@@ -92,6 +92,96 @@ pub fn navigation_sidebar<'a, M: 'a>(
         .into()
 }
 
+/// One entry of a [`SidebarList`].
+pub struct SidebarItem<M> {
+    icon: Option<Icon>,
+    title: String,
+    subtitle: Option<String>,
+    selected: bool,
+    on_press: M,
+}
+
+impl<M> SidebarItem<M> {
+    pub fn new(title: impl Into<String>, on_press: M) -> Self {
+        Self { icon: None, title: title.into(), subtitle: None, selected: false, on_press }
+    }
+    pub fn icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+    /// A short description. Shown only in [`SidebarStyle::Cards`].
+    pub fn subtitle(mut self, s: impl Into<String>) -> Self {
+        self.subtitle = Some(s.into());
+        self
+    }
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+}
+
+/// How a [`SidebarList`] presents its items.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SidebarStyle {
+    /// `.navigation-sidebar`: compact selectable rows on the sidebar color, for a sidebar
+    /// beside the content or in a drawer. Subtitles are hidden.
+    #[default]
+    List,
+    /// A page of cards: a padded, scrolling boxed list on the content color, each row with
+    /// its icon, title, **subtitle** and a chevron, as in a mobile settings app. Use it for
+    /// the sidebar as the first page ([`CollapsedSidebar::FirstPage`]) when collapsed.
+    Cards,
+}
+
+/// The navigation entries of a sidebar, in either [`SidebarStyle`]. One component, so an
+/// app describes its destinations once and the presentation follows the layout.
+pub struct SidebarList<'a, M> {
+    items: Vec<SidebarItem<M>>,
+    style: SidebarStyle,
+    window_radius: f32,
+    _p: std::marker::PhantomData<&'a ()>,
+}
+
+impl<'a, M: Clone + 'a> SidebarList<'a, M> {
+    pub fn new(items: impl IntoIterator<Item = SidebarItem<M>>) -> Self {
+        Self { items: items.into_iter().collect(), style: SidebarStyle::List, window_radius: 0.0, _p: Default::default() }
+    }
+    pub fn style(mut self, style: SidebarStyle) -> Self {
+        self.style = style;
+        self
+    }
+    /// Window radius for the [`SidebarStyle::List`] bottom corners.
+    pub fn window_radius(mut self, r: f32) -> Self {
+        self.window_radius = r;
+        self
+    }
+}
+
+impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
+    fn from(l: SidebarList<'a, M>) -> Self {
+        match l.style {
+            SidebarStyle::List => navigation_sidebar_rounded(
+                l.items.into_iter().map(|i| sidebar_row(i.icon, i.title, i.selected, i.on_press)),
+                l.window_radius,
+            ),
+            SidebarStyle::Cards => {
+                let m = Metrics::desktop();
+                let rows = l.items.into_iter().map(|i| {
+                    let mut r = super::ActionRow::new(i.title).chevron(true).on_activate(i.on_press).metrics(m);
+                    if let Some(icon) = i.icon {
+                        r = r.prefix(icon.view(m.icon_size));
+                    }
+                    if let Some(s) = i.subtitle {
+                        r = r.subtitle(s);
+                    }
+                    Element::from(r)
+                });
+                super::page(super::boxed_list(rows)).metrics(m).into()
+            }
+        }
+    }
+}
+
 /// What the sidebar becomes when a [`NavigationSplitView`] collapses (narrow / mobile).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum CollapsedSidebar {

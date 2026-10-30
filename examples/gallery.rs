@@ -50,6 +50,18 @@ impl Page {
             Page::Theming => "Theming",
         }
     }
+    /// Shown under the title when the sidebar is presented as cards.
+    fn description(self) -> &'static str {
+        match self {
+            Page::Buttons => "Button styles, shapes and typography",
+            Page::Lists => "Rows, groups and choosers",
+            Page::Inputs => "Entries, checks, sliders and text",
+            Page::Feedback => "Banners, progress and status pages",
+            Page::Dialogs => "Alerts, about, shortcuts and toasts",
+            Page::Navigation => "Switchers, tabs and carousels",
+            Page::Theming => "Colors, radii, shadows and motion",
+        }
+    }
     fn icon(self) -> Icon {
         match self {
             Page::Buttons => Icon::Check,
@@ -663,13 +675,22 @@ impl Gallery {
             }
         }
 
-        let sidebar_list = w::navigation_sidebar_rounded(
-            Page::ALL
-                .iter()
-                .map(|p| w::sidebar_row(Some(p.icon()), p.title(), *p == self.page, Message::Page(*p))),
-            corner,
-        );
-        let sidebar_pane = w::toolbar_view(sidebar_list).top_bar(sidebar_bar);
+        // Collapsed as the first page, the sidebar is a page of cards with descriptions;
+        // otherwise (beside the content, or in the drawer) the compact list.
+        let sidebar_style = if collapsed && self.sidebar_mode == w::CollapsedSidebar::FirstPage {
+            w::SidebarStyle::Cards
+        } else {
+            w::SidebarStyle::List
+        };
+        let sidebar_list = w::SidebarList::new(Page::ALL.iter().map(|p| {
+            w::SidebarItem::new(p.title(), Message::Page(*p))
+                .icon(p.icon())
+                .subtitle(p.description())
+                .selected(*p == self.page)
+        }))
+        .style(sidebar_style)
+        .window_radius(corner);
+        let sidebar_pane = w::toolbar_view(Element::from(sidebar_list)).top_bar(sidebar_bar);
 
         let page: Element = match self.page {
             Page::Buttons => self.buttons_page(),

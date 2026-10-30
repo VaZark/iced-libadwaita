@@ -62,3 +62,15 @@ Config: `[navigation] mobile-sidebar=drawer|first-page`.
 Header bars are continuous: a bar has no color of its own and takes the pane behind it (sidebar
 header = sidebar color, content header = content color). Headers exist to align the two panes and
 to hold menu items.
+
+### Sidebar presentation (`SidebarList`)
+
+The sidebar's entries are described once (`SidebarItem`: icon, title, optional subtitle, selected,
+message) and presented by `SidebarStyle`:
+
+| Style | Used for | Look |
+|---|---|---|
+| `List` (default) | beside the content, and in a drawer | compact `.navigation-sidebar` rows on the sidebar color; subtitles hidden |
+| `Cards` | the collapsed `FirstPage` sidebar | scrolling page padding, one boxed list on the content color; each row has its icon, title, **subtitle** and a chevron |
+
+Choose `Cards` when `collapsed && mode == FirstPage`; the gallery does exactly that.

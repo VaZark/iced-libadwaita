@@ -58,7 +58,7 @@ pub use motion::{drawer_layer, entrance, layered, reveal, DrawerLayer, Entrance,
 pub use menu::{menu_button, primary_menu, Menu, MenuButton, MenuItem, MenuPresentation};
 pub use navigation::{
     navigation_sidebar, navigation_sidebar_rounded, CollapsedSidebar, navigation_view, sidebar_row, Breakpoint, NavigationPage,
-    collapse_width, sidebar_width_for, NavigationSplitView, OverlaySplitView, COLLAPSE_WIDTH,
+    collapse_width, sidebar_width_for, SidebarItem, SidebarList, SidebarStyle, NavigationSplitView, OverlaySplitView, COLLAPSE_WIDTH,
 };
 pub use preferences::{preferences_group, preferences_page, PreferencesGroup, PreferencesPage};
 pub use rows::{

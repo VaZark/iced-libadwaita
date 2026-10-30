@@ -55,6 +55,7 @@ pub static COMPONENTS: &[Component] = &[
     c("path_bar", "-", "path_bar(segments, current, on_select)", &["segments", "current"], &[], &["on_select"]),
     // -- navigation
     c("navigation_split_view", "AdwNavigationSplitView", "NavigationSplitView::new(sidebar, content)", &["collapsed", "show_content", "sidebar_width", "sidebar_width_fraction", "min_sidebar_width", "max_sidebar_width", "collapsed_sidebar", "show_sidebar", "window_radius", "adapt"], &["sidebar", "content"], &["on_close_drawer"]),
+    c("sidebar_list", "GtkListBox.navigation-sidebar", "SidebarList::new(items)", &["style", "window_radius"], &["items"], &[]),
     c("overlay_split_view", "AdwOverlaySplitView", "OverlaySplitView::new(sidebar, content)", &["collapsed", "show_sidebar", "sidebar_width"], &["sidebar", "content"], &["on_close"]),
     c("navigation_view", "AdwNavigationView", "navigation_view(pages, on_pop)", &["pages"], &["pages"], &["on_pop"]),
     c("navigation_sidebar", "GtkListBox.navigation-sidebar", "navigation_sidebar(rows)", &[], &["rows"], &[]),
