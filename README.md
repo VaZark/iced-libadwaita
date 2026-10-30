@@ -126,7 +126,7 @@ touches the bottom-left corner.
   `bottom_sheet_in_window`, `HeaderBar::window_corners`), and the outline is drawn above the
   content. Maximized/fullscreen goes edge to edge.
 * **Mobile sidebar:** collapsed, a split view's sidebar is a **drawer** over the content by default
-  (never the whole screen) or a **full page**: `NavigationSplitView::collapsed_sidebar(CollapsedSidebar::Drawer | FullPage)`.
+  (never the whole screen) or the **first page** of a navigation stack: `NavigationSplitView::collapsed_sidebar(CollapsedSidebar::Drawer | FirstPage)`.
 * **Animations** follow libadwaita: `adw::animation` has the 35 `AdwEasing` curves, timed
   and damped-spring animations with libadwaita's own parameters (navigation 1000 stiffness,
   sheets ratio 0.8 / stiffness 400, 250ms reveals, 200ms style transitions) and honors the

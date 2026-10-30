@@ -285,7 +285,6 @@ impl Config {
         if let Some(v) = get("navigation", "mobile-sidebar") {
             match v {
                 "drawer" => self.mobile_sidebar = CollapsedSidebar::Drawer,
-                "full-page" => self.mobile_sidebar = CollapsedSidebar::FullPage,
                 "first-page" => self.mobile_sidebar = CollapsedSidebar::FirstPage,
                 _ => bad!("navigation", "mobile-sidebar", v),
             }
@@ -555,7 +554,7 @@ button-layout=close,minimize,maximize:
 mobile-max-width=500
 
 [navigation]
-mobile-sidebar=full-page
+mobile-sidebar=first-page
 
 [menus]
 presentation=dropdown
@@ -589,7 +588,7 @@ thing=1
         assert_eq!(c.decorations, DecorationMode::Ssd);
         assert_eq!(c.button_layout, Pick::Fixed("close,minimize,maximize:".into()));
         assert_eq!(c.mobile_max_width, 500.0);
-        assert_eq!(c.mobile_sidebar, CollapsedSidebar::FullPage);
+        assert_eq!(c.mobile_sidebar, CollapsedSidebar::FirstPage);
         assert_eq!(c.menu_presentation, MenuPresentationSetting::Dropdown);
         assert_eq!(c.row_collapse, CollapseBehavior::Flex);
         assert_eq!(c.row_wrap_basis, 200.0);
@@ -631,10 +630,10 @@ thing=1
     fn app_opt_out_overrides_and_is_reported() {
         let c = Config::from_keyfile("[motion]\nanimations=on\n[navigation]\nmobile-sidebar=drawer\n")
             .opt_out(|o| {
-                o.animations(false).mobile_sidebar(CollapsedSidebar::FullPage);
+                o.animations(false).mobile_sidebar(CollapsedSidebar::FirstPage);
             });
         assert_eq!(c.animations, Pick::Fixed(false));
-        assert_eq!(c.mobile_sidebar, CollapsedSidebar::FullPage);
+        assert_eq!(c.mobile_sidebar, CollapsedSidebar::FirstPage);
         assert_eq!(c.overridden(), &[Setting::Animations, Setting::MobileSidebar]);
         assert!(c.denied().is_empty());
     }

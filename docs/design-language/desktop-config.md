@@ -32,7 +32,7 @@ Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 wi
 | | `button-layout` | system / GTK string (system) | `DecorationLayout::detect()` |
 | | `mobile-max-width` | px (450) | `window::is_mobile`, menu `Auto` |
 | navigation | `collapse-width` | px (400) | `NavigationSplitView::adapt` |
-| | `mobile-sidebar` | drawer / full-page / first-page (drawer) | `NavigationSplitView` default |
+| | `mobile-sidebar` | drawer / first-page (drawer) | `NavigationSplitView` default |
 | menus | `presentation` | auto / dropdown / full-page (auto) | `MenuPresentation::resolve` |
 | rows | `collapse` | stacked / flex (stacked) | rows' wrapped suffix |
 | | `wrap-basis` | px (128) | when a suffix wraps |

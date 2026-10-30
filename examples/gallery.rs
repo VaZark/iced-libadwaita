@@ -254,7 +254,7 @@ enum Message {
     Saved(usize, window::Screenshot),
 }
 
-static SIDEBAR_MODES: [w::CollapsedSidebar; 3] = w::CollapsedSidebar::ALL;
+static SIDEBAR_MODES: [w::CollapsedSidebar; 2] = w::CollapsedSidebar::ALL;
 static MOTIONS: [DemoMotion; 8] = DemoMotion::ALL;
 const FRUITS: [&str; 3] = ["Apple", "Banana", "Cherry"];
 const COMBO: [&str; 3] = ["Adwaita Sans", "Cantarell", "Inter"];
@@ -315,7 +315,6 @@ impl Gallery {
                 dialog: None,
                 show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
                 sidebar_mode: match std::env::var("GALLERY_SIDEBAR_MODE").as_deref() {
-                    Ok("page") => w::CollapsedSidebar::FullPage,
                     Ok("first-page") => w::CollapsedSidebar::FirstPage,
                     _ => cfg.mobile_sidebar,
                 },
@@ -1140,7 +1139,7 @@ impl Gallery {
                     Some(self.sidebar_mode),
                     Message::SidebarMode,
                 )
-                .subtitle("Drawer over the content, its own page, or the first page of a stack"),
+                .subtitle("Drawer over the content, or the first page of a stack"),
             )
             .push(w::SwitchRow::new("Shadows", self.shadows_on, Message::Shadows).subtitle("Adwaita elevation: cards, popovers, dialogs").metrics(m))
             .push(
@@ -1254,7 +1253,7 @@ fn main() -> iced::Result {
         // Opting out of desktop settings is highly discouraged; shown here only to demonstrate
         // that it is allowed, explicit and reported (a notice is printed on install).
         cfg = cfg.opt_out(|o| {
-            o.mobile_sidebar(w::CollapsedSidebar::FullPage);
+            o.mobile_sidebar(w::CollapsedSidebar::FirstPage);
         });
     }
     adw::config::install(cfg);

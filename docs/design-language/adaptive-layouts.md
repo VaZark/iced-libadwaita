@@ -54,11 +54,10 @@ spacing between groups; maximum 600.
 | Mode | Collapsed behavior | Sidebar color |
 |---|---|---|
 | `Drawer` (default) | slides over the content with a scrim; never the whole screen | sidebar |
-| `FullPage` | replaces the content as its own page | sidebar |
 | `FirstPage` | the landing page of a navigation stack (settings-style); choosing an item pushes the content, with a back button | **content** |
 
 Beside the content (not collapsed) the sidebar is always a different color from the content.
-Config: `[navigation] mobile-sidebar=drawer|full-page|first-page`.
+Config: `[navigation] mobile-sidebar=drawer|first-page`.
 
 Header bars are continuous: a bar has no color of its own and takes the pane behind it (sidebar
 header = sidebar color, content header = content color). Headers exist to align the two panes and

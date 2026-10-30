@@ -101,9 +101,6 @@ pub enum CollapsedSidebar {
     /// ([`NavigationSplitView::show_sidebar`]). (default)
     #[default]
     Drawer,
-    /// The sidebar replaces the content as its own page (`AdwNavigationSplitView`'s
-    /// collapsed navigation view); `show_content` picks the visible pane.
-    FullPage,
     /// The sidebar is the *first page* of a navigation stack, as in a settings app: it
     /// is the landing page, painted in the **content** color (not the sidebar color),
     /// and choosing an item pushes the content page (`show_content`) with a back button.
@@ -112,14 +109,13 @@ pub enum CollapsedSidebar {
 }
 
 impl CollapsedSidebar {
-    pub const ALL: [Self; 3] = [Self::Drawer, Self::FullPage, Self::FirstPage];
+    pub const ALL: [Self; 2] = [Self::Drawer, Self::FirstPage];
 }
 
 impl std::fmt::Display for CollapsedSidebar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::Drawer => "Drawer",
-            Self::FullPage => "Full page",
             Self::FirstPage => "First page",
         })
     }
@@ -175,7 +171,7 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
         }
     }
     /// What the sidebar becomes when collapsed: [`CollapsedSidebar::Drawer`]
-    /// (default), [`CollapsedSidebar::FullPage`] or [`CollapsedSidebar::FirstPage`].
+    /// (default) or [`CollapsedSidebar::FirstPage`].
     pub fn collapsed_sidebar(mut self, mode: CollapsedSidebar) -> Self {
         self.collapsed_sidebar = mode;
         self
@@ -243,7 +239,7 @@ impl<'a, M: Clone + 'a> From<NavigationSplitView<'a, M>> for Element<'a, M> {
         // The sidebar pane carries the sidebar color (`.sidebar-pane`), so a flat header
         // above the list continues it. It sits at the window edge, so it rounds the
         // window's corners: left only when beside the content or as a drawer, all four
-        // when it is the whole (collapsed, full-page) window.
+        // when it is the whole (collapsed, first-page) window.
         let pane = move |radius: iced::border::Radius| {
             move |t: &crate::Theme| iced::widget::container::Style {
                 border: iced::Border::default().rounded(radius),
@@ -255,15 +251,9 @@ impl<'a, M: Clone + 'a> From<NavigationSplitView<'a, M>> for Element<'a, M> {
             if v.collapsed_sidebar != CollapsedSidebar::Drawer {
                 return if v.show_content {
                     v.content
-                } else if v.collapsed_sidebar == CollapsedSidebar::FirstPage {
+                } else {
                     // A page like any other: the content color (the window behind it).
                     container(v.sidebar).width(Length::Fill).height(Length::Fill).into()
-                } else {
-                    container(v.sidebar)
-                        .width(Length::Fill)
-                        .height(Length::Fill)
-                        .style(pane(r.into()))
-                        .into()
                 };
             }
             // Drawer: the content is always there; the sidebar slides over it. The layer
@@ -420,7 +410,7 @@ mod tests {
 
     #[test]
     fn full_page_uses_the_regular_width_rule() {
-        let f = split(CollapsedSidebar::FullPage).adapt(300.0);
+        let f = split(CollapsedSidebar::FirstPage).adapt(300.0);
         assert!(f.collapsed && (f.sidebar_width - 180.0).abs() < 1e-3);
     }
 
