@@ -19,11 +19,11 @@ Title bar with start/end children and window controls; the window drag handle.
 
 ## Spec
 
-Height ≈47 ‡ (includes 1px border), 6px child spacing/margins (docs `.toolbar`), flat icon buttons.
+Height 47 ✓ (flat: 46 ✓), padding 6 7 7 7 ✓, 6px child spacing (docs `.toolbar`), flat icon buttons. **Flat** headers (`%headerbar-flat`: no background, no shadow) take the color behind them: dialogs, sheets and inline contexts use them so the header flows into the body (Nautilus-style).
 
 ## iced mapping
 
-`header_bar().title().subtitle().pack_start().pack_end().window_controls().on_drag().on_double_click()`. Layout is a custom three-slot widget implementing the **loose** centering policy: title centered when both sides leave room, else shifted toward free space, else clipped; start/end slots are never squeezed, so window controls stay reachable down to 360px.
+`header_bar().flat(bool).title().subtitle().pack_start().pack_end().window_controls().on_drag().on_double_click()`. Layout is a custom three-slot widget implementing the **loose** centering policy: title centered when both sides leave room, else shifted toward free space, else clipped; start/end slots are never squeezed, so window controls stay reachable down to 360px.
 
 ## Deviations / gaps
 

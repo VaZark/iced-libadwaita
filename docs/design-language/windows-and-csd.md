@@ -31,7 +31,9 @@ Source: [`AdwWindow`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/c
 * **Split views:** each pane's header shows only the buttons at its own window edge
   (`show-start-title-buttons` / `show-end-title-buttons`).
 * **Dialogs:** the header shows the dialog title and only a close button, on the
-  side the system puts it (end by default); its top corners follow the dialog radius.
+  side the system puts it (end by default). The header is **flat** (no color of its
+  own), so it flows into the dialog body like Nautilus's dialogs; the dialog's
+  rounded background provides the corners.
 * **Mobile mode** (`window::is_mobile`, width ≤ 450): decorations are hidden
   completely and menus become full pages. Corners are **not** forced: they follow
   the real window state, so a narrow *floating* window keeps its rounded corners

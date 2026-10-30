@@ -30,7 +30,8 @@ stylesheet source and should be checked against the SCSS.
 | Popover `contents` padding | 8px | ✓ `_popovers.scss` |
 | Scrollbar slider | 8px (min length 40); idle overlay 3px, hover 8px; trough 10% on hover; 200ms linear | ✓ `_scrolling.scss` |
 | Switch | ≈46×26 (knob 20) | ‡ |
-| Header bar height | 47 | ‡ |
+| Header bar | min-height **47**, padding `6 7 7 7`, `inset 0 -1px --headerbar-shade-color` | ✓ `_header-bar.scss` |
+| Flat header bar (`%headerbar-flat`) | `background: none`, `box-shadow: none`, `color: inherit`, min-height **46** | ✓ |
 | Navigation sidebar row | height ≈36, 6px list padding, 2px gap | ‡ |
 | Progress bar thickness | 8 | ‡ |
 | Scale trough / handle | 10 / 20 | ‡ |
