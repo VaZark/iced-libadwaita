@@ -6,7 +6,7 @@
 //! ```
 
 use iced::widget::{
-    checkbox, column, container, pick_list, radio, row, scrollable, slider, text,
+    checkbox, column, container, radio, row, slider, text,
     text_editor, text_input, toggler,
 };
 use iced::{window, Element as IcedElement, Length, Subscription, Task};
@@ -57,11 +57,19 @@ impl Page {
             Page::Lists => Icon::OpenMenu,
             Page::Inputs => Icon::Edit,
             Page::Feedback => Icon::DialogInformation,
-            Page::Dialogs => Icon::WindowMaximize,
+            Page::Dialogs => Icon::Window,
             Page::Navigation => Icon::GoNext,
             Page::Theming => Icon::Settings,
         }
     }
+}
+
+/// How the primary menu is presented: follow the window width, or force a mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MenuMode {
+    Auto,
+    Dropdown,
+    FullPage,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +95,10 @@ struct Gallery {
     radius_m: f32,
     radius_l: f32,
     card_override: bool,
+    shadows_on: bool,
+    shadow_scale: f32,
+    shadow_intensity: f32,
+    raised_bar: bool,
 
     wifi: bool,
     notifications: bool,
@@ -103,6 +115,9 @@ struct Gallery {
     picked: Option<&'static str>,
 
     dialog: Option<Dialog>,
+    show_content: bool,
+    menu_mode: MenuMode,
+    win: adw::window::State,
     sheet: bool,
     carousel: usize,
     toast: Option<String>,
@@ -110,6 +125,7 @@ struct Gallery {
     angle: f32,
 
     shots: Option<Shots>,
+    shot_tag: Option<&'static str>,
 }
 
 struct Shots {
@@ -126,6 +142,10 @@ enum Message {
     RadiusM(f32),
     RadiusL(f32),
     CardOverride(bool),
+    Shadows(bool),
+    ShadowScale(f32),
+    ShadowIntensity(f32),
+    RaisedBar(bool),
     Wifi(bool),
     Notifications(bool),
     Expanded(bool),
@@ -150,12 +170,21 @@ enum Message {
     Noop,
     Drag,
     Close,
+    Minimize,
+    ToggleMaximize,
+    Resize(window::Direction),
+    Back,
+    MenuMode(MenuMode),
+    ToggleFullscreen,
+    WindowChanged,
+    WindowState(adw::window::State),
     // screenshot mode
     Shot(usize),
     Capture(usize),
     Saved(usize, window::Screenshot),
 }
 
+const FRUITS: [&str; 3] = ["Apple", "Banana", "Cherry"];
 const COMBO: [&str; 3] = ["Adwaita Sans", "Cantarell", "Inter"];
 
 impl Gallery {
@@ -180,9 +209,13 @@ impl Gallery {
                 scheme: Scheme::Light,
                 accent: AccentColor::Blue,
                 compact: false,
-                radius_m: 6.0,
-                radius_l: 12.0,
+                radius_m: std::env::var("GALLERY_RM").ok().and_then(|v| v.parse().ok()).unwrap_or(Metrics::default().radius_m),
+                radius_l: std::env::var("GALLERY_RL").ok().and_then(|v| v.parse().ok()).unwrap_or(12.0),
                 card_override: false,
+                shadows_on: true,
+                shadow_scale: 1.0,
+                shadow_intensity: 1.0,
+                raised_bar: std::env::var_os("GALLERY_RAISED").is_some(),
                 wifi: true,
                 notifications: false,
                 expanded: true,
@@ -197,12 +230,23 @@ impl Gallery {
                 editor: text_editor::Content::with_text("Multi-line text editor\nstyled by the theme."),
                 picked: None,
                 dialog: None,
+                show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
+                menu_mode: match std::env::var("GALLERY_MENU").as_deref() {
+                    Ok("page") => MenuMode::FullPage,
+                    Ok("dropdown") => MenuMode::Dropdown,
+                    _ => MenuMode::Auto,
+                },
+                win: adw::window::State {
+                    maximized: std::env::var_os("GALLERY_FULL").is_some(),
+                    fullscreen: false,
+                },
                 sheet: false,
                 carousel: 0,
                 toast: None,
                 banner: true,
                 angle: 0.0,
                 shots,
+                shot_tag: None,
             },
             boot,
         )
@@ -214,7 +258,16 @@ impl Gallery {
     }
 
     fn theme(&self) -> Theme {
-        let mut t = Theme::new(self.scheme).accent(self.accent).with_metrics(self.metrics());
+        let shadows = if self.shadows_on {
+            adw::Shadows::default().with_scale(self.shadow_scale).with_intensity(self.shadow_intensity)
+        } else {
+            adw::Shadows::none()
+        };
+        let mut t = Theme::new(self.scheme)
+            .accent(self.accent)
+            .with_metrics(self.metrics())
+            .with_shadows(shadows)
+            .with_transparent_window(Self::csd());
         if self.card_override {
             t = t.with_semantic(|s| {
                 s.card.bg = adw::color::hex(0x3d2c5a);
@@ -226,13 +279,22 @@ impl Gallery {
 
     fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
-            Message::Page(p) => self.page = p,
+            Message::Page(p) => {
+                self.page = p;
+                self.show_content = true;
+            }
+            Message::Back => self.show_content = false,
+            Message::MenuMode(m) => self.menu_mode = m,
             Message::Scheme(dark) => self.scheme = if dark { Scheme::Dark } else { Scheme::Light },
             Message::Accent(a) => self.accent = a,
             Message::Compact(c) => self.compact = c,
             Message::RadiusM(r) => self.radius_m = r,
             Message::RadiusL(r) => self.radius_l = r,
             Message::CardOverride(c) => self.card_override = c,
+            Message::Shadows(v) => self.shadows_on = v,
+            Message::ShadowScale(v) => self.shadow_scale = v,
+            Message::ShadowIntensity(v) => self.shadow_intensity = v,
+            Message::RaisedBar(v) => self.raised_bar = v,
             Message::Wifi(v) => self.wifi = v,
             Message::Notifications(v) => self.notifications = v,
             Message::Expanded(v) => self.expanded = v,
@@ -257,6 +319,26 @@ impl Gallery {
             Message::Noop => {}
             Message::Drag => return window::oldest().and_then(window::drag),
             Message::Close => return iced::exit(),
+            Message::ToggleFullscreen => {
+                return window::oldest().and_then(|id| {
+                    window::mode(id).then(move |m| {
+                        window::set_mode(
+                            id,
+                            if m == window::Mode::Fullscreen { window::Mode::Windowed } else { window::Mode::Fullscreen },
+                        )
+                    })
+                });
+            }
+            Message::WindowChanged => return adw::window::refresh().map(Message::WindowState),
+            // GALLERY_FULL forces the edge-to-edge look for screenshots.
+            Message::WindowState(st) => {
+                if std::env::var_os("GALLERY_FULL").is_none() {
+                    self.win = st;
+                }
+            }
+            Message::Minimize => return window::oldest().and_then(|id| window::minimize(id, true)),
+            Message::ToggleMaximize => return window::oldest().and_then(window::toggle_maximize),
+            Message::Resize(d) => return window::oldest().and_then(move |id| window::drag_resize(id, d)),
             Message::Shot(i) => return self.shot_next(i),
             Message::Capture(i) => {
                 return window::oldest()
@@ -266,9 +348,10 @@ impl Gallery {
             Message::Saved(i, shot) => {
                 if let Some(s) = &self.shots {
                     let name = format!(
-                        "{}-{}.png",
+                        "{}-{}{}.png",
                         if self.scheme.is_dark() { "dark" } else { "light" },
-                        format!("{:?}", self.page).to_lowercase()
+                        format!("{:?}", self.page).to_lowercase(),
+                        self.shot_tag.map(|t| format!("-{t}")).unwrap_or_default()
                     );
                     std::fs::create_dir_all(&s.dir).ok();
                     let path = s.dir.join(name);
@@ -292,12 +375,27 @@ impl Gallery {
     /// the Dialogs page so overlays are covered too.
     fn shot_next(&mut self, i: usize) -> Task<Message> {
         let total = 2 * Page::ALL.len();
-        if i >= total {
+        if i > total {
             return iced::exit();
+        }
+        if i == total {
+            // Drive the real update path with the radius slider messages.
+            self.scheme = Scheme::Light;
+            self.page = Page::Theming;
+            self.dialog = None;
+            self.toast = None;
+            self.shot_tag = Some("radius0");
+            return Task::batch([Task::done(Message::RadiusM(0.0)), Task::done(Message::RadiusL(0.0))])
+                .chain(Task::perform(tokio::time::sleep(Duration::from_millis(500)), move |_| Message::Capture(i)));
         }
         self.scheme = if i < Page::ALL.len() { Scheme::Light } else { Scheme::Dark };
         self.page = Page::ALL[i % Page::ALL.len()];
-        self.dialog = (self.page == Page::Dialogs).then_some(Dialog::Alert);
+        self.dialog = (self.page == Page::Dialogs).then(|| match std::env::var("GALLERY_DIALOG").as_deref() {
+            Ok("preferences") => Dialog::Preferences,
+            Ok("shortcuts") => Dialog::Shortcuts,
+            Ok("about") => Dialog::About,
+            _ => Dialog::Alert,
+        });
         self.toast = (self.page == Page::Dialogs).then(|| "Settings saved".to_string());
         if let Some(s) = &mut self.shots {
             s.index = i;
@@ -306,37 +404,118 @@ impl Gallery {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        if self.page == Page::Feedback || self.shots.is_some() {
+        let frames = if self.page == Page::Feedback || self.shots.is_some() {
             window::frames().map(|_| Message::Frame)
         } else {
             Subscription::none()
-        }
+        };
+        Subscription::batch([
+            frames,
+            adw::window::changes().map(|_| Message::WindowChanged),
+            iced::event::listen_with(|event, _, _| match event {
+                iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+                    key: iced::keyboard::Key::Named(iced::keyboard::key::Named::F11),
+                    ..
+                }) => Some(Message::ToggleFullscreen),
+                _ => None,
+            }),
+        ])
     }
 
     fn view(&self) -> IcedElement<'_, Message, Theme> {
-        let m = self.metrics();
-        let csd = std::env::var_os("GALLERY_CSD").is_some();
+        iced::widget::responsive(|size| self.root(size)).into()
+    }
 
-        let sidebar = w::navigation_sidebar(
+    /// Whether the window draws its own decorations (the Adwaita default).
+    fn csd() -> bool {
+        std::env::var_os("GALLERY_SSD").is_none()
+    }
+
+    fn root(&self, size: iced::Size) -> IcedElement<'_, Message, Theme> {
+        let m = self.metrics();
+        let csd = Self::csd();
+        let collapsed = size.width <= w::COLLAPSE_WIDTH;
+
+        // Floating windows have rounded corners; maximized/fullscreen go edge to edge.
+        // Mobile mode (narrow): no window decorations at all. Corners still follow the
+        // real window state: rounded while floating, edge to edge only when the window
+        // is actually maximized or fullscreen.
+        let mobile = adw::window::is_mobile(size.width);
+        let win_state = self.win;
+        let corner = if csd { win_state.radius(&adw::Metrics::default()) } else { 0.0 };
+
+        // Primary menu (HIG): open-menu icon, above the sidebar list, standard items last.
+        let presentation = match self.menu_mode {
+            MenuMode::Auto => w::MenuPresentation::for_width(size.width),
+            MenuMode::Dropdown => w::MenuPresentation::Dropdown,
+            MenuMode::FullPage => w::MenuPresentation::FullPage,
+        };
+        let dark = self.scheme.is_dark();
+        let primary = w::primary_menu(
+            w::Menu::new("Main Menu")
+                .section([w::MenuItem::check("Dark Style", dark, Message::Scheme(!dark))])
+                .section([
+                    w::MenuItem::action("Preferences", Message::OpenDialog(Dialog::Preferences)).accel("Ctrl+,"),
+                    w::MenuItem::action("Keyboard Shortcuts", Message::OpenDialog(Dialog::Shortcuts)).accel("Ctrl+?"),
+                    w::MenuItem::action("Help", Message::ShowToast("Opening Help…")).accel("F1"),
+                    w::MenuItem::action("About iced-libadwaita", Message::OpenDialog(Dialog::About)),
+                ]),
+        )
+        .presentation(presentation)
+        .window_radius(corner)
+        .open_initially(self.shots.is_some() && std::env::var_os("GALLERY_MENU").is_some());
+
+        // Which buttons exist, on which side, follows the user's GNOME `button-layout`
+        // (this machine: `appmenu:close`, so a lone close button at the end).
+        let controls = || w::WindowControls {
+            on_minimize: Some(Message::Minimize),
+            on_maximize: Some(Message::ToggleMaximize),
+            on_close: Some(Message::Close),
+            maximized: self.win.maximized,
+            layout: None,
+        };
+        let show_content_only = collapsed && self.show_content;
+        let show_sidebar_only = collapsed && !self.show_content;
+
+        // One header bar per pane, as in libadwaita split views. Window controls
+        // appear only at the window edge (the end pane); the collapsed single pane has both.
+        let mut sidebar_bar = w::header_bar::<Message>()
+            .title("iced-libadwaita")
+            .pack_end(primary)
+            .window_corners(corner, if show_sidebar_only { corner } else { 0.0 })
+            .metrics(m);
+        let mut content_bar = w::header_bar::<Message>()
+            .title(self.page.title())
+            .window_corners(if show_content_only { corner } else { 0.0 }, corner)
+            .metrics(m);
+        if show_content_only {
+            content_bar = content_bar.pack_start(w::circular_button(Icon::GoPrevious).on_press(Message::Back));
+        }
+        if csd {
+            sidebar_bar = sidebar_bar.on_drag(Message::Drag).on_double_click(Message::ToggleMaximize);
+            content_bar = content_bar.on_drag(Message::Drag).on_double_click(Message::ToggleMaximize);
+            // Controls only outside mobile mode. In a split view each pane shows only the
+            // buttons at its own window edge; a collapsed single pane shows both sides.
+            if !mobile {
+                if show_sidebar_only {
+                    sidebar_bar = sidebar_bar.window_controls(controls());
+                } else if show_content_only {
+                    content_bar = content_bar.window_controls(controls());
+                } else {
+                    sidebar_bar = sidebar_bar.window_controls(controls()).show_end_title_buttons(false);
+                    content_bar = content_bar.window_controls(controls()).show_start_title_buttons(false);
+                }
+            }
+        }
+        let bar_style = if self.raised_bar { w::BarStyle::Raised } else { w::BarStyle::Flat };
+
+        let sidebar_list = w::navigation_sidebar_rounded(
             Page::ALL
                 .iter()
                 .map(|p| w::sidebar_row(Some(p.icon()), p.title(), *p == self.page, Message::Page(*p))),
+            corner,
         );
-
-        let mut bar = w::header_bar::<Message>()
-            .title("iced-libadwaita")
-            .subtitle(self.page.title())
-            .pack_end(w::icon_button(Icon::OpenMenu).on_press(Message::ShowToast("Main menu")))
-            .pack_end(
-                w::icon_button(if self.scheme.is_dark() { Icon::Check } else { Icon::Settings })
-                    .on_press(Message::Scheme(!self.scheme.is_dark())),
-            )
-            .metrics(m);
-        if csd {
-            bar = bar
-                .on_drag(Message::Drag)
-                .window_controls(w::WindowControls { on_close: Some(Message::Close), ..Default::default() });
-        }
+        let sidebar_pane = w::toolbar_view(sidebar_list).top_bar(sidebar_bar).top_bar_style(bar_style);
 
         let page: Element = match self.page {
             Page::Buttons => self.buttons_page(),
@@ -348,16 +527,14 @@ impl Gallery {
             Page::Theming => self.theming_page(),
         };
 
-        let body = w::toolbar_view(
-            w::NavigationSplitView::new(sidebar, page).sidebar_width(m.sidebar_width),
-        )
-        .top_bar(bar);
+        let content_pane = w::toolbar_view(page).top_bar(content_bar).top_bar_style(bar_style);
+        let body = w::NavigationSplitView::new(sidebar_pane, content_pane)
+            .adapt(size.width)
+            .show_content(self.show_content);
 
         let base: Element = w::toast_overlay(
-            container(body)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .style(style::container::window),
+            // The window background comes from `adw::window::frame` (rounded when floating).
+            container(body).width(Length::Fill).height(Length::Fill),
             self.toast.clone().map(|t| w::Toast::new(t).on_dismiss(Message::DismissToast)),
         );
 
@@ -367,7 +544,7 @@ impl Gallery {
             self.sheet,
             Message::Sheet(false),
         );
-        match self.dialog {
+        let result: Element<'_> = match self.dialog {
             None => base,
             Some(Dialog::Alert) => w::dialog(
                 base,
@@ -406,14 +583,15 @@ impl Gallery {
                     .on_close(Message::CloseDialog),
                 Some(Message::CloseDialog),
             ),
-        }
+        };
+        if csd { adw::window::frame(result, win_state, Message::Resize) } else { result }
     }
 
     // --- pages ----------------------------------------------------------
 
     fn page_frame<'a>(&self, content: impl Into<Element<'a>>) -> Element<'a> {
         let m = self.metrics();
-        scrollable(w::clamp(
+        w::scrolled_window(w::clamp(
             container(content).padding(m.page_padding).width(Length::Fill),
             m.clamp_maximum + 120.0,
         ))
@@ -425,7 +603,7 @@ impl Gallery {
     fn buttons_page(&self) -> Element<'_> {
         let m = self.metrics();
         let g = |title: &'static str| w::PreferencesGroup::<Message>::new().title(title).metrics(m);
-        let lbl = |s: &'static str| -> Element<'static> { text(s).into() };
+        let lbl = |s: &'static str| -> Element<'static> { w::typography::label(s).into() };
 
         let plain = row![
             w::raised_button(lbl("Default")).on_press(Message::Noop),
@@ -518,7 +696,9 @@ impl Gallery {
                     .subtitle("Switches the whole gallery")
                     .metrics(m))
                 .push(w::SwitchRow::new("Wi-Fi", self.wifi, Message::Wifi).metrics(m))
-                .push(w::ComboRow::new("Font", &COMBO, self.combo, Message::Combo).subtitle("Interface font"))
+                .push(w::ComboRow::new("Font", &COMBO, self.combo, Message::Combo)
+                    .subtitle("Interface font")
+                    .open_initially(self.shots.is_some()))
                 .push(w::SpinRow::new("Text Scale", self.spin, 1.0..=10.0, 1.0, Message::Spin)),
         );
 
@@ -585,7 +765,8 @@ impl Gallery {
                 radio("Radio B", 1u8, self.radio, Message::Radio),
                 radio("Radio C", 2u8, self.radio, Message::Radio),
             ]
-            .spacing(m.space_l),
+            .spacing(m.space_l)
+            .wrap(),
             toggler(self.wifi).label("Switch").on_toggle(Message::Wifi).size(m.switch_size),
         ]
         .spacing(m.space_m);
@@ -596,8 +777,7 @@ impl Gallery {
             w::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::success),
             w::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::warning),
             w::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::error),
-            pick_list(["Apple", "Banana", "Cherry"], self.picked, Message::Picked)
-                .placeholder("Pick a fruit"),
+            Element::from(w::dropdown(&FRUITS, self.picked, Message::Picked)),
         ]
         .spacing(m.space_m);
 
@@ -756,18 +936,20 @@ impl Gallery {
             .on_press(Message::Accent(*a))
             .into()
         }))
-        .spacing(m.space_s);
+        .spacing(m.space_s)
+        .wrap();
 
         let swatch = |name: &'static str, s: adw::Surface| -> Element<'static> {
             container(text(name).size(12).color(s.fg))
                 .padding([m.space_m, m.space_m])
                 .width(Length::Fill)
-                .style(move |_: &Theme| iced::widget::container::Style {
+                
+                .style(move |t: &Theme| iced::widget::container::Style {
                     background: Some(iced::Background::Color(s.bg)),
                     border: iced::Border {
                         color: adw::color::alpha(s.fg, 0.2),
                         width: 1.0,
-                        radius: 6.0.into(),
+                        radius: t.metrics.radius_m.into(),
                     },
                     ..Default::default()
                 })
@@ -797,21 +979,105 @@ impl Gallery {
                     .metrics(m),
             )
             .push(
+                w::ActionRow::new("Menu presentation")
+                    .subtitle("Auto: full page at ≤ 450px, else dropdown")
+                    .suffix(Element::from(w::toggle_group(
+                        vec![
+                            w::ToggleItem::new(MenuMode::Auto, "Auto"),
+                            w::ToggleItem::new(MenuMode::Dropdown, "Dropdown"),
+                            w::ToggleItem::new(MenuMode::FullPage, "Full page"),
+                        ],
+                        Some(self.menu_mode),
+                        Message::MenuMode,
+                    )))
+                    .metrics(m),
+            )
+            .push(w::SwitchRow::new("Shadows", self.shadows_on, Message::Shadows).subtitle("Adwaita elevation: cards, popovers, dialogs").metrics(m))
+            .push(
+                w::ActionRow::new("Shadow intensity")
+                    .subtitle(format!("{:.1}x", self.shadow_intensity))
+                    .suffix(slider(0.0..=2.0, self.shadow_intensity, Message::ShadowIntensity).step(0.1_f32).width(Length::Fill))
+                    .suffix_basis(160.0)
+                    .metrics(m),
+            )
+            .push(
+                w::ActionRow::new("Shadow size")
+                    .subtitle(format!("{:.1}x", self.shadow_scale))
+                    .suffix(slider(0.0..=2.0, self.shadow_scale, Message::ShadowScale).step(0.1_f32).width(Length::Fill))
+                    .suffix_basis(160.0)
+                    .metrics(m),
+            )
+            .push(w::SwitchRow::new("Raised header bar", self.raised_bar, Message::RaisedBar).subtitle("top-bar-style: raised").metrics(m))
+            .push(
                 w::ActionRow::new("Control radius")
                     .subtitle(format!("radius_m = {:.0}px", self.radius_m))
-                    .suffix(slider(0.0..=Metrics::MAX_RADIUS_M, self.radius_m, Message::RadiusM).width(Length::Fixed(160.0)))
+                    .suffix(slider(0.0..=Metrics::MAX_RADIUS_M, self.radius_m, Message::RadiusM).width(Length::Fill))
+                    .suffix_basis(160.0)
                     .metrics(m),
             )
             .push(
                 w::ActionRow::new("Card radius")
                     .subtitle(format!("radius_l = {:.0}px", self.radius_l))
-                    .suffix(slider(0.0..=Metrics::MAX_RADIUS_L, self.radius_l, Message::RadiusL).width(Length::Fixed(160.0)))
+                    .suffix(slider(0.0..=Metrics::MAX_RADIUS_L, self.radius_l, Message::RadiusL).width(Length::Fill))
+                    .suffix_basis(160.0)
                     .metrics(m),
             );
 
+        // Everything here reads the theme's radii at draw time, so the sliders above
+        // visibly change it: control radius (radius_m) rounds buttons, entries and
+        // toggles; card radius (radius_l) rounds the card and boxed list.
+        let preview = column![
+            row![
+                w::raised_button(w::typography::label("Default")).on_press(Message::Noop),
+                w::suggested_button(w::typography::label("Suggested")).on_press(Message::Noop),
+                w::destructive_button(w::typography::label("Destructive")).on_press(Message::Noop),
+            ]
+            .spacing(m.space_s)
+            .wrap(),
+            text_input("Entry", &self.name).on_input(Message::Name).padding(m.entry_padding),
+            Element::from(w::toggle_group(
+                vec![
+                    w::ToggleItem::new(Tab::One, "One"),
+                    w::ToggleItem::new(Tab::Two, "Two"),
+                    w::ToggleItem::new(Tab::Three, "Three"),
+                ],
+                Some(self.tab),
+                Message::Tab,
+            )),
+            w::boxed_list([
+                Element::from(w::ActionRow::new("Row in a boxed list").subtitle("Rounded by the card radius").metrics(m)),
+                Element::from(w::ActionRow::new("Second row").metrics(m)),
+            ]),
+        ]
+        .spacing(m.space_m);
+
         self.page_frame(
-            column![rows, w::PreferencesGroup::<Message>::new().title("Semantic Surfaces").metrics(m).push(w::card(surfaces))]
-                .spacing(m.group_spacing),
+            column![
+                rows,
+                w::PreferencesGroup::<Message>::new()
+                    .title("Collapse Behavior")
+                    .description("Narrow the window: the control wraps. Stacked = 100% width; Flex = keeps its width.")
+                    .metrics(m)
+                    .push(
+                        w::ActionRow::new("Stacked (default)")
+                            .subtitle("collapse = Stacked")
+                            .suffix(slider(0.0..=100.0, self.slider, Message::Slider).width(Length::Fill))
+                            .suffix_basis(260.0)
+                            .collapse(adw::CollapseBehavior::Stacked)
+                            .metrics(m),
+                    )
+                    .push(
+                        w::ActionRow::new("Flex")
+                            .subtitle("collapse = Flex")
+                            .suffix(slider(0.0..=100.0, self.slider, Message::Slider).width(Length::Fill))
+                            .suffix_basis(260.0)
+                            .collapse(adw::CollapseBehavior::Flex)
+                            .metrics(m),
+                    ),
+                w::PreferencesGroup::<Message>::new().title("Live Preview").metrics(m).push(w::card(preview)),
+                w::PreferencesGroup::<Message>::new().title("Semantic Surfaces").metrics(m).push(w::card(surfaces)),
+            ]
+            .spacing(m.group_spacing),
         )
     }
 }
@@ -834,9 +1100,15 @@ fn main() -> iced::Result {
             ..Default::default()
         })
         .window(window::Settings {
-            size: iced::Size::new(1040.0, 760.0),
-            decorations: std::env::var_os("GALLERY_CSD").is_none(),
-            ..Default::default()
+            size: std::env::var("GALLERY_SIZE")
+                .ok()
+                .and_then(|v| {
+                    let (w, h) = v.split_once('x')?;
+                    Some(iced::Size::new(w.parse().ok()?, h.parse().ok()?))
+                })
+                .unwrap_or(iced::Size::new(1040.0, 760.0)),
+            // Adwaita has no server-side decorations; opt back in with GALLERY_SSD=1.
+            ..adw::window::settings_with_ssd(!Gallery::csd())
         })
         .run()
 }
