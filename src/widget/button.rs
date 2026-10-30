@@ -134,45 +134,52 @@ pub fn split_button<'a, M: Clone + 'a>(
     .into()
 }
 
-/// One entry of a [`ToggleGroup`].
-pub struct ToggleItem<T> {
+/// One entry of a [`ToggleGroup`]: a label, an icon, both, or any element.
+pub struct ToggleItem<'a, T, M> {
     pub value: T,
     pub label: Option<String>,
     pub icon: Option<Icon>,
+    custom: Option<Element<'a, M>>,
 }
 
-impl<T> ToggleItem<T> {
+impl<'a, T, M> ToggleItem<'a, T, M> {
+    /// A text segment.
     pub fn new(value: T, label: impl Into<String>) -> Self {
-        Self {
-            value,
-            label: Some(label.into()),
-            icon: None,
-        }
+        Self { value, label: Some(label.into()), icon: None, custom: None }
     }
+    /// An icon-only segment.
     pub fn icon_only(value: T, icon: Icon) -> Self {
-        Self {
-            value,
-            label: None,
-            icon: Some(icon),
-        }
+        Self { value, label: None, icon: Some(icon), custom: None }
     }
+    /// A segment with any content (an avatar, a badge, a row of widgets…).
+    pub fn custom(value: T, content: impl Into<Element<'a, M>>) -> Self {
+        Self { value, label: None, icon: None, custom: Some(content.into()) }
+    }
+    /// Adds an icon before the label. When the group is too narrow for icon and
+    /// label together, the segment falls back to the icon alone.
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
         self
     }
 }
 
-/// `AdwToggleGroup` / `AdwViewSwitcher`: exclusive, linked toggle buttons.
+/// `AdwToggleGroup` / `AdwViewSwitcher`: exclusive, linked segments.
+///
+/// It respects the space it is given: with [`width`](ToggleGroup::width)`(Fill)`
+/// (or when a stacked row asks for 100%) the segments stretch evenly with no
+/// dead space; when too wide it shrinks fairly and never overshoots its limits.
 pub struct ToggleGroup<'a, T, M> {
-    items: Vec<ToggleItem<T>>,
+    items: Vec<ToggleItem<'a, T, M>>,
     active: Option<T>,
     on_select: Box<dyn Fn(T) -> M + 'a>,
+    width: Length,
+    homogeneous: bool,
     metrics: Metrics,
 }
 
 /// Builds a [`ToggleGroup`].
 pub fn toggle_group<'a, T: Clone + PartialEq, M>(
-    items: Vec<ToggleItem<T>>,
+    items: Vec<ToggleItem<'a, T, M>>,
     active: Option<T>,
     on_select: impl Fn(T) -> M + 'a,
 ) -> ToggleGroup<'a, T, M> {
@@ -180,6 +187,8 @@ pub fn toggle_group<'a, T: Clone + PartialEq, M>(
         items,
         active,
         on_select: Box::new(on_select),
+        width: Length::Shrink,
+        homogeneous: false,
         metrics: Metrics::default(),
     }
 }
@@ -189,45 +198,48 @@ impl<'a, T, M> ToggleGroup<'a, T, M> {
         self.metrics = m;
         self
     }
+    /// All segments the same width (`AdwToggleGroup:homogeneous`).
+    pub fn homogeneous(mut self, h: bool) -> Self {
+        self.homogeneous = h;
+        self
+    }
+    /// `Length::Fill` makes the group fill the available width, each segment
+    /// taking an equal share (`flex: 1`) with its content centered.
+    pub fn width(mut self, w: impl Into<Length>) -> Self {
+        self.width = w.into();
+        self
+    }
 }
 
-impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> From<ToggleGroup<'a, T, M>> for Element<'a, M> {
+impl<'a, T: Clone + PartialEq + 'a, M: 'a> From<ToggleGroup<'a, T, M>> for Element<'a, M> {
     fn from(g: ToggleGroup<'a, T, M>) -> Self {
-        let n = g.items.len();
         let m = g.metrics;
-        let mut r = row![].spacing(0).align_y(Vertical::Center);
-        for (i, item) in g.items.into_iter().enumerate() {
-            let pos = match (i, n) {
-                (_, 1) => Position::Only,
-                (0, _) => Position::Start,
-                (i, n) if i + 1 == n => Position::End,
-                _ => Position::Middle,
-            };
-            let active = g.active.as_ref() == Some(&item.value);
-            let mut content = row![].spacing(m.space_s).align_y(Vertical::Center);
-            if let Some(ic) = item.icon {
-                content = content.push(ic.view(m.icon_size));
-            }
-            if let Some(l) = item.label {
-                content = content.push(super::typography::label(l));
-            }
-            let msg = (g.on_select)(item.value);
-            r = r.push(
-                sized(content, &m)
-                    .style(sb::toggle(active, pos))
-                    .on_press(msg),
-            );
-        }
-        container(r)
-            .padding(2)
-            .style(|t: &Theme| iced::widget::container::Style {
-                background: Some(iced::Background::Color(crate::color::alpha(
-                    t.semantic.window.fg,
-                    t.semantic.opacity.control,
-                ))),
-                border: iced::Border::default().rounded(if t.metrics.radius_m > 0.0 { t.metrics.radius_m + 2.0 } else { 0.0 }),
-                ..Default::default()
+        let active = g.active.as_ref().and_then(|a| g.items.iter().position(|i| &i.value == a));
+        let segments = g
+            .items
+            .into_iter()
+            .map(|item| {
+                let icon = |ic: Icon| -> Element<'a, M> { ic.view(m.icon_size).into() };
+                let (full, compact): (Element<'a, M>, Option<Element<'a, M>>) = match (item.custom, item.icon, item.label) {
+                    (Some(c), _, _) => (c, None),
+                    (None, Some(ic), Some(l)) => (
+                        row![icon(ic), super::typography::label(l)]
+                            .spacing(m.space_s)
+                            .align_y(Vertical::Center)
+                            .into(),
+                        Some(icon(ic)),
+                    ),
+                    (None, Some(ic), None) => (icon(ic), None),
+                    (None, None, Some(l)) => (super::typography::label(l).into(), None),
+                    (None, None, None) => (iced::widget::space().into(), None),
+                };
+                (item.value, full, compact)
             })
+            .collect();
+        super::segmented::Segmented::new(segments, active, g.on_select)
+            .width(g.width)
+            .homogeneous(g.homogeneous)
+            .metrics(m)
             .into()
     }
 }

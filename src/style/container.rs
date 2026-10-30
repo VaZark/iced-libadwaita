@@ -106,6 +106,16 @@ pub fn backdrop(theme: &Theme) -> Style {
     }
 }
 
+/// The scrim clipped to a rounded window: same dim as [`backdrop`] with the window's
+/// corner radius, so it never paints into the transparent corners outside the
+/// rounded window (iced can only clip rectangles).
+pub fn backdrop_in_window(radius: f32) -> impl Fn(&Theme) -> Style + Copy {
+    move |theme| Style {
+        border: Border::default().rounded(radius),
+        ..backdrop(theme)
+    }
+}
+
 /// `AdwBanner`: accent fill with accent foreground.
 pub fn banner(theme: &Theme) -> Style {
     surface(theme.semantic.accent.surface(), 0.0)

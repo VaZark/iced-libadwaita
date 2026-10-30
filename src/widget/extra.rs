@@ -57,7 +57,7 @@ pub fn breakpoint_bin<'a, M: 'a>(
 
 /// `AdwViewSwitcher`: exclusive icon+label toggles (usually in a header bar).
 pub fn view_switcher<'a, T: Clone + PartialEq, M>(
-    items: Vec<ToggleItem<T>>,
+    items: Vec<ToggleItem<'a, T, M>>,
     active: Option<T>,
     on_select: impl Fn(T) -> M + 'a,
 ) -> ToggleGroup<'a, T, M> {
@@ -66,7 +66,7 @@ pub fn view_switcher<'a, T: Clone + PartialEq, M>(
 
 /// `AdwInlineViewSwitcher`: the same control, meant for use inside content.
 pub fn inline_view_switcher<'a, T: Clone + PartialEq, M>(
-    items: Vec<ToggleItem<T>>,
+    items: Vec<ToggleItem<'a, T, M>>,
     active: Option<T>,
     on_select: impl Fn(T) -> M + 'a,
 ) -> ToggleGroup<'a, T, M> {
@@ -75,7 +75,7 @@ pub fn inline_view_switcher<'a, T: Clone + PartialEq, M>(
 
 /// `AdwViewSwitcherBar`: a switcher in a bottom bar.
 pub fn view_switcher_bar<'a, M: Clone + 'a, T: Clone + PartialEq + 'a>(
-    items: Vec<ToggleItem<T>>,
+    items: Vec<ToggleItem<'a, T, M>>,
     active: Option<T>,
     on_select: impl Fn(T) -> M + 'a,
 ) -> Element<'a, M> {
@@ -334,18 +334,40 @@ pub fn bottom_sheet<'a, M: Clone + 'a>(
     open: bool,
     on_close: M,
 ) -> Element<'a, M> {
+    bottom_sheet_in_window(content, sheet, open, on_close, 0.0)
+}
+
+/// Like [`bottom_sheet`], for a window with rounded corners: the scrim and the
+/// panel's bottom corners take the window radius so nothing paints outside it.
+pub fn bottom_sheet_in_window<'a, M: Clone + 'a>(
+    content: impl Into<Element<'a, M>>,
+    sheet: impl Into<Element<'a, M>>,
+    open: bool,
+    on_close: M,
+    window_radius: f32,
+) -> Element<'a, M> {
     if !open {
         return content.into();
     }
     let m = Metrics::default();
-    let scrim = mouse_area(container(space()).width(Length::Fill).height(Length::Fill).style(sc::backdrop))
-        .on_press(on_close);
+    let scrim = mouse_area(
+        container(space())
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(sc::backdrop_in_window(window_radius)),
+    )
+    .on_press(on_close);
     let panel = container(sheet.into())
         .padding(m.space_l)
         .width(Length::Fill)
-        .style(|t: &Theme| iced::widget::container::Style {
+        .style(move |t: &Theme| iced::widget::container::Style {
             border: iced::Border {
-                radius: iced::border::top(t.metrics.radius_l),
+                radius: iced::border::Radius {
+                    top_left: t.metrics.radius_l,
+                    top_right: t.metrics.radius_l,
+                    bottom_right: window_radius,
+                    bottom_left: window_radius,
+                },
                 ..Default::default()
             },
             ..sc::dialog(t)

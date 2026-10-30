@@ -11,6 +11,7 @@ use iced::advanced::overlay;
 use iced::advanced::renderer;
 use iced::advanced::widget::{Operation, Tree, Widget};
 use iced::advanced::{Clipboard, Shell};
+use iced::alignment::Horizontal;
 use iced::{mouse, Element, Event, Length, Point, Rectangle, Size, Vector};
 
 pub struct FlexRow<'a, M> {
@@ -19,6 +20,7 @@ pub struct FlexRow<'a, M> {
     line_gap: f32,
     main_basis: f32,
     aside_basis: Option<f32>,
+    aside_align: Horizontal,
     collapse: CollapseBehavior,
 }
 
@@ -32,6 +34,7 @@ impl<'a, M> FlexRow<'a, M> {
             line_gap: m.space_s,
             main_basis: m.row_wrap_basis,
             aside_basis: None,
+            aside_align: Horizontal::Left,
             collapse: m.row_collapse,
         }
     }
@@ -54,6 +57,13 @@ impl<'a, M> FlexRow<'a, M> {
     /// controls (sliders, entries), which have no natural width to measure.
     pub fn aside_basis(mut self, px: f32) -> Self {
         self.aside_basis = Some(px);
+        self
+    }
+    /// Where `aside` sits on its own line when wrapped with
+    /// [`CollapseBehavior::Flex`]: `Left` (start) or `Right` (end edge, `flex-end`).
+    /// While sharing a line it is always pinned to the end.
+    pub fn aside_align(mut self, a: Horizontal) -> Self {
+        self.aside_align = a;
         self
     }
     /// What happens to `aside` when it wraps (see [`CollapseBehavior`]).
@@ -120,11 +130,15 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for FlexRow<'a, M> {
                 ),
             };
             let ah = a.size().height;
+            let ax = match self.aside_align {
+                Horizontal::Right => (width - a.size().width).max(0.0),
+                _ => 0.0,
+            };
             layout::Node::with_children(
                 Size::new(width, mh + self.line_gap + ah),
                 vec![
                     m.move_to(Point::new(0.0, 0.0)),
-                    a.move_to(Point::new(0.0, mh + self.line_gap)),
+                    a.move_to(Point::new(ax, mh + self.line_gap)),
                 ],
             )
         }

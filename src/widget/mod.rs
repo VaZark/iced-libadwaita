@@ -18,6 +18,7 @@ mod menu;
 mod navigation;
 mod preferences;
 mod rows;
+mod segmented;
 mod scrolled;
 mod slots;
 mod spinner;
@@ -35,7 +36,7 @@ pub use button::{
     ToggleItem,
 };
 pub use extra::{
-    bottom_sheet, breakpoint_bin, carousel, carousel_indicator_dots, carousel_indicator_lines,
+    bottom_sheet, bottom_sheet_in_window, breakpoint_bin, carousel, carousel_indicator_dots, carousel_indicator_lines,
     inline_view_switcher, password_entry_row, path_bar, preferences_dialog, shortcut_label, shortcuts_dialog,
     sidebar, tab_bar, tab_button, view_switcher, view_switcher_bar, window, wrap_box,
 };

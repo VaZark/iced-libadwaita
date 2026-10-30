@@ -45,6 +45,7 @@ pub struct ActionRow<'a, M> {
     chevron: bool,
     wrap: bool,
     collapse: CollapseBehavior,
+    suffix_align: Horizontal,
     suffix_basis: Option<f32>,
     metrics: Metrics,
     typography: Typography,
@@ -66,6 +67,7 @@ impl<'a, M> ActionRow<'a, M> {
             chevron: false,
             wrap: true,
             collapse: Metrics::default().row_collapse,
+            suffix_align: Horizontal::Left,
             suffix_basis: None,
             metrics: Metrics::default(),
             typography: Typography::default(),
@@ -106,6 +108,14 @@ impl<'a, M> ActionRow<'a, M> {
     /// its own width).
     pub fn collapse(mut self, c: CollapseBehavior) -> Self {
         self.collapse = c;
+        self
+    }
+    /// Where a *wrapped* suffix sits on its own line: `Horizontal::Left` (start,
+    /// default) or `Horizontal::Right` (locked to the end edge, like `flex-end`).
+    /// Only matters for [`CollapseBehavior::Flex`]; a stacked suffix is 100% wide.
+    /// While sharing a line with the title, the suffix is always pinned to the end.
+    pub fn suffix_align(mut self, a: Horizontal) -> Self {
+        self.suffix_align = a;
         self
     }
     /// The width a `Fill`-width suffix (e.g. a slider) takes while sharing a line
@@ -153,7 +163,8 @@ impl<'a, M: Clone + 'a> From<ActionRow<'a, M>> for Element<'a, M> {
                     .spacing(m.row_spacing)
                     .line_spacing(m.space_s)
                     .main_basis(m.row_wrap_basis)
-                    .collapse(r.collapse);
+                    .collapse(r.collapse)
+                    .aside_align(r.suffix_align);
                 if let Some(b) = r.suffix_basis {
                     f = f.aside_basis(b);
                 }
@@ -192,7 +203,8 @@ impl<'a, M> SwitchRow<'a, M> {
         on_toggle: impl Fn(bool) -> M + 'a,
     ) -> Self {
         Self {
-            row: ActionRow::new(title),
+            // Compact fixed-size suffix: pin it to the end, no flex wrapping.
+            row: ActionRow::new(title).wrap_suffix(false),
             active,
             on_toggle: Box::new(on_toggle),
             metrics: Metrics::default(),
@@ -375,7 +387,8 @@ impl<'a, T: ToString + PartialEq + Clone, M> ComboRow<'a, T, M> {
         on_select: impl Fn(T) -> M + 'a,
     ) -> Self {
         Self {
-            row: ActionRow::new(title),
+            // Compact fixed-size suffix: pin it to the end, no flex wrapping.
+            row: ActionRow::new(title).wrap_suffix(false),
             options,
             selected,
             on_select: Box::new(on_select),
@@ -445,7 +458,8 @@ impl<'a, M> SpinRow<'a, M> {
         on_change: impl Fn(f64) -> M + 'a,
     ) -> Self {
         Self {
-            row: ActionRow::new(title),
+            // Compact fixed-size suffix: pin it to the end, no flex wrapping.
+            row: ActionRow::new(title).wrap_suffix(false),
             value,
             min: *range.start(),
             max: *range.end(),
@@ -503,7 +517,8 @@ impl<'a, M> ExpanderRow<'a, M> {
         on_toggle: impl Fn(bool) -> M + 'a,
     ) -> Self {
         Self {
-            row: ActionRow::new(title),
+            // Compact fixed-size suffix: pin it to the end, no flex wrapping.
+            row: ActionRow::new(title).wrap_suffix(false),
             expanded,
             on_toggle: Box::new(on_toggle),
             children: Vec::new(),
