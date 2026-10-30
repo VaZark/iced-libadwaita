@@ -31,7 +31,7 @@ impl Typography {
         text(content).size(self.title_4).font(weight(Weight::Bold))
     }
     pub fn heading<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
-        text(content).size(self.heading).font(weight(Weight::Bold))
+        text(content).size(self.heading).font(weight(Weight::Bold)).wrapping(text::Wrapping::None)
     }
     pub fn body<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
         text(content).size(self.body)
@@ -52,6 +52,13 @@ impl Typography {
     pub fn dim_label<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
         self.body(content).style(style::text::dim)
     }
+}
+
+/// A single-line label that never wraps (button, tab, sidebar and header
+/// labels). libadwaita ellipsizes; iced cannot, so we keep the full text and
+/// let the surrounding layout wrap or scroll instead of squeezing it.
+pub fn label<'a>(content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
+    text(content).wrapping(text::Wrapping::None)
 }
 
 macro_rules! free {
