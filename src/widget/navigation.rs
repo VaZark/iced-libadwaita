@@ -5,7 +5,7 @@ use super::{header_bar, toolbar_view, Element};
 use crate::style::{button as sb, container as sc};
 use crate::{Icon, Metrics};
 use iced::alignment::Vertical;
-use iced::widget::{button, column, container, mouse_area, opaque, row, space, stack, text};
+use iced::widget::{button, column, container, mouse_area, opaque, row, space, stack};
 use iced::{Length, Size};
 
 /// `AdwBreakpoint` condition on window width.
@@ -44,7 +44,9 @@ pub fn sidebar_row<'a, M: Clone + 'a>(
     if let Some(i) = icon {
         r = r.push(i.view(m.icon_size));
     }
-    r = r.push(text(label.into()));
+    // libadwaita ellipsizes; we clip at the row edge so text never paints
+    // outside the selection highlight.
+    r = r.push(container(super::typography::label(label.into())).width(Length::Fill).clip(true));
     button(
         container(r)
             .padding([0.0, m.sidebar_row_padding])
@@ -56,6 +58,23 @@ pub fn sidebar_row<'a, M: Clone + 'a>(
     .style(sb::sidebar_row(selected))
     .on_press(on_press)
     .into()
+}
+
+/// Like [`navigation_sidebar`] but rounds the bottom-left corner to match a
+/// rounded window (pass [`window::State::radius`](crate::window::State::radius)).
+pub fn navigation_sidebar_rounded<'a, M: 'a>(
+    rows: impl IntoIterator<Item = Element<'a, M>>,
+    window_radius: f32,
+) -> Element<'a, M> {
+    let m = Metrics::default();
+    container(column(rows).spacing(m.sidebar_spacing).padding(m.sidebar_padding))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(move |t: &crate::Theme| iced::widget::container::Style {
+            border: iced::Border::default().rounded(iced::border::bottom_left(window_radius)),
+            ..sc::sidebar(t)
+        })
+        .into()
 }
 
 /// Stacks sidebar rows with `.navigation-sidebar` spacing/padding.
@@ -76,22 +95,50 @@ pub struct NavigationSplitView<'a, M> {
     sidebar: Element<'a, M>,
     content: Element<'a, M>,
     sidebar_width: f32,
+    fraction: f32,
+    min_width: f32,
+    max_width: f32,
     collapsed: bool,
     show_content: bool,
 }
+
+/// libadwaita's width for a split-view sidebar: `fraction` of the total width
+/// clamped to `[min, max]` (defaults 25%, 180sp, 280sp).
+pub fn sidebar_width_for(total: f32, fraction: f32, min: f32, max: f32) -> f32 {
+    (total * fraction).clamp(min, max)
+}
+
+/// The `max-width` below which split views collapse (docs: `400sp`).
+pub const COLLAPSE_WIDTH: f32 = 400.0;
 
 impl<'a, M: 'a> NavigationSplitView<'a, M> {
     pub fn new(sidebar: impl Into<Element<'a, M>>, content: impl Into<Element<'a, M>>) -> Self {
         Self {
             sidebar: sidebar.into(),
             content: content.into(),
-            sidebar_width: Metrics::default().sidebar_width,
+            sidebar_width: 240.0,
+            fraction: 0.25,
+            min_width: 180.0,
+            max_width: 280.0,
             collapsed: false,
             show_content: true,
         }
     }
+    /// Fixed sidebar width (overrides the fraction rules).
     pub fn sidebar_width(mut self, w: f32) -> Self {
         self.sidebar_width = w;
+        self
+    }
+    pub fn sidebar_width_fraction(mut self, f: f32) -> Self {
+        self.fraction = f;
+        self
+    }
+    pub fn min_sidebar_width(mut self, w: f32) -> Self {
+        self.min_width = w;
+        self
+    }
+    pub fn max_sidebar_width(mut self, w: f32) -> Self {
+        self.max_width = w;
         self
     }
     pub fn collapsed(mut self, c: bool) -> Self {
@@ -100,6 +147,13 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
     }
     pub fn show_content(mut self, s: bool) -> Self {
         self.show_content = s;
+        self
+    }
+    /// Applies libadwaita's adaptive rules for a window of `width`: collapse at
+    /// `max-width: 400sp` and size the sidebar by fraction/min/max.
+    pub fn adapt(mut self, width: f32) -> Self {
+        self.collapsed = width <= COLLAPSE_WIDTH;
+        self.sidebar_width = sidebar_width_for(width, self.fraction, self.min_width, self.max_width);
         self
     }
 }
@@ -111,7 +165,7 @@ impl<'a, M: 'a> From<NavigationSplitView<'a, M>> for Element<'a, M> {
         }
         row![
             container(v.sidebar).width(Length::Fixed(v.sidebar_width)).height(Length::Fill),
-            container(space().width(1)).height(Length::Fill).style(sc::separator),
+            container(space().width(1)).height(Length::Fill).style(sc::sidebar_separator),
             container(v.content).width(Length::Fill).height(Length::Fill),
         ]
         .into()
@@ -165,7 +219,7 @@ impl<'a, M: Clone + 'a> From<OverlaySplitView<'a, M>> for Element<'a, M> {
         }
         let side = container(v.sidebar).width(Length::Fixed(v.sidebar_width)).height(Length::Fill);
         if !v.collapsed {
-            return row![side, container(space().width(1)).height(Length::Fill).style(sc::separator), v.content].into();
+            return row![side, container(space().width(1)).height(Length::Fill).style(sc::sidebar_separator), v.content].into();
         }
         let mut scrim = mouse_area(container(space()).width(Length::Fill).height(Length::Fill).style(sc::backdrop));
         if let Some(m) = v.on_close {
@@ -202,4 +256,26 @@ pub fn navigation_view<'a, M: Clone + 'a>(
         bar = bar.pack_start(super::circular_button(Icon::GoPrevious).on_press(on_pop));
     }
     toolbar_view(top.content).top_bar(bar).into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sidebar_width_follows_docs_rules() {
+        // 25% of the width, clamped to 180..280.
+        assert_eq!(sidebar_width_for(600.0, 0.25, 180.0, 280.0), 180.0);
+        assert_eq!(sidebar_width_for(1000.0, 0.25, 180.0, 280.0), 250.0);
+        assert_eq!(sidebar_width_for(2000.0, 0.25, 180.0, 280.0), 280.0);
+    }
+
+    #[test]
+    fn breakpoint_conditions() {
+        let bp = Breakpoint::max_width(400.0);
+        assert!(bp.matches(Size::new(360.0, 600.0)));
+        assert!(bp.matches(Size::new(400.0, 600.0)));
+        assert!(!bp.matches(Size::new(401.0, 600.0)));
+        assert!(Breakpoint::min_width(500.0).matches(Size::new(500.0, 1.0)));
+    }
 }

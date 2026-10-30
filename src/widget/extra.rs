@@ -5,7 +5,7 @@ use super::{header_bar, toolbar_view, Element, EntryRow};
 use crate::style::{button as sb, container as sc, text as st};
 use crate::widget::button::{toggle_group, ToggleGroup, ToggleItem};
 use crate::widget::navigation::Breakpoint;
-use crate::{Icon, Metrics, Theme, Typography};
+use crate::{DecorationLayout, Icon, Metrics, Theme, Typography, WindowButton};
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{
     button, column, container, mouse_area, opaque, responsive, row, space, stack, text,
@@ -161,13 +161,27 @@ fn dialog_frame<'a, M: Clone + 'a>(
     width: f32,
     height: f32,
 ) -> Element<'a, M> {
+    // `AdwHeaderBar` in a dialog: the dialog title and only a close button, on the
+    // side the system puts it (end by default). The header is flat so it shares the
+    // dialog's background.
+    let close_at_start = DecorationLayout::detect().start.contains(&WindowButton::Close);
+    let close = |at: bool| if at { vec![WindowButton::Close] } else { vec![] };
+    let layout = DecorationLayout { start: close(close_at_start), end: close(!close_at_start) };
     let bar = header_bar()
         .title(title.to_string())
-        .pack_end(super::circular_button(Icon::WindowClose).on_press(on_close));
+        // Flat: the header flows into the dialog body instead of having its own color.
+        .flat(true)
+        .window_controls(super::WindowControls {
+            on_close: Some(on_close),
+            layout: Some(layout),
+            ..Default::default()
+        });
     let content = container(body).padding(Metrics::default().space_l);
-    container(toolbar_view(iced::widget::scrollable(content)).top_bar(bar))
-        .width(Length::Fixed(width))
-        .height(Length::Fixed(height))
+    container(toolbar_view(super::scrolled_window(content)).top_bar(bar))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .max_width(width)
+        .max_height(height)
         .clip(true)
         .style(sc::dialog)
         .into()
@@ -247,7 +261,7 @@ pub fn tab_bar<'a, M: Clone + 'a>(
     let m = Metrics::default();
     let mut r = row![].spacing(m.space_xs).padding(m.space_xs).align_y(Vertical::Center);
     for (i, title) in tabs.into_iter().enumerate() {
-        let mut label = row![container(text(title)).width(Length::Fill)]
+        let mut label = row![container(super::typography::label(title)).width(Length::Fill)]
             .spacing(m.space_s)
             .align_y(Vertical::Center);
         if let Some(close) = &on_close {

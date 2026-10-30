@@ -5,7 +5,7 @@ use crate::style::button as sb;
 use crate::style::button::Position;
 use crate::{Icon, Metrics, Theme};
 use iced::alignment::Vertical;
-use iced::widget::{button, container, row, space, text, Button};
+use iced::widget::{button, container, row, space, Button};
 use iced::{Length, Padding};
 
 /// `AdwButtonContent`: an optional icon next to a label.
@@ -41,7 +41,7 @@ impl<'a, M: 'a> From<ButtonContent<'a, M>> for Element<'a, M> {
         if let Some(i) = c.icon {
             r = r.push(i.view(c.metrics.icon_size));
         }
-        r.push(text(c.label)).into()
+        r.push(super::typography::label(c.label)).into()
     }
 }
 
@@ -124,7 +124,7 @@ pub fn split_button<'a, M: Clone + 'a>(
     let m = Metrics::default();
     row![
         sized(content, &m).style(sb::linked(Position::Start)).on_press(on_press),
-        container(space().width(1).height(Length::Fill)).style(crate::style::container::separator),
+        container(space().width(1).height(Length::Fill)).style(crate::style::container::bar_separator),
         button(container(Icon::GoDown.view(m.icon_size)).center_y(Length::Fixed(m.button_min_height - m.button_padding.y())))
             .padding(m.button_padding)
             .style(sb::linked(Position::End))
@@ -195,7 +195,7 @@ impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> From<ToggleGroup<'a, T, M>> f
     fn from(g: ToggleGroup<'a, T, M>) -> Self {
         let n = g.items.len();
         let m = g.metrics;
-        let mut r = row![].spacing(1);
+        let mut r = row![].spacing(0).align_y(Vertical::Center);
         for (i, item) in g.items.into_iter().enumerate() {
             let pos = match (i, n) {
                 (_, 1) => Position::Only,
@@ -209,7 +209,7 @@ impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> From<ToggleGroup<'a, T, M>> f
                 content = content.push(ic.view(m.icon_size));
             }
             if let Some(l) = item.label {
-                content = content.push(text(l));
+                content = content.push(super::typography::label(l));
             }
             let msg = (g.on_select)(item.value);
             r = r.push(
@@ -218,6 +218,16 @@ impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> From<ToggleGroup<'a, T, M>> f
                     .on_press(msg),
             );
         }
-        r.into()
+        container(r)
+            .padding(2)
+            .style(|t: &Theme| iced::widget::container::Style {
+                background: Some(iced::Background::Color(crate::color::alpha(
+                    t.semantic.window.fg,
+                    t.semantic.opacity.control,
+                ))),
+                border: iced::Border::default().rounded(if t.metrics.radius_m > 0.0 { t.metrics.radius_m + 2.0 } else { 0.0 }),
+                ..Default::default()
+            })
+            .into()
     }
 }

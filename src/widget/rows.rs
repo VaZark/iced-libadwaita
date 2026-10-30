@@ -2,11 +2,11 @@
 //! `AdwSpinRow`, `AdwExpanderRow`, `AdwButtonRow`, and `.boxed-list`.
 
 use super::Element;
-use crate::style::{button as sb, container as sc, pick_list as sp, text as st, text_input as si};
+use crate::style::{button as sb, container as sc, text as st, text_input as si};
 use crate::widget::typography;
-use crate::{Icon, Metrics, Role, Theme, Typography};
+use crate::{CollapseBehavior, Icon, Metrics, Role, Theme, Typography};
 use iced::alignment::{Horizontal, Vertical};
-use iced::widget::{button, column, container, pick_list, row, space, text, text_input, toggler};
+use iced::widget::{button, column, container, row, space, text, text_input};
 use iced::Length;
 
 /// `.boxed-list`: rows in a rounded card separated by hairlines.
@@ -16,7 +16,7 @@ pub fn boxed_list<'a, M: 'a>(
     let mut col = column![];
     for (i, r) in rows.into_iter().enumerate() {
         if i > 0 {
-            col = col.push(container(space().height(1)).width(Length::Fill).style(sc::separator));
+            col = col.push(container(space().height(1)).width(Length::Fill).style(sc::card_separator));
         }
         col = col.push(r);
     }
@@ -43,6 +43,9 @@ pub struct ActionRow<'a, M> {
     suffix: Option<Element<'a, M>>,
     on_press: Option<M>,
     chevron: bool,
+    wrap: bool,
+    collapse: CollapseBehavior,
+    suffix_basis: Option<f32>,
     metrics: Metrics,
     typography: Typography,
 }
@@ -61,6 +64,9 @@ impl<'a, M> ActionRow<'a, M> {
             suffix: None,
             on_press: None,
             chevron: false,
+            wrap: true,
+            collapse: Metrics::default().row_collapse,
+            suffix_basis: None,
             metrics: Metrics::default(),
             typography: Typography::default(),
         }
@@ -89,6 +95,25 @@ impl<'a, M> ActionRow<'a, M> {
         self.chevron = show;
         self
     }
+    /// Whether the suffix wraps to its own line when it can't share one with the
+    /// title (default true, like CSS `flex-wrap`).
+    pub fn wrap_suffix(mut self, wrap: bool) -> Self {
+        self.wrap = wrap;
+        self
+    }
+    /// What the suffix does when it wraps: [`CollapseBehavior::Stacked`] (100%
+    /// width on its own line, the default) or [`CollapseBehavior::Flex`] (keeps
+    /// its own width).
+    pub fn collapse(mut self, c: CollapseBehavior) -> Self {
+        self.collapse = c;
+        self
+    }
+    /// The width a `Fill`-width suffix (e.g. a slider) takes while sharing a line
+    /// with the title. Required for such suffixes so the row can tell when they fit.
+    pub fn suffix_basis(mut self, px: f32) -> Self {
+        self.suffix_basis = Some(px);
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -102,24 +127,42 @@ impl<'a, M> ActionRow<'a, M> {
 impl<'a, M: Clone + 'a> From<ActionRow<'a, M>> for Element<'a, M> {
     fn from(r: ActionRow<'a, M>) -> Self {
         let m = r.metrics;
-        let mut titles = column![r.typography.body(r.title)].spacing(2);
+        let mut titles = column![r.typography.body(r.title).wrapping(text::Wrapping::WordOrGlyph)].spacing(2);
         if let Some(s) = r.subtitle {
-            titles = titles.push(r.typography.caption(s).size(r.typography.body * 0.93).style(st::dim));
+            titles = titles.push(
+                r.typography
+                    .caption(s)
+                    .size(r.typography.body * 0.93)
+                    .wrapping(text::Wrapping::WordOrGlyph)
+                    .style(st::dim),
+            );
         }
-        let mut line = row![].spacing(m.row_spacing).align_y(Vertical::Center);
+        let mut main = row![].spacing(m.row_spacing).align_y(Vertical::Center);
         if let Some(p) = r.prefix {
-            line = line.push(p);
+            main = main.push(p);
         }
-        line = line.push(titles.width(Length::Fill));
-        if let Some(s) = r.suffix {
-            line = line.push(s);
-        }
+        main = main.push(titles.width(Length::Fill));
         if r.chevron {
-            line = line.push(Icon::GoNext.view(m.icon_size).style(|t: &Theme, _| {
+            main = main.push(Icon::GoNext.view(m.icon_size).style(|t: &Theme, _| {
                 iced::widget::svg::Style { color: Some(t.semantic.dim_solid()) }
             }));
         }
-        let framed = container(row_frame(line.width(Length::Fill), &m))
+        let line: Element<'a, M> = match r.suffix {
+            Some(suffix) if r.wrap => {
+                let mut f = super::FlexRow::new(main.width(Length::Fill), suffix)
+                    .spacing(m.row_spacing)
+                    .line_spacing(m.space_s)
+                    .main_basis(m.row_wrap_basis)
+                    .collapse(r.collapse);
+                if let Some(b) = r.suffix_basis {
+                    f = f.aside_basis(b);
+                }
+                f.into()
+            }
+            Some(suffix) => main.push(suffix).width(Length::Fill).into(),
+            None => main.width(Length::Fill).into(),
+        };
+        let framed = container(row_frame(line, &m))
             .padding(m.row_padding)
             .width(Length::Fill);
         match r.on_press {
@@ -173,9 +216,7 @@ impl<'a, M> SwitchRow<'a, M> {
 impl<'a, M: Clone + 'a> From<SwitchRow<'a, M>> for Element<'a, M> {
     fn from(s: SwitchRow<'a, M>) -> Self {
         let toggle_to = (s.on_toggle)(!s.active);
-        let sw = toggler(s.active)
-            .on_toggle(s.on_toggle)
-            .size(s.metrics.switch_size);
+        let sw = super::switch(s.active).on_toggle(s.on_toggle);
         s.row.suffix(sw).on_activate(toggle_to).into()
     }
 }
@@ -213,7 +254,7 @@ impl<'a, M: Clone + 'a> From<ButtonRow<M>> for Element<'a, M> {
     fn from(b: ButtonRow<M>) -> Self {
         let m = b.metrics;
         let role = b.role;
-        let label = text(b.title).style(move |t: &Theme| iced::widget::text::Style {
+        let label = typography::label(b.title).style(move |t: &Theme| iced::widget::text::Style {
             color: Some(t.semantic.swatch(role).color),
         });
         let inner = container(row_frame(label, &m))
@@ -236,6 +277,7 @@ pub struct EntryRow<'a, M> {
     on_submit: Option<M>,
     secure: bool,
     suffix: Option<Element<'a, M>>,
+    collapse: CollapseBehavior,
     metrics: Metrics,
 }
 
@@ -248,8 +290,14 @@ impl<'a, M> EntryRow<'a, M> {
             on_submit: None,
             secure: false,
             suffix: None,
+            collapse: Metrics::default().row_collapse,
             metrics: Metrics::default(),
         }
+    }
+    /// Behavior of the suffix when it wraps (see [`CollapseBehavior`]).
+    pub fn collapse(mut self, c: CollapseBehavior) -> Self {
+        self.collapse = c;
+        self
     }
     pub fn on_input(mut self, f: impl Fn(String) -> M + 'a) -> Self {
         self.on_input = Some(Box::new(f));
@@ -288,18 +336,19 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
         if let Some(s) = e.on_submit {
             input = input.on_submit(s);
         }
-        let mut line = row![column![
-            t.caption(e.title).style(st::dim),
-            input
-        ]
-        .spacing(2)
-        .width(Length::Fill)]
-        .spacing(m.row_spacing)
-        .align_y(Vertical::Center);
-        if let Some(s) = e.suffix {
-            line = line.push(s);
-        }
-        container(row_frame(line.width(Length::Fill), &m))
+        let main = column![t.caption(e.title).style(st::dim), input]
+            .spacing(2)
+            .width(Length::Fill);
+        let line: Element<'a, M> = match e.suffix {
+            Some(s) => super::FlexRow::new(main, s)
+                .spacing(m.row_spacing)
+                .line_spacing(m.space_s)
+                .main_basis(m.row_wrap_basis)
+                .collapse(e.collapse)
+                .into(),
+            None => main.into(),
+        };
+        container(row_frame(line, &m))
             .padding(m.row_padding)
             .width(Length::Fill)
             .into()
@@ -315,6 +364,7 @@ where
     options: &'a [T],
     selected: Option<T>,
     on_select: Box<dyn Fn(T) -> M + 'a>,
+    open_initially: bool,
 }
 
 impl<'a, T: ToString + PartialEq + Clone, M> ComboRow<'a, T, M> {
@@ -329,10 +379,16 @@ impl<'a, T: ToString + PartialEq + Clone, M> ComboRow<'a, T, M> {
             options,
             selected,
             on_select: Box::new(on_select),
+            open_initially: false,
         }
     }
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {
         self.row = self.row.subtitle(s);
+        self
+    }
+    /// Start with the popover open (screenshots, demos).
+    pub fn open_initially(mut self, open: bool) -> Self {
+        self.open_initially = open;
         self
     }
 }
@@ -343,8 +399,29 @@ where
     M: Clone + 'a,
 {
     fn from(c: ComboRow<'a, T, M>) -> Self {
-        let pl = pick_list(c.options, c.selected, c.on_select).style(sp::flat);
-        c.row.suffix(pl).into()
+        let m = Metrics::default();
+        let current = c.selected.as_ref().map(ToString::to_string).unwrap_or_default();
+        let value = row![
+            typography::label(current).style(st::dim),
+            Icon::GoDown.view(m.icon_size).style(|t: &Theme, _| iced::widget::svg::Style {
+                color: Some(t.semantic.dim_solid()),
+            }),
+        ]
+        .spacing(m.space_s)
+        .align_y(Vertical::Center);
+        let header: Element<'a, M> = c.row.suffix(value).into();
+        let on_select = c.on_select;
+        let selected = c.selected;
+        let items = c
+            .options
+            .iter()
+            .map(|o| super::menu_item(o.to_string(), selected.as_ref() == Some(o), on_select(o.clone())));
+        super::Dropdown::custom(header, super::popover(items, 280.0))
+            .appearance(super::DropdownAppearance::Row)
+            .align(super::PopoverAlign::End)
+            .popover_width(240.0)
+            .open_initially(c.open_initially)
+            .into()
     }
 }
 
@@ -459,7 +536,7 @@ impl<'a, M: Clone + 'a> From<ExpanderRow<'a, M>> for Element<'a, M> {
             let mut inner = column![];
             for c in x.children {
                 inner = inner
-                    .push(container(space().height(1)).width(Length::Fill).style(sc::separator))
+                    .push(container(space().height(1)).width(Length::Fill).style(sc::card_separator))
                     .push(c);
             }
             col = col.push(container(inner).width(Length::Fill).style(|t: &Theme| {

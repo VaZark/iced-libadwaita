@@ -3,8 +3,7 @@
 use super::{boxed_list, clamp, Element};
 use crate::style::text as st;
 use crate::{Metrics, Typography};
-use iced::alignment::Vertical;
-use iced::widget::{column, row, scrollable, space};
+use iced::widget::{column, space};
 use iced::Length;
 
 /// `AdwPreferencesGroup`: a titled boxed list.
@@ -75,11 +74,16 @@ impl<'a, M: 'a> From<PreferencesGroup<'a, M>> for Element<'a, M> {
         let mut col = column![].spacing(g.metrics.space_m).width(Length::Fill);
         let has_head = g.header_suffix.is_some() || has_text;
         if has_head {
-            let mut r = row![head.width(Length::Fill)].align_y(Vertical::Center);
-            if let Some(s) = g.header_suffix {
-                r = r.push(s);
-            }
-            col = col.push(r);
+            let head: Element<'a, M> = head.width(Length::Fill).into();
+            col = col.push(match g.header_suffix {
+                Some(s) => super::FlexRow::new(head, s)
+                    .spacing(g.metrics.space_m)
+                    .line_spacing(g.metrics.space_s)
+                    .main_basis(g.metrics.row_wrap_basis)
+                    .collapse(g.metrics.row_collapse)
+                    .into(),
+                None => head,
+            });
         }
         if !g.rows.is_empty() {
             col = col.push(boxed_list(g.rows));
@@ -128,7 +132,7 @@ impl<'a, M: 'a> From<PreferencesPage<'a, M>> for Element<'a, M> {
             column(p.groups).spacing(m.group_spacing).width(Length::Fill),
         )
         .padding(m.page_padding);
-        scrollable(clamp(body, m.clamp_maximum))
+        super::scrolled_window(clamp(body, m.clamp_maximum))
             .width(Length::Fill)
             .height(Length::Fill)
             .into()

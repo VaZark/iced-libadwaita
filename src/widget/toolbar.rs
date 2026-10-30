@@ -2,24 +2,63 @@
 
 use super::Element;
 use crate::style::container as sc;
-use crate::Metrics;
+use crate::{Metrics, Theme};
 use iced::alignment::Vertical;
-use iced::widget::{column, container, row, space};
-use iced::Length;
+use iced::gradient::Linear;
+use iced::widget::{column, container, row, space, stack};
+use iced::{Background, Color, Length, Radians};
 
-fn sep<'a, M: 'a>() -> Element<'a, M> {
-    container(space().height(1))
+/// `AdwToolbarView:top-bar-style` / `bottom-bar-style`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BarStyle {
+    /// No shadow (the Adwaita default; libadwaita draws a scroll undershoot instead).
+    #[default]
+    Flat,
+    /// Persistent shadow: `0 1px` and `0 2px 4px` of `--headerbar-shade-color` at 50%.
+    Raised,
+    /// A 1px line in `--headerbar-darker-shade-color`.
+    RaisedBorder,
+}
+
+/// The shadow cast by a raised bar onto the content, drawn as a fading strip
+/// (iced draws one shadow per quad and later siblings would paint over it).
+fn shade_strip<'a, M: 'a>(top: bool) -> Element<'a, M> {
+    container(space())
         .width(Length::Fill)
-        .style(sc::separator)
+        .height(Length::Fixed(6.0))
+        .style(move |t: &Theme| {
+            let s = &t.semantic;
+            let k = if t.shadows.enabled { t.shadows.intensity } else { 0.0 };
+            let c = Color { a: (s.headerbar_shade.a * 0.5 * k).min(1.0), ..s.headerbar_shade };
+            let clear = Color { a: 0.0, ..c };
+            // iced angles: 0 = left→right; π/2 = top→bottom.
+            let (from, to) = if top { (c, clear) } else { (clear, c) };
+            let g = Linear::new(Radians(std::f32::consts::FRAC_PI_2)).add_stop(0.0, from).add_stop(1.0, to);
+            iced::widget::container::Style {
+                background: Some(Background::Gradient(g.into())),
+                ..Default::default()
+            }
+        })
         .into()
 }
 
-/// `AdwToolbarView`: top bars, content, bottom bars, with hairlines between.
+fn border_line<'a, M: 'a>() -> Element<'a, M> {
+    container(space().height(1))
+        .width(Length::Fill)
+        .style(|t: &Theme| iced::widget::container::Style {
+            background: Some(Background::Color(t.semantic.headerbar_darker_shade)),
+            ..Default::default()
+        })
+        .into()
+}
+
+/// `AdwToolbarView`: top bars, content, bottom bars.
 pub struct ToolbarView<'a, M> {
     top: Vec<Element<'a, M>>,
     bottom: Vec<Element<'a, M>>,
     content: Element<'a, M>,
-    separators: bool,
+    top_style: BarStyle,
+    bottom_style: BarStyle,
 }
 
 pub fn toolbar_view<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> ToolbarView<'a, M> {
@@ -32,7 +71,8 @@ impl<'a, M: 'a> ToolbarView<'a, M> {
             top: Vec::new(),
             bottom: Vec::new(),
             content: content.into(),
-            separators: true,
+            top_style: BarStyle::Flat,
+            bottom_style: BarStyle::Flat,
         }
     }
     /// `add_top_bar`.
@@ -45,9 +85,14 @@ impl<'a, M: 'a> ToolbarView<'a, M> {
         self.bottom.push(e.into());
         self
     }
-    /// `top-bar-style` raised (true, default) or flat (false).
-    pub fn separators(mut self, s: bool) -> Self {
-        self.separators = s;
+    /// `top-bar-style`.
+    pub fn top_bar_style(mut self, s: BarStyle) -> Self {
+        self.top_style = s;
+        self
+    }
+    /// `bottom-bar-style`.
+    pub fn bottom_bar_style(mut self, s: BarStyle) -> Self {
+        self.bottom_style = s;
         self
     }
 }
@@ -55,15 +100,26 @@ impl<'a, M: 'a> ToolbarView<'a, M> {
 impl<'a, M: 'a> From<ToolbarView<'a, M>> for Element<'a, M> {
     fn from(t: ToolbarView<'a, M>) -> Self {
         let mut col = column![];
+        let has_top = !t.top.is_empty();
+        let has_bottom = !t.bottom.is_empty();
         for b in t.top {
             col = col.push(b);
         }
-        if t.separators {
-            col = col.push(sep());
+        if has_top && t.top_style == BarStyle::RaisedBorder {
+            col = col.push(border_line());
         }
-        col = col.push(container(t.content).width(Length::Fill).height(Length::Fill));
-        if t.separators && !t.bottom.is_empty() {
-            col = col.push(sep());
+
+        let mut layers = vec![container(t.content).width(Length::Fill).height(Length::Fill).into()];
+        if has_top && t.top_style == BarStyle::Raised {
+            layers.push(container(shade_strip(true)).align_top(Length::Fill).into());
+        }
+        if has_bottom && t.bottom_style == BarStyle::Raised {
+            layers.push(container(shade_strip(false)).align_bottom(Length::Fill).into());
+        }
+        col = col.push(stack(layers).width(Length::Fill).height(Length::Fill));
+
+        if has_bottom && t.bottom_style == BarStyle::RaisedBorder {
+            col = col.push(border_line());
         }
         for b in t.bottom {
             col = col.push(b);

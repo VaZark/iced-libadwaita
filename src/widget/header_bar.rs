@@ -3,17 +3,28 @@
 use super::Element;
 use crate::style::container as sc;
 use crate::widget::typography;
-use crate::{Icon, Metrics, Theme};
+use crate::{DecorationLayout, Icon, Metrics, Theme, WindowButton};
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{column, container, mouse_area, row, space, text};
 use iced::{Length, Padding};
 
-/// Window-control messages shown on the right of a [`HeaderBar`]
-/// (`show-end-title-buttons`).
+/// Window controls for a [`HeaderBar`].
+///
+/// Which buttons appear, and on which side, follows the user's GNOME
+/// `button-layout` (`DecorationLayout::detect`, GNOME's default is a lone close
+/// button at the end). A button is shown only if the layout includes it *and* you
+/// provide its message. The icons come from the current icon theme.
+///
+/// In mobile mode ([`window::is_mobile`](crate::window::is_mobile)) don't add
+/// controls at all.
 pub struct WindowControls<M> {
     pub on_minimize: Option<M>,
     pub on_maximize: Option<M>,
     pub on_close: Option<M>,
+    /// Shows the restore icon on the maximize button.
+    pub maximized: bool,
+    /// Overrides the detected layout (e.g. for tests or non-GNOME setups).
+    pub layout: Option<DecorationLayout>,
 }
 
 impl<M> Default for WindowControls<M> {
@@ -22,6 +33,8 @@ impl<M> Default for WindowControls<M> {
             on_minimize: None,
             on_maximize: None,
             on_close: None,
+            maximized: false,
+            layout: None,
         }
     }
 }
@@ -31,7 +44,7 @@ pub fn window_title<'a, M: 'a>(title: &str, subtitle: Option<&str>) -> Element<'
     let mut c = column![typography::heading(title.to_string())]
         .align_x(Horizontal::Center);
     if let Some(s) = subtitle {
-        c = c.push(typography::caption(s.to_string()).style(crate::style::text::dim));
+        c = c.push(typography::caption(s.to_string()).wrapping(text::Wrapping::None).style(crate::style::text::dim));
     }
     c.into()
 }
@@ -44,8 +57,12 @@ pub struct HeaderBar<'a, M> {
     subtitle: Option<String>,
     title_widget: Option<Element<'a, M>>,
     controls: Option<WindowControls<M>>,
+    show_start_buttons: bool,
+    show_end_buttons: bool,
     on_drag: Option<M>,
     on_double_click: Option<M>,
+    corners: (f32, f32),
+    flat: bool,
     metrics: Metrics,
 }
 
@@ -63,8 +80,12 @@ impl<'a, M> HeaderBar<'a, M> {
             subtitle: None,
             title_widget: None,
             controls: None,
+            show_start_buttons: true,
+            show_end_buttons: true,
             on_drag: None,
             on_double_click: None,
+            corners: (0.0, 0.0),
+            flat: false,
             metrics: Metrics::default(),
         }
     }
@@ -91,6 +112,17 @@ impl<'a, M> HeaderBar<'a, M> {
         self.title_widget = Some(e.into());
         self
     }
+    /// `show-start-title-buttons`: window buttons the layout puts at the start.
+    /// In split views only the pane at that window edge shows them.
+    pub fn show_start_title_buttons(mut self, show: bool) -> Self {
+        self.show_start_buttons = show;
+        self
+    }
+    /// `show-end-title-buttons`: window buttons the layout puts at the end.
+    pub fn show_end_title_buttons(mut self, show: bool) -> Self {
+        self.show_end_buttons = show;
+        self
+    }
     pub fn window_controls(mut self, c: WindowControls<M>) -> Self {
         self.controls = Some(c);
         self
@@ -105,6 +137,25 @@ impl<'a, M> HeaderBar<'a, M> {
         self.on_double_click = Some(m);
         self
     }
+    /// Rounds the bar's top corners to match the window corners (pass
+    /// [`window::State::radius`](crate::window::State::radius); 0 when maximized).
+    pub fn window_radius(mut self, r: f32) -> Self {
+        self.corners = (r, r);
+        self
+    }
+    /// Flat header (`%headerbar-flat`: no background, no shadow): the bar shows
+    /// whatever is behind it, so it flows into the content. Used in dialogs
+    /// (Nautilus-style) and inline contexts.
+    pub fn flat(mut self, flat: bool) -> Self {
+        self.flat = flat;
+        self
+    }
+    /// Rounds only the outer corners: `left` and `right` radii. Use in split views
+    /// where each pane has its own header (left pane: `(r, 0)`, right pane: `(0, r)`).
+    pub fn window_corners(mut self, left: f32, right: f32) -> Self {
+        self.corners = (left, right);
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -117,27 +168,41 @@ impl<'a, M: Clone + 'a> Default for HeaderBar<'a, M> {
     }
 }
 
-fn ctl<'a, M: Clone + 'a>(icon: Icon, msg: Option<M>) -> Element<'a, M> {
-    let mut b = super::circular_button(icon);
-    if let Some(m) = msg {
-        b = b.on_press(m);
-    }
-    b.into()
+/// A window button: a 24px circle with the icon theme's symbol.
+fn ctl<'a, M: Clone + 'a>(icon: Icon, msg: M) -> Element<'a, M> {
+    let m = Metrics::default();
+    iced::widget::button(container(icon.view(m.icon_size)).center(Length::Fixed(24.0)))
+        .padding(0)
+        .style(crate::style::button::circular)
+        .on_press(msg)
+        .into()
 }
 
 impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
     fn from(h: HeaderBar<'a, M>) -> Self {
         let m = h.metrics;
+        let (corner_l, corner_r) = h.corners;
+        let flat = h.flat;
+        let mut start = h.start;
         let mut end = h.end;
         if let Some(c) = h.controls {
-            if c.on_minimize.is_some() {
-                end.push(ctl(Icon::WindowMinimize, c.on_minimize));
+            let layout = c.layout.clone().unwrap_or_else(DecorationLayout::detect);
+            let make = |b: WindowButton| -> Option<Element<'a, M>> {
+                match b {
+                    WindowButton::Minimize => c.on_minimize.clone().map(|m| ctl(Icon::WindowMinimize, m)),
+                    WindowButton::Maximize => c.on_maximize.clone().map(|m| {
+                        ctl(if c.maximized { Icon::WindowRestore } else { Icon::WindowMaximize }, m)
+                    }),
+                    WindowButton::Close => c.on_close.clone().map(|m| ctl(Icon::WindowClose, m)),
+                }
+            };
+            if h.show_start_buttons {
+                let mut buttons: Vec<_> = layout.start.iter().copied().filter_map(&make).collect();
+                buttons.append(&mut start);
+                start = buttons;
             }
-            if c.on_maximize.is_some() {
-                end.push(ctl(Icon::WindowMaximize, c.on_maximize));
-            }
-            if c.on_close.is_some() {
-                end.push(ctl(Icon::WindowClose, c.on_close));
+            if h.show_end_buttons {
+                end.extend(layout.end.iter().copied().filter_map(&make));
             }
         }
         let title: Element<'a, M> = match (h.title_widget, h.title) {
@@ -145,24 +210,32 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
             (None, Some(t)) => window_title(&t, h.subtitle.as_deref()),
             (None, None) => space().into(),
         };
-        let side = |items: Vec<Element<'a, M>>, h: Horizontal| {
-            container(row(items).spacing(m.space_s).align_y(Vertical::Center))
-                .width(Length::FillPortion(1))
-                .align_x(h)
+        let side = |items: Vec<Element<'a, M>>| -> Element<'a, M> {
+            row(items).spacing(m.space_s).align_y(Vertical::Center).into()
         };
-        let bar = container(
-            row![
-                side(h.start, Horizontal::Left),
-                title,
-                side(end, Horizontal::Right),
-            ]
-            .align_y(Vertical::Center)
-            .spacing(m.space_m),
-        )
+        let bar = container(super::slots::slots(
+            side(start),
+            title,
+            side(end),
+            m.headerbar_height,
+            m.space_m,
+        ))
         .padding(m.headerbar_padding)
-        .center_y(Length::Fixed(m.headerbar_height))
         .width(Length::Fill)
-        .style(sc::headerbar);
+        .style(move |t: &Theme| {
+            if flat {
+                // Text color only; the background comes from what is behind the bar.
+                return iced::widget::container::Style {
+                    text_color: Some(t.semantic.headerbar.fg),
+                    ..Default::default()
+                };
+            }
+            iced::widget::container::Style {
+                border: iced::Border::default()
+                    .rounded(iced::border::top_left(corner_l).top_right(corner_r)),
+                ..sc::headerbar(t)
+            }
+        });
 
         let mut area = mouse_area(bar);
         if let Some(d) = h.on_drag {

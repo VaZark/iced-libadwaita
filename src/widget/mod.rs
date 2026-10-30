@@ -46,8 +46,8 @@ pub use flex::FlexRow;
 pub use header_bar::{header_bar, window_title, HeaderBar, WindowControls};
 pub use menu::{menu_button, primary_menu, Menu, MenuButton, MenuItem, MenuPresentation};
 pub use navigation::{
-    navigation_sidebar, navigation_view, sidebar_row, Breakpoint, NavigationPage,
-    NavigationSplitView, OverlaySplitView,
+    navigation_sidebar, navigation_sidebar_rounded, navigation_view, sidebar_row, Breakpoint, NavigationPage,
+    sidebar_width_for, NavigationSplitView, OverlaySplitView, COLLAPSE_WIDTH,
 };
 pub use preferences::{preferences_group, preferences_page, PreferencesGroup, PreferencesPage};
 pub use rows::{
@@ -58,7 +58,7 @@ pub use scrolled::{scrollbar, scrolled_window, scrolled_window_both, scrolled_wi
 pub use spinner::{spinner, Spinner};
 pub use status_page::{bin, card, clamp, status_page, StatusPage};
 pub use toast::{toast_overlay, Toast};
-pub use toolbar::{action_bar, toolbar_view, ActionBar, ToolbarView};
+pub use toolbar::{action_bar, toolbar_view, ActionBar, BarStyle, ToolbarView};
 
 /// Shorthand for an iced element using this crate's [`Theme`](crate::Theme).
 pub type Element<'a, Message> = iced::Element<'a, Message, crate::Theme>;

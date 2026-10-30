@@ -21,7 +21,7 @@ pub fn dialog<'a, M: Clone + 'a>(
     stack![
         base.into(),
         opaque(scrim),
-        container(opaque(dialog.into())).center(Length::Fill)
+        container(opaque(dialog.into())).center(Length::Fill).padding(12)
     ]
     .into()
 }
@@ -80,11 +80,11 @@ impl<'a, M> AlertDialog<'a, M> {
 }
 
 fn separator_v<'a, M: 'a>() -> Element<'a, M> {
-    container(space().width(1)).height(Length::Fill).style(sc::separator).into()
+    container(space().width(1)).height(Length::Fill).style(sc::card_separator).into()
 }
 
 fn separator_h<'a, M: 'a>() -> Element<'a, M> {
-    container(space().height(1)).width(Length::Fill).style(sc::separator).into()
+    container(space().height(1)).width(Length::Fill).style(sc::card_separator).into()
 }
 
 impl<'a, M: Clone + 'a> From<AlertDialog<'a, M>> for Element<'a, M> {
@@ -148,7 +148,8 @@ impl<'a, M: Clone + 'a> From<AlertDialog<'a, M>> for Element<'a, M> {
         container(
             column![container(body).padding(m.dialog_padding), separator_h(), buttons]
         )
-        .width(Length::Fixed(m.dialog_width))
+        .width(Length::Fill)
+        .max_width(m.dialog_width)
         .clip(true)
         .style(sc::dialog)
         .into()
@@ -254,7 +255,8 @@ impl<'a, M: Clone + 'a> From<AboutDialog<'a, M>> for Element<'a, M> {
             );
         }
         container(c)
-            .width(Length::Fixed(m.dialog_width + 40.0))
+            .width(Length::Fill)
+            .max_width(m.dialog_width + 40.0)
             .clip(true)
             .style(sc::dialog)
             .into()

@@ -246,9 +246,10 @@ fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M>
         .align_y(Vertical::Center),
     )
     .width(Length::Fill)
-    .style(move |th: &Theme| iced::widget::container::Style {
-        border: iced::Border::default().rounded(iced::border::top(window_radius)),
-        ..sc::headerbar(th)
+    // Flat, like a dialog header: it shares the page background.
+    .style(|th: &Theme| iced::widget::container::Style {
+        text_color: Some(th.semantic.window.fg),
+        ..Default::default()
     });
 
     // Large touch rows, one boxed list per section.
