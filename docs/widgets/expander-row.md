@@ -22,4 +22,4 @@ Nested list sits on a slightly shaded background separated by a hairline ‡.
 
 ## iced mapping
 
-`ExpanderRow::new(title, expanded, on_toggle).push(row)`; stateless (app owns `expanded`).
+`ExpanderRow::new(title, expanded, on_toggle).push(row)`; stateless (app owns `expanded`). The nested list is always mounted inside a `reveal` that slides it open/closed (250ms, `ADW_EASE`).

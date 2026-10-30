@@ -12,8 +12,8 @@ Bottom sheet with optional bottom bar integrated with content (1.6); for transie
 
 ## iced mapping
 
-`bottom_sheet(content, sheet, open, on_close)`.
+`bottom_sheet(content, sheet, open, on_close)` / `bottom_sheet_in_window(.., radius)`; slides up on the sheet spring (damping ratio 0.8, mass 1, stiffness 400) with a fading scrim.
 
 ## Deviations / gaps
 
-No bottom bar, drag.
+No bottom bar, drag, or slide-out (it animates in only).

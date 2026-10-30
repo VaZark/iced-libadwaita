@@ -20,4 +20,4 @@ Switch ≈46×26 with a 20px knob ‡. Switch sits in the suffix, vertically cen
 
 ## iced mapping
 
-`SwitchRow::new(title, active, on_toggle)`; whole row is activatable. The switch is a custom `adw::widget::Switch` with Adwaita proportions (46×26) rather than iced's 2:1 toggler.
+`SwitchRow::new(title, active, on_toggle)`; whole row is activatable. The switch is a custom `adw::widget::Switch` with Adwaita proportions (46×26) rather than iced's 2:1 toggler; the knob slides and the track cross-fades in 200ms (`$ease-out-quad`) and snaps when animations are disabled.

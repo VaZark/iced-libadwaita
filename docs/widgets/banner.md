@@ -20,4 +20,4 @@ Accent-filled bar with accent foreground, button right.
 
 ## iced mapping
 
-`banner(title).button(label, msg).revealed(bool)`.
+`banner(title).button(label, msg).revealed(bool)`; slides in/out with the 250ms `ADW_EASE` reveal.

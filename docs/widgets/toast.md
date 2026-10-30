@@ -20,8 +20,8 @@ OSD surface, pill radius, centered at the bottom.
 
 ## iced mapping
 
-`toast_overlay(content, Option<Toast>)`; the app clears it (no timers in widgets).
+`toast_overlay(content, Option<Toast>)`; the app clears it (no timers in widgets). Slides up on show (300ms, `ADW_EASE`).
 
 ## Deviations / gaps
 
-No timeout/priority queue.
+No timeout/priority queue; no hide animation (fade + 0.95 scale) because the app removes the toast.

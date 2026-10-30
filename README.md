@@ -109,6 +109,12 @@ touches the bottom-left corner.
   content. Maximized/fullscreen goes edge to edge.
 * **Mobile sidebar:** collapsed, a split view's sidebar is a **drawer** over the content by default
   (never the whole screen) or a **full page**: `NavigationSplitView::collapsed_sidebar(CollapsedSidebar::Drawer | FullPage)`.
+* **Animations** follow libadwaita: `adw::animation` has the 35 `AdwEasing` curves, timed
+  and damped-spring animations with libadwaita's own parameters (navigation 1000 stiffness,
+  sheets ratio 0.8 / stiffness 400, 250ms reveals, 200ms style transitions) and honors the
+  desktop's `enable-animations`. Switch, ExpanderRow/Banner reveals, the sidebar drawer,
+  dialogs, bottom sheets and toasts animate themselves with no app plumbing; see
+  `docs/design-language/animations.md` (including what iced can't animate).
 * In a split view give each pane its own header bar; only the pane at a window edge
   shows the window buttons.
 
