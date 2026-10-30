@@ -20,6 +20,8 @@ pub enum Icon {
     WindowRestore,
     /// A generic window glyph (not the themed window-control icons).
     Window,
+    /// Toggles a sidebar (`sidebar-show-symbolic`).
+    Sidebar,
     OpenMenu,
     ListAdd,
     ListRemove,
@@ -48,6 +50,7 @@ impl Icon {
             Icon::WindowMinimize => r#"<path d="M3 12h10"/>"#,
             Icon::WindowMaximize => r#"<rect x="3" y="3" width="10" height="10" rx="1"/>"#,
             Icon::Window => r#"<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12"/>"#,
+            Icon::Sidebar => r#"<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 3v10"/>"#,
             Icon::WindowRestore => {
                 r#"<rect x="2.5" y="5.5" width="8" height="8" rx="1"/><path d="M5.5 5.5v-2a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1h-2"/>"#
             }

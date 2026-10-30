@@ -91,8 +91,22 @@ pub fn navigation_sidebar<'a, M: 'a>(
         .into()
 }
 
-/// `AdwNavigationSplitView`. When `collapsed` only one pane is shown,
-/// selected by `show_content`.
+/// What the sidebar becomes when a [`NavigationSplitView`] collapses (narrow / mobile).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum CollapsedSidebar {
+    /// The sidebar slides over the content from the start edge with a scrim; the
+    /// content stays visible behind it and the drawer never takes the whole screen
+    /// (`AdwOverlaySplitView`'s collapsed overlay). Opened/closed by the app
+    /// ([`NavigationSplitView::show_sidebar`]). (default)
+    #[default]
+    Drawer,
+    /// The sidebar replaces the content as its own page (`AdwNavigationSplitView`'s
+    /// collapsed navigation view); `show_content` picks the visible pane.
+    FullPage,
+}
+
+/// `AdwNavigationSplitView`. Collapsed, it shows either a drawer over the content
+/// or one pane at a time; see [`CollapsedSidebar`].
 pub struct NavigationSplitView<'a, M> {
     sidebar: Element<'a, M>,
     content: Element<'a, M>,
@@ -103,6 +117,9 @@ pub struct NavigationSplitView<'a, M> {
     collapsed: bool,
     show_content: bool,
     window_radius: f32,
+    collapsed_sidebar: CollapsedSidebar,
+    drawer_open: bool,
+    on_close_drawer: Option<M>,
 }
 
 /// libadwaita's width for a split-view sidebar: `fraction` of the total width
@@ -126,7 +143,26 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
             collapsed: false,
             show_content: true,
             window_radius: 0.0,
+            collapsed_sidebar: CollapsedSidebar::Drawer,
+            drawer_open: false,
+            on_close_drawer: None,
         }
+    }
+    /// What the sidebar becomes when collapsed: [`CollapsedSidebar::Drawer`]
+    /// (default) or [`CollapsedSidebar::FullPage`].
+    pub fn collapsed_sidebar(mut self, mode: CollapsedSidebar) -> Self {
+        self.collapsed_sidebar = mode;
+        self
+    }
+    /// Whether the drawer is open (only used with [`CollapsedSidebar::Drawer`]).
+    pub fn show_sidebar(mut self, open: bool) -> Self {
+        self.drawer_open = open;
+        self
+    }
+    /// Message sent when the scrim behind the open drawer is clicked.
+    pub fn on_close_drawer(mut self, msg: M) -> Self {
+        self.on_close_drawer = Some(msg);
+        self
     }
     /// Rounds the sidebar pane's outer corners to match a rounded window
     /// ([`window::State::radius`](crate::window::State::radius)). The pane paints
@@ -164,36 +200,75 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
     /// `max-width: 400sp` and size the sidebar by fraction/min/max.
     pub fn adapt(mut self, width: f32) -> Self {
         self.collapsed = width <= COLLAPSE_WIDTH;
-        self.sidebar_width = sidebar_width_for(width, self.fraction, self.min_width, self.max_width);
+        self.sidebar_width = if self.collapsed && self.collapsed_sidebar == CollapsedSidebar::Drawer {
+            // A drawer uses the maximum sidebar width when it fits, but always leaves a
+            // strip of content (and the scrim) visible: never the whole screen.
+            self.max_width.min(width * 0.85)
+        } else {
+            sidebar_width_for(width, self.fraction, self.min_width, self.max_width)
+        };
         self
     }
 }
 
-impl<'a, M: 'a> From<NavigationSplitView<'a, M>> for Element<'a, M> {
+impl<'a, M: Clone + 'a> From<NavigationSplitView<'a, M>> for Element<'a, M> {
     fn from(v: NavigationSplitView<'a, M>) -> Self {
         let r = v.window_radius;
         // The sidebar pane carries the sidebar color (`.sidebar-pane`), so a flat header
         // above the list continues it. It sits at the window edge, so it rounds the
-        // window's corners: left only when beside the content, all four when it is the
-        // whole (collapsed) window.
+        // window's corners: left only when beside the content or as a drawer, all four
+        // when it is the whole (collapsed, full-page) window.
         let pane = move |radius: iced::border::Radius| {
             move |t: &crate::Theme| iced::widget::container::Style {
                 border: iced::Border::default().rounded(radius),
                 ..sc::sidebar(t)
             }
         };
+        let left = iced::border::Radius { top_left: r, top_right: 0.0, bottom_right: 0.0, bottom_left: r };
         if v.collapsed {
-            return if v.show_content {
-                v.content
-            } else {
-                container(v.sidebar)
+            if v.collapsed_sidebar == CollapsedSidebar::FullPage {
+                return if v.show_content {
+                    v.content
+                } else {
+                    container(v.sidebar)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .style(pane(r.into()))
+                        .into()
+                };
+            }
+            // Drawer: the content is always there; the sidebar slides over it.
+            let content: Element<'a, M> = container(v.content).width(Length::Fill).height(Length::Fill).into();
+            if !v.drawer_open {
+                return content;
+            }
+            let mut scrim = mouse_area(
+                container(space())
                     .width(Length::Fill)
                     .height(Length::Fill)
-                    .style(pane(r.into()))
-                    .into()
-            };
+                    .style(sc::backdrop_in_window(r)),
+            );
+            if let Some(m) = v.on_close_drawer {
+                scrim = scrim.on_press(m);
+            }
+            let drawer = container(v.sidebar)
+                .width(Length::Fixed(v.sidebar_width))
+                .height(Length::Fill)
+                .style(move |t: &crate::Theme| {
+                    let shadow = t.shadows.dialog().shadow;
+                    iced::widget::container::Style {
+                        border: iced::Border::default().rounded(left),
+                        shadow,
+                        ..sc::sidebar(t)
+                    }
+                });
+            return stack![
+                content,
+                opaque(scrim),
+                container(opaque(drawer)).width(Length::Fill).height(Length::Fill).align_x(iced::alignment::Horizontal::Left)
+            ]
+            .into();
         }
-        let left = iced::border::Radius { top_left: r, top_right: 0.0, bottom_right: 0.0, bottom_left: r };
         row![
             container(v.sidebar)
                 .width(Length::Fixed(v.sidebar_width))
@@ -302,6 +377,34 @@ mod tests {
         assert_eq!(sidebar_width_for(600.0, 0.25, 180.0, 280.0), 180.0);
         assert_eq!(sidebar_width_for(1000.0, 0.25, 180.0, 280.0), 250.0);
         assert_eq!(sidebar_width_for(2000.0, 0.25, 180.0, 280.0), 280.0);
+    }
+
+    fn split(mode: CollapsedSidebar) -> NavigationSplitView<'static, ()> {
+        NavigationSplitView::new(space(), space()).collapsed_sidebar(mode)
+    }
+
+    #[test]
+    fn drawer_is_the_default_collapsed_mode() {
+        assert_eq!(CollapsedSidebar::default(), CollapsedSidebar::Drawer);
+        assert_eq!(split(CollapsedSidebar::Drawer).collapsed_sidebar, CollapsedSidebar::Drawer);
+    }
+
+    #[test]
+    fn drawer_never_takes_the_whole_screen() {
+        // At 380px the drawer uses the max sidebar width; at 300px it is capped to 85%.
+        let d = split(CollapsedSidebar::Drawer).adapt(380.0);
+        assert!(d.collapsed && (d.sidebar_width - 280.0).abs() < 1e-3);
+        let d = split(CollapsedSidebar::Drawer).adapt(300.0);
+        assert!((d.sidebar_width - 255.0).abs() < 1e-3 && d.sidebar_width < 300.0);
+        // Not collapsed: the usual fraction/min/max rule.
+        let wide = split(CollapsedSidebar::Drawer).adapt(1000.0);
+        assert!(!wide.collapsed && (wide.sidebar_width - 250.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn full_page_uses_the_regular_width_rule() {
+        let f = split(CollapsedSidebar::FullPage).adapt(300.0);
+        assert!(f.collapsed && (f.sidebar_width - 180.0).abs() < 1e-3);
     }
 
     #[test]

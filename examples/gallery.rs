@@ -119,6 +119,8 @@ struct Gallery {
     dialog: Option<Dialog>,
     show_content: bool,
     menu_mode: MenuMode,
+    sidebar_mode: w::CollapsedSidebar,
+    drawer_open: bool,
     win: adw::window::State,
     sheet: bool,
     carousel: usize,
@@ -179,6 +181,8 @@ enum Message {
     Resize(window::Direction),
     Back,
     MenuMode(MenuMode),
+    SidebarMode(w::CollapsedSidebar),
+    Drawer(bool),
     ToggleFullscreen,
     WindowChanged,
     WindowState(adw::window::State),
@@ -237,6 +241,11 @@ impl Gallery {
                 picked: None,
                 dialog: None,
                 show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
+                sidebar_mode: match std::env::var("GALLERY_SIDEBAR_MODE").as_deref() {
+                    Ok("page") => w::CollapsedSidebar::FullPage,
+                    _ => w::CollapsedSidebar::Drawer,
+                },
+                drawer_open: std::env::var_os("GALLERY_DRAWER").is_some(),
                 menu_mode: match std::env::var("GALLERY_MENU").as_deref() {
                     Ok("page") => MenuMode::FullPage,
                     Ok("dropdown") => MenuMode::Dropdown,
@@ -289,7 +298,13 @@ impl Gallery {
             Message::Page(p) => {
                 self.page = p;
                 self.show_content = true;
+                self.drawer_open = false;
             }
+            Message::SidebarMode(m) => {
+                self.sidebar_mode = m;
+                self.drawer_open = false;
+            }
+            Message::Drawer(open) => self.drawer_open = open,
             Message::Back => self.show_content = false,
             Message::MenuMode(m) => self.menu_mode = m,
             Message::Scheme(dark) => self.scheme = if dark { Scheme::Dark } else { Scheme::Light },
@@ -483,8 +498,10 @@ impl Gallery {
             maximized: self.win.maximized,
             layout: None,
         };
-        let show_content_only = collapsed && self.show_content;
-        let show_sidebar_only = collapsed && !self.show_content;
+        // Collapsed, the sidebar is a drawer over the content (default) or its own page.
+        let drawer_mode = collapsed && self.sidebar_mode == w::CollapsedSidebar::Drawer;
+        let show_content_only = collapsed && !drawer_mode && self.show_content;
+        let show_sidebar_only = collapsed && !drawer_mode && !self.show_content;
 
         // One header bar per pane, as in libadwaita split views. Window controls
         // appear only at the window edge (the end pane); the collapsed single pane has both.
@@ -495,7 +512,7 @@ impl Gallery {
             .metrics(m);
         let mut content_bar = w::header_bar::<Message>()
             .title(self.page.title())
-            .window_corners(if show_content_only { corner } else { 0.0 }, corner)
+            .window_corners(if show_content_only || drawer_mode { corner } else { 0.0 }, corner)
             .metrics(m);
         if self.path_bar_title {
             // Replaces the title; the window buttons are independent of it.
@@ -504,6 +521,10 @@ impl Gallery {
                 2,
                 |_| Message::Noop,
             ));
+        }
+        if drawer_mode {
+            // The drawer toggle: the sidebar lives behind it.
+            content_bar = content_bar.pack_start(w::circular_button(Icon::Sidebar).on_press(Message::Drawer(true)));
         }
         if show_content_only {
             content_bar = content_bar.pack_start(w::circular_button(Icon::GoPrevious).on_press(Message::Back));
@@ -548,6 +569,9 @@ impl Gallery {
         let body = w::NavigationSplitView::new(sidebar_pane, content_pane)
             .adapt(size.width)
             .window_radius(corner)
+            .collapsed_sidebar(self.sidebar_mode)
+            .show_sidebar(self.drawer_open)
+            .on_close_drawer(Message::Drawer(false))
             .show_content(self.show_content);
 
         let base: Element = w::toast_overlay(
@@ -1026,6 +1050,19 @@ impl Gallery {
                         ],
                         Some(self.menu_mode),
                         Message::MenuMode,
+                    )))
+                    .metrics(m),
+            )
+            .push(
+                w::ActionRow::new("Mobile sidebar")
+                    .subtitle("Drawer over the content, or its own page")
+                    .suffix(Element::from(w::toggle_group(
+                        vec![
+                            w::ToggleItem::new(w::CollapsedSidebar::Drawer, "Drawer").icon(Icon::Sidebar),
+                            w::ToggleItem::new(w::CollapsedSidebar::FullPage, "Full page").icon(Icon::Window),
+                        ],
+                        Some(self.sidebar_mode),
+                        Message::SidebarMode,
                     )))
                     .metrics(m),
             )
