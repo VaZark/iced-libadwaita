@@ -36,7 +36,7 @@ pub use button::{
 };
 pub use extra::{
     bottom_sheet, breakpoint_bin, carousel, carousel_indicator_dots, carousel_indicator_lines,
-    inline_view_switcher, password_entry_row, preferences_dialog, shortcut_label, shortcuts_dialog,
+    inline_view_switcher, password_entry_row, path_bar, preferences_dialog, shortcut_label, shortcuts_dialog,
     sidebar, tab_bar, tab_button, view_switcher, view_switcher_bar, window, wrap_box,
 };
 pub use dropdown::{dropdown, menu_item, popover, Align as PopoverAlign, Appearance as DropdownAppearance, Dropdown, Presentation as DropdownPresentation};

@@ -62,7 +62,7 @@ pub struct HeaderBar<'a, M> {
     on_drag: Option<M>,
     on_double_click: Option<M>,
     corners: (f32, f32),
-    flat: bool,
+    flat: Option<bool>,
     metrics: Metrics,
 }
 
@@ -85,7 +85,7 @@ impl<'a, M> HeaderBar<'a, M> {
             on_drag: None,
             on_double_click: None,
             corners: (0.0, 0.0),
-            flat: false,
+            flat: None,
             metrics: Metrics::default(),
         }
     }
@@ -146,8 +146,10 @@ impl<'a, M> HeaderBar<'a, M> {
     /// Flat header (`%headerbar-flat`: no background, no shadow): the bar shows
     /// whatever is behind it, so it flows into the content. Used in dialogs
     /// (Nautilus-style) and inline contexts.
+    ///
+    /// Without a call to this, the bar follows [`Theme::flat_headerbars`](crate::Theme::flat_headerbars).
     pub fn flat(mut self, flat: bool) -> Self {
-        self.flat = flat;
+        self.flat = Some(flat);
         self
     }
     /// Rounds only the outer corners: `left` and `right` radii. Use in split views
@@ -223,7 +225,7 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
         .padding(m.headerbar_padding)
         .width(Length::Fill)
         .style(move |t: &Theme| {
-            if flat {
+            if flat.unwrap_or(t.flat_headerbars) {
                 // Text color only; the background comes from what is behind the bar.
                 return iced::widget::container::Style {
                     text_color: Some(t.semantic.headerbar.fg),

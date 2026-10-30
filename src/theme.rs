@@ -30,6 +30,11 @@ pub struct Theme {
     /// show transparent corners (the default). Disable for server-side
     /// decorations or non-transparent windows.
     pub transparent_window: bool,
+    /// Header bars without a color of their own (`%headerbar-flat`): they take the
+    /// color behind them, so window and header read as one continuous surface (the
+    /// Nautilus look). Default `false` (libadwaita's `--headerbar-bg-color`). A
+    /// bar's own `.flat(..)` overrides this; dialog headers are always flat.
+    pub flat_headerbars: bool,
     name: String,
     iced: iced::Theme,
 }
@@ -64,6 +69,7 @@ impl Theme {
             typography: Typography::default(),
             shadows: Shadows::default(),
             transparent_window: true,
+            flat_headerbars: false,
             name,
         }
     }
@@ -108,6 +114,12 @@ impl Theme {
     /// decorations: the window background is then painted opaque.
     pub fn with_transparent_window(mut self, transparent: bool) -> Self {
         self.transparent_window = transparent;
+        self
+    }
+
+    /// Makes header bars continuous with the content (see [`Theme::flat_headerbars`]).
+    pub fn with_flat_headerbars(mut self, flat: bool) -> Self {
+        self.flat_headerbars = flat;
         self
     }
 
@@ -490,5 +502,16 @@ mod shadow_and_scrollbar_tests {
     fn radii_follow_adwaita_scss() {
         let m = Metrics::default();
         assert_eq!((m.radius_m, m.radius_l, m.radius_popover, m.radius_window), (9.0, 12.0, 15.0, 15.0));
+    }
+}
+
+#[cfg(test)]
+mod header_tests {
+    use super::*;
+
+    #[test]
+    fn header_bars_follow_libadwaita_unless_made_continuous() {
+        assert!(!Theme::light().flat_headerbars);
+        assert!(Theme::light().with_flat_headerbars(true).flat_headerbars);
     }
 }

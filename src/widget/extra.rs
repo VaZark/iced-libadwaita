@@ -187,6 +187,29 @@ fn dialog_frame<'a, M: Clone + 'a>(
         .into()
 }
 
+/// A Nautilus-style path bar: breadcrumb segments with the current one
+/// highlighted, selecting one sends its index. Meant as a [`HeaderBar`](super::HeaderBar)
+/// `title_widget` (it replaces the title; window controls are unaffected). The
+/// first segment is shown as the Home icon.
+pub fn path_bar<'a, M: Clone + 'a>(
+    segments: Vec<String>,
+    current: usize,
+    on_select: impl Fn(usize) -> M + 'a,
+) -> Element<'a, M> {
+    let items = segments
+        .into_iter()
+        .enumerate()
+        .map(|(i, label)| {
+            if i == 0 {
+                ToggleItem::icon_only(i, Icon::Home)
+            } else {
+                ToggleItem::new(i, label)
+            }
+        })
+        .collect();
+    Element::from(toggle_group(items, Some(current), on_select))
+}
+
 /// `AdwCarousel`: shows page `index`; `on_navigate` is sent by the indicator.
 pub fn carousel<'a, M: Clone + 'a>(
     pages: Vec<Element<'a, M>>,

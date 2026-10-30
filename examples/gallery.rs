@@ -99,6 +99,8 @@ struct Gallery {
     shadow_scale: f32,
     shadow_intensity: f32,
     raised_bar: bool,
+    flat_headers: bool,
+    path_bar_title: bool,
 
     wifi: bool,
     notifications: bool,
@@ -146,6 +148,8 @@ enum Message {
     ShadowScale(f32),
     ShadowIntensity(f32),
     RaisedBar(bool),
+    FlatHeaders(bool),
+    PathBarTitle(bool),
     Wifi(bool),
     Notifications(bool),
     Expanded(bool),
@@ -216,6 +220,8 @@ impl Gallery {
                 shadow_scale: 1.0,
                 shadow_intensity: 1.0,
                 raised_bar: std::env::var_os("GALLERY_RAISED").is_some(),
+                flat_headers: std::env::var_os("GALLERY_FLAT").is_some(),
+                path_bar_title: std::env::var_os("GALLERY_PATHBAR").is_some(),
                 wifi: true,
                 notifications: false,
                 expanded: true,
@@ -267,7 +273,8 @@ impl Gallery {
             .accent(self.accent)
             .with_metrics(self.metrics())
             .with_shadows(shadows)
-            .with_transparent_window(Self::csd());
+            .with_transparent_window(Self::csd())
+            .with_flat_headerbars(self.flat_headers);
         if self.card_override {
             t = t.with_semantic(|s| {
                 s.card.bg = adw::color::hex(0x3d2c5a);
@@ -295,6 +302,8 @@ impl Gallery {
             Message::ShadowScale(v) => self.shadow_scale = v,
             Message::ShadowIntensity(v) => self.shadow_intensity = v,
             Message::RaisedBar(v) => self.raised_bar = v,
+            Message::FlatHeaders(v) => self.flat_headers = v,
+            Message::PathBarTitle(v) => self.path_bar_title = v,
             Message::Wifi(v) => self.wifi = v,
             Message::Notifications(v) => self.notifications = v,
             Message::Expanded(v) => self.expanded = v,
@@ -488,6 +497,14 @@ impl Gallery {
             .title(self.page.title())
             .window_corners(if show_content_only { corner } else { 0.0 }, corner)
             .metrics(m);
+        if self.path_bar_title {
+            // Replaces the title; the window buttons are independent of it.
+            content_bar = content_bar.title_widget(w::path_bar(
+                vec!["Home".into(), "Projects".into(), "iced-libadwaita".into()],
+                2,
+                |_| Message::Noop,
+            ));
+        }
         if show_content_only {
             content_bar = content_bar.pack_start(w::circular_button(Icon::GoPrevious).on_press(Message::Back));
         }
@@ -1007,6 +1024,8 @@ impl Gallery {
                     .suffix_basis(160.0)
                     .metrics(m),
             )
+            .push(w::SwitchRow::new("Continuous header bars", self.flat_headers, Message::FlatHeaders).subtitle("No header color of its own (Nautilus-style)").metrics(m))
+            .push(w::SwitchRow::new("Path bar title", self.path_bar_title, Message::PathBarTitle).subtitle("A title_widget replaces the title; window buttons stay").metrics(m))
             .push(w::SwitchRow::new("Raised header bar", self.raised_bar, Message::RaisedBar).subtitle("top-bar-style: raised").metrics(m))
             .push(
                 w::ActionRow::new("Control radius")

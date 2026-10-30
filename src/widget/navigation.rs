@@ -164,7 +164,12 @@ impl<'a, M: 'a> From<NavigationSplitView<'a, M>> for Element<'a, M> {
             return if v.show_content { v.content } else { v.sidebar };
         }
         row![
-            container(v.sidebar).width(Length::Fixed(v.sidebar_width)).height(Length::Fill),
+            // The sidebar pane carries the sidebar color (`.sidebar-pane`), so a flat
+            // header above the list continues it.
+            container(v.sidebar)
+                .width(Length::Fixed(v.sidebar_width))
+                .height(Length::Fill)
+                .style(sc::sidebar),
             container(space().width(1)).height(Length::Fill).style(sc::sidebar_separator),
             container(v.content).width(Length::Fill).height(Length::Fill),
         ]
