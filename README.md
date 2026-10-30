@@ -99,6 +99,10 @@ touches the bottom-left corner.
   `.presentation(MenuPresentation::Dropdown | FullPage)`; `MenuPresentation::for_width(w)`
   picks full page at ≤ 450. See `docs/design-language/menus.md` for the conventions
   (GNOME HIG, Material, `AdwDialog`) behind this.
+* **Continuous header bars** (Nautilus-style, no header color of their own):
+  `Theme::with_flat_headerbars(true)`, or `HeaderBar::flat(true)` per bar; dialog
+  headers are always flat. Titles are replaceable (`title_widget`, e.g. `w::path_bar`);
+  only the window buttons are fixed.
 * In a split view give each pane its own header bar; only the pane at a window edge
   shows the window buttons.
 

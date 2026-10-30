@@ -19,7 +19,7 @@ Title bar with start/end children and window controls; the window drag handle.
 
 ## Spec
 
-Height 47 ✓ (flat: 46 ✓), padding 6 7 7 7 ✓, 6px child spacing (docs `.toolbar`), flat icon buttons. **Flat** headers (`%headerbar-flat`: no background, no shadow) take the color behind them: dialogs, sheets and inline contexts use them so the header flows into the body (Nautilus-style).
+Height 47 ✓ (flat: 46 ✓), padding 6 7 7 7 ✓, 6px child spacing (docs `.toolbar`), flat icon buttons. **Flat** headers (`%headerbar-flat`: no background, no shadow) take the color behind them: dialogs, sheets and inline contexts use them so the header flows into the body (Nautilus-style). The same continuous look is available for **main windows**: `Theme::with_flat_headerbars(true)` (default false = `--headerbar-bg-color`), overridable per bar with `.flat(..)`; `NavigationSplitView` gives the sidebar pane the sidebar color so a flat sidebar header continues it. Start, end and title are all replaceable (`title_widget`, e.g. a [path bar](path-bar.md)); only the window buttons are fixed.
 
 ## iced mapping
 
