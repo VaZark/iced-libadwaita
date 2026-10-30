@@ -70,11 +70,12 @@ pub fn navigation_sidebar_rounded<'a, M: 'a>(
     container(column(rows).spacing(m.sidebar_spacing).padding(m.sidebar_padding))
         .width(Length::Fill)
         .height(Length::Fill)
-        .style(move |t: &crate::Theme| iced::widget::container::Style {
-            // Both bottom corners: beside content the right one reveals the pane behind
+        .style(move |_: &crate::Theme| iced::widget::container::Style {
+            // Transparent: the split view's pane supplies the color (sidebar or, as a first
+            // page, content). Both bottom corners: beside content the right one reveals the pane behind
             // (same color); when the sidebar is the whole window it is a real window corner.
             border: iced::Border::default().rounded(iced::border::bottom(window_radius)),
-            ..sc::sidebar(t)
+            ..Default::default()
         })
         .into()
 }
@@ -103,6 +104,25 @@ pub enum CollapsedSidebar {
     /// The sidebar replaces the content as its own page (`AdwNavigationSplitView`'s
     /// collapsed navigation view); `show_content` picks the visible pane.
     FullPage,
+    /// The sidebar is the *first page* of a navigation stack, as in a settings app: it
+    /// is the landing page, painted in the **content** color (not the sidebar color),
+    /// and choosing an item pushes the content page (`show_content`) with a back button.
+    /// Beside the content the sidebar keeps its own color.
+    FirstPage,
+}
+
+impl CollapsedSidebar {
+    pub const ALL: [Self; 3] = [Self::Drawer, Self::FullPage, Self::FirstPage];
+}
+
+impl std::fmt::Display for CollapsedSidebar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Drawer => "Drawer",
+            Self::FullPage => "Full page",
+            Self::FirstPage => "First page",
+        })
+    }
 }
 
 /// `AdwNavigationSplitView`. Collapsed, it shows either a drawer over the content
@@ -155,7 +175,7 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
         }
     }
     /// What the sidebar becomes when collapsed: [`CollapsedSidebar::Drawer`]
-    /// (default) or [`CollapsedSidebar::FullPage`].
+    /// (default), [`CollapsedSidebar::FullPage`] or [`CollapsedSidebar::FirstPage`].
     pub fn collapsed_sidebar(mut self, mode: CollapsedSidebar) -> Self {
         self.collapsed_sidebar = mode;
         self
@@ -232,9 +252,12 @@ impl<'a, M: Clone + 'a> From<NavigationSplitView<'a, M>> for Element<'a, M> {
         };
         let left = iced::border::Radius { top_left: r, top_right: 0.0, bottom_right: 0.0, bottom_left: r };
         if v.collapsed {
-            if v.collapsed_sidebar == CollapsedSidebar::FullPage {
+            if v.collapsed_sidebar != CollapsedSidebar::Drawer {
                 return if v.show_content {
                     v.content
+                } else if v.collapsed_sidebar == CollapsedSidebar::FirstPage {
+                    // A page like any other: the content color (the window behind it).
+                    container(v.sidebar).width(Length::Fill).height(Length::Fill).into()
                 } else {
                     container(v.sidebar)
                         .width(Length::Fill)

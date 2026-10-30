@@ -138,7 +138,7 @@ impl Default for Config {
         let mut c = Self {
             color_scheme: Pick::System,
             accent: Pick::System,
-            flat_headerbars: false,
+            flat_headerbars: true,
             density: Density::Default,
             text_scale: 1.0,
             shadows: true,
@@ -286,6 +286,7 @@ impl Config {
             match v {
                 "drawer" => self.mobile_sidebar = CollapsedSidebar::Drawer,
                 "full-page" => self.mobile_sidebar = CollapsedSidebar::FullPage,
+                "first-page" => self.mobile_sidebar = CollapsedSidebar::FirstPage,
                 _ => bad!("navigation", "mobile-sidebar", v),
             }
         }

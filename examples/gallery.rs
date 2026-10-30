@@ -157,8 +157,6 @@ struct Gallery {
     shadows_on: bool,
     shadow_scale: f32,
     shadow_intensity: f32,
-    raised_bar: bool,
-    flat_headers: bool,
     path_bar_title: bool,
     anim_enabled: bool,
     demo: DemoMotion,
@@ -212,8 +210,6 @@ enum Message {
     Shadows(bool),
     ShadowScale(f32),
     ShadowIntensity(f32),
-    RaisedBar(bool),
-    FlatHeaders(bool),
     PathBarTitle(bool),
     Wifi(bool),
     Notifications(bool),
@@ -258,6 +254,7 @@ enum Message {
     Saved(usize, window::Screenshot),
 }
 
+static SIDEBAR_MODES: [w::CollapsedSidebar; 3] = w::CollapsedSidebar::ALL;
 static MOTIONS: [DemoMotion; 8] = DemoMotion::ALL;
 const FRUITS: [&str; 3] = ["Apple", "Banana", "Cherry"];
 const COMBO: [&str; 3] = ["Adwaita Sans", "Cantarell", "Inter"];
@@ -297,8 +294,6 @@ impl Gallery {
                 shadows_on: cfg.shadows,
                 shadow_scale: 1.0,
                 shadow_intensity: 1.0,
-                raised_bar: std::env::var_os("GALLERY_RAISED").is_some(),
-                flat_headers: cfg.flat_headerbars || std::env::var_os("GALLERY_FLAT").is_some(),
                 path_bar_title: std::env::var_os("GALLERY_PATHBAR").is_some(),
                 anim_enabled: adw::animation::enabled(),
                 demo: DemoMotion::EaseOutCubic,
@@ -321,6 +316,7 @@ impl Gallery {
                 show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
                 sidebar_mode: match std::env::var("GALLERY_SIDEBAR_MODE").as_deref() {
                     Ok("page") => w::CollapsedSidebar::FullPage,
+                    Ok("first-page") => w::CollapsedSidebar::FirstPage,
                     _ => cfg.mobile_sidebar,
                 },
                 drawer_open: std::env::var_os("GALLERY_DRAWER").is_some(),
@@ -360,8 +356,7 @@ impl Gallery {
             .accent(self.accent)
             .with_metrics(self.metrics())
             .with_shadows(shadows)
-            .with_transparent_window(Self::csd())
-            .with_flat_headerbars(self.flat_headers);
+            .with_transparent_window(Self::csd());
         if self.card_override {
             t = t.with_semantic(|s| {
                 s.card.bg = adw::color::hex(0x3d2c5a);
@@ -394,8 +389,6 @@ impl Gallery {
             Message::Shadows(v) => self.shadows_on = v,
             Message::ShadowScale(v) => self.shadow_scale = v,
             Message::ShadowIntensity(v) => self.shadow_intensity = v,
-            Message::RaisedBar(v) => self.raised_bar = v,
-            Message::FlatHeaders(v) => self.flat_headers = v,
             Message::PathBarTitle(v) => self.path_bar_title = v,
             Message::Wifi(v) => self.wifi = v,
             Message::Notifications(v) => self.notifications = v,
@@ -665,7 +658,6 @@ impl Gallery {
                 }
             }
         }
-        let bar_style = if self.raised_bar { w::BarStyle::Raised } else { w::BarStyle::Flat };
 
         let sidebar_list = w::navigation_sidebar_rounded(
             Page::ALL
@@ -673,7 +665,7 @@ impl Gallery {
                 .map(|p| w::sidebar_row(Some(p.icon()), p.title(), *p == self.page, Message::Page(*p))),
             corner,
         );
-        let sidebar_pane = w::toolbar_view(sidebar_list).top_bar(sidebar_bar).top_bar_style(bar_style);
+        let sidebar_pane = w::toolbar_view(sidebar_list).top_bar(sidebar_bar);
 
         let page: Element = match self.page {
             Page::Buttons => self.buttons_page(),
@@ -685,7 +677,7 @@ impl Gallery {
             Page::Theming => self.theming_page(),
         };
 
-        let content_pane = w::toolbar_view(page).top_bar(content_bar).top_bar_style(bar_style);
+        let content_pane = w::toolbar_view(page).top_bar(content_bar);
         let body = w::NavigationSplitView::new(sidebar_pane, content_pane)
             .adapt(size.width)
             .window_radius(corner)
@@ -1142,17 +1134,13 @@ impl Gallery {
                 .metrics(m),
             )
             .push(
-                w::ToggleGroupRow::new(
+                w::ComboRow::new(
                     "Mobile sidebar",
-                    vec![
-                        w::ToggleItem::new(w::CollapsedSidebar::Drawer, "Drawer").icon(Icon::Sidebar),
-                        w::ToggleItem::new(w::CollapsedSidebar::FullPage, "Full page").icon(Icon::Window),
-                    ],
+                    &SIDEBAR_MODES,
                     Some(self.sidebar_mode),
                     Message::SidebarMode,
                 )
-                .subtitle("Drawer over the content, or its own page")
-                .metrics(m),
+                .subtitle("Drawer over the content, its own page, or the first page of a stack"),
             )
             .push(w::SwitchRow::new("Shadows", self.shadows_on, Message::Shadows).subtitle("Adwaita elevation: cards, popovers, dialogs").metrics(m))
             .push(
@@ -1167,9 +1155,7 @@ impl Gallery {
                     .step(0.1)
                     .metrics(m),
             )
-            .push(w::SwitchRow::new("Continuous header bars", self.flat_headers, Message::FlatHeaders).subtitle("No header color of its own (Nautilus-style)").metrics(m))
             .push(w::SwitchRow::new("Path bar title", self.path_bar_title, Message::PathBarTitle).subtitle("A title_widget replaces the title; window buttons stay").metrics(m))
-            .push(w::SwitchRow::new("Raised header bar", self.raised_bar, Message::RaisedBar).subtitle("top-bar-style: raised").metrics(m))
             .push(
                 w::SliderRow::new("Control radius", self.radius_m, 0.0..=Metrics::MAX_RADIUS_M, Message::RadiusM)
                     .subtitle(format!("radius_m = {:.0}px", self.radius_m))

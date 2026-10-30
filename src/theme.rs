@@ -99,7 +99,7 @@ impl Theme {
             typography: Typography::default(),
             shadows: Shadows::default(),
             transparent_window: true,
-            flat_headerbars: false,
+            flat_headerbars: true,
             name,
         }
     }
@@ -541,7 +541,7 @@ mod header_tests {
 
     #[test]
     fn header_bars_follow_libadwaita_unless_made_continuous() {
-        assert!(!Theme::light().flat_headerbars);
-        assert!(Theme::light().with_flat_headerbars(true).flat_headerbars);
+        assert!(Theme::light().flat_headerbars);
+        assert!(!Theme::light().with_flat_headerbars(false).flat_headerbars);
     }
 }

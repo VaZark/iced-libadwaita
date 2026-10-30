@@ -22,7 +22,7 @@ Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 wi
 |---|---|---|---|
 | appearance | `color-scheme` | system / light / dark (system) | `Theme::from_config` (system = `color-scheme`) |
 | | `accent` | system / blue … slate (system) | accent (system = GNOME `accent-color`) |
-| | `flat-headerbars` | bool (false) | continuous Nautilus-style header bars |
+| | `flat-headerbars` | bool (true) | continuous Nautilus-style header bars |
 | | `density` | default / compact | `Metrics` used by all widgets |
 | | `text-scale` | 0.5 … 3.0 (1.0) | `Typography` base size |
 | | `shadows`, `shadow-scale`, `shadow-intensity` | true, 1.0, 1.0 | `Shadows` |
@@ -32,7 +32,7 @@ Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 wi
 | | `button-layout` | system / GTK string (system) | `DecorationLayout::detect()` |
 | | `mobile-max-width` | px (450) | `window::is_mobile`, menu `Auto` |
 | navigation | `collapse-width` | px (400) | `NavigationSplitView::adapt` |
-| | `mobile-sidebar` | drawer / full-page (drawer) | `NavigationSplitView` default |
+| | `mobile-sidebar` | drawer / full-page / first-page (drawer) | `NavigationSplitView` default |
 | menus | `presentation` | auto / dropdown / full-page (auto) | `MenuPresentation::resolve` |
 | rows | `collapse` | stacked / flex (stacked) | rows' wrapped suffix |
 | | `wrap-basis` | px (128) | when a suffix wraps |
