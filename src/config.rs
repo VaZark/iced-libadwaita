@@ -681,7 +681,7 @@ thing=1
         let c = Config::from_keyfile("[motion]\npage-change=none\npopover=default\ncarousel=wobble\n");
         assert_eq!(c.motion.get(&Trigger::PageChange), Some(&Motion::None));
         assert_eq!(c.motion.get(&Trigger::Popover), Some(&Motion::Animated));
-        assert!(c.motion.get(&Trigger::Carousel).is_none());
+        assert!(!c.motion.contains_key(&Trigger::Carousel));
         assert!(c.warnings().iter().any(|w| w.contains("carousel")));
         assert!(!c.warnings().iter().any(|w| w.contains("unknown")), "trigger keys are known settings");
     }
