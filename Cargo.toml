@@ -1,0 +1,14 @@
+[package]
+name = "iced-libadwaita"
+version = "0.1.0"
+edition = "2024"
+description = "libadwaita-style theme and widgets for iced"
+keywords = ["iced", "gui", "gnome", "libadwaita", "theme"]
+categories = ["gui"]
+
+[dependencies]
+iced = { version = "0.14", features = ["advanced", "svg", "image", "tokio", "canvas"] }
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+tokio = { version = "1", features = ["time"] }
