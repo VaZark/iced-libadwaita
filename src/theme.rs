@@ -6,6 +6,7 @@
 use crate::metrics::{Metrics, Typography};
 use crate::palette::{AccentColor, Palette, Scheme};
 use crate::semantic::Semantic;
+use crate::shadow::Shadows;
 use crate::style;
 use iced::widget::{
     button, checkbox, combo_box, container, pane_grid, pick_list, progress_bar, radio,
@@ -24,6 +25,11 @@ pub struct Theme {
     pub semantic: Semantic,
     pub metrics: Metrics,
     pub typography: Typography,
+    pub shadows: Shadows,
+    /// Paint nothing behind the app root so a rounded client-side frame can
+    /// show transparent corners (the default). Disable for server-side
+    /// decorations or non-transparent windows.
+    pub transparent_window: bool,
     name: String,
     iced: iced::Theme,
 }
@@ -56,6 +62,8 @@ impl Theme {
             semantic,
             metrics: Metrics::default(),
             typography: Typography::default(),
+            shadows: Shadows::default(),
+            transparent_window: true,
             name,
         }
     }
@@ -86,6 +94,20 @@ impl Theme {
     /// ([`Metrics::MAX_RADIUS_M`] etc.).
     pub fn with_metrics(mut self, metrics: Metrics) -> Self {
         self.metrics = metrics.clamped();
+        self
+    }
+
+    /// Replaces the shadow settings ([`Shadows::none()`] for a flat look).
+    pub fn with_shadows(mut self, shadows: Shadows) -> Self {
+        self.shadows = shadows;
+        self
+    }
+
+    /// Whether the area behind the app root is transparent (default `true`,
+    /// needed for rounded window corners). Use `false` with server-side
+    /// decorations: the window background is then painted opaque.
+    pub fn with_transparent_window(mut self, transparent: bool) -> Self {
+        self.transparent_window = transparent;
         self
     }
 
@@ -147,7 +169,11 @@ impl iced::theme::Base for Theme {
 
     fn base(&self) -> iced::theme::Style {
         iced::theme::Style {
-            background_color: self.semantic.window.bg,
+            background_color: if self.transparent_window {
+                iced::Color::TRANSPARENT
+            } else {
+                self.semantic.window.bg
+            },
             text_color: self.semantic.window.fg,
         }
     }
@@ -409,5 +435,60 @@ mod tests {
     fn light_and_dark_differ() {
         assert_ne!(Theme::light().semantic.window.bg, Theme::dark().semantic.window.bg);
         assert!(Theme::dark().is_dark());
+    }
+}
+
+#[cfg(test)]
+mod shadow_and_scrollbar_tests {
+    use super::*;
+    use crate::Shadows;
+    use iced::widget::scrollable::Status;
+
+    #[test]
+    fn shadows_are_a_theme_setting() {
+        let on = Theme::light();
+        let off = Theme::light().with_shadows(Shadows::none());
+        assert!(on.shadows.card().ring.is_some());
+        assert!(off.shadows.card().ring.is_none());
+        let flat = crate::style::container::card(&off);
+        assert_eq!(flat.shadow.color.a, 0.0);
+        assert_eq!(flat.border.width, 0.0);
+        let raised = crate::style::container::card(&on);
+        assert!(raised.shadow.blur_radius > 0.0 && raised.border.width == 1.0);
+    }
+
+    #[test]
+    fn scrollbar_slider_levels_match_adwaita() {
+        use iced::Background;
+        let t = Theme::light();
+        let alpha = |s: Status| match crate::style::scrollable::default(&t, s).vertical_rail.scroller.background {
+            Background::Color(c) => c.a / t.semantic.window.fg.a,
+            _ => unreachable!(),
+        };
+        let rest = Status::Active { is_horizontal_scrollbar_disabled: false, is_vertical_scrollbar_disabled: false };
+        let hover = Status::Hovered {
+            is_horizontal_scrollbar_hovered: false,
+            is_vertical_scrollbar_hovered: true,
+            is_horizontal_scrollbar_disabled: false,
+            is_vertical_scrollbar_disabled: false,
+        };
+        let drag = Status::Dragged {
+            is_horizontal_scrollbar_dragged: false,
+            is_vertical_scrollbar_dragged: true,
+            is_horizontal_scrollbar_disabled: false,
+            is_vertical_scrollbar_disabled: false,
+        };
+        assert!((alpha(rest) - 0.20).abs() < 1e-4);
+        assert!((alpha(hover) - 0.40).abs() < 1e-4);
+        assert!((alpha(drag) - 0.60).abs() < 1e-4);
+        // The trough only shows while hovered.
+        assert!(crate::style::scrollable::default(&t, rest).vertical_rail.background.is_none());
+        assert!(crate::style::scrollable::default(&t, hover).vertical_rail.background.is_some());
+    }
+
+    #[test]
+    fn radii_follow_adwaita_scss() {
+        let m = Metrics::default();
+        assert_eq!((m.radius_m, m.radius_l, m.radius_popover, m.radius_window), (9.0, 12.0, 15.0, 15.0));
     }
 }

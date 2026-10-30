@@ -14,7 +14,7 @@
 //! });
 //! ```
 
-use crate::color::{alpha, darken, lighten};
+use crate::color::{alpha, lighten};
 use crate::palette::{Palette, Scheme};
 use iced::Color;
 
@@ -87,7 +87,7 @@ impl Default for Opacity {
         Self {
             control: 0.10,
             control_hover: 0.15,
-            control_active: 0.22,
+            control_active: 0.30,
             flat_hover: 0.10,
             flat_active: 0.16,
             dim: 0.55,
@@ -113,6 +113,9 @@ pub struct Semantic {
     pub sidebar: Surface,
     pub secondary_sidebar: Surface,
     pub thumbnail: Surface,
+    pub overview: Surface,
+    /// The active segment of a toggle group / view switcher.
+    pub active_toggle: Surface,
 
     pub accent: Swatch,
     pub destructive: Swatch,
@@ -120,8 +123,20 @@ pub struct Semantic {
     pub warning: Swatch,
     pub error: Swatch,
 
-    /// Separator / hairline color (`headerbar_border_color`).
+    /// `--scrollbar-outline-color`: outline that keeps overlay scrollbars visible.
+    pub scrollbar_outline: Color,
+    /// `--border-color`: the window foreground at `--border-opacity`.
     pub border: Color,
+    /// Hairline between boxed-list rows (`--card-shade-color`).
+    pub card_shade: Color,
+    /// Hairline under bars (`--headerbar-shade-color`).
+    pub headerbar_shade: Color,
+    /// Line under a `raised-border` bar (`--headerbar-darker-shade-color`).
+    pub headerbar_darker_shade: Color,
+    /// Hairline beside a sidebar (`--sidebar-border-color`).
+    pub sidebar_border: Color,
+    /// Popover shade (`--popover-shade-color`).
+    pub popover_shade: Color,
     /// Dark scrim used behind dialogs and for shadows (`shade_color`).
     pub shade: Color,
     /// Color of the focus ring.
@@ -150,6 +165,8 @@ impl Semantic {
             sidebar: s(p.sidebar_bg_color, p.sidebar_fg_color),
             secondary_sidebar: s(p.secondary_sidebar_bg_color, p.secondary_sidebar_fg_color),
             thumbnail: s(p.thumbnail_bg_color, p.thumbnail_fg_color),
+            overview: s(p.overview_bg_color, p.overview_fg_color),
+            active_toggle: s(p.active_toggle_bg_color, p.active_toggle_fg_color),
 
             accent: w(p.accent_bg_color, p.accent_fg_color, p.accent_color),
             destructive: w(
@@ -161,7 +178,13 @@ impl Semantic {
             warning: w(p.warning_bg_color, p.warning_fg_color, p.warning_color),
             error: w(p.error_bg_color, p.error_fg_color, p.error_color),
 
-            border: p.headerbar_border_color,
+            scrollbar_outline: p.scrollbar_outline_color,
+            border: alpha(p.window_fg_color, Opacity::default().border),
+            card_shade: p.card_shade_color,
+            headerbar_shade: p.headerbar_shade_color,
+            headerbar_darker_shade: p.headerbar_darker_shade_color,
+            sidebar_border: p.sidebar_border_color,
+            popover_shade: p.popover_shade_color,
             shade: p.shade_color,
             focus_ring: alpha(p.accent_bg_color, 0.5),
             selection: alpha(p.accent_bg_color, 0.3),
@@ -198,12 +221,14 @@ impl Semantic {
     /// Hover variant of a solid fill (like libadwaita's `lighten` on hover
     /// in light mode and a white overlay in dark mode).
     pub fn hover_fill(&self, c: Color) -> Color {
-        lighten(c, if self.is_dark() { 0.12 } else { 0.1 })
+        // `background-image: image(color-mix(in srgb, currentColor 10%, transparent))`
+        lighten(c, 0.10)
     }
 
     /// Pressed variant of a solid fill.
     pub fn active_fill(&self, c: Color) -> Color {
-        darken(c, if self.is_dark() { 0.1 } else { 0.12 })
+        // `background-image: image(RGB(0 0 6 / 20%))`
+        crate::color::mix(c, crate::color::ink(1.0), 0.20)
     }
 
     /// `alpha(window_fg, a)`, the basis of translucent state layers.

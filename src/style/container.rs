@@ -4,7 +4,7 @@ use crate::color::alpha;
 use crate::semantic::{Role, Surface};
 use crate::Theme;
 use iced::widget::container::Style;
-use iced::{Background, Border, Color, Shadow, Vector};
+use iced::{Background, Border, Color, Shadow};
 
 fn surface(s: Surface, radius: f32) -> Style {
     Style {
@@ -46,55 +46,33 @@ pub fn secondary_sidebar(theme: &Theme) -> Style {
     surface(theme.semantic.secondary_sidebar, 0.0)
 }
 
-/// Dialog body (`AdwDialog`).
+/// Dialog body (`AdwDialog` floating sheet): window radius, layered shadow.
 pub fn dialog(theme: &Theme) -> Style {
+    let r = theme.shadows.dialog();
     Style {
-        border: Border {
-            color: alpha(theme.semantic.dialog.fg, 0.1),
-            width: theme.metrics.border_width,
-            radius: theme.metrics.radius_l.into(),
-        },
-        shadow: Shadow {
-            color: alpha(Color::BLACK, 0.35),
-            offset: Vector::new(0.0, 4.0),
-            blur_radius: 18.0,
-        },
-        ..surface(theme.semantic.dialog, theme.metrics.radius_l)
+        border: r.border(theme.metrics.radius_window),
+        shadow: r.shadow,
+        ..surface(theme.semantic.dialog, theme.metrics.radius_window)
     }
 }
 
-/// Popover / menu surface.
+/// Popover / menu surface: popover radius (15), layered shadow.
 pub fn popover(theme: &Theme) -> Style {
+    let r = theme.shadows.popover();
     Style {
-        border: Border {
-            color: alpha(theme.semantic.popover.fg, 0.1),
-            width: theme.metrics.border_width,
-            radius: theme.metrics.radius_l.into(),
-        },
-        shadow: Shadow {
-            color: alpha(Color::BLACK, 0.25),
-            offset: Vector::new(0.0, 2.0),
-            blur_radius: 8.0,
-        },
-        ..surface(theme.semantic.popover, theme.metrics.radius_l)
+        border: r.border(theme.metrics.radius_popover),
+        shadow: r.shadow,
+        ..surface(theme.semantic.popover, theme.metrics.radius_popover)
     }
 }
 
-/// `.card`.
+/// `.card`: card radius, layered shadow with a 1px ring.
 pub fn card(theme: &Theme) -> Style {
-    let s = &theme.semantic;
+    let r = theme.shadows.card();
     Style {
-        border: Border {
-            color: alpha(s.card.fg, 0.08),
-            width: theme.metrics.border_width,
-            radius: theme.metrics.radius_l.into(),
-        },
-        shadow: Shadow {
-            color: s.shade,
-            offset: Vector::new(0.0, 1.0),
-            blur_radius: 3.0,
-        },
-        ..surface(s.card, theme.metrics.radius_l)
+        border: r.border(theme.metrics.radius_l),
+        shadow: r.shadow,
+        ..surface(theme.semantic.card, theme.metrics.radius_l)
     }
 }
 
@@ -110,23 +88,20 @@ pub fn osd(theme: &Theme) -> Style {
 
 /// `AdwToast`.
 pub fn toast(theme: &Theme) -> Style {
+    let r = theme.shadows.osd();
     Style {
-        shadow: Shadow {
-            color: alpha(Color::BLACK, 0.3),
-            offset: Vector::new(0.0, 2.0),
-            blur_radius: 8.0,
-        },
+        border: r.border(theme.metrics.radius_pill),
+        shadow: r.shadow,
         ..surface(theme.semantic.osd, theme.metrics.radius_pill)
     }
 }
 
-/// Scrim behind modal dialogs.
+/// Scrim behind modal dialogs: `--shade-color` at double alpha
+/// (`floating-sheet > dimming`), so 14% in light and 50% in dark.
 pub fn backdrop(theme: &Theme) -> Style {
+    let c = theme.semantic.shade;
     Style {
-        background: Some(Background::Color(alpha(
-            Color::BLACK,
-            if theme.is_dark() { 0.5 } else { 0.3 },
-        ))),
+        background: Some(Background::Color(Color { a: (c.a * 2.0).min(1.0), ..c })),
         ..Style::default()
     }
 }
@@ -175,6 +150,38 @@ pub fn avatar(bg: Color, size: f32) -> impl Fn(&Theme) -> Style {
 pub fn separator(theme: &Theme) -> Style {
     Style {
         background: Some(Background::Color(theme.semantic.border)),
+        ..Style::default()
+    }
+}
+
+/// Hairline between boxed-list rows (`--card-shade-color`).
+pub fn card_separator(theme: &Theme) -> Style {
+    Style {
+        background: Some(Background::Color(theme.semantic.card_shade)),
+        ..Style::default()
+    }
+}
+
+/// Hairline under/over bars (`--headerbar-shade-color`).
+pub fn bar_separator(theme: &Theme) -> Style {
+    Style {
+        background: Some(Background::Color(theme.semantic.headerbar_shade)),
+        ..Style::default()
+    }
+}
+
+/// Hairline between sections of a popover menu (`--popover-shade-color`).
+pub fn popover_separator(theme: &Theme) -> Style {
+    Style {
+        background: Some(Background::Color(theme.semantic.popover_shade)),
+        ..Style::default()
+    }
+}
+
+/// Hairline beside a sidebar (`--sidebar-border-color`).
+pub fn sidebar_separator(theme: &Theme) -> Style {
+    Style {
+        background: Some(Background::Color(theme.semantic.sidebar_border)),
         ..Style::default()
     }
 }

@@ -180,16 +180,8 @@ pub fn card(theme: &Theme, status: Status) -> Style {
         } else {
             s.card.fg
         },
-        border: Border {
-            color: alpha(s.card.fg, 0.08),
-            width: theme.metrics.border_width,
-            radius: theme.metrics.radius_l.into(),
-        },
-        shadow: Shadow {
-            color: s.shade,
-            offset: Vector::new(0.0, 1.0),
-            blur_radius: 3.0,
-        },
+        border: theme.shadows.card().border(theme.metrics.radius_l),
+        shadow: theme.shadows.card().shadow,
         snap: false,
     }
 }
@@ -233,8 +225,9 @@ pub fn list_row(theme: &Theme, status: Status) -> Style {
     let fg = theme.semantic.card.fg;
     let o = theme.semantic.opacity;
     let layer = match status {
-        Status::Hovered => o.flat_hover * 0.5,
-        Status::Pressed => o.flat_active * 0.6,
+        // `row.activatable:hover` 3%, `:active` 8% (libadwaita _lists.scss).
+        Status::Hovered => 0.03,
+        Status::Pressed => 0.08,
         _ => 0.0,
     };
     Style {
@@ -268,21 +261,27 @@ pub fn sidebar_row(selected: bool) -> impl Fn(&Theme, Status) -> Style + Copy {
     }
 }
 
-/// A toggle button (`AdwToggle`, view switcher). `active` highlights it.
+/// A toggle in an `AdwToggleGroup`/view switcher. The active toggle uses the
+/// *active toggle* surface with a faint shadow; others are plain.
 pub fn toggle(active: bool, pos: Position) -> impl Fn(&Theme, Status) -> Style + Copy {
     move |theme, status| {
         let o = theme.semantic.opacity;
-        let fg = theme.semantic.window.fg;
         let r = linked_radius(theme.metrics.radius_m, pos);
         if active {
-            let sw = theme.semantic.accent;
-            let mut s = filled(theme, status, sw.bg, sw.fg, r);
-            if status == Status::Disabled {
-                s.text_color = fade(sw.fg, o.disabled);
+            let t = theme.semantic.active_toggle;
+            Style {
+                background: Some(Background::Color(t.bg)),
+                text_color: if status == Status::Disabled { fade(t.fg, o.disabled) } else { t.fg },
+                border: border(r),
+                shadow: Shadow {
+                    color: alpha(Color::BLACK, if theme.is_dark() { 0.3 } else { 0.12 }),
+                    offset: Vector::new(0.0, 1.0),
+                    blur_radius: 2.0,
+                },
+                snap: false,
             }
-            s
         } else {
-            tinted(theme, status, fg, o.control, r)
+            tinted(theme, status, theme.semantic.window.fg, 0.0, r)
         }
     }
 }
@@ -307,5 +306,31 @@ pub fn flat_toggle(active: bool) -> impl Fn(&Theme, Status) -> Style + Copy {
             )));
         }
         s
+    }
+}
+
+/// An item in a `.menu` popover: flat, 6px radius, a hover layer, and a
+/// slightly stronger layer when selected.
+pub fn menu_item(selected: bool) -> impl Fn(&Theme, Status) -> Style + Copy {
+    move |theme, status| {
+        let fg = theme.semantic.popover.fg;
+        let layer = match status {
+            Status::Hovered => 0.10,
+            Status::Pressed => 0.16,
+            _ => {
+                if selected {
+                    0.06
+                } else {
+                    0.0
+                }
+            }
+        };
+        Style {
+            background: (layer > 0.0).then(|| Background::Color(alpha(fg, layer))),
+            text_color: fg,
+            border: border(theme.metrics.radius_menu),
+            shadow: Shadow::default(),
+            snap: false,
+        }
     }
 }

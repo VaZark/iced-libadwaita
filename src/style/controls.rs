@@ -264,30 +264,46 @@ pub mod scrollable {
     use crate::color::alpha;
     use crate::Theme;
     use iced::widget::scrollable::{Rail, Scroller, Status, Style};
-    use iced::{Background, Border, Color};
+    use iced::{Background, Border};
 
-    /// Thin overlay scrollbars like GTK4.
+    /// Adwaita's overlay scrollbar (libadwaita `_scrolling.scss`):
+    /// * slider: `currentColor` at 20% at rest, 40% hovered, 60% dragged;
+    /// * trough: `currentColor` at 10%, shown only while the scrollbar is hovered
+    ///   or dragged (`.hovering`);
+    /// * a 1px outline in `--scrollbar-outline-color` (35% at rest, 60% when
+    ///   hovered) keeps the slider visible on any content;
+    /// * fully rounded.
+    ///
+    /// Sizes come from `Metrics` via [`crate::widget::scrollbar`].
     pub fn default(theme: &Theme, status: Status) -> Style {
         let s = &theme.semantic;
-        let mut style = iced::widget::scrollable::default(theme.as_iced(), status);
-        let hot = matches!(status, Status::Hovered { .. } | Status::Dragged { .. });
-        let scroller_alpha = if hot { s.opacity.scroller + 0.25 } else { s.opacity.scroller };
+        let (hovered, dragged) = match status {
+            Status::Active { .. } => (false, false),
+            Status::Hovered { .. } => (true, false),
+            Status::Dragged { .. } => (true, true),
+        };
+        let level = if dragged { 0.60 } else if hovered { 0.40 } else { 0.20 };
+        let outline = if hovered { 0.60 } else { 0.35 };
+        let radius = theme.metrics.radius_pill;
         let rail = Rail {
-            background: if hot {
-                Some(Background::Color(alpha(s.window.fg, 0.08)))
-            } else {
-                None
-            },
-            border: Border::default().rounded(theme.metrics.radius_pill),
+            background: hovered.then(|| Background::Color(alpha(s.window.fg, 0.10))),
+            border: Border::default().rounded(radius),
             scroller: Scroller {
-                background: Background::Color(alpha(s.window.fg, scroller_alpha)),
+                background: Background::Color(alpha(s.window.fg, level)),
                 border: Border {
-                    color: Color::TRANSPARENT,
-                    width: 0.0,
-                    radius: theme.metrics.radius_pill.into(),
+                    color: alpha(s.scrollbar_outline, outline),
+                    width: 1.0,
+                    radius: radius.into(),
                 },
             },
         };
+        let mut style = iced::widget::scrollable::default(theme.as_iced(), match status {
+            Status::Active { is_horizontal_scrollbar_disabled, is_vertical_scrollbar_disabled } => Status::Active {
+                is_horizontal_scrollbar_disabled,
+                is_vertical_scrollbar_disabled,
+            },
+            other => other,
+        });
         style.container = iced::widget::container::Style::default();
         style.vertical_rail = rail;
         style.horizontal_rail = rail;
@@ -332,28 +348,19 @@ pub mod pick_list {
 }
 
 pub mod menu {
-    use crate::color::alpha;
     use crate::Theme;
     use iced::widget::overlay::menu::Style;
-    use iced::{Background, Border, Color, Shadow, Vector};
+    use iced::Background;
 
     pub fn default(theme: &Theme) -> Style {
         let s = &theme.semantic;
         Style {
             background: Background::Color(s.popover.bg),
-            border: Border {
-                color: alpha(s.popover.fg, 0.12),
-                width: theme.metrics.border_width,
-                radius: theme.metrics.radius_l.into(),
-            },
+            border: theme.shadows.popover().border(theme.metrics.radius_popover),
             text_color: s.popover.fg,
             selected_text_color: s.accent.fg,
             selected_background: Background::Color(s.accent.bg),
-            shadow: Shadow {
-                color: alpha(Color::BLACK, 0.25),
-                offset: Vector::new(0.0, 2.0),
-                blur_radius: 8.0,
-            },
+            shadow: theme.shadows.popover().shadow,
         }
     }
 }

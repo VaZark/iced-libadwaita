@@ -8,8 +8,18 @@ pub fn hex(rgb: u32) -> Color {
     Color::from_rgb8((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8)
 }
 
-/// Returns `color` with its alpha replaced by `a` (like GTK's `alpha()`).
+/// Scales the alpha of `color` by `a`, exactly like GTK's `alpha()` and CSS
+/// `color-mix(in srgb, color a%, transparent)`.
+///
+/// This multiplies: libadwaita's foreground is `rgb(0 0 6 / 80%)` in the light
+/// style, so `alpha(fg, 0.2)` is 16% effective, not 20%. Use [`with_alpha`] to
+/// set an absolute alpha instead.
 pub fn alpha(color: Color, a: f32) -> Color {
+    Color { a: color.a * a, ..color }
+}
+
+/// Returns `color` with its alpha *replaced* by `a`.
+pub fn with_alpha(color: Color, a: f32) -> Color {
     Color { a, ..color }
 }
 
@@ -51,4 +61,23 @@ pub fn black(a: f32) -> Color {
 /// White with the given alpha (`rgba(255, 255, 255, a)`).
 pub fn white(a: f32) -> Color {
     Color { a, ..Color::WHITE }
+}
+
+/// libadwaita's "ink": `rgb(0 0 6 / a)`, the near-black used for foregrounds
+/// and shades in the light style.
+pub fn ink(a: f32) -> Color {
+    Color::from_rgba8(0, 0, 6, a)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alpha_multiplies_like_gtk() {
+        let fg = ink(0.8);
+        assert!((alpha(fg, 0.2).a - 0.16).abs() < 1e-6);
+        assert_eq!(alpha(Color::WHITE, 0.5).a, 0.5);
+        assert_eq!(with_alpha(fg, 0.2).a, 0.2);
+    }
 }

@@ -17,6 +17,9 @@ pub enum Icon {
     WindowClose,
     WindowMinimize,
     WindowMaximize,
+    WindowRestore,
+    /// A generic window glyph (not the themed window-control icons).
+    Window,
     OpenMenu,
     ListAdd,
     ListRemove,
@@ -44,6 +47,10 @@ impl Icon {
             Icon::WindowClose => r#"<path d="M4 4l8 8M12 4l-8 8"/>"#,
             Icon::WindowMinimize => r#"<path d="M3 12h10"/>"#,
             Icon::WindowMaximize => r#"<rect x="3" y="3" width="10" height="10" rx="1"/>"#,
+            Icon::Window => r#"<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12"/>"#,
+            Icon::WindowRestore => {
+                r#"<rect x="2.5" y="5.5" width="8" height="8" rx="1"/><path d="M5.5 5.5v-2a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1h-2"/>"#
+            }
             Icon::OpenMenu => r#"<path d="M2 4h12M2 8h12M2 12h12"/>"#,
             Icon::ListAdd => r#"<path d="M8 3v10M3 8h10"/>"#,
             Icon::ListRemove => r#"<path d="M3 8h10"/>"#,
@@ -74,8 +81,24 @@ impl Icon {
         format!("{HEAD}{}</svg>", self.body())
     }
 
-    /// An [`svg::Handle`] for the icon.
+    /// The freedesktop symbolic icon name, for icons the desktop's icon theme
+    /// should draw (window controls follow the user's theme, like other GNOME apps).
+    pub fn system_name(self) -> Option<&'static str> {
+        Some(match self {
+            Icon::WindowClose => "window-close-symbolic",
+            Icon::WindowMinimize => "window-minimize-symbolic",
+            Icon::WindowMaximize => "window-maximize-symbolic",
+            Icon::WindowRestore => "window-restore-symbolic",
+            _ => return None,
+        })
+    }
+
+    /// An [`svg::Handle`] for the icon: the current icon theme's version when it
+    /// has one (see [`Icon::system_name`]), else the built-in drawing.
     pub fn handle(self) -> svg::Handle {
+        if let Some(bytes) = self.system_name().and_then(crate::system::find_icon) {
+            return svg::Handle::from_memory(bytes);
+        }
         svg::Handle::from_memory(self.source().into_bytes())
     }
 
@@ -92,4 +115,24 @@ impl Icon {
 
 fn svg<'a>(handle: svg::Handle) -> Svg<'a, Theme> {
     iced::widget::svg(handle)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_window_controls_use_the_system_icon_theme() {
+        assert_eq!(Icon::WindowClose.system_name(), Some("window-close-symbolic"));
+        assert_eq!(Icon::WindowRestore.system_name(), Some("window-restore-symbolic"));
+        assert_eq!(Icon::Window.system_name(), None);
+        assert_eq!(Icon::OpenMenu.system_name(), None);
+    }
+
+    #[test]
+    fn every_icon_has_a_drawing() {
+        for i in [Icon::WindowRestore, Icon::Window, Icon::WindowClose] {
+            assert!(i.source().contains("<svg") && i.source().ends_with("</svg>"));
+        }
+    }
 }
