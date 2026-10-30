@@ -329,7 +329,7 @@ pub fn bottom_sheet_in_window<'a, M: Clone + 'a>(
     window_radius: f32,
 ) -> Element<'a, M> {
     if !open {
-        return content.into();
+        return super::layered(content, None);
     }
     let m = Metrics::desktop();
     let catcher = mouse_area(container(space()).width(Length::Fill).height(Length::Fill)).on_press(on_close);
@@ -353,9 +353,8 @@ pub fn bottom_sheet_in_window<'a, M: Clone + 'a>(
         opaque(catcher),
         container(opaque(panel)).height(Length::Fill).align_y(Vertical::Bottom)
     ];
-    stack![
-        content.into(),
-        Element::from(super::entrance(layer, iced::Vector::new(0.0, 160.0)).scrim(window_radius))
-    ]
-    .into()
+    super::layered(
+        content,
+        Some(Element::from(super::entrance(layer, iced::Vector::new(0.0, 160.0)).scrim(window_radius))),
+    )
 }

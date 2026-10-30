@@ -703,50 +703,35 @@ impl Gallery {
             Message::Sheet(false),
             corner,
         );
-        let result: Element<'_> = match self.dialog {
-            None => base,
-            Some(Dialog::Alert) => w::dialog_in_window(
-                base,
-                w::AlertDialog::new("Discard Changes?")
+        let dialog: Option<Element<'_>> = match self.dialog {
+            None => None,
+            Some(Dialog::Alert) => Some(Element::from(w::AlertDialog::new("Discard Changes?")
                     .body("Unsaved changes will be permanently lost.")
                     .response("Cancel", w::ResponseAppearance::Default, Message::CloseDialog)
                     .response("Save", w::ResponseAppearance::Suggested, Message::CloseDialog)
-                    .response("Discard", w::ResponseAppearance::Destructive, Message::CloseDialog),
-                Some(Message::CloseDialog),
-                corner,
+                    .response("Discard", w::ResponseAppearance::Destructive, Message::CloseDialog)),
             ),
-            Some(Dialog::Shortcuts) => w::dialog_in_window(
-                base,
-                w::shortcuts_dialog(
+            Some(Dialog::Shortcuts) => Some(                w::shortcuts_dialog(
                     vec![
                         ("General".into(), vec![("Open Menu".into(), "F10".into()), ("Quit".into(), "Ctrl+Q".into())]),
                         ("Editing".into(), vec![("Undo".into(), "Ctrl+Z".into()), ("Redo".into(), "Ctrl+Shift+Z".into())]),
                     ],
                     Message::CloseDialog,
                 ),
-                Some(Message::CloseDialog),
-                corner,
             ),
-            Some(Dialog::Preferences) => w::dialog_in_window(
-                base,
-                w::preferences_dialog("Preferences", self.lists_page(), Message::CloseDialog),
-                Some(Message::CloseDialog),
-                corner,
+            Some(Dialog::Preferences) => Some(                w::preferences_dialog("Preferences", self.lists_page(), Message::CloseDialog),
             ),
-            Some(Dialog::About) => w::dialog_in_window(
-                base,
-                w::AboutDialog::new("Gallery")
+            Some(Dialog::About) => Some(Element::from(w::AboutDialog::new("Gallery")
                     .developer_name("The iced-libadwaita authors")
                     .version("0.1.0")
                     .comments("Widget gallery for iced-libadwaita.")
                     .website("https://iced.rs")
                     .license("MIT OR Apache-2.0")
                     .application_icon(Icon::Home.colored(48.0, self.theme().semantic.accent.color))
-                    .on_close(Message::CloseDialog),
-                Some(Message::CloseDialog),
-                corner,
+                    .on_close(Message::CloseDialog)),
             ),
         };
+        let result = w::present_dialog(base, dialog, Some(Message::CloseDialog), corner);
         if csd { adw::window::frame(result, win_state, Message::Resize) } else { result }
     }
 

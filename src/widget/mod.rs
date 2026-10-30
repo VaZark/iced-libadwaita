@@ -46,7 +46,7 @@ pub use extra::{
 };
 pub use dropdown::{dropdown, menu_item, popover, Align as PopoverAlign, Appearance as DropdownAppearance, Dropdown, Presentation as DropdownPresentation};
 pub use switch::{switch, Switch};
-pub use dialog::{dialog, dialog_in_window, AboutDialog, AlertDialog, ResponseAppearance};
+pub use dialog::{dialog, dialog_in_window, present_dialog, AboutDialog, AlertDialog, ResponseAppearance};
 pub use flex::FlexRow;
 pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent};
 pub use forms::{
@@ -54,7 +54,7 @@ pub use forms::{
     radio_button, scale, status_swatch, tag, text_view, Entry, EntryState, TextView,
 };
 pub use header_bar::{header_bar, window_title, HeaderBar, WindowControls};
-pub use motion::{drawer_layer, entrance, reveal, DrawerLayer, Entrance, Reveal};
+pub use motion::{drawer_layer, entrance, layered, reveal, DrawerLayer, Entrance, Reveal};
 pub use menu::{menu_button, primary_menu, Menu, MenuButton, MenuItem, MenuPresentation};
 pub use navigation::{
     navigation_sidebar, navigation_sidebar_rounded, CollapsedSidebar, navigation_view, sidebar_row, Breakpoint, NavigationPage,

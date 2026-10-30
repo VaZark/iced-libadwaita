@@ -4,7 +4,7 @@ use super::Element;
 use crate::style::{button as sb, container as sc};
 use crate::Metrics;
 use iced::alignment::{Horizontal, Vertical};
-use iced::widget::{button, container, row, stack, text};
+use iced::widget::{button, container, row, text};
 use iced::Length;
 
 pub struct Toast<M> {
@@ -40,7 +40,7 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
     toast: Option<Toast<M>>,
 ) -> Element<'a, M> {
     let Some(t) = toast else {
-        return content.into();
+        return super::layered(content, None);
     };
     let m = Metrics::desktop();
     let mut r = row![text(t.title)].spacing(m.space_m).align_y(Vertical::Center);
@@ -68,14 +68,16 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
             crate::animation::presets::TOAST_SHOW.0,
             crate::animation::presets::TOAST_SHOW.1,
         ));
-    stack![
-        content.into(),
-        container(toast)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .align_x(Horizontal::Center)
-            .align_y(Vertical::Bottom)
-            .padding(m.space_xl)
-    ]
-    .into()
+    super::layered(
+        content,
+        Some(
+            container(toast)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_x(Horizontal::Center)
+                .align_y(Vertical::Bottom)
+                .padding(m.space_xl)
+                .into(),
+        ),
+    )
 }

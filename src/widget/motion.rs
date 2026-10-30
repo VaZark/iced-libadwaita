@@ -402,6 +402,21 @@ pub struct Entrance<'a, M> {
     spec: Spec,
 }
 
+/// Stacks an optional overlay layer over `content`. The stack is **always** present, so
+/// showing or hiding the layer never changes the content's place in the widget tree: its
+/// state (scroll offsets, focus, animations) survives, and it does not move. Without a
+/// layer the second slot is an empty placeholder.
+pub fn layered<'a, M: 'a>(
+    content: impl Into<Element<'a, M, Theme>>,
+    layer: Option<Element<'a, M, Theme>>,
+) -> Element<'a, M, Theme> {
+    iced::widget::stack![
+        content.into(),
+        layer.unwrap_or_else(|| iced::widget::space().into())
+    ]
+    .into()
+}
+
 pub fn entrance<'a, M>(content: impl Into<Element<'a, M, Theme>>, offset: Vector) -> Entrance<'a, M> {
     Entrance {
         content: content.into(),
@@ -513,5 +528,24 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
 impl<'a, M: 'a> From<Entrance<'a, M>> for Element<'a, M, Theme> {
     fn from(e: Entrance<'a, M>) -> Self {
         Element::new(e)
+    }
+}
+
+#[cfg(test)]
+mod layered_tests {
+    use super::*;
+    use iced::advanced::widget::Tree;
+
+    #[test]
+    fn content_keeps_its_tree_position_with_or_without_a_layer() {
+        let bare: iced::Element<'_, (), Theme> = layered(iced::widget::text("content"), None);
+        let over: iced::Element<'_, (), Theme> =
+            layered(iced::widget::text("content"), Some(iced::widget::text("layer").into()));
+        let (a, b) = (Tree::new(&bare), Tree::new(&over));
+        // Same shape: the content is child 0 either way, so its state survives showing
+        // or hiding the layer and it never moves.
+        assert_eq!(a.children.len(), 2);
+        assert_eq!(b.children.len(), 2);
+        assert_eq!(a.children[0].tag, b.children[0].tag);
     }
 }

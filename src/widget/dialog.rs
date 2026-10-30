@@ -36,11 +36,25 @@ pub fn dialog_in_window<'a, M: Clone + 'a>(
         opaque(catcher),
         container(opaque(dialog.into())).center(Length::Fill).padding(12)
     ];
-    stack![
-        base.into(),
-        Element::from(super::entrance(layer, iced::Vector::new(0.0, 24.0)).scrim(window_radius))
-    ]
-    .into()
+    super::layered(
+        base,
+        Some(Element::from(super::entrance(layer, iced::Vector::new(0.0, 24.0)).scrim(window_radius))),
+    )
+}
+
+/// Like [`dialog_in_window`] for an app that has a dialog only sometimes: with `None`
+/// the base is returned in the same tree position, so opening or closing a dialog does
+/// not disturb the window below it (scroll offsets and so on).
+pub fn present_dialog<'a, M: Clone + 'a>(
+    base: impl Into<Element<'a, M>>,
+    dialog: Option<Element<'a, M>>,
+    on_backdrop: Option<M>,
+    window_radius: f32,
+) -> Element<'a, M> {
+    match dialog {
+        Some(d) => dialog_in_window(base, d, on_backdrop, window_radius),
+        None => super::layered(base, None),
+    }
 }
 
 /// Appearance of an [`AlertDialog`] response (`AdwResponseAppearance`).
