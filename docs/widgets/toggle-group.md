@@ -20,8 +20,8 @@ Active toggle uses the *active toggle* surface (white / 20% white) on a transluc
 
 ## iced mapping
 
-`toggle_group(items, active, on_select)`; the active toggle uses the *active toggle* surface (white / 20% white) with a faint shadow, on a translucent trough.
+`toggle_group(items, active, on_select)` is a custom segmented control that owns its layout: with `.width(Fill)`, or when a stacked row demands 100%, every segment gets an equal share (`flex: 1`) with its content centered, never narrower than its own content; too wide, it shrinks fairly (short segments keep their size) and never overshoots; if any segment would be squeezed, **all** segments that have a compact form switch to icon-only together (all icons or all full content). `.homogeneous(true)` forces equal widths. Segments take a label, an icon, icon+label, or any element (`ToggleItem::{new, icon_only, icon, custom}`). The active toggle uses the *active toggle* surface with a faint shadow, on a translucent trough.
 
 ## Deviations / gaps
 
-No `homogeneous`/`can-shrink`/vertical orientation yet.
+No vertical orientation; no ellipsis (clipped inside its segment); no animated active indicator.

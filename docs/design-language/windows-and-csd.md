@@ -42,6 +42,18 @@ Source: [`AdwWindow`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/c
 * Not covered: non-GNOME desktops (KDE, etc.) are not read; they get GNOME's
   defaults and the Adwaita/hicolor icon fallback.
 
+## Containment: nothing may leave the rounded window
+
+iced can only clip to rectangles, so a rounded window is kept clean by construction:
+
+* Every surface that touches a window corner takes the window radius: header bars
+  (`HeaderBar::window_corners`), the sidebar pane (`NavigationSplitView::window_radius`),
+  the sidebar list (`navigation_sidebar_rounded`), the full-page menu.
+* Every full-window layer takes it too: dialog scrim (`dialog_in_window`), bottom
+  sheet scrim and panel (`bottom_sheet_in_window`).
+* The 1px window outline is drawn **above** the content so content can't paint over it.
+* Maximized/fullscreen: radius 0 everywhere, no outline, no grips.
+
 ## iced mapping
 `window::settings()` (SSD off by default), `window::settings_with_ssd(bool)`,
 `HeaderBar::{on_drag, on_double_click, window_controls}`, and

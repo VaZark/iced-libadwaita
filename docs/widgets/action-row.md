@@ -33,6 +33,7 @@ least `Metrics::row_wrap_basis` (128px); if it can't, the suffix wraps to its ow
 `flex-wrap`), so a wide control like a row of color swatches never crushes or overlaps the title. Applies
 to ActionRow (and so SwitchRow, ComboRow, SpinRow, ExpanderRow), EntryRow suffixes and PreferencesGroup
 header suffixes; opt out with `wrap_suffix(false)`.
+**Pinned suffix:** rows whose suffix is compact and fixed-size (`SwitchRow`, `ComboRow`, `SpinRow`, `ExpanderRow`) never flex-wrap: the control is pinned to the end edge (`wrap_suffix(false)`). A wrapping row can place its wrapped control at the end with `suffix_align(Horizontal::Right)` (`flex-end`).
 **Collapse behavior** (`CollapseBehavior`, default `Stacked`, set globally with `Metrics::row_collapse` or per row with
 `.collapse(..)`): when the suffix wraps, `Stacked` gives it 100% of the row width on its own line (`Fill`-width
 controls such as sliders and entries stretch); `Flex` keeps the control's own width, left-aligned. A `Fill`-width suffix

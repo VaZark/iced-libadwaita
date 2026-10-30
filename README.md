@@ -103,6 +103,10 @@ touches the bottom-left corner.
   `Theme::with_flat_headerbars(true)`, or `HeaderBar::flat(true)` per bar; dialog
   headers are always flat. Titles are replaceable (`title_widget`, e.g. `w::path_bar`);
   only the window buttons are fixed.
+* **Rounded windows stay contained:** every corner-touching surface and full-window layer
+  takes the window radius (`NavigationSplitView::window_radius`, `dialog_in_window`,
+  `bottom_sheet_in_window`, `HeaderBar::window_corners`), and the outline is drawn above the
+  content. Maximized/fullscreen goes edge to edge.
 * In a split view give each pane its own header bar; only the pane at a window edge
   shows the window buttons.
 
