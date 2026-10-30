@@ -186,7 +186,7 @@ pub mod toggler {
             foreground_border_width: 0.0,
             foreground_border_color: Color::TRANSPARENT,
             text_color: Some(fade(s.window.fg, k)),
-            border_radius: Some(theme.metrics.radius_pill.into()),
+            border_radius: Some((theme.metrics.radius_pill * (theme.metrics.radius_m / crate::Metrics::MAX_RADIUS_M).clamp(0.0, 1.0)).into()),
             padding_ratio: 0.14,
         }
     }

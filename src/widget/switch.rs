@@ -1,4 +1,5 @@
-//! `GtkSwitch`: a 46×26 pill track with a 20px knob.
+//! `GtkSwitch`: a 46×26 pill track with a 20px knob. The pill follows the theme's
+//! control radius (`radius_m`): fully round at the Adwaita default, square at 0.
 //!
 //! iced's own `toggler` is always 2:1 and sizes the knob from the height, which
 //! looks too wide next to Adwaita. This widget uses Adwaita's proportions.
@@ -132,6 +133,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
         let hovered = enabled && cursor.is_over(b);
         let k = if enabled { 1.0 } else { s.opacity.disabled };
 
+        // The control radius scales the pill: the default (the Adwaita maximum) is fully
+        // round, 0 is square; the knob follows so it stays concentric with the track.
+        let round = (theme.metrics.radius_m / crate::Metrics::MAX_RADIUS_M).clamp(0.0, 1.0);
+
         let p = tree.state.downcast_ref::<State>().shown.clamp(0.0, 1.0);
         let off = crate::color::alpha(s.window.fg, s.opacity.trough + if hovered { 0.05 } else { 0.0 });
         let on = if hovered { s.hover_fill(s.accent.bg) } else { s.accent.bg };
@@ -140,7 +145,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
         renderer.fill_quad(
             Quad {
                 bounds: b,
-                border: Border::default().rounded(HEIGHT / 2.0),
+                border: Border::default().rounded(HEIGHT / 2.0 * round),
                 shadow: Shadow::default(),
                 snap: false,
             },
@@ -153,7 +158,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
         renderer.fill_quad(
             Quad {
                 bounds: knob,
-                border: Border::default().rounded(KNOB / 2.0),
+                border: Border::default().rounded(KNOB / 2.0 * round),
                 shadow: Shadow {
                     color: Color { a: 0.25 * k, ..Color::BLACK },
                     offset: Vector::new(0.0, 1.0),
