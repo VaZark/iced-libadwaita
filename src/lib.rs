@@ -9,6 +9,7 @@
 //! * [`widget`]: Adw-named widgets (`HeaderBar`, `ActionRow`, `PreferencesGroup`,
 //!   `StatusPage`, `AlertDialog`, …).
 
+pub mod animation;
 pub mod color;
 pub mod icon;
 pub mod metrics;

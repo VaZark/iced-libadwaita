@@ -3,6 +3,7 @@
 //! iced's own `toggler` is always 2:1 and sizes the knob from the height, which
 //! looks too wide next to Adwaita. This widget uses Adwaita's proportions.
 
+use crate::animation::{Spec, Tween};
 use crate::Theme;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
@@ -20,9 +21,11 @@ pub struct Switch<'a, M> {
     on_toggle: Option<Box<dyn Fn(bool) -> M + 'a>>,
 }
 
-#[derive(Default)]
 struct State {
     pressed: bool,
+    /// 0 = off, 1 = on; animated with the stylesheet's 200ms `$ease-out-quad`.
+    progress: Tween,
+    shown: f32,
 }
 
 /// Builds a [`Switch`]. Without `.on_toggle` it renders disabled.
@@ -43,7 +46,8 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(State::default())
+        let initial = if self.active { 1.0 } else { 0.0 };
+        tree::State::new(State { pressed: false, progress: Tween::new(initial), shown: initial })
     }
 
     fn size(&self) -> Size<Length> {
@@ -65,8 +69,18 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
         shell: &mut Shell<'_, M>,
         _: &Rectangle,
     ) {
-        let Some(on_toggle) = &self.on_toggle else { return };
         let state = tree.state.downcast_mut::<State>();
+        // Animate the knob and track toward the current value.
+        if let Event::Window(iced::window::Event::RedrawRequested(now)) = event {
+            let target = if self.active { 1.0 } else { 0.0 };
+            state.progress.set_target(target, *now, Spec::STYLE);
+            let v = state.progress.tick(*now);
+            if (v - state.shown).abs() > f32::EPSILON || state.progress.is_animating() {
+                state.shown = v;
+                shell.request_redraw();
+            }
+        }
+        let Some(on_toggle) = &self.on_toggle else { return };
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
                 if cursor.is_over(layout.bounds()) =>
@@ -104,7 +118,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
 
     fn draw(
         &self,
-        _: &Tree,
+        tree: &Tree,
         renderer: &mut iced::Renderer,
         theme: &Theme,
         _: &renderer::Style,
@@ -118,11 +132,11 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
         let hovered = enabled && cursor.is_over(b);
         let k = if enabled { 1.0 } else { s.opacity.disabled };
 
-        let track = if self.active {
-            if hovered { s.hover_fill(s.accent.bg) } else { s.accent.bg }
-        } else {
-            crate::color::alpha(s.window.fg, s.opacity.trough + if hovered { 0.05 } else { 0.0 })
-        };
+        let p = tree.state.downcast_ref::<State>().shown.clamp(0.0, 1.0);
+        let off = crate::color::alpha(s.window.fg, s.opacity.trough + if hovered { 0.05 } else { 0.0 });
+        let on = if hovered { s.hover_fill(s.accent.bg) } else { s.accent.bg };
+        // The track cross-fades between the off and on colors as the knob slides.
+        let track = crate::color::mix(off, on, p);
         renderer.fill_quad(
             Quad {
                 bounds: b,
@@ -134,7 +148,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
         );
 
         let margin = (HEIGHT - KNOB) / 2.0;
-        let x = if self.active { b.x + b.width - margin - KNOB } else { b.x + margin };
+        let x = b.x + margin + p * (b.width - 2.0 * margin - KNOB);
         let knob = Rectangle { x, y: b.y + margin, width: KNOB, height: KNOB };
         renderer.fill_quad(
             Quad {

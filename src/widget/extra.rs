@@ -350,13 +350,7 @@ pub fn bottom_sheet_in_window<'a, M: Clone + 'a>(
         return content.into();
     }
     let m = Metrics::default();
-    let scrim = mouse_area(
-        container(space())
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(sc::backdrop_in_window(window_radius)),
-    )
-    .on_press(on_close);
+    let catcher = mouse_area(container(space()).width(Length::Fill).height(Length::Fill)).on_press(on_close);
     let panel = container(sheet.into())
         .padding(m.space_l)
         .width(Length::Fill)
@@ -372,10 +366,14 @@ pub fn bottom_sheet_in_window<'a, M: Clone + 'a>(
             },
             ..sc::dialog(t)
         });
+    // Slides up on the sheet spring with a fading scrim (`AdwBottomSheet`).
+    let layer = stack![
+        opaque(catcher),
+        container(opaque(panel)).height(Length::Fill).align_y(Vertical::Bottom)
+    ];
     stack![
         content.into(),
-        opaque(scrim),
-        container(opaque(panel)).height(Length::Fill).align_y(Vertical::Bottom)
+        Element::from(super::entrance(layer, iced::Vector::new(0.0, 160.0)).scrim(window_radius))
     ]
     .into()
 }

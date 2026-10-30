@@ -547,14 +547,14 @@ impl<'a, M: Clone + 'a> From<ExpanderRow<'a, M>> for Element<'a, M> {
             .suffix(icon.view(16.0))
             .on_activate((x.on_toggle)(!x.expanded));
         let mut col = column![Element::from(header)];
-        if x.expanded && !x.children.is_empty() {
+        if !x.children.is_empty() {
             let mut inner = column![];
             for c in x.children {
                 inner = inner
                     .push(container(space().height(1)).width(Length::Fill).style(sc::card_separator))
                     .push(c);
             }
-            col = col.push(container(inner).width(Length::Fill).style(|t: &Theme| {
+            let list = container(inner).width(Length::Fill).style(|t: &Theme| {
                 iced::widget::container::Style {
                     background: Some(iced::Background::Color(crate::color::alpha(
                         t.semantic.card.fg,
@@ -562,7 +562,9 @@ impl<'a, M: Clone + 'a> From<ExpanderRow<'a, M>> for Element<'a, M> {
                     ))),
                     ..Default::default()
                 }
-            }));
+            });
+            // Always mounted: the revealer slides it open/closed (250ms, ADW_EASE).
+            col = col.push(Element::from(super::reveal(list, x.expanded)));
         }
         col.into()
     }

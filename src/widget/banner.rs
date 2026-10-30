@@ -4,7 +4,7 @@ use super::Element;
 use crate::style::{button as sb, container as sc};
 use crate::Metrics;
 use iced::alignment::{Horizontal, Vertical};
-use iced::widget::{button, container, row, space, text};
+use iced::widget::{button, container, row, text};
 use iced::Length;
 
 pub struct Banner<M> {
@@ -42,9 +42,6 @@ impl<M> Banner<M> {
 
 impl<'a, M: Clone + 'a> From<Banner<M>> for Element<'a, M> {
     fn from(b: Banner<M>) -> Self {
-        if !b.revealed {
-            return space().height(0).into();
-        }
         let m = b.metrics;
         let mut r = row![
             container(text(b.title)).width(Length::Fill).align_x(Horizontal::Center)
@@ -70,10 +67,11 @@ impl<'a, M: Clone + 'a> From<Banner<M>> for Element<'a, M> {
                     .on_press(msg),
             );
         }
-        container(r)
+        let banner = container(r)
             .padding([m.space_s, m.space_m])
             .width(Length::Fill)
-            .style(sc::banner)
-            .into()
+            .style(sc::banner);
+        // Hidden by default; `revealed` slides it in/out (250ms, ADW_EASE).
+        super::reveal(banner, b.revealed).into()
     }
 }

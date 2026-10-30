@@ -64,6 +64,60 @@ impl Page {
     }
 }
 
+/// The motions the Theming page can play: libadwaita easings and the sheet spring.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DemoMotion {
+    Linear,
+    StyleEaseOutQuad,
+    Ease,
+    EaseOutCubic,
+    EaseOutBack,
+    EaseOutBounce,
+    EaseOutElastic,
+    Spring,
+}
+
+impl DemoMotion {
+    const ALL: [DemoMotion; 8] = [
+        DemoMotion::Linear,
+        DemoMotion::StyleEaseOutQuad,
+        DemoMotion::Ease,
+        DemoMotion::EaseOutCubic,
+        DemoMotion::EaseOutBack,
+        DemoMotion::EaseOutBounce,
+        DemoMotion::EaseOutElastic,
+        DemoMotion::Spring,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            DemoMotion::Linear => "Linear",
+            DemoMotion::StyleEaseOutQuad => "Style 200ms",
+            DemoMotion::Ease => "Ease",
+            DemoMotion::EaseOutCubic => "OutCubic",
+            DemoMotion::EaseOutBack => "OutBack",
+            DemoMotion::EaseOutBounce => "OutBounce",
+            DemoMotion::EaseOutElastic => "OutElastic",
+            DemoMotion::Spring => "Sheet spring",
+        }
+    }
+
+    fn spec(self) -> adw::animation::Spec {
+        use adw::animation::{presets, Easing, Spec};
+        let ms = std::time::Duration::from_millis(600);
+        match self {
+            DemoMotion::Linear => Spec::Timed(ms, Easing::Linear),
+            DemoMotion::StyleEaseOutQuad => Spec::STYLE,
+            DemoMotion::Ease => Spec::Timed(ms, Easing::Ease),
+            DemoMotion::EaseOutCubic => Spec::Timed(ms, Easing::EaseOutCubic),
+            DemoMotion::EaseOutBack => Spec::Timed(ms, Easing::EaseOutBack),
+            DemoMotion::EaseOutBounce => Spec::Timed(ms, Easing::EaseOutBounce),
+            DemoMotion::EaseOutElastic => Spec::Timed(ms, Easing::EaseOutElastic),
+            DemoMotion::Spring => Spec::Spring(presets::sheet(false)),
+        }
+    }
+}
+
 /// How the primary menu is presented: follow the window width, or force a mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MenuMode {
@@ -101,6 +155,10 @@ struct Gallery {
     raised_bar: bool,
     flat_headers: bool,
     path_bar_title: bool,
+    anim_enabled: bool,
+    demo: DemoMotion,
+    demo_tween: adw::animation::Tween,
+    demo_value: f32,
 
     wifi: bool,
     notifications: bool,
@@ -172,7 +230,10 @@ enum Message {
     ShowToast(&'static str),
     DismissToast,
     DismissBanner,
-    Frame,
+    Frame(std::time::Instant),
+    Animations(bool),
+    DemoMotion(DemoMotion),
+    DemoPlay,
     Noop,
     Drag,
     Close,
@@ -226,6 +287,10 @@ impl Gallery {
                 raised_bar: std::env::var_os("GALLERY_RAISED").is_some(),
                 flat_headers: std::env::var_os("GALLERY_FLAT").is_some(),
                 path_bar_title: std::env::var_os("GALLERY_PATHBAR").is_some(),
+                anim_enabled: true,
+                demo: DemoMotion::EaseOutCubic,
+                demo_tween: adw::animation::Tween::new(0.0),
+                demo_value: 0.0,
                 wifi: true,
                 notifications: false,
                 expanded: true,
@@ -339,7 +404,20 @@ impl Gallery {
             Message::ShowToast(s) => self.toast = Some(s.into()),
             Message::DismissToast => self.toast = None,
             Message::DismissBanner => self.banner = false,
-            Message::Frame => self.angle += 0.12,
+            Message::Frame(now) => {
+                self.angle += 0.12;
+                self.demo_value = self.demo_tween.tick(now);
+            }
+            Message::Animations(on) => {
+                self.anim_enabled = on;
+                adw::animation::set_enabled(Some(on));
+            }
+            Message::DemoMotion(m) => self.demo = m,
+            Message::DemoPlay => {
+                let now = std::time::Instant::now();
+                let to = if self.demo_tween.target() > 0.5 { 0.0 } else { 1.0 };
+                self.demo_tween.set_target(to, now, self.demo.spec());
+            }
             Message::Noop => {}
             Message::Drag => return window::oldest().and_then(window::drag),
             Message::Close => return iced::exit(),
@@ -398,6 +476,33 @@ impl Gallery {
     /// Screenshot mode: step through (scheme x page), with dialogs/toasts on
     /// the Dialogs page so overlays are covered too.
     fn shot_next(&mut self, i: usize) -> Task<Message> {
+        // GALLERY_ANIM=switch|drawer|reveal|dialog|toast: capture an animation instead of the
+        // normal pages: settled start, then +70ms, +160ms and settled end after a trigger.
+        if let Ok(kind) = std::env::var("GALLERY_ANIM") {
+            let wait = |ms: u64, tag: &'static str, this: &mut Self| {
+                this.shot_tag = Some(tag);
+                Task::perform(tokio::time::sleep(Duration::from_millis(ms)), move |_| Message::Capture(i))
+            };
+            return match i {
+                0 => {
+                    self.scheme = Scheme::Light;
+                    wait(700, "a0-start", self)
+                }
+                1 => {
+                    let trigger = match kind.as_str() {
+                        "switch" => Message::Wifi(!self.wifi),
+                        "drawer" => Message::Drawer(true),
+                        "reveal" => Message::Expanded(!self.expanded),
+                        "dialog" => Message::OpenDialog(Dialog::Alert),
+                        _ => Message::ShowToast("Settings saved"),
+                    };
+                    Task::done(trigger).chain(wait(70, "a1-70ms", self))
+                }
+                2 => wait(90, "a2-160ms", self),
+                3 => wait(700, "a3-end", self),
+                _ => iced::exit(),
+            };
+        }
         let total = 2 * Page::ALL.len();
         if i > total {
             return iced::exit();
@@ -428,8 +533,8 @@ impl Gallery {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        let frames = if self.page == Page::Feedback || self.shots.is_some() {
-            window::frames().map(|_| Message::Frame)
+        let frames = if self.page == Page::Feedback || self.shots.is_some() || self.demo_tween.is_animating() {
+            window::frames().map(Message::Frame)
         } else {
             Subscription::none()
         };
@@ -1130,6 +1235,41 @@ impl Gallery {
         self.page_frame(
             column![
                 rows,
+                w::PreferencesGroup::<Message>::new()
+                    .title("Animations")
+                    .description("libadwaita's easings and springs; honors the system enable-animations setting.")
+                    .metrics(m)
+                    .push(w::SwitchRow::new("Animations", self.anim_enabled, Message::Animations).subtitle("Off: every transition jumps to its end value").metrics(m))
+                    .push(
+                        w::ActionRow::new("Motion")
+                            .subtitle(self.demo.label())
+                            .suffix(Element::from(
+                                w::toggle_group(
+                                    DemoMotion::ALL
+                                        .iter()
+                                        .map(|d| w::ToggleItem::new(*d, d.label()))
+                                        .collect(),
+                                    Some(self.demo),
+                                    Message::DemoMotion,
+                                )
+                                .width(Length::Fill),
+                            ))
+                            .suffix_basis(280.0)
+                            .metrics(m),
+                    )
+                    .push(
+                        w::ActionRow::new("Play")
+                            .subtitle(format!("value {:.2}", self.demo_value))
+                            .suffix(
+                                row![
+                                    w::progress_bar(0.0..=1.0, self.demo_value.clamp(0.0, 1.0)).length(Length::Fixed(120.0)),
+                                    w::suggested_button(w::typography::label("Play")).on_press(Message::DemoPlay),
+                                ]
+                                .spacing(m.space_m)
+                                .align_y(iced::Alignment::Center),
+                            )
+                            .metrics(m),
+                    ),
                 w::PreferencesGroup::<Message>::new()
                     .title("Collapse Behavior")
                     .description("Narrow the window: the control wraps. Stacked = 100% width; Flex = keeps its width.")

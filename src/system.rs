@@ -83,6 +83,17 @@ fn gsettings(schema: &str, key: &str) -> Option<String> {
     Some(s.trim().trim_matches('\'').to_string())
 }
 
+/// Whether the desktop wants animations (`org.gnome.desktop.interface enable-animations`,
+/// GTK's `gtk-enable-animations`); default `true`. Cached.
+pub fn animations_enabled() -> bool {
+    static CACHE: OnceLock<bool> = OnceLock::new();
+    *CACHE.get_or_init(|| {
+        gsettings("org.gnome.desktop.interface", "enable-animations")
+            .map(|v| v != "false")
+            .unwrap_or(true)
+    })
+}
+
 /// The current icon theme name (`icon-theme`), default `Adwaita`.
 pub fn icon_theme() -> String {
     static CACHE: OnceLock<String> = OnceLock::new();

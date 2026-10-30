@@ -237,20 +237,9 @@ impl<'a, M: Clone + 'a> From<NavigationSplitView<'a, M>> for Element<'a, M> {
                         .into()
                 };
             }
-            // Drawer: the content is always there; the sidebar slides over it.
+            // Drawer: the content is always there; the sidebar slides over it. The layer
+            // is always mounted so it animates open *and* closed (spring, scrim fade).
             let content: Element<'a, M> = container(v.content).width(Length::Fill).height(Length::Fill).into();
-            if !v.drawer_open {
-                return content;
-            }
-            let mut scrim = mouse_area(
-                container(space())
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .style(sc::backdrop_in_window(r)),
-            );
-            if let Some(m) = v.on_close_drawer {
-                scrim = scrim.on_press(m);
-            }
             let drawer = container(v.sidebar)
                 .width(Length::Fixed(v.sidebar_width))
                 .height(Length::Fill)
@@ -262,12 +251,11 @@ impl<'a, M: Clone + 'a> From<NavigationSplitView<'a, M>> for Element<'a, M> {
                         ..sc::sidebar(t)
                     }
                 });
-            return stack![
-                content,
-                opaque(scrim),
-                container(opaque(drawer)).width(Length::Fill).height(Length::Fill).align_x(iced::alignment::Horizontal::Left)
-            ]
-            .into();
+            let mut layer = super::drawer_layer(drawer, v.drawer_open, v.sidebar_width).window_radius(r);
+            if let Some(m) = v.on_close_drawer {
+                layer = layer.on_close(m);
+            }
+            return stack![content, Element::from(layer)].into();
         }
         row![
             container(v.sidebar)

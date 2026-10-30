@@ -25,19 +25,20 @@ pub fn dialog_in_window<'a, M: Clone + 'a>(
     on_backdrop: Option<M>,
     window_radius: f32,
 ) -> Element<'a, M> {
-    let mut scrim = mouse_area(
-        container(space())
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(sc::backdrop_in_window(window_radius)),
-    );
+    // The scrim fades in and the dialog slides up on the sheet spring (damping ratio
+    // 0.8, mass 1, stiffness 400), as `AdwDialog` presents. The transparent catcher
+    // blocks the window below and sends `on_backdrop` when clicked.
+    let mut catcher = mouse_area(container(space()).width(Length::Fill).height(Length::Fill));
     if let Some(m) = on_backdrop {
-        scrim = scrim.on_press(m);
+        catcher = catcher.on_press(m);
     }
+    let layer = stack![
+        opaque(catcher),
+        container(opaque(dialog.into())).center(Length::Fill).padding(12)
+    ];
     stack![
         base.into(),
-        opaque(scrim),
-        container(opaque(dialog.into())).center(Length::Fill).padding(12)
+        Element::from(super::entrance(layer, iced::Vector::new(0.0, 24.0)).scrim(window_radius))
     ]
     .into()
 }

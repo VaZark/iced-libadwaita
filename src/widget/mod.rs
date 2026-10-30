@@ -15,6 +15,7 @@ mod extra;
 mod flex;
 mod header_bar;
 mod menu;
+mod motion;
 mod navigation;
 mod preferences;
 mod rows;
@@ -45,6 +46,7 @@ pub use switch::{switch, Switch};
 pub use dialog::{dialog, dialog_in_window, AboutDialog, AlertDialog, ResponseAppearance};
 pub use flex::FlexRow;
 pub use header_bar::{header_bar, window_title, HeaderBar, WindowControls};
+pub use motion::{drawer_layer, entrance, reveal, DrawerLayer, Entrance, Reveal};
 pub use menu::{menu_button, primary_menu, Menu, MenuButton, MenuItem, MenuPresentation};
 pub use navigation::{
     navigation_sidebar, navigation_sidebar_rounded, CollapsedSidebar, navigation_view, sidebar_row, Breakpoint, NavigationPage,

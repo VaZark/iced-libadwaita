@@ -61,6 +61,13 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
         );
     }
     let toast = container(r).padding([m.space_s, m.space_l]).style(sc::toast);
+    // Slides up on show: 300ms, ADW_EASE (`SHOW_DURATION`). No hide animation: the app
+    // removes the toast.
+    let toast = super::entrance(toast, iced::Vector::new(0.0, 60.0))
+        .spec(crate::animation::Spec::Timed(
+            crate::animation::presets::TOAST_SHOW.0,
+            crate::animation::presets::TOAST_SHOW.1,
+        ));
     stack![
         content.into(),
         container(toast)
