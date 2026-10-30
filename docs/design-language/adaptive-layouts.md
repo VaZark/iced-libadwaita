@@ -18,7 +18,7 @@ Source: [adaptive layouts](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/m
 | Pattern | Breakpoint | At narrow width |
 |---|---|---|
 | ViewSwitcher | `max-width: 550sp` | header switcher replaced by a revealed `ViewSwitcherBar` at the bottom |
-| NavigationSplitView | `max-width: 400sp` | `collapsed`, sidebar becomes a page; `show-content` selects pane |
+| NavigationSplitView | `max-width: 400sp` | `collapsed`; sidebar becomes a page (`show-content` selects pane) **or, here by default, a drawer over the content** |
 | OverlaySplitView | `max-width: 400sp` | `collapsed`, sidebar becomes an overlay, sidebar toggle shown |
 | Tabs | `max-width: 500px` | tab bar hidden, overview button shown |
 | Multi-layout | `max-width: 400sp` | switch to bottom-sheet layout |

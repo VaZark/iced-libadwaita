@@ -107,6 +107,8 @@ touches the bottom-left corner.
   takes the window radius (`NavigationSplitView::window_radius`, `dialog_in_window`,
   `bottom_sheet_in_window`, `HeaderBar::window_corners`), and the outline is drawn above the
   content. Maximized/fullscreen goes edge to edge.
+* **Mobile sidebar:** collapsed, a split view's sidebar is a **drawer** over the content by default
+  (never the whole screen) or a **full page**: `NavigationSplitView::collapsed_sidebar(CollapsedSidebar::Drawer | FullPage)`.
 * In a split view give each pane its own header bar; only the pane at a window edge
   shows the window buttons.
 

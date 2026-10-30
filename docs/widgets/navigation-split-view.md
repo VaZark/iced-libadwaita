@@ -22,8 +22,8 @@ Sidebar bg = sidebar color with a sidebar-border hairline.
 
 ## iced mapping
 
-`NavigationSplitView::new(sidebar, content).sidebar_width(f).collapsed(b).show_content(b)`.
+`NavigationSplitView::new(sidebar, content).adapt(width).collapsed_sidebar(CollapsedSidebar::Drawer | FullPage).show_sidebar(open).on_close_drawer(msg).window_radius(r)`. Collapsed (`max-width: 400`), the sidebar is a **drawer** by default: it slides over the content from the start edge with a scrim, uses the max sidebar width (280) but at most 85% of the window so it never takes the whole screen, and is opened by an app-owned toggle (`show_sidebar`). `FullPage` is libadwaita's own collapsed behavior: the sidebar replaces the content as a page (`show_content` picks the pane).
 
 ## Deviations / gaps
 
-Fixed sidebar width; fraction/min/max to be added.
+Drawer as the default for the navigation split view is a project choice (libadwaita's collapsed navigation split view is page-based; its *overlay* split view is the drawer). No swipe gesture and no spring animation yet.
