@@ -1049,19 +1049,21 @@ impl Gallery {
                 })
                 .collect()
         };
+        // One card: the carousel and its control share a single frame and shadow.
         let car = w::Card::new(
-            w::carousel(carousel_pages(), self.carousel, Message::Carousel).indicator(self.carousel_indicator),
+            container(w::carousel(carousel_pages(), self.carousel, Message::Carousel).indicator(self.carousel_indicator))
+                .height(Length::Fixed(160.0)),
         )
         .padding(0)
-        .height(Length::Fixed(160.0));
-        let car_controls = w::boxed_list([w::ComboRow::new(
-            "Indicator",
-            &INDICATORS,
-            Some(self.carousel_indicator),
-            Message::CarouselIndicator,
-        )
-        .subtitle("Drag the pages, or click the indicator")
-        .into()]);
+        .push(
+            w::ComboRow::new(
+                "Indicator",
+                &INDICATORS,
+                Some(self.carousel_indicator),
+                Message::CarouselIndicator,
+            )
+            .subtitle("Drag the pages, or click the indicator"),
+        );
         let tabs = w::tab_bar(
             vec!["Home".into(), "Docs".into(), "Settings".into()],
             self.tab as usize,
@@ -1095,7 +1097,7 @@ impl Gallery {
                     .width(Length::Fill),
                 ))),
                 g("Tab Bar").push(w::Card::new(tabs).padding(0)),
-                g("Carousel").push(car).push(car_controls),
+                g("Carousel").push(car),
                 g("Shortcut Labels").push(w::card(shortcuts)),
                 g("Wrap Box").push(w::card(w::wrap_box(tags, m.space_s))),
                 g("Bottom Sheet").push(w::card(

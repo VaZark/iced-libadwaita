@@ -9,18 +9,14 @@ use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{button, column, container, row, space, text, text_input};
 use iced::Length;
 
-/// `.boxed-list`: rows in a rounded card separated by hairlines.
+/// `.boxed-list`: rows in a rounded card separated by hairlines (a [`Card`](super::Card)
+/// of rows with no padding).
 pub fn boxed_list<'a, M: 'a>(
     rows: impl IntoIterator<Item = Element<'a, M>>,
 ) -> Element<'a, M> {
-    let mut col = column![];
-    for (i, r) in rows.into_iter().enumerate() {
-        if i > 0 {
-            col = col.push(container(space().height(1)).width(Length::Fill).style(sc::card_separator));
-        }
-        col = col.push(r);
-    }
-    container(col).width(Length::Fill).clip(true).style(sc::boxed_list).into()
+    let mut rows = rows.into_iter();
+    let Some(first) = rows.next() else { return space().into() };
+    rows.fold(super::Card::new(first).padding(0), |card, r| card.push(r)).into()
 }
 
 fn row_frame<'a, M: 'a>(

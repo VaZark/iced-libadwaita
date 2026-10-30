@@ -24,22 +24,44 @@ pub fn card<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
     Card::new(content).into()
 }
 
-/// `.card` with properties: padding, width and height.
+/// `.card`, the generic chainable box: **one** surface (one border, one shadow, one
+/// clip) holding any number of children, separated by hairlines. Other components are
+/// this box with a different default: [`boxed_list`](super::boxed_list) is a `Card` of
+/// rows with no padding, a preferences group is a titled `Card` of rows.
+///
+/// ```ignore
+/// Card::new(carousel).padding(0).push(ComboRow::new(..)) // one frame, one shadow
+/// ```
+///
+/// Padding applies to each child; use `.padding(0)` for children that pad themselves
+/// (rows, carousels).
 pub struct Card<'a, M> {
-    content: Element<'a, M>,
+    children: Vec<Element<'a, M>>,
     padding: iced::Padding,
     width: Length,
     height: Length,
+    separators: bool,
 }
 
 impl<'a, M: 'a> Card<'a, M> {
     pub fn new(content: impl Into<Element<'a, M>>) -> Self {
         Self {
-            content: content.into(),
+            children: vec![content.into()],
             padding: Metrics::desktop().card_padding,
             width: Length::Fill,
             height: Length::Shrink,
+            separators: true,
         }
+    }
+    /// Appends a child inside the same surface (after a hairline).
+    pub fn push(mut self, child: impl Into<Element<'a, M>>) -> Self {
+        self.children.push(child.into());
+        self
+    }
+    /// Whether hairlines separate the children (default true).
+    pub fn separators(mut self, on: bool) -> Self {
+        self.separators = on;
+        self
     }
     pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
         self.padding = p.into();
@@ -57,12 +79,14 @@ impl<'a, M: 'a> Card<'a, M> {
 
 impl<'a, M: 'a> From<Card<'a, M>> for Element<'a, M> {
     fn from(c: Card<'a, M>) -> Self {
-        container(c.content)
-            .padding(c.padding)
-            .width(c.width)
-            .height(c.height)
-            .style(sc::card)
-            .into()
+        let mut col = column![].width(Length::Fill);
+        for (i, child) in c.children.into_iter().enumerate() {
+            if i > 0 && c.separators {
+                col = col.push(container(iced::widget::space().height(1)).width(Length::Fill).style(sc::card_separator));
+            }
+            col = col.push(container(child).padding(c.padding).width(Length::Fill));
+        }
+        container(col).width(c.width).height(c.height).clip(true).style(sc::card).into()
     }
 }
 

@@ -120,7 +120,7 @@ pub static COMPONENTS: &[Component] = &[
     c("clamp", "AdwClamp", "clamp(content, maximum)", &["maximum"], &["content"], &[]),
     c("wrap_box", "AdwWrapBox", "wrap_box(children, spacing)", &["spacing"], &["children"], &[]),
     c("bin", "AdwBin", "bin(content)", &[], &["content"], &[]),
-    c("card", "GtkBox.card", "Card::new(content)", &["padding", "width", "height"], &["content"], &[]),
+    c("card", "GtkBox.card", "Card::new(content)", &["padding", "width", "height", "separators"], &["content", "push"], &[]),
     c("page", "-", "Page::new(content)", &["maximum_size", "metrics"], &["content"], &[]),
     c("scrolled_window", "GtkScrolledWindow", "scrolled_window(content)", &[], &["content"], &[]),
     c("color_swatch", "-", "color_swatch(label, surface)", &[], &[], &[]),
