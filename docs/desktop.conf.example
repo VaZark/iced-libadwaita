@@ -26,7 +26,7 @@ mobile-max-width=450     # at or below this width: mobile mode (no window button
 
 [navigation]
 collapse-width=400       # split views collapse at or below this width
-mobile-sidebar=drawer    # drawer | full-page
+mobile-sidebar=drawer    # drawer | full-page | first-page
 
 [menus]
 presentation=auto        # auto (full page in mobile mode) | dropdown | full-page
