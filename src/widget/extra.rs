@@ -355,6 +355,6 @@ pub fn bottom_sheet_in_window<'a, M: Clone + 'a>(
     ];
     super::layered(
         content,
-        Some(Element::from(super::entrance(layer, iced::Vector::new(0.0, 160.0)).scrim(window_radius))),
+        Some(Element::from(super::entrance(layer, iced::Vector::new(0.0, 160.0)).trigger(crate::animation::Trigger::Sheet).scrim(window_radius))),
     )
 }

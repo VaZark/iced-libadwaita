@@ -489,6 +489,111 @@ pub fn enabled() -> bool {
 pub enum Spec {
     Timed(Duration, Easing),
     Spring(SpringParams),
+    /// No animation: jump to the target. What a trigger resolves to under [`Motion::None`].
+    Instant,
+}
+
+/// An action that plays an animation. Each trigger has its **own** animation (see
+/// [`Trigger::animation`]) and each can be switched to [`Motion::None`] in the desktop config
+/// (`[motion]`); under reduced motion every trigger is `None`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Trigger {
+    /// Switching the page shown in a content area.
+    PageChange,
+    /// Pushing / popping a page of a navigation stack.
+    PagePush,
+    /// A popover or menu opening.
+    Popover,
+    /// A selection highlight moving to another row.
+    Selection,
+    /// The collapsed-sidebar drawer opening / closing.
+    Drawer,
+    /// A dialog presenting.
+    Dialog,
+    /// A bottom sheet presenting.
+    Sheet,
+    /// A toast showing.
+    Toast,
+    /// A revealer (expander row, banner) opening / closing.
+    Reveal,
+    /// A switch toggling.
+    Switch,
+    /// A carousel moving between pages.
+    Carousel,
+}
+
+/// Whether a [`Trigger`] plays its animation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Motion {
+    /// The trigger's own animation.
+    #[default]
+    Animated,
+    /// No animation: the change is instant. The reduced-motion fallback.
+    None,
+}
+
+impl Trigger {
+    pub const ALL: [Trigger; 11] = [
+        Trigger::PageChange, Trigger::PagePush, Trigger::Popover, Trigger::Selection, Trigger::Drawer,
+        Trigger::Dialog, Trigger::Sheet, Trigger::Toast, Trigger::Reveal, Trigger::Switch, Trigger::Carousel,
+    ];
+
+    /// The `[motion]` config key.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::PageChange => "page-change",
+            Self::PagePush => "page-push",
+            Self::Popover => "popover",
+            Self::Selection => "selection",
+            Self::Drawer => "drawer",
+            Self::Dialog => "dialog",
+            Self::Sheet => "sheet",
+            Self::Toast => "toast",
+            Self::Reveal => "reveal",
+            Self::Switch => "switch",
+            Self::Carousel => "carousel",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|t| t.key() == key)
+    }
+
+    /// This trigger's own animation, for documentation and tooling.
+    pub fn animation(self) -> &'static str {
+        match self {
+            Self::PageChange => "content fades in, 200ms ease-out-quad (AdwViewStack cross-fade)",
+            Self::PagePush => "page slides in over the old one, which moves a third out and dims; navigation spring (1, 1, 1000)",
+            Self::Popover => "rises 8px into place (a full-page menu slides in); 200ms ease-out-quad",
+            Self::Selection => "highlight fades in/out, 200ms ease-out-quad",
+            Self::Drawer => "slides from the start edge over a fading scrim; sidebar spring (1, 0.5, 500)",
+            Self::Dialog => "scrim fades in, dialog slides up; sheet spring (0.8, 1, 400)",
+            Self::Sheet => "scrim fades in, sheet slides up; sheet spring (0.8, 1, 400)",
+            Self::Toast => "slides up, 300ms ease",
+            Self::Reveal => "slides open/closed, 250ms ease",
+            Self::Switch => "knob slides and track cross-fades, 200ms ease-out-quad",
+            Self::Carousel => "scroll spring (1, 0.5, 500) with drag velocity hand-off",
+        }
+    }
+
+    /// Whether this trigger animates: not under reduced motion (animations disabled by the
+    /// desktop or `[motion] reduced-motion`), and not set to `none` in the config.
+    pub fn motion(self) -> Motion {
+        let cfg = crate::config::current();
+        if !enabled() || cfg.reduced_motion {
+            return Motion::None;
+        }
+        cfg.motion.get(&self).copied().unwrap_or_default()
+    }
+
+    pub fn animated(self) -> bool {
+        self.motion() == Motion::Animated
+    }
+
+    /// `own` when the trigger animates, [`Spec::Instant`] otherwise.
+    pub fn spec(self, own: Spec) -> Spec {
+        if self.animated() { own } else { Spec::Instant }
+    }
 }
 
 impl Spec {
@@ -537,7 +642,7 @@ impl Tween {
     pub fn fling_to(&mut self, target: f32, velocity: f32, now: Instant, spec: Spec) {
         let current = self.value_at(now);
         self.target = target as f64;
-        if !enabled() || (current - target as f64).abs() < 1e-6 && velocity.abs() < 1e-3 {
+        if !enabled() || spec == Spec::Instant || (current - target as f64).abs() < 1e-6 && velocity.abs() < 1e-3 {
             self.value = target as f64;
             self.running = None;
             self.start = None;
@@ -547,6 +652,7 @@ impl Tween {
         self.start = Some(now);
         self.running = Some(match spec {
             Spec::Timed(d, e) => Running::Timed(TimedAnimation::new(current, target as f64, d, e)),
+            Spec::Instant => unreachable!("handled above"),
             Spec::Spring(p) => {
                 let a = SpringAnimation::new(current, target as f64, p).initial_velocity(velocity as f64);
                 Running::Spring(a, a.estimated_duration())
@@ -569,7 +675,7 @@ impl Tween {
             _ => 0.0,
         };
         self.target = target;
-        if !enabled() || (current - target).abs() < 1e-6 {
+        if !enabled() || spec == Spec::Instant || (current - target).abs() < 1e-6 {
             self.value = target;
             self.running = None;
             self.start = None;
@@ -579,6 +685,7 @@ impl Tween {
         self.start = Some(now);
         self.running = Some(match spec {
             Spec::Timed(d, e) => Running::Timed(TimedAnimation::new(current, target, d, e)),
+            Spec::Instant => unreachable!("handled above"),
             Spec::Spring(p) => {
                 let a = SpringAnimation::new(current, target, p).initial_velocity(velocity);
                 Running::Spring(a, a.estimated_duration())

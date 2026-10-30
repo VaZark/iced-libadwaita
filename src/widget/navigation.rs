@@ -47,7 +47,8 @@ pub fn sidebar_row<'a, M: Clone + 'a>(
     // libadwaita ellipsizes; we clip at the row edge so text never paints
     // outside the selection highlight.
     r = r.push(container(super::typography::label(label.into())).width(Length::Fill).clip(true));
-    button(
+    // The selected background fades in and out (`Highlight`); the button keeps hover/press.
+    let btn = button(
         container(r)
             .padding([0.0, m.sidebar_row_padding])
             .center_y(Length::Fixed(m.sidebar_row_height))
@@ -55,9 +56,9 @@ pub fn sidebar_row<'a, M: Clone + 'a>(
     )
     .padding(0)
     .width(Length::Fill)
-    .style(sb::sidebar_row(selected))
-    .on_press(on_press)
-    .into()
+    .style(sb::sidebar_row(false))
+    .on_press(on_press);
+    super::highlight(btn, selected, m.radius_m, 0.10).into()
 }
 
 /// Like [`navigation_sidebar`] but rounds the bottom corners to match a
@@ -339,12 +340,10 @@ impl<'a, M: Clone + 'a> From<NavigationSplitView<'a, M>> for Element<'a, M> {
         let left = iced::border::Radius { top_left: r, top_right: 0.0, bottom_right: 0.0, bottom_left: r };
         if v.collapsed {
             if v.collapsed_sidebar != CollapsedSidebar::Drawer {
-                return if v.show_content {
-                    v.content
-                } else {
-                    // A page like any other: the content color (the window behind it).
-                    container(v.sidebar).width(Length::Fill).height(Length::Fill).into()
-                };
+                // The sidebar is the first page; the content is pushed over it (and popped
+                // back) with the navigation slide.
+                let first: Element<'a, M> = container(v.sidebar).width(Length::Fill).height(Length::Fill).into();
+                return super::push_stack(first, v.content, v.show_content).window_radius(r).into();
             }
             // Drawer: the content is always there; the sidebar slides over it. The layer
             // is always mounted so it animates open *and* closed (spring, scrim fade).

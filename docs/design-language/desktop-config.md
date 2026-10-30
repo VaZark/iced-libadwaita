@@ -27,7 +27,8 @@ Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 wi
 | | `text-scale` | 0.5 … 3.0 (1.0) | `Typography` base size |
 | | `shadows`, `shadow-scale`, `shadow-intensity` | true, 1.0, 1.0 | `Shadows` |
 | motion | `animations` | system / on / off (system) | `animation::enabled()` |
-| | `reduced-motion` | bool (false) | critically damped sheet spring |
+| | `reduced-motion` | bool (false) | every trigger resolves to `none` (prefers-reduced-motion) |
+| | `page-change`, `page-push`, `popover`, `selection`, `drawer`, `dialog`, `sheet`, `toast`, `reveal`, `switch`, `carousel` | default / none (default) | that trigger's animation, per [motion triggers](animations.md#triggers) |
 | windows | `decorations` | csd / ssd (csd) | `window::settings()`, transparent base |
 | | `button-layout` | system / GTK string (system) | `DecorationLayout::detect()` |
 | | `mobile-max-width` | px (450) | `window::is_mobile`, menu `Auto` |

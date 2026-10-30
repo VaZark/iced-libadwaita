@@ -53,6 +53,7 @@ pub enum Setting {
     Shadows,
     Animations,
     ReducedMotion,
+    Motion,
     Decorations,
     ButtonLayout,
     MobileMaxWidth,
@@ -110,7 +111,10 @@ pub struct Config {
     pub shadow_intensity: f32,
     /// `system` follows `enable-animations`; `Fixed(bool)` forces it.
     pub animations: Pick<bool>,
+    /// `true`: every trigger resolves to [`Motion::None`] (prefers-reduced-motion).
     pub reduced_motion: bool,
+    /// Per-trigger overrides from `[motion] <trigger>=default|none`.
+    pub motion: std::collections::HashMap<crate::animation::Trigger, crate::animation::Motion>,
     pub decorations: DecorationMode,
     /// `system` follows GNOME's `button-layout`; `Fixed(string)` is a GTK layout string.
     pub button_layout: Pick<String>,
@@ -146,6 +150,7 @@ impl Default for Config {
             shadow_intensity: 1.0,
             animations: Pick::System,
             reduced_motion: false,
+            motion: Default::default(),
             decorations: DecorationMode::Csd,
             button_layout: Pick::System,
             mobile_max_width: 450.0,
@@ -257,6 +262,15 @@ impl Config {
         if let Some(v) = get("appearance", "shadow-intensity") {
             v.parse::<f32>().ok().filter(|f| *f >= 0.0).map(|f| self.shadow_intensity = f).unwrap_or_else(|| bad!("appearance", "shadow-intensity", v));
         }
+        for t in crate::animation::Trigger::ALL {
+            if let Some(v) = get("motion", t.key()) {
+                match v {
+                    "default" | "animated" => { self.motion.insert(t, crate::animation::Motion::Animated); }
+                    "none" => { self.motion.insert(t, crate::animation::Motion::None); }
+                    _ => bad!("motion", t.key(), v),
+                }
+            }
+        }
         if let Some(v) = get("motion", "animations") {
             match v {
                 "system" => self.animations = Pick::System,
@@ -324,7 +338,8 @@ impl Config {
             ("policy", "allow-app-overrides"),
         ];
         for (s, k) in m.keys() {
-            if !KNOWN.contains(&(s.as_str(), k.as_str())) {
+            let trigger = s == "motion" && crate::animation::Trigger::from_key(k).is_some();
+            if !trigger && !KNOWN.contains(&(s.as_str(), k.as_str())) {
                 warn.push(format!("[{s}] {k}: unknown setting"));
             }
         }
@@ -443,6 +458,7 @@ pub struct Overrides {
     row_collapse: Option<CollapseBehavior>,
     row_wrap_basis: Option<f32>,
     icon_theme: Option<String>,
+    motion: Vec<(crate::animation::Trigger, crate::animation::Motion)>,
 }
 
 macro_rules! override_fn {
@@ -475,7 +491,17 @@ impl Overrides {
     override_fn!(row_wrap_basis, row_wrap_basis, f32, Setting::RowWrapBasis);
     override_fn!(icon_theme, icon_theme, String, Setting::IconTheme);
 
+    /// Overrides one trigger's animation for this app (discouraged).
+    pub fn motion(&mut self, trigger: crate::animation::Trigger, motion: crate::animation::Motion) -> &mut Self {
+        self.motion.push((trigger, motion));
+        self.touched.push(Setting::Motion);
+        self
+    }
+
     fn apply_to(self, c: &mut Config) {
+        for (t, m) in self.motion {
+            c.motion.insert(t, m);
+        }
         if let Some(v) = self.color_scheme { c.color_scheme = Pick::Fixed(v) }
         if let Some(v) = self.accent { c.accent = Pick::Fixed(v) }
         if let Some(v) = self.flat_headerbars { c.flat_headerbars = v }
@@ -647,5 +673,25 @@ thing=1
         assert_eq!(c.animations, Pick::Fixed(true), "the desktop value stands");
         assert!(c.overridden().is_empty());
         assert_eq!(c.denied(), &[Setting::Animations]);
+    }
+
+    #[test]
+    fn each_trigger_can_be_set_to_none() {
+        use crate::animation::{Motion, Trigger};
+        let c = Config::from_keyfile("[motion]\npage-change=none\npopover=default\ncarousel=wobble\n");
+        assert_eq!(c.motion.get(&Trigger::PageChange), Some(&Motion::None));
+        assert_eq!(c.motion.get(&Trigger::Popover), Some(&Motion::Animated));
+        assert!(c.motion.get(&Trigger::Carousel).is_none());
+        assert!(c.warnings().iter().any(|w| w.contains("carousel")));
+        assert!(!c.warnings().iter().any(|w| w.contains("unknown")), "trigger keys are known settings");
+    }
+
+    #[test]
+    fn trigger_keys_round_trip() {
+        use crate::animation::Trigger;
+        for t in Trigger::ALL {
+            assert_eq!(Trigger::from_key(t.key()), Some(t));
+            assert!(!t.animation().is_empty());
+        }
     }
 }

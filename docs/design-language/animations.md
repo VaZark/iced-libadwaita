@@ -69,3 +69,28 @@ scrim fades but children don't fade or scale; dialogs, bottom sheets and toasts 
 only while shown, so they animate **in** but not out; no navigation-view page transition or
 swipe gestures; stock iced widgets (button hover, text input focus) can't animate because their
 style functions only receive the current status, so only crate-owned widgets (Switch, …) do.
+
+## Triggers
+
+Every action that animates is a `Trigger` with **its own** animation and a `None` fallback.
+`Trigger::motion()` resolves to `None` when the desktop disables animations
+(`enable-animations`, `[motion] animations=off`) or `[motion] reduced-motion=true`; otherwise it
+is the per-trigger `[motion] <key>=default|none` setting. A `None` trigger jumps to its end state
+(`Spec::Instant`); widgets still lay out and behave identically.
+
+| Trigger | Config key | Animation |
+|---|---|---|
+| `PageChange` | `page-change` | content fades in, 200ms ease-out-quad (`AdwViewStack` cross-fade) |
+| `PagePush` | `page-push` | page slides in over the old one, which moves a third out and dims; navigation spring (1, 1, 1000) |
+| `Popover` | `popover` | rises 8px into place (a full-page menu slides in); 200ms ease-out-quad |
+| `Selection` | `selection` | highlight fades in/out, 200ms ease-out-quad |
+| `Drawer` | `drawer` | slides from the start edge over a fading scrim; sidebar spring (1, 0.5, 500) |
+| `Dialog` | `dialog` | scrim fades in, dialog slides up; sheet spring (0.8, 1, 400) |
+| `Sheet` | `sheet` | scrim fades in, sheet slides up; sheet spring (0.8, 1, 400) |
+| `Toast` | `toast` | slides up, 300ms ease |
+| `Reveal` | `reveal` | slides open/closed, 250ms ease |
+| `Switch` | `switch` | knob slides and track cross-fades, 200ms ease-out-quad |
+| `Carousel` | `carousel` | scroll spring (1, 0.5, 500) with drag velocity hand-off |
+
+An app can override one trigger (discouraged, reported like any opt-out):
+`Config::load().opt_out(|o| { o.motion(Trigger::Toast, Motion::None); })`.

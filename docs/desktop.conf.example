@@ -17,7 +17,21 @@ shadow-intensity=1.0
 
 [motion]
 animations=system        # system | on | off
-reduced-motion=false     # sheets use a critically damped spring
+reduced-motion=false     # true: every trigger below is "none" (prefers-reduced-motion)
+
+# Each action trigger has its own animation; "none" makes that change instant.
+# default | none. Reduced motion (or animations=off) forces none everywhere.
+page-change=default      # content fades in
+page-push=default        # navigation page slides over the previous one
+popover=default          # menus and dropdowns rise into place
+selection=default        # selection highlight fades
+drawer=default           # collapsed sidebar slides in over a scrim
+dialog=default           # dialog scrim + slide
+sheet=default            # bottom sheet scrim + slide
+toast=default            # toast slides up
+reveal=default           # expanders and banners slide open
+switch=default           # switch knob slides
+carousel=default         # carousel spring
 
 [windows]
 decorations=csd          # csd (Adwaita) | ssd (discouraged)

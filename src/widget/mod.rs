@@ -54,7 +54,7 @@ pub use forms::{
     radio_button, scale, status_swatch, tag, text_view, Entry, EntryState, TextView,
 };
 pub use header_bar::{header_bar, window_title, HeaderBar, WindowControls};
-pub use motion::{drawer_layer, entrance, layered, reveal, DrawerLayer, Entrance, Reveal};
+pub use motion::{drawer_layer, entrance, highlight, layered, page_transition, push_stack, reveal, DrawerLayer, Entrance, Highlight, PageTransition, PushStack, Reveal};
 pub use menu::{menu_button, primary_menu, Menu, MenuButton, MenuItem, MenuPresentation};
 pub use navigation::{
     navigation_sidebar, navigation_sidebar_rounded, CollapsedSidebar, navigation_view, sidebar_row, Breakpoint, NavigationPage,

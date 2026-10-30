@@ -11,6 +11,7 @@
 //!
 //! State is controlled: the app owns `index` and updates it from `on_navigate`.
 
+use crate::animation::Trigger;
 use crate::animation::{presets, Spec, Tween};
 use crate::Theme;
 use iced::advanced::layout::{self, Layout};
@@ -194,7 +195,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
         // Animate the scroll position toward the current page (unless the user holds it).
         if let Event::Window(window::Event::RedrawRequested(now)) = event {
             if !state.dragging {
-                state.position.set_target(self.index.min(n - 1) as f32, *now, self.spec);
+                state.position.set_target(self.index.min(n - 1) as f32, *now, Trigger::Carousel.spec(self.spec));
             }
             let v = state.position.tick(*now);
             if (v - state.shown).abs() > f32::EPSILON || state.position.is_animating() {
@@ -243,7 +244,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
                         // Project a little along the velocity, then snap to the nearest page.
                         let target = (state.shown + pr.velocity * 0.12).round().clamp(0.0, max_pos) as usize;
                         let now = Instant::now();
-                        state.position.fling_to(target as f32, pr.velocity, now, self.spec);
+                        state.position.fling_to(target as f32, pr.velocity, now, Trigger::Carousel.spec(self.spec));
                         state.dragging = false;
                         state.press = None;
                         if target != self.index {

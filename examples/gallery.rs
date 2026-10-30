@@ -516,6 +516,8 @@ impl Gallery {
                         "drawer" => Message::Drawer(true),
                         "reveal" => Message::Expanded(!self.expanded),
                         "carousel" => Message::Carousel(1),
+                        "page" => Message::Page(Page::Theming),
+                        "push" => Message::Page(Page::Dialogs),
                         "dialog" => Message::OpenDialog(Dialog::Alert),
                         _ => Message::ShowToast("Settings saved"),
                     };
@@ -702,6 +704,8 @@ impl Gallery {
             Page::Theming => self.theming_page(),
         };
 
+        // Switching pages fades the new one in (collapsed, the push slide does that job).
+        let page = w::page_transition(page, if collapsed { 0 } else { self.page as u64 });
         let content_pane = w::toolbar_view(page).top_bar(content_bar);
         let body = w::NavigationSplitView::new(sidebar_pane, content_pane)
             .adapt(size.width)

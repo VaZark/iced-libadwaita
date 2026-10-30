@@ -64,6 +64,7 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
     // Slides up on show: 300ms, ADW_EASE (`SHOW_DURATION`). No hide animation: the app
     // removes the toast.
     let toast = super::entrance(toast, iced::Vector::new(0.0, 60.0))
+        .trigger(crate::animation::Trigger::Toast)
         .spec(crate::animation::Spec::Timed(
             crate::animation::presets::TOAST_SHOW.0,
             crate::animation::presets::TOAST_SHOW.1,

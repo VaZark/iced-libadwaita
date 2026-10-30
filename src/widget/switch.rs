@@ -74,7 +74,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
         // Animate the knob and track toward the current value.
         if let Event::Window(iced::window::Event::RedrawRequested(now)) = event {
             let target = if self.active { 1.0 } else { 0.0 };
-            state.progress.set_target(target, *now, Spec::STYLE);
+            state.progress.set_target(target, *now, crate::animation::Trigger::Switch.spec(Spec::STYLE));
             let v = state.progress.tick(*now);
             if (v - state.shown).abs() > f32::EPSILON || state.progress.is_animating() {
                 state.shown = v;
