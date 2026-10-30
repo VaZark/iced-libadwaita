@@ -154,6 +154,20 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Reveal<'a, M> {
         }
     }
 
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<iced::advanced::overlay::Element<'b, M, Theme, iced::Renderer>> {
+        if tree.state.downcast_ref::<RevealState>().progress.shown <= 0.001 {
+            return None;
+        }
+        self.content.as_widget_mut().overlay(&mut tree.children[0], layout.children().next()?, renderer, viewport, translation)
+    }
+
     fn mouse_interaction(
         &self,
         tree: &Tree,
@@ -336,6 +350,20 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
         }
     }
 
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<iced::advanced::overlay::Element<'b, M, Theme, iced::Renderer>> {
+        if tree.state.downcast_ref::<DrawerState>().progress.shown <= 0.001 && !self.open {
+            return None;
+        }
+        self.pane.as_widget_mut().overlay(&mut tree.children[0], layout.children().next()?, renderer, viewport, translation)
+    }
+
     fn mouse_interaction(
         &self,
         tree: &Tree,
@@ -498,6 +526,17 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         }
     }
 
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<iced::advanced::overlay::Element<'b, M, Theme, iced::Renderer>> {
+        self.content.as_widget_mut().overlay(&mut tree.children[0], layout.children().next()?, renderer, viewport, translation)
+    }
+
     fn mouse_interaction(
         &self,
         tree: &Tree,
@@ -604,6 +643,17 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         }
         self.content.as_widget_mut().update(&mut tree.children[0], event, layout.children().next().unwrap(), cursor, renderer, clipboard, shell, viewport);
     }
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<iced::advanced::overlay::Element<'b, M, Theme, iced::Renderer>> {
+        self.content.as_widget_mut().overlay(&mut tree.children[0], layout.children().next()?, renderer, viewport, translation)
+    }
+
     fn mouse_interaction(
         &self,
         tree: &Tree,
@@ -745,6 +795,26 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
             shell.capture_event(); // no clicks while a page is sliding
         }
     }
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<iced::advanced::overlay::Element<'b, M, Theme, iced::Renderer>> {
+        // Popovers belong to the page being shown: the pushed one past halfway.
+        let top = tree.state.downcast_ref::<PushState>().progress.shown > 0.5;
+        let mut kids = layout.children();
+        let (root_l, top_l) = (kids.next()?, kids.next()?);
+        let (a, b) = tree.children.split_at_mut(1);
+        if top {
+            self.top.as_widget_mut().overlay(&mut b[0], top_l, renderer, viewport, translation)
+        } else {
+            self.root.as_widget_mut().overlay(&mut a[0], root_l, renderer, viewport, translation)
+        }
+    }
+
     fn mouse_interaction(
         &self,
         tree: &Tree,
@@ -917,6 +987,17 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Highlight<'a, M> {
         }
         self.content.as_widget_mut().update(&mut tree.children[0], event, layout.children().next().unwrap(), cursor, renderer, clipboard, shell, viewport);
     }
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<iced::advanced::overlay::Element<'b, M, Theme, iced::Renderer>> {
+        self.content.as_widget_mut().overlay(&mut tree.children[0], layout.children().next()?, renderer, viewport, translation)
+    }
+
     fn mouse_interaction(
         &self,
         tree: &Tree,
