@@ -12,7 +12,7 @@ use iced::Element;
 
 /// The Adwaita scrollbar configuration (overlay, thin).
 pub fn scrollbar() -> Scrollbar {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     Scrollbar::new()
         .width(m.scrollbar_width)
         .scroller_width(m.scrollbar_slider_width)

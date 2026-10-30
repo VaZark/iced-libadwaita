@@ -33,13 +33,26 @@ pub enum MenuPresentation {
 }
 
 impl MenuPresentation {
+    /// The presentation the **desktop config** asks for at this width: `[menus] presentation`
+    /// (`auto` follows [`for_width`](Self::for_width)). Apps should use this; forcing a mode
+    /// is an opt-out (`Config::opt_out`).
+    pub fn resolve(width: f32) -> Self {
+        use crate::config::MenuPresentationSetting as S;
+        match crate::config::current().menu_presentation {
+            S::Auto => Self::for_width(width),
+            S::Dropdown => Self::Dropdown,
+            S::FullPage => Self::FullPage,
+        }
+    }
+
     /// The window width at or below which phones/narrow windows should use the
     /// full-page presentation (the `AdwDialog` bottom-sheet threshold).
     pub const FULL_PAGE_MAX_WIDTH: f32 = crate::window::MOBILE_MAX_WIDTH;
 
-    /// Picks a presentation for the window width: full page when narrow.
+    /// Picks a presentation for the window width: full page when narrow (at or below
+    /// the configured mobile breakpoint).
     pub fn for_width(width: f32) -> Self {
-        if width <= Self::FULL_PAGE_MAX_WIDTH {
+        if crate::window::is_mobile(width) {
             Self::FullPage
         } else {
             Self::Dropdown
@@ -162,7 +175,7 @@ impl<M> MenuButton<M> {
 
 /// Builds one row's content: `[leading] label … [accel]`.
 fn row_content<'a, M: 'a>(item: &MenuItem<M>, any_check: bool) -> Element<'a, M> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     let t = Typography::default();
     let (text_label, destructive, accel, icon) =
         (item.label.clone(), item.destructive, item.accel.clone(), item.icon);
@@ -196,7 +209,7 @@ fn message<M: Clone>(item: &MenuItem<M>) -> M {
 }
 
 fn dropdown_items<'a, M: Clone + 'a>(menu: &Menu<M>) -> Vec<Element<'a, M>> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     let any_check = menu.sections.iter().flatten().any(|i| matches!(i.kind, Kind::Check { .. }));
     let mut out: Vec<Element<'a, M>> = Vec::new();
     for (si, section) in menu.sections.iter().enumerate() {
@@ -228,7 +241,7 @@ fn dropdown_items<'a, M: Clone + 'a>(menu: &Menu<M>) -> Vec<Element<'a, M>> {
 }
 
 fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     let t = Typography::default();
     let any_check = menu.sections.iter().flatten().any(|i| matches!(i.kind, Kind::Check { .. }));
 
@@ -289,7 +302,7 @@ fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M>
 
 impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
     fn from(b: MenuButton<M>) -> Self {
-        let m = Metrics::default();
+        let m = Metrics::desktop();
         let trigger = container(b.icon.view(m.icon_size))
             .center(Length::Fixed(m.button_min_height));
         let (content, presentation) = match b.presentation {

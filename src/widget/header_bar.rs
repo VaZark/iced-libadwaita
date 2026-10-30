@@ -86,7 +86,7 @@ impl<'a, M> HeaderBar<'a, M> {
             on_double_click: None,
             corners: (0.0, 0.0),
             flat: None,
-            metrics: Metrics::default(),
+            metrics: Metrics::desktop(),
         }
     }
     /// `pack_start`.
@@ -172,7 +172,7 @@ impl<'a, M: Clone + 'a> Default for HeaderBar<'a, M> {
 
 /// A window button: a 24px circle with the icon theme's symbol.
 fn ctl<'a, M: Clone + 'a>(icon: Icon, msg: M) -> Element<'a, M> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     iced::widget::button(container(icon.view(m.icon_size)).center(Length::Fixed(24.0)))
         .padding(0)
         .style(crate::style::button::circular)

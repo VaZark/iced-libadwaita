@@ -84,7 +84,7 @@ impl<'a, T: Clone, M: 'a> Segmented<'a, T, M> {
             on_select: Box::new(on_select),
             width: Length::Shrink,
             homogeneous: false,
-            metrics: Metrics::default(),
+            metrics: Metrics::desktop(),
             rects: Vec::new(),
             use_compact: vec![false; n],
         }

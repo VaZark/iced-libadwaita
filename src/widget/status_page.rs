@@ -21,11 +21,89 @@ pub fn bin<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
 
 /// `.card`: padded card surface.
 pub fn card<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
-    container(content)
-        .padding(Metrics::default().card_padding)
+    Card::new(content).into()
+}
+
+/// `.card` with properties: padding, width and height.
+pub struct Card<'a, M> {
+    content: Element<'a, M>,
+    padding: iced::Padding,
+    width: Length,
+    height: Length,
+}
+
+impl<'a, M: 'a> Card<'a, M> {
+    pub fn new(content: impl Into<Element<'a, M>>) -> Self {
+        Self {
+            content: content.into(),
+            padding: Metrics::desktop().card_padding,
+            width: Length::Fill,
+            height: Length::Shrink,
+        }
+    }
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = p.into();
+        self
+    }
+    pub fn width(mut self, w: impl Into<Length>) -> Self {
+        self.width = w.into();
+        self
+    }
+    pub fn height(mut self, h: impl Into<Length>) -> Self {
+        self.height = h.into();
+        self
+    }
+}
+
+impl<'a, M: 'a> From<Card<'a, M>> for Element<'a, M> {
+    fn from(c: Card<'a, M>) -> Self {
+        container(c.content)
+            .padding(c.padding)
+            .width(c.width)
+            .height(c.height)
+            .style(sc::card)
+            .into()
+    }
+}
+
+/// A scrolled, clamped page: the body of a window pane. Content is limited to
+/// `maximum` wide (default 720) with the standard page padding, in an Adwaita
+/// scrolled window. (`AdwPreferencesPage` is the same thing specialised for groups.)
+pub struct Page<'a, M> {
+    content: Element<'a, M>,
+    maximum: f32,
+    metrics: Metrics,
+}
+
+pub fn page<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Page<'a, M> {
+    Page::new(content)
+}
+
+impl<'a, M: 'a> Page<'a, M> {
+    pub fn new(content: impl Into<Element<'a, M>>) -> Self {
+        Self { content: content.into(), maximum: 720.0, metrics: Metrics::desktop() }
+    }
+    /// `AdwClamp:maximum-size`.
+    pub fn maximum_size(mut self, px: f32) -> Self {
+        self.maximum = px;
+        self
+    }
+    pub fn metrics(mut self, m: Metrics) -> Self {
+        self.metrics = m;
+        self
+    }
+}
+
+impl<'a, M: 'a> From<Page<'a, M>> for Element<'a, M> {
+    fn from(p: Page<'a, M>) -> Self {
+        super::scrolled_window(clamp(
+            container(p.content).padding(p.metrics.page_padding).width(Length::Fill),
+            p.maximum,
+        ))
         .width(Length::Fill)
-        .style(sc::card)
+        .height(Length::Fill)
         .into()
+    }
 }
 
 /// `AdwStatusPage`.
@@ -50,7 +128,7 @@ impl<'a, M> StatusPage<'a, M> {
             description: None,
             child: None,
             compact: false,
-            metrics: Metrics::default(),
+            metrics: Metrics::desktop(),
         }
     }
     /// `icon-name` (any element, typically an [`Icon`](crate::Icon) view).

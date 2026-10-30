@@ -68,7 +68,7 @@ impl<'a, M> AlertDialog<'a, M> {
             body: None,
             child: None,
             responses: Vec::new(),
-            metrics: Metrics::default(),
+            metrics: Metrics::desktop(),
         }
     }
     pub fn body(mut self, b: impl Into<String>) -> Self {
@@ -230,7 +230,7 @@ impl<'a, M> AboutDialog<'a, M> {
 
 impl<'a, M: Clone + 'a> From<AboutDialog<'a, M>> for Element<'a, M> {
     fn from(a: AboutDialog<'a, M>) -> Self {
-        let m = Metrics::default();
+        let m = Metrics::desktop();
         let t = Typography::default();
         let mut col = column![].spacing(m.space_s).align_x(Horizontal::Center).width(Length::Fill);
         if let Some(i) = a.icon {

@@ -6,8 +6,7 @@
 //! ```
 
 use iced::widget::{
-    checkbox, column, container, radio, row, slider, text,
-    text_editor, text_input, toggler,
+    column, container, row, text,
 };
 use iced::{window, Element as IcedElement, Length, Subscription, Task};
 use iced_libadwaita as adw;
@@ -75,6 +74,12 @@ enum DemoMotion {
     EaseOutBounce,
     EaseOutElastic,
     Spring,
+}
+
+impl std::fmt::Display for DemoMotion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.label())
+    }
 }
 
 impl DemoMotion {
@@ -171,7 +176,7 @@ struct Gallery {
     check: bool,
     radio: Option<u8>,
     slider: f32,
-    editor: text_editor::Content,
+    editor: w::TextContent,
     picked: Option<&'static str>,
 
     dialog: Option<Dialog>,
@@ -221,7 +226,7 @@ enum Message {
     Check(bool),
     Radio(u8),
     Slider(f32),
-    Editor(text_editor::Action),
+    Editor(w::TextAction),
     Picked(&'static str),
     OpenDialog(Dialog),
     CloseDialog,
@@ -253,11 +258,16 @@ enum Message {
     Saved(usize, window::Screenshot),
 }
 
+static MOTIONS: [DemoMotion; 8] = DemoMotion::ALL;
 const FRUITS: [&str; 3] = ["Apple", "Banana", "Cherry"];
 const COMBO: [&str; 3] = ["Adwaita Sans", "Cantarell", "Inter"];
 
 impl Gallery {
     fn new() -> (Self, Task<Message>) {
+        // Desktop-level behavior comes from the shared config; the gallery's own switches
+        // below are demos layered on top of it.
+        let cfg = adw::config::current();
+        let from_cfg = Theme::from_config(&cfg);
         let args: Vec<String> = std::env::args().collect();
         let shots = args
             .iter()
@@ -275,19 +285,22 @@ impl Gallery {
                     .ok()
                     .and_then(|v| Page::ALL.into_iter().find(|p| format!("{p:?}").eq_ignore_ascii_case(&v)))
                     .unwrap_or(Page::Buttons),
-                scheme: Scheme::Light,
-                accent: AccentColor::Blue,
-                compact: false,
+                scheme: from_cfg.scheme,
+                accent: match cfg.accent {
+                    adw::config::Pick::Fixed(a) => a,
+                    adw::config::Pick::System => adw::system::accent_color().unwrap_or(AccentColor::Blue),
+                },
+                compact: cfg.density == adw::config::Density::Compact,
                 radius_m: std::env::var("GALLERY_RM").ok().and_then(|v| v.parse().ok()).unwrap_or(Metrics::default().radius_m),
                 radius_l: std::env::var("GALLERY_RL").ok().and_then(|v| v.parse().ok()).unwrap_or(12.0),
                 card_override: false,
-                shadows_on: true,
+                shadows_on: cfg.shadows,
                 shadow_scale: 1.0,
                 shadow_intensity: 1.0,
                 raised_bar: std::env::var_os("GALLERY_RAISED").is_some(),
-                flat_headers: std::env::var_os("GALLERY_FLAT").is_some(),
+                flat_headers: cfg.flat_headerbars || std::env::var_os("GALLERY_FLAT").is_some(),
                 path_bar_title: std::env::var_os("GALLERY_PATHBAR").is_some(),
-                anim_enabled: true,
+                anim_enabled: adw::animation::enabled(),
                 demo: DemoMotion::EaseOutCubic,
                 demo_tween: adw::animation::Tween::new(0.0),
                 demo_value: 0.0,
@@ -302,13 +315,13 @@ impl Gallery {
                 check: true,
                 radio: Some(1),
                 slider: 40.0,
-                editor: text_editor::Content::with_text("Multi-line text editor\nstyled by the theme."),
+                editor: w::TextContent::with_text("Multi-line text editor\nstyled by the theme."),
                 picked: None,
                 dialog: None,
                 show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
                 sidebar_mode: match std::env::var("GALLERY_SIDEBAR_MODE").as_deref() {
                     Ok("page") => w::CollapsedSidebar::FullPage,
-                    _ => w::CollapsedSidebar::Drawer,
+                    _ => cfg.mobile_sidebar,
                 },
                 drawer_open: std::env::var_os("GALLERY_DRAWER").is_some(),
                 menu_mode: match std::env::var("GALLERY_MENU").as_deref() {
@@ -493,6 +506,7 @@ impl Gallery {
                         "switch" => Message::Wifi(!self.wifi),
                         "drawer" => Message::Drawer(true),
                         "reveal" => Message::Expanded(!self.expanded),
+                        "carousel" => Message::Carousel(1),
                         "dialog" => Message::OpenDialog(Dialog::Alert),
                         _ => Message::ShowToast("Settings saved"),
                     };
@@ -558,12 +572,13 @@ impl Gallery {
     /// Whether the window draws its own decorations (the Adwaita default).
     fn csd() -> bool {
         std::env::var_os("GALLERY_SSD").is_none()
+            && adw::config::current().decorations == adw::config::DecorationMode::Csd
     }
 
     fn root(&self, size: iced::Size) -> IcedElement<'_, Message, Theme> {
         let m = self.metrics();
         let csd = Self::csd();
-        let collapsed = size.width <= w::COLLAPSE_WIDTH;
+        let collapsed = size.width <= w::collapse_width();
 
         // Floating windows have rounded corners; maximized/fullscreen go edge to edge.
         // Mobile mode (narrow): no window decorations at all. Corners still follow the
@@ -575,7 +590,7 @@ impl Gallery {
 
         // Primary menu (HIG): open-menu icon, above the sidebar list, standard items last.
         let presentation = match self.menu_mode {
-            MenuMode::Auto => w::MenuPresentation::for_width(size.width),
+            MenuMode::Auto => w::MenuPresentation::resolve(size.width),
             MenuMode::Dropdown => w::MenuPresentation::Dropdown,
             MenuMode::FullPage => w::MenuPresentation::FullPage,
         };
@@ -743,13 +758,7 @@ impl Gallery {
 
     fn page_frame<'a>(&self, content: impl Into<Element<'a>>) -> Element<'a> {
         let m = self.metrics();
-        w::scrolled_window(w::clamp(
-            container(content).padding(m.page_padding).width(Length::Fill),
-            m.clamp_maximum + 120.0,
-        ))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+        w::page(content).maximum_size(m.clamp_maximum + 120.0).metrics(m).into()
     }
 
     fn buttons_page(&self) -> Element<'_> {
@@ -772,11 +781,8 @@ impl Gallery {
             w::suggested_pill_button(lbl("Suggested Pill")).on_press(Message::Noop),
             w::circular_button(Icon::ListAdd).on_press(Message::Noop),
             w::icon_button(Icon::Delete).on_press(Message::Noop),
-            iced::widget::button(text("Link")).style(style::button::link).on_press(Message::Noop),
-            iced::widget::button(text("Card button").width(Length::Fixed(110.0)))
-                .padding(m.card_padding)
-                .style(style::button::card)
-                .on_press(Message::Noop),
+            w::link_button("Link").on_press(Message::Noop),
+            w::card_button(text("Card button").width(Length::Fixed(110.0))).on_press(Message::Noop),
         ]
         .spacing(m.space_m)
         .align_y(iced::Alignment::Center)
@@ -899,32 +905,37 @@ impl Gallery {
         let m = self.metrics();
         let g = |title: &'static str| w::PreferencesGroup::<Message>::new().title(title).metrics(m);
         let entries = column![
-            text_input("Search…", &self.name).on_input(Message::Name).padding(m.entry_padding),
-            text_input("Invalid value", "oops")
-                .style(style::text_input::error)
-                .padding(m.entry_padding),
-            text_input("Disabled", "read only").padding(m.entry_padding),
-            text_editor(&self.editor).on_action(Message::Editor).height(90),
+            w::entry("Search…", &self.name).on_input(Message::Name).metrics(m),
+            w::entry("Invalid value", "oops").on_input(Message::Name).state(w::EntryState::Error).metrics(m),
+            w::entry("Warning", "careful").on_input(Message::Name).state(w::EntryState::Warning).metrics(m),
+            w::entry("Disabled", "read only").metrics(m),
+            w::password_entry("Password", &self.password).on_input(Message::Password).metrics(m),
+            w::text_view(&self.editor).on_action(Message::Editor),
         ]
         .spacing(m.space_m);
 
         let toggles = column![
-            checkbox(self.check).label("Checkbox").on_toggle(Message::Check),
-            checkbox(false).label("Unchecked"),
-            checkbox(true).label("Disabled checked"),
+            w::check_button("Checkbox", self.check).on_toggle(Message::Check),
+            w::check_button("Unchecked", false),
+            w::check_button("Disabled checked", true),
             row![
-                radio("Radio A", 0u8, self.radio, Message::Radio),
-                radio("Radio B", 1u8, self.radio, Message::Radio),
-                radio("Radio C", 2u8, self.radio, Message::Radio),
+                w::radio_button("Radio A", 0u8, self.radio, Message::Radio),
+                w::radio_button("Radio B", 1u8, self.radio, Message::Radio),
+                w::radio_button("Radio C", 2u8, self.radio, Message::Radio),
             ]
             .spacing(m.space_l)
             .wrap(),
-            toggler(self.wifi).label("Switch").on_toggle(Message::Wifi).size(m.switch_size),
+            row![
+                w::switch(self.wifi).on_toggle(Message::Wifi),
+                ty::body("Switch"),
+            ]
+            .spacing(m.space_m)
+            .align_y(iced::Alignment::Center),
         ]
         .spacing(m.space_m);
 
         let range = column![
-            slider(0.0..=100.0, self.slider, Message::Slider),
+            w::scale(0.0..=100.0, self.slider, Message::Slider),
             w::progress_bar(0.0..=100.0, self.slider),
             w::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::success),
             w::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::warning),
@@ -958,15 +969,15 @@ impl Gallery {
         .align_y(iced::Alignment::Center);
 
         let tags = row![
-            tag("Accent", Role::Accent),
-            tag("Success", Role::Success),
-            tag("Warning", Role::Warning),
-            tag("Error", Role::Error),
-            tag("Destructive", Role::Destructive),
+            w::tag("Accent", Role::Accent),
+            w::tag("Success", Role::Success),
+            w::tag("Warning", Role::Warning),
+            w::tag("Error", Role::Error),
+            w::tag("Destructive", Role::Destructive),
         ]
         .spacing(m.space_s);
 
-        let status = container(
+        let status = w::Card::new(
             w::status_page::<Message>()
                 .icon(Icon::DialogInformation.colored(64.0, self.theme().semantic.dim_solid()))
                 .title("No Results")
@@ -975,8 +986,8 @@ impl Gallery {
                 .compact(true)
                 .metrics(m),
         )
-        .height(Length::Fixed(300.0))
-        .style(style::container::card);
+        .padding(0)
+        .height(Length::Fixed(300.0));
 
         let banner: Element = w::banner("Network connection lost")
             .button("Retry", Message::DismissBanner)
@@ -1027,13 +1038,26 @@ impl Gallery {
                 w::ToggleItem::new(Tab::Three, "Settings").icon(Icon::Settings),
             ]
         };
-        let pages: Vec<Element> = ["First page", "Second page", "Third page"]
-            .into_iter()
-            .map(|t| -> Element { container(ty::title_2(t)).center(Length::Fill).into() })
-            .collect();
-        let car = container(w::carousel(pages, self.carousel, Message::Carousel))
-            .height(Length::Fixed(140.0))
-            .style(style::container::card);
+        // Each page has its own tint so the slide is easy to follow.
+        let carousel_pages = || -> Vec<Element<'_>> {
+            [("First page", Role::Accent), ("Second page", Role::Success), ("Third page", Role::Warning)]
+                .into_iter()
+                .map(|(t, role)| -> Element {
+                    container(ty::title_2(t))
+                        .center(Length::Fill)
+                        .style(style::container::tinted(role))
+                        .into()
+                })
+                .collect()
+        };
+        let car = w::Card::new(w::carousel(carousel_pages(), self.carousel, Message::Carousel))
+            .padding(0)
+            .height(Length::Fixed(160.0));
+        let car_lines = w::Card::new(
+            w::carousel(carousel_pages(), self.carousel, Message::Carousel).indicator(w::CarouselIndicator::Lines),
+        )
+        .padding(0)
+        .height(Length::Fixed(160.0));
         let tabs = w::tab_bar(
             vec!["Home".into(), "Docs".into(), "Settings".into()],
             self.tab as usize,
@@ -1047,7 +1071,7 @@ impl Gallery {
         .spacing(m.space_s);
         let tags: Vec<Element> = ["rust", "iced", "gnome", "adwaita", "libadwaita", "theming", "widgets"]
             .into_iter()
-            .map(|t| tag(t, Role::Accent))
+            .map(|t| w::tag(t, Role::Accent))
             .collect();
         self.page_frame(
             column![
@@ -1066,8 +1090,8 @@ impl Gallery {
                     )
                     .width(Length::Fill),
                 ))),
-                g("Tab Bar").push(container(tabs).style(style::container::card)),
-                g("Carousel").push(car).push(w::carousel_indicator_lines(3, self.carousel, Message::Carousel)),
+                g("Tab Bar").push(w::Card::new(tabs).padding(0)),
+                g("Carousel (drag, or click the dots)").push(car).push(car_lines),
                 g("Shortcut Labels").push(w::card(shortcuts)),
                 g("Wrap Box").push(w::card(w::wrap_box(tags, m.space_s))),
                 g("Bottom Sheet").push(w::card(
@@ -1082,53 +1106,12 @@ impl Gallery {
         let m = self.metrics();
         let sem = self.theme().semantic;
 
-        let accents = row(AccentColor::ALL.iter().map(|a| {
-            let c = a.to_color();
-            let selected = *a == self.accent;
-            iced::widget::button(
-                container(if selected {
-                    Icon::Check.colored(14.0, iced::Color::WHITE).into()
-                } else {
-                    Element::from(text(""))
-                })
-                .center(Length::Fixed(26.0)),
-            )
-            .padding(0)
-            .style(move |_: &Theme, _| iced::widget::button::Style {
-                background: Some(iced::Background::Color(c)),
-                border: iced::Border::default().rounded(999.0),
-                ..Default::default()
-            })
-            .on_press(Message::Accent(*a))
-            .into()
-        }))
-        .spacing(m.space_s)
-        .wrap();
-
-        let swatch = |name: &'static str, s: adw::Surface| -> Element<'static> {
-            container(text(name).size(12).color(s.fg))
-                .padding([m.space_m, m.space_m])
-                .width(Length::Fill)
-                
-                .style(move |t: &Theme| iced::widget::container::Style {
-                    background: Some(iced::Background::Color(s.bg)),
-                    border: iced::Border {
-                        color: adw::color::alpha(s.fg, 0.2),
-                        width: 1.0,
-                        radius: t.metrics.radius_m.into(),
-                    },
-                    ..Default::default()
-                })
-                .into()
-        };
-        let sw = |name: &'static str, s: adw::Swatch| swatch(name, s.surface());
-
         let surfaces = column![
-            row![swatch("window", sem.window), swatch("view", sem.view), swatch("headerbar", sem.headerbar)].spacing(m.space_s),
-            row![swatch("card", sem.card), swatch("dialog", sem.dialog), swatch("popover", sem.popover)].spacing(m.space_s),
-            row![swatch("sidebar", sem.sidebar), swatch("thumbnail", sem.thumbnail), swatch("osd", sem.osd)].spacing(m.space_s),
-            row![sw("accent", sem.accent), sw("destructive", sem.destructive), sw("success", sem.success)].spacing(m.space_s),
-            row![sw("warning", sem.warning), sw("error", sem.error)].spacing(m.space_s),
+            row![w::color_swatch("window", sem.window), w::color_swatch("view", sem.view), w::color_swatch("headerbar", sem.headerbar)].spacing(m.space_s),
+            row![w::color_swatch("card", sem.card), w::color_swatch("dialog", sem.dialog), w::color_swatch("popover", sem.popover)].spacing(m.space_s),
+            row![w::color_swatch("sidebar", sem.sidebar), w::color_swatch("thumbnail", sem.thumbnail), w::color_swatch("osd", sem.osd)].spacing(m.space_s),
+            row![w::status_swatch("accent", sem.accent), w::status_swatch("destructive", sem.destructive), w::status_swatch("success", sem.success)].spacing(m.space_s),
+            row![w::status_swatch("warning", sem.warning), w::status_swatch("error", sem.error)].spacing(m.space_s),
         ]
         .spacing(m.space_s);
 
@@ -1141,66 +1124,60 @@ impl Gallery {
             .push(w::SwitchRow::new("Override card color", self.card_override, Message::CardOverride).metrics(m))
             .push(
                 w::ActionRow::new("Accent color")
-                    .suffix(Element::from(accents))
+                    .suffix(w::accent_picker(self.accent, Message::Accent))
                     .metrics(m),
             )
             .push(
-                w::ActionRow::new("Menu presentation")
-                    .subtitle("Auto: full page at ≤ 450px, else dropdown")
-                    .suffix(Element::from(w::toggle_group(
-                        vec![
-                            w::ToggleItem::new(MenuMode::Auto, "Auto").icon(Icon::Settings),
-                            w::ToggleItem::new(MenuMode::Dropdown, "Dropdown").icon(Icon::GoDown),
-                            w::ToggleItem::new(MenuMode::FullPage, "Full page").icon(Icon::Window),
-                        ],
-                        Some(self.menu_mode),
-                        Message::MenuMode,
-                    )))
-                    .metrics(m),
+                w::ToggleGroupRow::new(
+                    "Menu presentation",
+                    vec![
+                        w::ToggleItem::new(MenuMode::Auto, "Auto").icon(Icon::Settings),
+                        w::ToggleItem::new(MenuMode::Dropdown, "Dropdown").icon(Icon::GoDown),
+                        w::ToggleItem::new(MenuMode::FullPage, "Full page").icon(Icon::Window),
+                    ],
+                    Some(self.menu_mode),
+                    Message::MenuMode,
+                )
+                .subtitle("Auto follows the desktop config (full page at the mobile breakpoint)")
+                .metrics(m),
             )
             .push(
-                w::ActionRow::new("Mobile sidebar")
-                    .subtitle("Drawer over the content, or its own page")
-                    .suffix(Element::from(w::toggle_group(
-                        vec![
-                            w::ToggleItem::new(w::CollapsedSidebar::Drawer, "Drawer").icon(Icon::Sidebar),
-                            w::ToggleItem::new(w::CollapsedSidebar::FullPage, "Full page").icon(Icon::Window),
-                        ],
-                        Some(self.sidebar_mode),
-                        Message::SidebarMode,
-                    )))
-                    .metrics(m),
+                w::ToggleGroupRow::new(
+                    "Mobile sidebar",
+                    vec![
+                        w::ToggleItem::new(w::CollapsedSidebar::Drawer, "Drawer").icon(Icon::Sidebar),
+                        w::ToggleItem::new(w::CollapsedSidebar::FullPage, "Full page").icon(Icon::Window),
+                    ],
+                    Some(self.sidebar_mode),
+                    Message::SidebarMode,
+                )
+                .subtitle("Drawer over the content, or its own page")
+                .metrics(m),
             )
             .push(w::SwitchRow::new("Shadows", self.shadows_on, Message::Shadows).subtitle("Adwaita elevation: cards, popovers, dialogs").metrics(m))
             .push(
-                w::ActionRow::new("Shadow intensity")
+                w::SliderRow::new("Shadow intensity", self.shadow_intensity, 0.0..=2.0, Message::ShadowIntensity)
                     .subtitle(format!("{:.1}x", self.shadow_intensity))
-                    .suffix(slider(0.0..=2.0, self.shadow_intensity, Message::ShadowIntensity).step(0.1_f32).width(Length::Fill))
-                    .suffix_basis(160.0)
+                    .step(0.1)
                     .metrics(m),
             )
             .push(
-                w::ActionRow::new("Shadow size")
+                w::SliderRow::new("Shadow size", self.shadow_scale, 0.0..=2.0, Message::ShadowScale)
                     .subtitle(format!("{:.1}x", self.shadow_scale))
-                    .suffix(slider(0.0..=2.0, self.shadow_scale, Message::ShadowScale).step(0.1_f32).width(Length::Fill))
-                    .suffix_basis(160.0)
+                    .step(0.1)
                     .metrics(m),
             )
             .push(w::SwitchRow::new("Continuous header bars", self.flat_headers, Message::FlatHeaders).subtitle("No header color of its own (Nautilus-style)").metrics(m))
             .push(w::SwitchRow::new("Path bar title", self.path_bar_title, Message::PathBarTitle).subtitle("A title_widget replaces the title; window buttons stay").metrics(m))
             .push(w::SwitchRow::new("Raised header bar", self.raised_bar, Message::RaisedBar).subtitle("top-bar-style: raised").metrics(m))
             .push(
-                w::ActionRow::new("Control radius")
+                w::SliderRow::new("Control radius", self.radius_m, 0.0..=Metrics::MAX_RADIUS_M, Message::RadiusM)
                     .subtitle(format!("radius_m = {:.0}px", self.radius_m))
-                    .suffix(slider(0.0..=Metrics::MAX_RADIUS_M, self.radius_m, Message::RadiusM).width(Length::Fill))
-                    .suffix_basis(160.0)
                     .metrics(m),
             )
             .push(
-                w::ActionRow::new("Card radius")
+                w::SliderRow::new("Card radius", self.radius_l, 0.0..=Metrics::MAX_RADIUS_L, Message::RadiusL)
                     .subtitle(format!("radius_l = {:.0}px", self.radius_l))
-                    .suffix(slider(0.0..=Metrics::MAX_RADIUS_L, self.radius_l, Message::RadiusL).width(Length::Fill))
-                    .suffix_basis(160.0)
                     .metrics(m),
             );
 
@@ -1215,7 +1192,7 @@ impl Gallery {
             ]
             .spacing(m.space_s)
             .wrap(),
-            text_input("Entry", &self.name).on_input(Message::Name).padding(m.entry_padding),
+            w::entry("Entry", &self.name).on_input(Message::Name).metrics(m),
             Element::from(w::toggle_group(
                 vec![
                     w::ToggleItem::new(Tab::One, "One"),
@@ -1241,21 +1218,8 @@ impl Gallery {
                     .metrics(m)
                     .push(w::SwitchRow::new("Animations", self.anim_enabled, Message::Animations).subtitle("Off: every transition jumps to its end value").metrics(m))
                     .push(
-                        w::ActionRow::new("Motion")
-                            .subtitle(self.demo.label())
-                            .suffix(Element::from(
-                                w::toggle_group(
-                                    DemoMotion::ALL
-                                        .iter()
-                                        .map(|d| w::ToggleItem::new(*d, d.label()))
-                                        .collect(),
-                                    Some(self.demo),
-                                    Message::DemoMotion,
-                                )
-                                .width(Length::Fill),
-                            ))
-                            .suffix_basis(280.0)
-                            .metrics(m),
+                        w::ComboRow::new("Motion", &MOTIONS, Some(self.demo), Message::DemoMotion)
+                            .subtitle("Pick an easing or the sheet spring, then Play"),
                     )
                     .push(
                         w::ActionRow::new("Play")
@@ -1275,18 +1239,16 @@ impl Gallery {
                     .description("Narrow the window: the control wraps. Stacked = 100% width; Flex = keeps its width.")
                     .metrics(m)
                     .push(
-                        w::ActionRow::new("Stacked (default)")
+                        w::SliderRow::new("Stacked (default)", self.slider, 0.0..=100.0, Message::Slider)
                             .subtitle("collapse = Stacked")
-                            .suffix(slider(0.0..=100.0, self.slider, Message::Slider).width(Length::Fill))
-                            .suffix_basis(260.0)
+                            .basis(260.0)
                             .collapse(adw::CollapseBehavior::Stacked)
                             .metrics(m),
                     )
                     .push(
-                        w::ActionRow::new("Flex")
+                        w::SliderRow::new("Flex", self.slider, 0.0..=100.0, Message::Slider)
                             .subtitle("collapse = Flex")
-                            .suffix(slider(0.0..=100.0, self.slider, Message::Slider).width(Length::Fill))
-                            .suffix_basis(260.0)
+                            .basis(260.0)
                             .collapse(adw::CollapseBehavior::Flex)
                             .metrics(m),
                     ),
@@ -1298,14 +1260,18 @@ impl Gallery {
     }
 }
 
-fn tag(label: &'static str, role: Role) -> Element<'static> {
-    container(text(label).size(13))
-        .padding([2.0, 10.0])
-        .style(style::container::tinted(role))
-        .into()
-}
 
 fn main() -> iced::Result {
+    // Shared desktop behavior: ~/.config/iced-libadwaita/desktop.conf (+ system files).
+    let mut cfg = adw::config::Config::load();
+    if std::env::var_os("GALLERY_OPT_OUT").is_some() {
+        // Opting out of desktop settings is highly discouraged; shown here only to demonstrate
+        // that it is allowed, explicit and reported (a notice is printed on install).
+        cfg = cfg.opt_out(|o| {
+            o.mobile_sidebar(w::CollapsedSidebar::FullPage);
+        });
+    }
+    adw::config::install(cfg);
     iced::application(Gallery::new, Gallery::update, Gallery::view)
         .title("iced-libadwaita gallery")
         .theme(Gallery::theme)

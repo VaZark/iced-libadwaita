@@ -10,10 +10,13 @@
 //!   `StatusPage`, `AlertDialog`, …).
 
 pub mod animation;
+pub mod catalog;
 pub mod color;
+pub mod config;
 pub mod icon;
 pub mod metrics;
 pub mod palette;
+pub mod prelude;
 pub mod semantic;
 pub mod shadow;
 pub mod style;

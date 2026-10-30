@@ -39,7 +39,7 @@ pub fn sidebar_row<'a, M: Clone + 'a>(
     selected: bool,
     on_press: M,
 ) -> Element<'a, M> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
     if let Some(i) = icon {
         r = r.push(i.view(m.icon_size));
@@ -66,7 +66,7 @@ pub fn navigation_sidebar_rounded<'a, M: 'a>(
     rows: impl IntoIterator<Item = Element<'a, M>>,
     window_radius: f32,
 ) -> Element<'a, M> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     container(column(rows).spacing(m.sidebar_spacing).padding(m.sidebar_padding))
         .width(Length::Fill)
         .height(Length::Fill)
@@ -83,7 +83,7 @@ pub fn navigation_sidebar_rounded<'a, M: 'a>(
 pub fn navigation_sidebar<'a, M: 'a>(
     rows: impl IntoIterator<Item = Element<'a, M>>,
 ) -> Element<'a, M> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     container(column(rows).spacing(m.sidebar_spacing).padding(m.sidebar_padding))
         .width(Length::Fill)
         .height(Length::Fill)
@@ -128,8 +128,13 @@ pub fn sidebar_width_for(total: f32, fraction: f32, min: f32, max: f32) -> f32 {
     (total * fraction).clamp(min, max)
 }
 
-/// The `max-width` below which split views collapse (docs: `400sp`).
+/// The default `max-width` below which split views collapse (docs: `400sp`).
 pub const COLLAPSE_WIDTH: f32 = 400.0;
+
+/// The collapse width in effect: the desktop config's `[navigation] collapse-width`.
+pub fn collapse_width() -> f32 {
+    crate::config::current().collapse_width
+}
 
 impl<'a, M: 'a> NavigationSplitView<'a, M> {
     pub fn new(sidebar: impl Into<Element<'a, M>>, content: impl Into<Element<'a, M>>) -> Self {
@@ -143,7 +148,8 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
             collapsed: false,
             show_content: true,
             window_radius: 0.0,
-            collapsed_sidebar: CollapsedSidebar::Drawer,
+            // The desktop config decides (default: drawer); `.collapsed_sidebar(..)` is an opt-out.
+            collapsed_sidebar: crate::config::current().mobile_sidebar,
             drawer_open: false,
             on_close_drawer: None,
         }
@@ -199,7 +205,7 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
     /// Applies libadwaita's adaptive rules for a window of `width`: collapse at
     /// `max-width: 400sp` and size the sidebar by fraction/min/max.
     pub fn adapt(mut self, width: f32) -> Self {
-        self.collapsed = width <= COLLAPSE_WIDTH;
+        self.collapsed = width <= collapse_width();
         self.sidebar_width = if self.collapsed && self.collapsed_sidebar == CollapsedSidebar::Drawer {
             // A drawer uses the maximum sidebar width when it fits, but always leaves a
             // strip of content (and the scrim) visible: never the whole screen.
@@ -285,7 +291,7 @@ impl<'a, M: 'a> OverlaySplitView<'a, M> {
         Self {
             sidebar: sidebar.into(),
             content: content.into(),
-            sidebar_width: Metrics::default().sidebar_width,
+            sidebar_width: Metrics::desktop().sidebar_width,
             collapsed: false,
             show_sidebar: true,
             on_close: None,

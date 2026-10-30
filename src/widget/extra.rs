@@ -6,7 +6,7 @@ use crate::style::{button as sb, container as sc, text as st};
 use crate::widget::button::{toggle_group, ToggleGroup, ToggleItem};
 use crate::widget::navigation::Breakpoint;
 use crate::{DecorationLayout, Icon, Metrics, Theme, Typography, WindowButton};
-use iced::alignment::{Horizontal, Vertical};
+use iced::alignment::Vertical;
 use iced::widget::{
     button, column, container, mouse_area, opaque, responsive, row, space, stack, text,
 };
@@ -79,7 +79,7 @@ pub fn view_switcher_bar<'a, M: Clone + 'a, T: Clone + PartialEq + 'a>(
     active: Option<T>,
     on_select: impl Fn(T) -> M + 'a,
 ) -> Element<'a, M> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     container(Element::from(toggle_group(items, active, on_select)))
         .padding(m.space_s)
         .center_x(Length::Fill)
@@ -126,7 +126,7 @@ pub fn shortcuts_dialog<'a, M: Clone + 'a>(
     sections: Vec<(String, Vec<(String, String)>)>,
     on_close: M,
 ) -> Element<'a, M> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     let t = Typography::default();
     let mut col = column![].spacing(m.space_l);
     for (title, items) in sections {
@@ -176,7 +176,7 @@ fn dialog_frame<'a, M: Clone + 'a>(
             layout: Some(layout),
             ..Default::default()
         });
-    let content = container(body).padding(Metrics::default().space_l);
+    let content = container(body).padding(Metrics::desktop().space_l);
     container(toolbar_view(super::scrolled_window(content)).top_bar(bar))
         .width(Length::Fill)
         .height(Length::Fill)
@@ -208,24 +208,6 @@ pub fn path_bar<'a, M: Clone + 'a>(
         })
         .collect();
     Element::from(toggle_group(items, Some(current), on_select))
-}
-
-/// `AdwCarousel`: shows page `index`; `on_navigate` is sent by the indicator.
-pub fn carousel<'a, M: Clone + 'a>(
-    pages: Vec<Element<'a, M>>,
-    index: usize,
-    on_navigate: impl Fn(usize) -> M + 'a,
-) -> Element<'a, M> {
-    let n = pages.len();
-    let current = pages.into_iter().nth(index);
-    column![
-        container(current.unwrap_or_else(|| space().into()))
-            .width(Length::Fill)
-            .height(Length::Fill),
-        carousel_indicator_dots(n, index, on_navigate),
-    ]
-    .align_x(Horizontal::Center)
-    .into()
 }
 
 /// `AdwCarouselIndicatorDots`.
@@ -281,7 +263,7 @@ pub fn tab_bar<'a, M: Clone + 'a>(
     on_select: impl Fn(usize) -> M + 'a,
     on_close: Option<impl Fn(usize) -> M + 'a>,
 ) -> Element<'a, M> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     let mut r = row![].spacing(m.space_xs).padding(m.space_xs).align_y(Vertical::Center);
     for (i, title) in tabs.into_iter().enumerate() {
         let mut label = row![container(super::typography::label(title)).width(Length::Fill)]
@@ -308,7 +290,7 @@ pub fn tab_bar<'a, M: Clone + 'a>(
 
 /// `AdwTabButton`: shows the open tab count, e.g. to open a tab overview.
 pub fn tab_button<'a, M: Clone + 'a>(count: usize, on_press: M) -> Element<'a, M> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     button(
         container(text(count.to_string()).size(12))
             .center(Length::Fixed(20.0))
@@ -349,7 +331,7 @@ pub fn bottom_sheet_in_window<'a, M: Clone + 'a>(
     if !open {
         return content.into();
     }
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     let catcher = mouse_area(container(space()).width(Length::Fill).height(Length::Fill)).on_press(on_close);
     let panel = container(sheet.into())
         .padding(m.space_l)

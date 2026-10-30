@@ -26,7 +26,7 @@ impl<M> Banner<M> {
             button_label: None,
             on_button: None,
             revealed: true,
-            metrics: Metrics::default(),
+            metrics: Metrics::desktop(),
         }
     }
     pub fn button(mut self, label: impl Into<String>, on_press: M) -> Self {

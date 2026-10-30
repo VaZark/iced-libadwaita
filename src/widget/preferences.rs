@@ -26,7 +26,7 @@ impl<'a, M> PreferencesGroup<'a, M> {
             description: None,
             header_suffix: None,
             rows: Vec::new(),
-            metrics: Metrics::default(),
+            metrics: Metrics::desktop(),
         }
     }
     pub fn title(mut self, t: impl Into<String>) -> Self {
@@ -106,7 +106,7 @@ impl<'a, M> PreferencesPage<'a, M> {
     pub fn new() -> Self {
         Self {
             groups: Vec::new(),
-            metrics: Metrics::default(),
+            metrics: Metrics::desktop(),
         }
     }
     pub fn push(mut self, g: impl Into<Element<'a, M>>) -> Self {

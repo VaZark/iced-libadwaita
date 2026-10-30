@@ -17,8 +17,12 @@ use iced::{mouse, Length, Size, Subscription, Task};
 /// `AdwWindow`'s default minimum size.
 pub const MIN_SIZE: Size = Size::new(360.0, 200.0);
 
-/// Window settings with SSD disabled (the Adwaita default).
+/// Window settings following the desktop config: client-side decorations unless the config
+/// says `[windows] decorations=ssd`.
 pub fn settings() -> Settings {
+    if crate::config::current().decorations == crate::config::DecorationMode::Ssd {
+        return settings_with_ssd(true);
+    }
     Settings {
         decorations: false,
         transparent: true,
@@ -45,9 +49,15 @@ pub fn settings_with_ssd(ssd: bool) -> Settings {
 /// [`State`] (rounded unless actually maximized/fullscreen). Same threshold as `AdwDialog`'s bottom-sheet switch (`max-width: 450`).
 pub const MOBILE_MAX_WIDTH: f32 = 450.0;
 
+/// The mobile breakpoint in effect: the desktop config's `[windows] mobile-max-width`
+/// (default [`MOBILE_MAX_WIDTH`]).
+pub fn mobile_max_width() -> f32 {
+    crate::config::current().mobile_max_width
+}
+
 /// Whether a window of this width is in mobile mode.
 pub fn is_mobile(width: f32) -> bool {
-    width <= MOBILE_MAX_WIDTH
+    width <= mobile_max_width()
 }
 
 const EDGE: f32 = 5.0;

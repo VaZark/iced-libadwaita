@@ -48,6 +48,36 @@ impl Theme {
         Self::new(Scheme::Light)
     }
 
+    /// Builds the theme the **desktop config** describes: color scheme and accent (`system`
+    /// reads GSettings), density, text scale, shadows, flat header bars, and a transparent
+    /// window base when decorations are client-side. This is the intended way to create an
+    /// app's theme; building one by hand is an opt-out of the shared desktop behavior.
+    pub fn from_config(c: &crate::config::Config) -> Self {
+        use crate::config::Pick;
+        let scheme = match c.color_scheme {
+            Pick::Fixed(s) => s,
+            Pick::System => crate::system::color_scheme().unwrap_or(Scheme::Light),
+        };
+        let mut t = Self::new(scheme);
+        let accent = match c.accent {
+            Pick::Fixed(a) => Some(a),
+            Pick::System => crate::system::accent_color(),
+        };
+        if let Some(a) = accent {
+            t = t.accent(a);
+        }
+        let shadows = if c.shadows {
+            Shadows::default().with_scale(c.shadow_scale).with_intensity(c.shadow_intensity)
+        } else {
+            Shadows::none()
+        };
+        t.with_metrics(c.metrics())
+            .with_typography(Typography::with_base(Typography::default().base * c.text_scale))
+            .with_shadows(shadows)
+            .with_flat_headerbars(c.flat_headerbars)
+            .with_transparent_window(c.decorations == crate::config::DecorationMode::Csd)
+    }
+
     pub fn dark() -> Self {
         Self::new(Scheme::Dark)
     }

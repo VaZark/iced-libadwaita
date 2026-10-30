@@ -466,14 +466,17 @@ pub fn set_enabled(enabled: Option<bool>) {
     );
 }
 
-/// Whether animations play: the override, else the system's `enable-animations`
-/// (GNOME setting, default on). Disabled animations jump straight to the end value,
+/// Whether animations play: the process override ([`set_enabled`]), else the desktop config
+/// (`[motion] animations`), else the system's `enable-animations` (GNOME setting, default on). Disabled animations jump straight to the end value,
 /// like libadwaita's `follow-enable-animations-setting`.
 pub fn enabled() -> bool {
     match OVERRIDE.load(Ordering::Relaxed) {
         1 => true,
         2 => false,
-        _ => crate::system::animations_enabled(),
+        _ => match crate::config::current().animations {
+            crate::config::Pick::Fixed(on) => on,
+            crate::config::Pick::System => crate::system::animations_enabled(),
+        },
     }
 }
 
@@ -518,6 +521,37 @@ impl Tween {
 
     pub fn target(&self) -> f32 {
         self.target as f32
+    }
+
+    /// Sets the value immediately (e.g. while the user drags), cancelling any animation.
+    pub fn set_immediate(&mut self, value: f32) {
+        self.value = value as f64;
+        self.target = value as f64;
+        self.running = None;
+        self.start = None;
+    }
+
+    /// Like [`set_target`](Self::set_target), but a spring starts with `velocity` (value units
+    /// per second): how a released drag hands its momentum to the animation
+    /// (`AdwSpringAnimation:initial-velocity`). Always retargets, even to the current target.
+    pub fn fling_to(&mut self, target: f32, velocity: f32, now: Instant, spec: Spec) {
+        let current = self.value_at(now);
+        self.target = target as f64;
+        if !enabled() || (current - target as f64).abs() < 1e-6 && velocity.abs() < 1e-3 {
+            self.value = target as f64;
+            self.running = None;
+            self.start = None;
+            return;
+        }
+        self.value = current;
+        self.start = Some(now);
+        self.running = Some(match spec {
+            Spec::Timed(d, e) => Running::Timed(TimedAnimation::new(current, target as f64, d, e)),
+            Spec::Spring(p) => {
+                let a = SpringAnimation::new(current, target as f64, p).initial_velocity(velocity as f64);
+                Running::Spring(a, a.estimated_duration())
+            }
+        });
     }
 
     /// Moves toward `target` using `spec`. Jumps instantly when animations are disabled.

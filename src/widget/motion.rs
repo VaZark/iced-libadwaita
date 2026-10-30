@@ -407,7 +407,7 @@ pub fn entrance<'a, M>(content: impl Into<Element<'a, M, Theme>>, offset: Vector
         content: content.into(),
         offset,
         scrim_radius: None,
-        spec: Spec::Spring(presets::sheet(false)),
+        spec: Spec::Spring(presets::sheet(crate::config::current().reduced_motion)),
     }
 }
 

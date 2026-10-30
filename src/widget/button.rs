@@ -21,7 +21,7 @@ impl<'a, M> ButtonContent<'a, M> {
         Self {
             label: label.into(),
             icon: None,
-            metrics: Metrics::default(),
+            metrics: Metrics::desktop(),
             _p: std::marker::PhantomData,
         }
     }
@@ -56,27 +56,27 @@ fn sized<'a, M: 'a>(content: impl Into<Element<'a, M>>, m: &Metrics) -> Button<'
 
 /// Standard button (`.default`).
 pub fn raised_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    sized(content, &Metrics::default()).style(sb::default)
+    sized(content, &Metrics::desktop()).style(sb::default)
 }
 
 /// `.flat` button.
 pub fn flat_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    sized(content, &Metrics::default()).style(sb::flat)
+    sized(content, &Metrics::desktop()).style(sb::flat)
 }
 
 /// `.suggested-action` button.
 pub fn suggested_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    sized(content, &Metrics::default()).style(sb::suggested)
+    sized(content, &Metrics::desktop()).style(sb::suggested)
 }
 
 /// `.destructive-action` button.
 pub fn destructive_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    sized(content, &Metrics::default()).style(sb::destructive)
+    sized(content, &Metrics::desktop()).style(sb::destructive)
 }
 
 /// `.pill` button.
 pub fn pill_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     button(content.into()).padding(m.pill_padding).style(sb::pill)
 }
 
@@ -84,7 +84,7 @@ pub fn pill_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, 
 pub fn suggested_pill_button<'a, M: 'a>(
     content: impl Into<Element<'a, M>>,
 ) -> Button<'a, M, Theme> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     button(content.into()).padding(m.pill_padding).style(sb::suggested_pill)
 }
 
@@ -93,12 +93,12 @@ pub fn progress_bar<'a>(
     range: std::ops::RangeInclusive<f32>,
     value: f32,
 ) -> iced::widget::ProgressBar<'a, Theme> {
-    iced::widget::progress_bar(range, value).girth(Metrics::default().progress_height)
+    iced::widget::progress_bar(range, value).girth(Metrics::desktop().progress_height)
 }
 
 /// A square `.circular` icon button (flat by default, like header bar buttons).
 pub fn circular_button<'a, M: 'a>(icon: Icon) -> Button<'a, M, Theme> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     button(
         container(icon.view(m.icon_size))
             .center(Length::Fixed(m.button_min_height)),
@@ -109,7 +109,7 @@ pub fn circular_button<'a, M: 'a>(icon: Icon) -> Button<'a, M, Theme> {
 
 /// A flat icon button with a rounded-rect hover (`.flat` + icon-only).
 pub fn icon_button<'a, M: 'a>(icon: Icon) -> Button<'a, M, Theme> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     button(container(icon.view(m.icon_size)).center(Length::Fixed(m.button_min_height)))
         .padding(Padding::from(0.0))
         .style(sb::flat)
@@ -121,7 +121,7 @@ pub fn split_button<'a, M: Clone + 'a>(
     on_press: M,
     on_menu: M,
 ) -> Element<'a, M> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     row![
         sized(content, &m).style(sb::linked(Position::Start)).on_press(on_press),
         container(space().width(1).height(Length::Fill)).style(crate::style::container::bar_separator),
@@ -189,7 +189,7 @@ pub fn toggle_group<'a, T: Clone + PartialEq, M>(
         on_select: Box::new(on_select),
         width: Length::Shrink,
         homogeneous: false,
-        metrics: Metrics::default(),
+        metrics: Metrics::desktop(),
     }
 }
 

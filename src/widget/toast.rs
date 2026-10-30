@@ -42,7 +42,7 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
     let Some(t) = toast else {
         return content.into();
     };
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     let mut r = row![text(t.title)].spacing(m.space_m).align_y(Vertical::Center);
     if let Some((label, msg)) = t.action {
         r = r.push(

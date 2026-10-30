@@ -27,7 +27,7 @@ pub struct FlexRow<'a, M> {
 impl<'a, M> FlexRow<'a, M> {
     /// `main` takes the leftover space on the first line; `aside` is the control.
     pub fn new(main: impl Into<Element<'a, M, Theme>>, aside: impl Into<Element<'a, M, Theme>>) -> Self {
-        let m = Metrics::default();
+        let m = Metrics::desktop();
         Self {
             children: [main.into(), aside.into()],
             gap: m.row_spacing,

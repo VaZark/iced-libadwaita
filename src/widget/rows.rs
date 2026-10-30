@@ -66,10 +66,10 @@ impl<'a, M> ActionRow<'a, M> {
             on_press: None,
             chevron: false,
             wrap: true,
-            collapse: Metrics::default().row_collapse,
+            collapse: Metrics::desktop().row_collapse,
             suffix_align: Horizontal::Left,
             suffix_basis: None,
-            metrics: Metrics::default(),
+            metrics: Metrics::desktop(),
             typography: Typography::default(),
         }
     }
@@ -207,7 +207,7 @@ impl<'a, M> SwitchRow<'a, M> {
             row: ActionRow::new(title).wrap_suffix(false),
             active,
             on_toggle: Box::new(on_toggle),
-            metrics: Metrics::default(),
+            metrics: Metrics::desktop(),
         }
     }
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {
@@ -247,7 +247,7 @@ impl<M> ButtonRow<M> {
             title: title.into(),
             on_press: None,
             role: Role::Accent,
-            metrics: Metrics::default(),
+            metrics: Metrics::desktop(),
         }
     }
     pub fn on_activate(mut self, m: M) -> Self {
@@ -302,8 +302,8 @@ impl<'a, M> EntryRow<'a, M> {
             on_submit: None,
             secure: false,
             suffix: None,
-            collapse: Metrics::default().row_collapse,
-            metrics: Metrics::default(),
+            collapse: Metrics::desktop().row_collapse,
+            metrics: Metrics::desktop(),
         }
     }
     /// Behavior of the suffix when it wraps (see [`CollapseBehavior`]).
@@ -412,7 +412,7 @@ where
     M: Clone + 'a,
 {
     fn from(c: ComboRow<'a, T, M>) -> Self {
-        let m = Metrics::default();
+        let m = Metrics::desktop();
         let current = c.selected.as_ref().map(ToString::to_string).unwrap_or_default();
         let value = row![
             typography::label(current).style(st::dim),
@@ -573,4 +573,107 @@ impl<'a, M: Clone + 'a> From<ExpanderRow<'a, M>> for Element<'a, M> {
 #[allow(dead_code)]
 fn _unused() {
     let _ = sb::default;
+}
+
+/// A row with a slider (`GtkScale`) as its suffix: `title`, optional `subtitle`, and a
+/// `Fill`-width scale. While the title and scale can't share a line the scale wraps
+/// below and stretches to 100% (see [`CollapseBehavior`]).
+pub struct SliderRow<'a, M> {
+    row: ActionRow<'a, M>,
+    value: f32,
+    range: std::ops::RangeInclusive<f32>,
+    step: f32,
+    on_change: Box<dyn Fn(f32) -> M + 'a>,
+    basis: f32,
+}
+
+impl<'a, M> SliderRow<'a, M> {
+    pub fn new(
+        title: impl Into<String>,
+        value: f32,
+        range: std::ops::RangeInclusive<f32>,
+        on_change: impl Fn(f32) -> M + 'a,
+    ) -> Self {
+        Self {
+            row: ActionRow::new(title),
+            value,
+            range,
+            step: 1.0,
+            on_change: Box::new(on_change),
+            basis: 160.0,
+        }
+    }
+    pub fn subtitle(mut self, s: impl Into<String>) -> Self {
+        self.row = self.row.subtitle(s);
+        self
+    }
+    pub fn step(mut self, step: f32) -> Self {
+        self.step = step;
+        self
+    }
+    /// The width the scale takes while sharing a line with the title.
+    pub fn basis(mut self, px: f32) -> Self {
+        self.basis = px;
+        self
+    }
+    pub fn collapse(mut self, c: CollapseBehavior) -> Self {
+        self.row = self.row.collapse(c);
+        self
+    }
+    pub fn metrics(mut self, m: Metrics) -> Self {
+        self.row = self.row.metrics(m);
+        self
+    }
+}
+
+impl<'a, M: Clone + 'a> From<SliderRow<'a, M>> for Element<'a, M> {
+    fn from(s: SliderRow<'a, M>) -> Self {
+        let scale = iced::widget::slider(s.range, s.value, s.on_change)
+            .step(s.step)
+            .width(Length::Fill);
+        s.row.suffix(scale).suffix_basis(s.basis).into()
+    }
+}
+
+/// A row with a toggle group (segmented control) as its suffix. The group stretches to
+/// 100% (equal `flex: 1` segments) when it wraps below the title.
+pub struct ToggleGroupRow<'a, T, M> {
+    row: ActionRow<'a, M>,
+    group: super::ToggleGroup<'a, T, M>,
+}
+
+impl<'a, T: Clone + PartialEq, M> ToggleGroupRow<'a, T, M> {
+    pub fn new(
+        title: impl Into<String>,
+        items: Vec<super::ToggleItem<'a, T, M>>,
+        active: Option<T>,
+        on_select: impl Fn(T) -> M + 'a,
+    ) -> Self {
+        Self {
+            row: ActionRow::new(title),
+            group: super::toggle_group(items, active, on_select),
+        }
+    }
+    pub fn subtitle(mut self, s: impl Into<String>) -> Self {
+        self.row = self.row.subtitle(s);
+        self
+    }
+    pub fn homogeneous(mut self, h: bool) -> Self {
+        self.group = self.group.homogeneous(h);
+        self
+    }
+    pub fn collapse(mut self, c: CollapseBehavior) -> Self {
+        self.row = self.row.collapse(c);
+        self
+    }
+    pub fn metrics(mut self, m: Metrics) -> Self {
+        self.row = self.row.metrics(m);
+        self
+    }
+}
+
+impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> From<ToggleGroupRow<'a, T, M>> for Element<'a, M> {
+    fn from(t: ToggleGroupRow<'a, T, M>) -> Self {
+        t.row.suffix(Element::from(t.group)).into()
+    }
 }

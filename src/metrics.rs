@@ -173,6 +173,12 @@ impl Default for Metrics {
 }
 
 impl Metrics {
+    /// The metrics the desktop config implies (density, row behavior). Widgets use this for
+    /// their build-time sizes; `Metrics::default()` stays libadwaita's pure values.
+    pub fn desktop() -> Self {
+        crate::config::current().metrics()
+    }
+
     /// Upper bounds for corner radii, taken from the GNOME HIG / libadwaita
     /// stylesheet: 4px small, 9px controls and menus, 12px cards, 15px popovers,
     /// dialogs and windows.

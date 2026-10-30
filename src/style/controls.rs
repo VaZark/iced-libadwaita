@@ -47,6 +47,22 @@ pub mod text_input {
         st
     }
 
+    /// Entry marked `.warning`.
+    pub fn warning(theme: &Theme, status: Status) -> Style {
+        let mut st = default(theme, status);
+        st.border.color = theme.semantic.warning.color;
+        st.border.width = theme.metrics.focus_ring_width;
+        st
+    }
+
+    /// Entry marked `.success`.
+    pub fn success(theme: &Theme, status: Status) -> Style {
+        let mut st = default(theme, status);
+        st.border.color = theme.semantic.success.color;
+        st.border.width = theme.metrics.focus_ring_width;
+        st
+    }
+
     /// Entry embedded in a row (no fill; the row provides the surface).
     pub fn embedded(theme: &Theme, status: Status) -> Style {
         let mut st = default(theme, status);

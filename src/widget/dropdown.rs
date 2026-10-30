@@ -74,7 +74,7 @@ struct State {
 impl<'a, M: 'a> Dropdown<'a, M> {
     /// A dropdown with fully custom trigger content and popover content.
     pub fn custom(trigger: impl Into<Element<'a, M>>, popover: impl Into<Element<'a, M>>) -> Self {
-        let m = Metrics::default();
+        let m = Metrics::desktop();
         Self {
             trigger: trigger.into(),
             popover: popover.into(),
@@ -132,7 +132,7 @@ pub fn menu_item<'a, M: Clone + 'a>(
     selected: bool,
     on_press: M,
 ) -> Element<'a, M> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     let mut r = row![text(label.into()).wrapping(text::Wrapping::None).width(Length::Fill)]
         .spacing(m.space_m)
         .align_y(Vertical::Center);
@@ -154,7 +154,7 @@ pub fn popover<'a, M: 'a>(
     items: impl IntoIterator<Item = Element<'a, M>>,
     max_height: f32,
 ) -> Element<'a, M> {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     container(super::scrolled_window(column(items).spacing(2).width(Length::Fill)))
         .padding(m.popover_padding)
         .max_height(max_height)
@@ -172,7 +172,7 @@ where
     T: ToString + PartialEq + Clone + 'a,
     M: Clone + 'a,
 {
-    let m = Metrics::default();
+    let m = Metrics::desktop();
     let current = selected.as_ref().map(|s| s.to_string()).unwrap_or_default();
     let trigger = container(
         row![

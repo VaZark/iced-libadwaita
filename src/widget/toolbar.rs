@@ -146,7 +146,7 @@ impl<'a, M> ActionBar<'a, M> {
             start: Vec::new(),
             center: None,
             end: Vec::new(),
-            metrics: Metrics::default(),
+            metrics: Metrics::desktop(),
         }
     }
     pub fn pack_start(mut self, e: impl Into<Element<'a, M>>) -> Self {

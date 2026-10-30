@@ -57,8 +57,12 @@ impl DecorationLayout {
         Self { start: buttons(start), end: buttons(end) }
     }
 
-    /// The user's configured layout (cached), or [`gnome_default`](Self::gnome_default).
+    /// The layout in effect: the desktop config's fixed `button-layout` if set, else the
+    /// user's GNOME `button-layout` (cached), else [`gnome_default`](Self::gnome_default).
     pub fn detect() -> Self {
+        if let crate::config::Pick::Fixed(s) = &crate::config::current().button_layout {
+            return Self::parse(s);
+        }
         static CACHE: OnceLock<DecorationLayout> = OnceLock::new();
         CACHE
             .get_or_init(|| {
@@ -94,8 +98,25 @@ pub fn animations_enabled() -> bool {
     })
 }
 
+/// The desktop color scheme (`org.gnome.desktop.interface color-scheme`): `prefer-dark` is
+/// dark, everything else light. `None` when GSettings is unavailable.
+pub fn color_scheme() -> Option<crate::Scheme> {
+    gsettings("org.gnome.desktop.interface", "color-scheme").map(|v| {
+        if v == "prefer-dark" { crate::Scheme::Dark } else { crate::Scheme::Light }
+    })
+}
+
+/// The desktop accent color (`org.gnome.desktop.interface accent-color`, GNOME 47+).
+pub fn accent_color() -> Option<crate::AccentColor> {
+    let v = gsettings("org.gnome.desktop.interface", "accent-color")?;
+    crate::AccentColor::ALL.into_iter().find(|a| format!("{a:?}").eq_ignore_ascii_case(&v))
+}
+
 /// The current icon theme name (`icon-theme`), default `Adwaita`.
 pub fn icon_theme() -> String {
+    if let crate::config::Pick::Fixed(t) = &crate::config::current().icon_theme {
+        return t.clone();
+    }
     static CACHE: OnceLock<String> = OnceLock::new();
     CACHE
         .get_or_init(|| {
@@ -162,7 +183,8 @@ fn find_svg(dir: &Path, name: &str, depth: u32, best: &mut Option<(u32, PathBuf)
 pub fn find_icon(name: &str) -> Option<Vec<u8>> {
     static CACHE: OnceLock<Mutex<HashMap<String, Option<Vec<u8>>>>> = OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
-    if let Some(hit) = cache.lock().ok()?.get(name) {
+    let key = format!("{}/{}", icon_theme(), name);
+    if let Some(hit) = cache.lock().ok()?.get(&key) {
         return hit.clone();
     }
 
@@ -202,7 +224,7 @@ pub fn find_icon(name: &str) -> Option<Vec<u8>> {
             }
         }
     }
-    cache.lock().ok()?.insert(name.to_string(), found.clone());
+    cache.lock().ok()?.insert(key, found.clone());
     found
 }
 
