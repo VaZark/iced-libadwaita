@@ -17,6 +17,9 @@ where we deliberately deviate.
 
 ## Contents
 
+* [Components](components.md) — the conventions every component follows, and the
+  generated [catalog](components-catalog.md) (tag → class, constructor, properties, slots, events).
+* [Desktop config](design-language/desktop-config.md) — shared desktop behavior and opt-outs.
 * [Design language](design-language/) — colors, typography, style classes,
   metrics, adaptive layout, windows and client-side decorations.
 * [Widgets](widgets/) — one file per libadwaita element.

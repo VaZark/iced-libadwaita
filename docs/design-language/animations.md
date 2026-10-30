@@ -62,6 +62,7 @@ subscription or messages:
 | Collapsed-sidebar drawer (`drawer_layer`) | sidebar spring (1, 0.5, 500) slide + scrim fade, **open and closed** |
 | `dialog_in_window`, `bottom_sheet_in_window` (`entrance`) | sheet spring (0.8, 1, 400) slide-in + scrim fade |
 | `toast_overlay` | slide up, 300ms `ADW_EASE` |
+| `carousel` | scroll spring (1, 0.5, 500), drag with velocity hand-off, indicator follows the position |
 
 Limitations: iced has no opacity layer or scaling transform, so dialogs/toasts slide and the
 scrim fades but children don't fade or scale; dialogs, bottom sheets and toasts are mounted

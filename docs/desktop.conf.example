@@ -1,0 +1,44 @@
+# iced-libadwaita desktop configuration (GLib key-file format)
+#
+# Install as  ~/.config/iced-libadwaita/desktop.conf   (user)
+#       or    /etc/xdg/iced-libadwaita/desktop.conf    (system; $XDG_CONFIG_DIRS)
+# Precedence: built-in defaults < system files < user file < an app's explicit opt-outs.
+# Every setting is optional. Shown values are the defaults.
+
+[appearance]
+color-scheme=system      # system | light | dark
+accent=system            # system | blue | teal | green | yellow | orange | red | pink | purple | slate
+flat-headerbars=false    # header bars with no color of their own (Nautilus-style)
+density=default          # default | compact
+text-scale=1.0           # 0.5 .. 3.0
+shadows=true
+shadow-scale=1.0
+shadow-intensity=1.0
+
+[motion]
+animations=system        # system | on | off
+reduced-motion=false     # sheets use a critically damped spring
+
+[windows]
+decorations=csd          # csd (Adwaita) | ssd (discouraged)
+button-layout=system     # system | a GTK button-layout string, e.g. appmenu:close
+mobile-max-width=450     # at or below this width: mobile mode (no window buttons, full-page menus)
+
+[navigation]
+collapse-width=400       # split views collapse at or below this width
+mobile-sidebar=drawer    # drawer | full-page
+
+[menus]
+presentation=auto        # auto (full page in mobile mode) | dropdown | full-page
+
+[rows]
+collapse=stacked         # stacked | flex  (what a wrapped row suffix does)
+wrap-basis=128           # minimum title width before the suffix wraps
+
+[icons]
+theme=system             # system | an icon theme name
+
+[policy]
+# Desktop policy: may individual apps opt out of the settings above? Opt-outs are highly
+# discouraged but allowed by default; set to false to ignore them.
+allow-app-overrides=true

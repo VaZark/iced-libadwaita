@@ -40,6 +40,24 @@ and every widget `Catalog`, so stock iced widgets (`button`, `text_input`,
 `cargo run --example gallery` for a tour (`-- --screenshot DIR` renders every
 page in light and dark).
 
+## A component library
+
+Every element is a reusable component with one shape (constructor, property setters, slots, `on_*`
+events, controlled state, `Into<Element>`), so layouts can be code or generated from a declarative
+description. `iced_libadwaita::prelude::*` imports everything; `iced_libadwaita::catalog` lists
+each tag with its libadwaita class, constructor, properties, slots and events (rendered in
+`docs/components-catalog.md`). Conventions: `docs/components.md`.
+
+## Desktop config
+
+Desktop-level behavior (color scheme, accent, density, shadows, animations, window decorations and
+buttons, the mobile breakpoint, menu presentation, the mobile sidebar, row behavior, the icon theme)
+is set once per desktop in `~/.config/iced-libadwaita/desktop.conf` (and system files), not per app.
+Call `adw::config::install(adw::config::Config::load())` at startup and build the theme with
+`Theme::from_config`. Apps may opt out per setting with `Config::opt_out` (**highly discouraged**;
+reported at startup, and a desktop can forbid it with `[policy] allow-app-overrides=false`). See
+`docs/design-language/desktop-config.md` and `docs/desktop.conf.example`.
+
 ## Design reference
 
 `docs/` holds the design language and one file per libadwaita element,
