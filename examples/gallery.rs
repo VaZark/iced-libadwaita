@@ -185,6 +185,7 @@ struct Gallery {
     win: adw::window::State,
     sheet: bool,
     carousel: usize,
+    carousel_indicator: w::CarouselIndicator,
     toast: Option<String>,
     banner: bool,
     angle: f32,
@@ -228,6 +229,7 @@ enum Message {
     CloseDialog,
     Sheet(bool),
     Carousel(usize),
+    CarouselIndicator(w::CarouselIndicator),
     ShowToast(&'static str),
     DismissToast,
     DismissBanner,
@@ -255,6 +257,7 @@ enum Message {
 }
 
 static SIDEBAR_MODES: [w::CollapsedSidebar; 2] = w::CollapsedSidebar::ALL;
+static INDICATORS: [w::CarouselIndicator; 3] = w::CarouselIndicator::ALL;
 static MOTIONS: [DemoMotion; 8] = DemoMotion::ALL;
 const FRUITS: [&str; 3] = ["Apple", "Banana", "Cherry"];
 const COMBO: [&str; 3] = ["Adwaita Sans", "Cantarell", "Inter"];
@@ -330,6 +333,7 @@ impl Gallery {
                 },
                 sheet: false,
                 carousel: 0,
+                carousel_indicator: w::CarouselIndicator::default(),
                 toast: None,
                 banner: true,
                 angle: 0.0,
@@ -406,6 +410,7 @@ impl Gallery {
             Message::CloseDialog => self.dialog = None,
             Message::Sheet(o) => self.sheet = o,
             Message::Carousel(i) => self.carousel = i,
+            Message::CarouselIndicator(i) => self.carousel_indicator = i,
             Message::ShowToast(s) => self.toast = Some(s.into()),
             Message::DismissToast => self.toast = None,
             Message::DismissBanner => self.banner = false,
@@ -1036,19 +1041,27 @@ impl Gallery {
                 .map(|(t, role)| -> Element {
                     container(ty::title_2(t))
                         .center(Length::Fill)
-                        .style(style::container::tinted(role))
+                        .style(move |t: &adw::Theme| iced::widget::container::Style {
+                            border: iced::Border::default(),
+                            ..style::container::tinted(role)(t)
+                        })
                         .into()
                 })
                 .collect()
         };
-        let car = w::Card::new(w::carousel(carousel_pages(), self.carousel, Message::Carousel))
-            .padding(0)
-            .height(Length::Fixed(160.0));
-        let car_lines = w::Card::new(
-            w::carousel(carousel_pages(), self.carousel, Message::Carousel).indicator(w::CarouselIndicator::Lines),
+        let car = w::Card::new(
+            w::carousel(carousel_pages(), self.carousel, Message::Carousel).indicator(self.carousel_indicator),
         )
         .padding(0)
         .height(Length::Fixed(160.0));
+        let car_controls = w::boxed_list([w::ComboRow::new(
+            "Indicator",
+            &INDICATORS,
+            Some(self.carousel_indicator),
+            Message::CarouselIndicator,
+        )
+        .subtitle("Drag the pages, or click the indicator")
+        .into()]);
         let tabs = w::tab_bar(
             vec!["Home".into(), "Docs".into(), "Settings".into()],
             self.tab as usize,
@@ -1082,7 +1095,7 @@ impl Gallery {
                     .width(Length::Fill),
                 ))),
                 g("Tab Bar").push(w::Card::new(tabs).padding(0)),
-                g("Carousel (drag, or click the dots)").push(car).push(car_lines),
+                g("Carousel").push(car).push(car_controls),
                 g("Shortcut Labels").push(w::card(shortcuts)),
                 g("Wrap Box").push(w::card(w::wrap_box(tags, m.space_s))),
                 g("Bottom Sheet").push(w::card(

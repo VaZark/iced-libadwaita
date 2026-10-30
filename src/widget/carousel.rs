@@ -29,6 +29,20 @@ pub enum CarouselIndicator {
     None,
 }
 
+impl CarouselIndicator {
+    pub const ALL: [Self; 3] = [Self::Dots, Self::Lines, Self::None];
+}
+
+impl std::fmt::Display for CarouselIndicator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Dots => "Dots",
+            Self::Lines => "Lines",
+            Self::None => "None",
+        })
+    }
+}
+
 const INDICATOR_HEIGHT: f32 = 24.0;
 const DRAG_THRESHOLD: f32 = 6.0;
 
