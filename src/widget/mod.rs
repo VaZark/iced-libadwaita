@@ -42,7 +42,7 @@ pub use extra::{
 };
 pub use dropdown::{dropdown, menu_item, popover, Align as PopoverAlign, Appearance as DropdownAppearance, Dropdown, Presentation as DropdownPresentation};
 pub use switch::{switch, Switch};
-pub use dialog::{dialog, AboutDialog, AlertDialog, ResponseAppearance};
+pub use dialog::{dialog, dialog_in_window, AboutDialog, AlertDialog, ResponseAppearance};
 pub use flex::FlexRow;
 pub use header_bar::{header_bar, window_title, HeaderBar, WindowControls};
 pub use menu::{menu_button, primary_menu, Menu, MenuButton, MenuItem, MenuPresentation};

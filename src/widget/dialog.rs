@@ -14,7 +14,23 @@ pub fn dialog<'a, M: Clone + 'a>(
     dialog: impl Into<Element<'a, M>>,
     on_backdrop: Option<M>,
 ) -> Element<'a, M> {
-    let mut scrim = mouse_area(container(space()).width(Length::Fill).height(Length::Fill).style(sc::backdrop));
+    dialog_in_window(base, dialog, on_backdrop, 0.0)
+}
+
+/// Like [`dialog`], for a window with rounded corners: the backdrop takes the window
+/// radius (`window::State::radius`) so it stays inside the rounded window.
+pub fn dialog_in_window<'a, M: Clone + 'a>(
+    base: impl Into<Element<'a, M>>,
+    dialog: impl Into<Element<'a, M>>,
+    on_backdrop: Option<M>,
+    window_radius: f32,
+) -> Element<'a, M> {
+    let mut scrim = mouse_area(
+        container(space())
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(sc::backdrop_in_window(window_radius)),
+    );
     if let Some(m) = on_backdrop {
         scrim = scrim.on_press(m);
     }

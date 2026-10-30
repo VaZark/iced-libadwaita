@@ -60,7 +60,7 @@ pub fn sidebar_row<'a, M: Clone + 'a>(
     .into()
 }
 
-/// Like [`navigation_sidebar`] but rounds the bottom-left corner to match a
+/// Like [`navigation_sidebar`] but rounds the bottom corners to match a
 /// rounded window (pass [`window::State::radius`](crate::window::State::radius)).
 pub fn navigation_sidebar_rounded<'a, M: 'a>(
     rows: impl IntoIterator<Item = Element<'a, M>>,
@@ -71,7 +71,9 @@ pub fn navigation_sidebar_rounded<'a, M: 'a>(
         .width(Length::Fill)
         .height(Length::Fill)
         .style(move |t: &crate::Theme| iced::widget::container::Style {
-            border: iced::Border::default().rounded(iced::border::bottom_left(window_radius)),
+            // Both bottom corners: beside content the right one reveals the pane behind
+            // (same color); when the sidebar is the whole window it is a real window corner.
+            border: iced::Border::default().rounded(iced::border::bottom(window_radius)),
             ..sc::sidebar(t)
         })
         .into()
@@ -100,6 +102,7 @@ pub struct NavigationSplitView<'a, M> {
     max_width: f32,
     collapsed: bool,
     show_content: bool,
+    window_radius: f32,
 }
 
 /// libadwaita's width for a split-view sidebar: `fraction` of the total width
@@ -122,7 +125,15 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
             max_width: 280.0,
             collapsed: false,
             show_content: true,
+            window_radius: 0.0,
         }
+    }
+    /// Rounds the sidebar pane's outer corners to match a rounded window
+    /// ([`window::State::radius`](crate::window::State::radius)). The pane paints
+    /// the sidebar color, so without this it would cover the window's corners.
+    pub fn window_radius(mut self, r: f32) -> Self {
+        self.window_radius = r;
+        self
     }
     /// Fixed sidebar width (overrides the fraction rules).
     pub fn sidebar_width(mut self, w: f32) -> Self {
@@ -160,16 +171,34 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
 
 impl<'a, M: 'a> From<NavigationSplitView<'a, M>> for Element<'a, M> {
     fn from(v: NavigationSplitView<'a, M>) -> Self {
+        let r = v.window_radius;
+        // The sidebar pane carries the sidebar color (`.sidebar-pane`), so a flat header
+        // above the list continues it. It sits at the window edge, so it rounds the
+        // window's corners: left only when beside the content, all four when it is the
+        // whole (collapsed) window.
+        let pane = move |radius: iced::border::Radius| {
+            move |t: &crate::Theme| iced::widget::container::Style {
+                border: iced::Border::default().rounded(radius),
+                ..sc::sidebar(t)
+            }
+        };
         if v.collapsed {
-            return if v.show_content { v.content } else { v.sidebar };
+            return if v.show_content {
+                v.content
+            } else {
+                container(v.sidebar)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .style(pane(r.into()))
+                    .into()
+            };
         }
+        let left = iced::border::Radius { top_left: r, top_right: 0.0, bottom_right: 0.0, bottom_left: r };
         row![
-            // The sidebar pane carries the sidebar color (`.sidebar-pane`), so a flat
-            // header above the list continues it.
             container(v.sidebar)
                 .width(Length::Fixed(v.sidebar_width))
                 .height(Length::Fill)
-                .style(sc::sidebar),
+                .style(pane(left)),
             container(space().width(1)).height(Length::Fill).style(sc::sidebar_separator),
             container(v.content).width(Length::Fill).height(Length::Fill),
         ]

@@ -112,16 +112,25 @@ pub fn frame<'a, M: Clone + 'a>(
         .height(Length::Fill)
         .clip(true)
         .style(move |t: &Theme| iced::widget::container::Style {
-            border: iced::Border {
-                color: crate::color::alpha(t.semantic.window.fg, 0.12),
-                width: if edge { 0.0 } else { 1.0 },
-                radius: radius.into(),
-            },
+            border: iced::Border { radius: radius.into(), ..iced::Border::default() },
             ..crate::style::container::window(t)
         });
     if edge {
         return body.into();
     }
+    // The 1px outline is drawn *above* the content so nothing paints over it at the
+    // edges (the way libadwaita's window outline sits over the contents).
+    let outline = container(space())
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(move |t: &Theme| iced::widget::container::Style {
+            border: iced::Border {
+                color: crate::color::alpha(t.semantic.window.fg, 0.12),
+                width: 1.0,
+                radius: radius.into(),
+            },
+            ..Default::default()
+        });
 
     let grip = |dir: Direction, w: Length, h: Length, cursor: mouse::Interaction| -> Element<'a, M> {
         mouse_area(space().width(w).height(h)).on_press(on_resize(dir)).interaction(cursor).into()
@@ -150,7 +159,7 @@ pub fn frame<'a, M: Clone + 'a>(
     .width(Length::Fill)
     .height(Length::Fill);
 
-    stack![body, grips].into()
+    stack![body, outline, grips].into()
 }
 
 #[cfg(test)]

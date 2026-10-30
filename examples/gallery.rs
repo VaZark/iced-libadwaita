@@ -547,6 +547,7 @@ impl Gallery {
         let content_pane = w::toolbar_view(page).top_bar(content_bar).top_bar_style(bar_style);
         let body = w::NavigationSplitView::new(sidebar_pane, content_pane)
             .adapt(size.width)
+            .window_radius(corner)
             .show_content(self.show_content);
 
         let base: Element = w::toast_overlay(
@@ -555,15 +556,16 @@ impl Gallery {
             self.toast.clone().map(|t| w::Toast::new(t).on_dismiss(Message::DismissToast)),
         );
 
-        let base: Element = w::bottom_sheet(
+        let base: Element = w::bottom_sheet_in_window(
             base,
             column![ty::title_3("Sheet"), ty::body("A bottom sheet over the content."), w::suggested_button(text("Done")).on_press(Message::Sheet(false))].spacing(m.space_m),
             self.sheet,
             Message::Sheet(false),
+            corner,
         );
         let result: Element<'_> = match self.dialog {
             None => base,
-            Some(Dialog::Alert) => w::dialog(
+            Some(Dialog::Alert) => w::dialog_in_window(
                 base,
                 w::AlertDialog::new("Discard Changes?")
                     .body("Unsaved changes will be permanently lost.")
@@ -571,8 +573,9 @@ impl Gallery {
                     .response("Save", w::ResponseAppearance::Suggested, Message::CloseDialog)
                     .response("Discard", w::ResponseAppearance::Destructive, Message::CloseDialog),
                 Some(Message::CloseDialog),
+                corner,
             ),
-            Some(Dialog::Shortcuts) => w::dialog(
+            Some(Dialog::Shortcuts) => w::dialog_in_window(
                 base,
                 w::shortcuts_dialog(
                     vec![
@@ -582,13 +585,15 @@ impl Gallery {
                     Message::CloseDialog,
                 ),
                 Some(Message::CloseDialog),
+                corner,
             ),
-            Some(Dialog::Preferences) => w::dialog(
+            Some(Dialog::Preferences) => w::dialog_in_window(
                 base,
                 w::preferences_dialog("Preferences", self.lists_page(), Message::CloseDialog),
                 Some(Message::CloseDialog),
+                corner,
             ),
-            Some(Dialog::About) => w::dialog(
+            Some(Dialog::About) => w::dialog_in_window(
                 base,
                 w::AboutDialog::new("Gallery")
                     .developer_name("The iced-libadwaita authors")
@@ -599,6 +604,7 @@ impl Gallery {
                     .application_icon(Icon::Home.colored(48.0, self.theme().semantic.accent.color))
                     .on_close(Message::CloseDialog),
                 Some(Message::CloseDialog),
+                corner,
             ),
         };
         if csd { adw::window::frame(result, win_state, Message::Resize) } else { result }
@@ -917,6 +923,20 @@ impl Gallery {
         self.page_frame(
             column![
                 g("View Switcher").push(w::card(Element::from(w::view_switcher(items(), Some(self.tab), Message::Tab)))),
+                g("Crowded Switcher (fills, shrinks, falls back to icons)").push(w::card(Element::from(
+                    w::toggle_group(
+                        vec![
+                            w::ToggleItem::new(Tab::One, "Files").icon(Icon::Home),
+                            w::ToggleItem::new(Tab::Two, "Search").icon(Icon::Search),
+                            w::ToggleItem::new(Tab::Three, "Settings").icon(Icon::Settings),
+                            w::ToggleItem::new(Tab::One, "Library").icon(Icon::Edit),
+                            w::ToggleItem::new(Tab::Two, "Archive").icon(Icon::Delete),
+                        ],
+                        Some(self.tab),
+                        Message::Tab,
+                    )
+                    .width(Length::Fill),
+                ))),
                 g("Tab Bar").push(container(tabs).style(style::container::card)),
                 g("Carousel").push(car).push(w::carousel_indicator_lines(3, self.carousel, Message::Carousel)),
                 g("Shortcut Labels").push(w::card(shortcuts)),
@@ -1000,9 +1020,9 @@ impl Gallery {
                     .subtitle("Auto: full page at ≤ 450px, else dropdown")
                     .suffix(Element::from(w::toggle_group(
                         vec![
-                            w::ToggleItem::new(MenuMode::Auto, "Auto"),
-                            w::ToggleItem::new(MenuMode::Dropdown, "Dropdown"),
-                            w::ToggleItem::new(MenuMode::FullPage, "Full page"),
+                            w::ToggleItem::new(MenuMode::Auto, "Auto").icon(Icon::Settings),
+                            w::ToggleItem::new(MenuMode::Dropdown, "Dropdown").icon(Icon::GoDown),
+                            w::ToggleItem::new(MenuMode::FullPage, "Full page").icon(Icon::Window),
                         ],
                         Some(self.menu_mode),
                         Message::MenuMode,
