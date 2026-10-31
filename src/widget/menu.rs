@@ -14,13 +14,15 @@
 //!   libadwaita's `AdwDialog` switches to a sheet on narrow windows. We follow that with
 //!   [`MenuPresentation::for_width`] (mobile mode, below 576px → full page).
 
-use super::dropdown::{Align, Appearance, Dropdown, Presentation, PAGE_BACK_WIDTH, PAGE_HEADER_HEIGHT};
-use super::{boxed_list, clamp, scrolled_window, Element};
+use super::dropdown::{
+    Align, Appearance, Dropdown, PAGE_BACK_WIDTH, PAGE_HEADER_HEIGHT, Presentation,
+};
+use super::{Element, boxed_list, clamp, scrolled_window};
 use crate::style::{button as sb, container as sc, text as st};
 use crate::{Icon, Metrics, Theme, Typography};
+use iced::Length;
 use iced::alignment::Vertical;
 use iced::widget::{button, column, container, row, space, text, tooltip};
-use iced::Length;
 
 /// How an opened menu is shown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -78,11 +80,25 @@ pub struct MenuItem<M> {
 impl<M> MenuItem<M> {
     /// A command (verb label, header capitalization).
     pub fn action(label: impl Into<String>, on_press: M) -> Self {
-        Self { label: label.into(), accel: None, icon: None, destructive: false, disabled: false, kind: Kind::Action { on_press } }
+        Self {
+            label: label.into(),
+            accel: None,
+            icon: None,
+            destructive: false,
+            disabled: false,
+            kind: Kind::Action { on_press },
+        }
     }
     /// A setting with a check mark (adjective label).
     pub fn check(label: impl Into<String>, checked: bool, on_press: M) -> Self {
-        Self { label: label.into(), accel: None, icon: None, destructive: false, disabled: false, kind: Kind::Check { checked, on_press } }
+        Self {
+            label: label.into(),
+            accel: None,
+            icon: None,
+            destructive: false,
+            disabled: false,
+            kind: Kind::Check { checked, on_press },
+        }
     }
     /// Shown dimmed at the end, e.g. `"Ctrl+Q"`.
     pub fn accel(mut self, accel: impl Into<String>) -> Self {
@@ -114,7 +130,10 @@ pub struct Menu<M> {
 
 impl<M> Menu<M> {
     pub fn new(title: impl Into<String>) -> Self {
-        Self { title: title.into(), sections: Vec::new() }
+        Self {
+            title: title.into(),
+            sections: Vec::new(),
+        }
     }
     /// Adds a group of items.
     pub fn section(mut self, items: impl IntoIterator<Item = MenuItem<M>>) -> Self {
@@ -204,8 +223,14 @@ fn row_content<'a, M: 'a>(item: &MenuItem<M>, any_check: bool, touch: bool) -> E
         let checked = matches!(item.kind, Kind::Check { checked: true, .. });
         let disabled = item.disabled;
         r = r.push(if checked {
-            Element::from(Icon::Check.view(m.icon_size).style(move |t: &Theme, _| iced::widget::svg::Style {
-                color: Some(if disabled { t.semantic.dim_solid() } else { t.semantic.popover.fg }),
+            Element::from(Icon::Check.view(m.icon_size).style(move |t: &Theme, _| {
+                iced::widget::svg::Style {
+                    color: Some(if disabled {
+                        t.semantic.dim_solid()
+                    } else {
+                        t.semantic.popover.fg
+                    }),
+                }
             }))
         } else {
             space().width(m.icon_size).into()
@@ -235,19 +260,28 @@ fn message<M: Clone>(item: &MenuItem<M>) -> M {
 }
 
 /// The popover for `menu`, as a dropdown shows it.
-pub(super) fn popover_content<'a, M: Clone + 'a>(menu: &Menu<M>, max_height: f32) -> Element<'a, M> {
+pub(super) fn popover_content<'a, M: Clone + 'a>(
+    menu: &Menu<M>,
+    max_height: f32,
+) -> Element<'a, M> {
     super::popover(dropdown_items(menu), max_height)
 }
 
 fn dropdown_items<'a, M: Clone + 'a>(menu: &Menu<M>) -> Vec<Element<'a, M>> {
     let m = Metrics::desktop();
-    let any_check = menu.sections.iter().flatten().any(|i| matches!(i.kind, Kind::Check { .. }));
+    let any_check = menu
+        .sections
+        .iter()
+        .flatten()
+        .any(|i| matches!(i.kind, Kind::Check { .. }));
     let mut out: Vec<Element<'a, M>> = Vec::new();
     for (si, section) in menu.sections.iter().enumerate() {
         if si > 0 {
             out.push(
                 container(
-                    container(space().height(1)).width(Length::Fill).style(sc::popover_separator),
+                    container(space().height(1))
+                        .width(Length::Fill)
+                        .style(sc::popover_separator),
                 )
                 .padding([m.space_xs, 0.0])
                 .into(),
@@ -274,7 +308,11 @@ fn dropdown_items<'a, M: Clone + 'a>(menu: &Menu<M>) -> Vec<Element<'a, M>> {
 fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M> {
     let m = Metrics::desktop();
     let t = Typography::default();
-    let any_check = menu.sections.iter().flatten().any(|i| matches!(i.kind, Kind::Check { .. }));
+    let any_check = menu
+        .sections
+        .iter()
+        .flatten()
+        .any(|i| matches!(i.kind, Kind::Check { .. }));
 
     // Header: back arrow (hit area handled by the overlay) + centered title.
     let header = container(
@@ -334,8 +372,8 @@ fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M>
 impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
     fn from(b: MenuButton<M>) -> Self {
         let m = Metrics::desktop();
-        let trigger = container(b.icon.view(m.icon_size))
-            .center(Length::Fixed(m.button_min_height));
+        let trigger =
+            container(b.icon.view(m.icon_size)).center(Length::Fixed(m.button_min_height));
         let (content, presentation) = match b.presentation {
             MenuPresentation::Dropdown => (
                 super::popover(dropdown_items(&b.menu), 360.0),
@@ -351,14 +389,20 @@ impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
             .popover_width(260.0)
             .open_initially(b.open_initially);
         let button: Element<'a, M> = match b.tooltip {
-            Some(t) => tooltip(Element::from(dd), text(t).size(12), tooltip::Position::Bottom)
-                .style(sc::osd)
-                .padding(m.space_xs)
-                .into(),
+            Some(t) => tooltip(
+                Element::from(dd),
+                text(t).size(12),
+                tooltip::Position::Bottom,
+            )
+            .style(sc::osd)
+            .padding(m.space_xs)
+            .into(),
             None => dd.into(),
         };
         // The menu registers the accelerators it shows, so they work while it is in the view.
-        crate::shortcut::Shortcuts::new().from_menu(&b.menu).scope(button)
+        crate::shortcut::Shortcuts::new()
+            .from_menu(&b.menu)
+            .scope(button)
     }
 }
 
@@ -368,9 +412,18 @@ mod tests {
 
     #[test]
     fn presentation_follows_width() {
-        assert_eq!(MenuPresentation::for_width(360.0), MenuPresentation::FullPage);
-        assert_eq!(MenuPresentation::for_width(575.0), MenuPresentation::FullPage);
-        assert_eq!(MenuPresentation::for_width(576.0), MenuPresentation::Dropdown);
+        assert_eq!(
+            MenuPresentation::for_width(360.0),
+            MenuPresentation::FullPage
+        );
+        assert_eq!(
+            MenuPresentation::for_width(575.0),
+            MenuPresentation::FullPage
+        );
+        assert_eq!(
+            MenuPresentation::for_width(576.0),
+            MenuPresentation::Dropdown
+        );
         assert_eq!(MenuPresentation::default(), MenuPresentation::Dropdown);
     }
 

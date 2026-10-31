@@ -343,6 +343,9 @@ mod tests {
         assert_eq!(d.dialog_bg_color, hex(0x36363a));
         assert_eq!(d.headerbar_bg_color, hex(0x2e2e32));
         assert_eq!(d.card_bg_color.a, 0.08);
-        assert_eq!(AccentColor::Blue.to_standalone_color(Scheme::Light), hex(0x0461be));
+        assert_eq!(
+            AccentColor::Blue.to_standalone_color(Scheme::Light),
+            hex(0x0461be)
+        );
     }
 }

@@ -1,9 +1,8 @@
 //! Styles for form controls and misc iced widgets.
 
-
 pub mod text_input {
-    use crate::color::{alpha, fade};
     use crate::Theme;
+    use crate::color::{alpha, fade};
     use iced::widget::text_input::{Status, Style};
     use iced::{Background, Border};
 
@@ -84,8 +83,16 @@ pub mod text_editor {
         Style {
             background: Background::Color(crate::color::alpha(s.window.fg, s.opacity.control)),
             border: Border {
-                color: if focused { s.accent.bg } else { iced::Color::TRANSPARENT },
-                width: if focused { theme.metrics.focus_ring_width } else { 0.0 },
+                color: if focused {
+                    s.accent.bg
+                } else {
+                    iced::Color::TRANSPARENT
+                },
+                width: if focused {
+                    theme.metrics.focus_ring_width
+                } else {
+                    0.0
+                },
                 radius: theme.metrics.radius_m.into(),
             },
             placeholder: s.dim(),
@@ -100,8 +107,8 @@ pub mod text_editor {
 }
 
 pub mod checkbox {
-    use crate::color::{alpha, fade};
     use crate::Theme;
+    use crate::color::{alpha, fade};
     use iced::widget::checkbox::{Status, Style};
     use iced::{Background, Border};
 
@@ -114,7 +121,11 @@ pub mod checkbox {
             Status::Disabled { is_checked } => (is_checked, false, true),
         };
         let (bg, icon) = if checked {
-            let b = if hovered { s.hover_fill(s.accent.bg) } else { s.accent.bg };
+            let b = if hovered {
+                s.hover_fill(s.accent.bg)
+            } else {
+                s.accent.bg
+            };
             (b, s.accent.fg)
         } else {
             let a = if hovered { o.control_hover } else { o.control };
@@ -125,8 +136,16 @@ pub mod checkbox {
             background: Background::Color(fade(bg, k)),
             icon_color: fade(icon, k),
             border: Border {
-                color: if checked { iced::Color::TRANSPARENT } else { alpha(s.window.fg, 0.25 * k) },
-                width: if checked { 0.0 } else { theme.metrics.border_width },
+                color: if checked {
+                    iced::Color::TRANSPARENT
+                } else {
+                    alpha(s.window.fg, 0.25 * k)
+                },
+                width: if checked {
+                    0.0
+                } else {
+                    theme.metrics.border_width
+                },
                 radius: theme.metrics.radius_s.into(),
             },
             text_color: Some(fade(s.window.fg, k)),
@@ -135,10 +154,10 @@ pub mod checkbox {
 }
 
 pub mod radio {
-    use crate::color::{alpha, fade};
     use crate::Theme;
-    use iced::widget::radio::{Status, Style};
+    use crate::color::{alpha, fade};
     use iced::Background;
+    use iced::widget::radio::{Status, Style};
 
     pub fn default(theme: &Theme, status: Status) -> Style {
         let s = &theme.semantic;
@@ -147,14 +166,29 @@ pub mod radio {
             Status::Hovered { is_selected } => (is_selected, true),
         };
         let bg = if selected {
-            if hovered { s.hover_fill(s.accent.bg) } else { s.accent.bg }
+            if hovered {
+                s.hover_fill(s.accent.bg)
+            } else {
+                s.accent.bg
+            }
         } else {
-            alpha(s.window.fg, if hovered { s.opacity.control_hover } else { s.opacity.control } + 0.05)
+            alpha(
+                s.window.fg,
+                if hovered {
+                    s.opacity.control_hover
+                } else {
+                    s.opacity.control
+                } + 0.05,
+            )
         };
         Style {
             background: Background::Color(bg),
             dot_color: s.accent.fg,
-            border_width: if selected { 0.0 } else { theme.metrics.border_width },
+            border_width: if selected {
+                0.0
+            } else {
+                theme.metrics.border_width
+            },
             border_color: fade(s.window.fg, 0.25),
             text_color: Some(s.window.fg),
         }
@@ -162,8 +196,8 @@ pub mod radio {
 }
 
 pub mod toggler {
-    use crate::color::{alpha, fade};
     use crate::Theme;
+    use crate::color::{alpha, fade};
     use iced::widget::toggler::{Status, Style};
     use iced::{Background, Color};
 
@@ -176,11 +210,22 @@ pub mod toggler {
             Status::Disabled { is_toggled } => (is_toggled, false, true),
         };
         let track = if on {
-            if hovered { s.hover_fill(s.accent.bg) } else { s.accent.bg }
+            if hovered {
+                s.hover_fill(s.accent.bg)
+            } else {
+                s.accent.bg
+            }
         } else {
-            alpha(s.window.fg, s.opacity.trough + if hovered { 0.05 } else { 0.0 })
+            alpha(
+                s.window.fg,
+                s.opacity.trough + if hovered { 0.05 } else { 0.0 },
+            )
         };
-        let knob = if s.is_dark() && !on { Color::from_rgb8(0xee, 0xee, 0xee) } else { Color::WHITE };
+        let knob = if s.is_dark() && !on {
+            Color::from_rgb8(0xee, 0xee, 0xee)
+        } else {
+            Color::WHITE
+        };
         let k = if disabled { s.opacity.disabled } else { 1.0 };
         Style {
             background: Background::Color(fade(track, k)),
@@ -190,15 +235,19 @@ pub mod toggler {
             foreground_border_width: 0.0,
             foreground_border_color: Color::TRANSPARENT,
             text_color: Some(fade(s.window.fg, k)),
-            border_radius: Some((theme.metrics.radius_pill * (theme.metrics.radius_m / crate::Metrics::MAX_RADIUS_M).clamp(0.0, 1.0)).into()),
+            border_radius: Some(
+                (theme.metrics.radius_pill
+                    * (theme.metrics.radius_m / crate::Metrics::MAX_RADIUS_M).clamp(0.0, 1.0))
+                .into(),
+            ),
             padding_ratio: 0.14,
         }
     }
 }
 
 pub mod slider {
-    use crate::color::alpha;
     use crate::Theme;
+    use crate::color::alpha;
     use iced::widget::slider::{Handle, HandleShape, Rail, Status, Style};
     use iced::{Background, Border, Color};
 
@@ -230,8 +279,8 @@ pub mod slider {
 }
 
 pub mod progress_bar {
-    use crate::color::alpha;
     use crate::Theme;
+    use crate::color::alpha;
     use iced::widget::progress_bar::Style;
     use iced::{Background, Border};
 
@@ -281,8 +330,8 @@ pub mod rule {
 }
 
 pub mod scrollable {
-    use crate::color::alpha;
     use crate::Theme;
+    use crate::color::alpha;
     use iced::widget::scrollable::{Rail, Scroller, Status, Style};
     use iced::{Background, Border};
 
@@ -302,7 +351,13 @@ pub mod scrollable {
             Status::Hovered { .. } => (true, false),
             Status::Dragged { .. } => (true, true),
         };
-        let level = if dragged { 0.60 } else if hovered { 0.40 } else { 0.20 };
+        let level = if dragged {
+            0.60
+        } else if hovered {
+            0.40
+        } else {
+            0.20
+        };
         let outline = if hovered { 0.60 } else { 0.35 };
         let radius = theme.metrics.radius_pill;
         let rail = Rail {
@@ -317,13 +372,19 @@ pub mod scrollable {
                 },
             },
         };
-        let mut style = iced::widget::scrollable::default(theme.as_iced(), match status {
-            Status::Active { is_horizontal_scrollbar_disabled, is_vertical_scrollbar_disabled } => Status::Active {
-                is_horizontal_scrollbar_disabled,
-                is_vertical_scrollbar_disabled,
+        let mut style = iced::widget::scrollable::default(
+            theme.as_iced(),
+            match status {
+                Status::Active {
+                    is_horizontal_scrollbar_disabled,
+                    is_vertical_scrollbar_disabled,
+                } => Status::Active {
+                    is_horizontal_scrollbar_disabled,
+                    is_vertical_scrollbar_disabled,
+                },
+                other => other,
             },
-            other => other,
-        });
+        );
         style.container = iced::widget::container::Style::default();
         style.vertical_rail = rail;
         style.horizontal_rail = rail;
@@ -333,8 +394,8 @@ pub mod scrollable {
 }
 
 pub mod pick_list {
-    use crate::color::{alpha, fade};
     use crate::Theme;
+    use crate::color::{alpha, fade};
     use iced::widget::pick_list::{Status, Style};
     use iced::{Background, Border};
 
@@ -369,8 +430,8 @@ pub mod pick_list {
 
 pub mod menu {
     use crate::Theme;
-    use iced::widget::overlay::menu::Style;
     use iced::Background;
+    use iced::widget::overlay::menu::Style;
 
     pub fn default(theme: &Theme) -> Style {
         let s = &theme.semantic;

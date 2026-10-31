@@ -11,14 +11,17 @@
 //!
 //! State is controlled: the app owns `index` and updates it from `on_navigate`.
 
-use crate::animation::Trigger;
-use crate::animation::{presets, Spec, Tween};
 use crate::Theme;
+use crate::animation::Trigger;
+use crate::animation::{Spec, Tween, presets};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
-use iced::advanced::widget::{tree, Tree, Widget};
+use iced::advanced::widget::{Tree, Widget, tree};
 use iced::advanced::{Clipboard, Renderer as _, Shell};
-use iced::{mouse, window, Background, Border, Color, Element, Event, Length, Point, Rectangle, Size, Vector};
+use iced::{
+    Background, Border, Color, Element, Event, Length, Point, Rectangle, Size, Vector, mouse,
+    window,
+};
 use std::time::Instant;
 
 /// Which indicator a [`Carousel`] draws below its pages.
@@ -100,7 +103,11 @@ impl<'a, M> Carousel<'a, M> {
     }
 
     fn indicator_height(&self) -> f32 {
-        if self.indicator == CarouselIndicator::None { 0.0 } else { INDICATOR_HEIGHT }
+        if self.indicator == CarouselIndicator::None {
+            0.0
+        } else {
+            INDICATOR_HEIGHT
+        }
     }
 }
 
@@ -152,10 +159,23 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
         Size::new(Length::Fill, Length::Fill)
     }
 
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
         let max = limits.max();
-        let w = if max.width.is_finite() { max.width } else { 320.0 };
-        let total_h = if max.height.is_finite() { max.height } else { 180.0 };
+        let w = if max.width.is_finite() {
+            max.width
+        } else {
+            320.0
+        };
+        let total_h = if max.height.is_finite() {
+            max.height
+        } else {
+            180.0
+        };
         let h = (total_h - self.indicator_height()).max(0.0);
         self.page_w = w;
         self.page_h = h;
@@ -165,7 +185,11 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
             .zip(&mut tree.children)
             .enumerate()
             .map(|(i, (page, t))| {
-                let node = page.as_widget_mut().layout(t, renderer, &layout::Limits::new(Size::new(w, h), Size::new(w, h)));
+                let node = page.as_widget_mut().layout(
+                    t,
+                    renderer,
+                    &layout::Limits::new(Size::new(w, h), Size::new(w, h)),
+                );
                 node.move_to(Point::new(i as f32 * (w + self.spacing), 0.0))
             })
             .collect();
@@ -195,7 +219,11 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
         // Animate the scroll position toward the current page (unless the user holds it).
         if let Event::Window(window::Event::RedrawRequested(now)) = event {
             if !state.dragging {
-                state.position.set_target(self.index.min(n - 1) as f32, *now, Trigger::Carousel.spec(self.spec));
+                state.position.set_target(
+                    self.index.min(n - 1) as f32,
+                    *now,
+                    Trigger::Carousel.spec(self.spec),
+                );
             }
             let v = state.position.tick(*now);
             if (v - state.shown).abs() > f32::EPSILON || state.position.is_animating() {
@@ -204,14 +232,23 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
             }
         }
 
-        let page_area = Rectangle { height: self.page_h, ..bounds };
+        let page_area = Rectangle {
+            height: self.page_h,
+            ..bounds
+        };
         let over_pages = cursor.position().is_some_and(|p| page_area.contains(p));
 
         if self.interactive {
             match event {
                 Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) if over_pages => {
                     let x = cursor.position().map(|p| p.x).unwrap_or(0.0);
-                    state.press = Some(Press { x0: x, pos0: state.shown, last_x: x, last_t: Instant::now(), velocity: 0.0 });
+                    state.press = Some(Press {
+                        x0: x,
+                        pos0: state.shown,
+                        last_x: x,
+                        last_t: Instant::now(),
+                        velocity: 0.0,
+                    });
                 }
                 Event::Mouse(mouse::Event::CursorMoved { position }) => {
                     if let Some(mut pr) = state.press {
@@ -222,7 +259,13 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
                         if state.dragging {
                             // Rubber-band past the ends.
                             let raw = pr.pos0 - dx / pitch;
-                            let pos = if raw < 0.0 { raw * 0.35 } else if raw > max_pos { max_pos + (raw - max_pos) * 0.35 } else { raw };
+                            let pos = if raw < 0.0 {
+                                raw * 0.35
+                            } else if raw > max_pos {
+                                max_pos + (raw - max_pos) * 0.35
+                            } else {
+                                raw
+                            };
                             state.position.set_immediate(pos);
                             state.shown = pos;
                             let now = Instant::now();
@@ -242,9 +285,16 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
                     if state.dragging {
                         let pr = state.press.unwrap();
                         // Project a little along the velocity, then snap to the nearest page.
-                        let target = (state.shown + pr.velocity * 0.12).round().clamp(0.0, max_pos) as usize;
+                        let target = (state.shown + pr.velocity * 0.12)
+                            .round()
+                            .clamp(0.0, max_pos) as usize;
                         let now = Instant::now();
-                        state.position.fling_to(target as f32, pr.velocity, now, Trigger::Carousel.spec(self.spec));
+                        state.position.fling_to(
+                            target as f32,
+                            pr.velocity,
+                            now,
+                            Trigger::Carousel.spec(self.spec),
+                        );
                         state.dragging = false;
                         state.press = None;
                         if target != self.index {
@@ -287,12 +337,23 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
             };
             let ev = match event {
                 Event::Mouse(mouse::Event::CursorMoved { position }) => {
-                    Event::Mouse(mouse::Event::CursorMoved { position: shift(*position) })
+                    Event::Mouse(mouse::Event::CursorMoved {
+                        position: shift(*position),
+                    })
                 }
                 other => other.clone(),
             };
             let page_layout = layout.children().nth(i).unwrap();
-            self.pages[i].as_widget_mut().update(&mut tree.children[i], &ev, page_layout, cur, renderer, clipboard, shell, viewport);
+            self.pages[i].as_widget_mut().update(
+                &mut tree.children[i],
+                &ev,
+                page_layout,
+                cur,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
         }
     }
 
@@ -311,7 +372,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
             return mouse::Interaction::Grabbing;
         }
         if let Some(p) = cursor.position() {
-            if self.indicator != CarouselIndicator::None && indicator_hit(self.indicator, n, bounds, self.page_h, p).is_some() {
+            if self.indicator != CarouselIndicator::None
+                && indicator_hit(self.indicator, n, bounds, self.page_h, p).is_some()
+            {
                 return mouse::Interaction::Pointer;
             }
             if self.interactive && bounds.contains(p) && n > 1 {
@@ -339,16 +402,30 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
         let pos = tree.state.downcast_ref::<State>().shown;
         let pitch = self.page_w + self.spacing;
         let off = pos * pitch;
-        let page_area = Rectangle { height: self.page_h, ..bounds };
+        let page_area = Rectangle {
+            height: self.page_h,
+            ..bounds
+        };
 
         renderer.with_layer(page_area, |r| {
             // Slide everything left by `off`; shift the viewport back so clipping still
             // matches the (translated) page.
-            let vp = Rectangle { x: viewport.x + off, ..*viewport };
+            let vp = Rectangle {
+                x: viewport.x + off,
+                ..*viewport
+            };
             r.with_translation(Vector::new(-off, 0.0), |r| {
                 for (i, (page, node)) in self.pages.iter().zip(layout.children()).enumerate() {
                     if (i as f32 - pos).abs() < 1.0 + self.spacing / self.page_w.max(1.0) {
-                        page.as_widget().draw(&tree.children[i], r, theme, style, node, cursor, &vp);
+                        page.as_widget().draw(
+                            &tree.children[i],
+                            r,
+                            theme,
+                            style,
+                            node,
+                            cursor,
+                            &vp,
+                        );
                     }
                 }
             });
@@ -363,7 +440,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
             let cy = bounds.y + self.page_h + INDICATOR_HEIGHT / 2.0;
             let quad = |renderer: &mut iced::Renderer, b: Rectangle, radius: f32, c: Color| {
                 renderer.fill_quad(
-                    Quad { bounds: b, border: Border::default().rounded(radius), shadow: Default::default(), snap: false },
+                    Quad {
+                        bounds: b,
+                        border: Border::default().rounded(radius),
+                        shadow: Default::default(),
+                        snap: false,
+                    },
                     Background::Color(c),
                 );
             };
@@ -375,18 +457,39 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
                         let d = size * (0.75 + 0.25 * near);
                         let alpha = 0.3 + 0.6 * near;
                         let x = cx + i as f32 * pitch_i;
-                        quad(renderer, Rectangle::new(Point::new(x - d / 2.0, cy - d / 2.0), Size::new(d, d)), d / 2.0, crate::color::alpha(fg, alpha));
+                        quad(
+                            renderer,
+                            Rectangle::new(Point::new(x - d / 2.0, cy - d / 2.0), Size::new(d, d)),
+                            d / 2.0,
+                            crate::color::alpha(fg, alpha),
+                        );
                     }
                 }
                 CarouselIndicator::Lines => {
                     let h = 3.0;
                     for i in 0..n {
                         let x = cx + i as f32 * pitch_i;
-                        quad(renderer, Rectangle::new(Point::new(x - size / 2.0, cy - h / 2.0), Size::new(size, h)), h / 2.0, crate::color::alpha(fg, 0.3));
+                        quad(
+                            renderer,
+                            Rectangle::new(
+                                Point::new(x - size / 2.0, cy - h / 2.0),
+                                Size::new(size, h),
+                            ),
+                            h / 2.0,
+                            crate::color::alpha(fg, 0.3),
+                        );
                     }
                     // The active line glides with the position.
                     let x = cx + pos.clamp(0.0, (n - 1) as f32) * pitch_i;
-                    quad(renderer, Rectangle::new(Point::new(x - size / 2.0, cy - h / 2.0), Size::new(size, h)), h / 2.0, fg);
+                    quad(
+                        renderer,
+                        Rectangle::new(
+                            Point::new(x - size / 2.0, cy - h / 2.0),
+                            Size::new(size, h),
+                        ),
+                        h / 2.0,
+                        fg,
+                    );
                 }
                 CarouselIndicator::None => {}
             }
@@ -395,19 +498,30 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
 }
 
 /// Which indicator item (if any) the point `p` is over.
-fn indicator_hit(kind: CarouselIndicator, n: usize, bounds: Rectangle, page_h: f32, p: Point) -> Option<usize> {
+fn indicator_hit(
+    kind: CarouselIndicator,
+    n: usize,
+    bounds: Rectangle,
+    page_h: f32,
+    p: Point,
+) -> Option<usize> {
     if n == 0 || kind == CarouselIndicator::None {
         return None;
     }
     let (pitch, _) = indicator_slots(kind, n);
-    let area = Rectangle { y: bounds.y + page_h, height: INDICATOR_HEIGHT, ..bounds };
+    let area = Rectangle {
+        y: bounds.y + page_h,
+        height: INDICATOR_HEIGHT,
+        ..bounds
+    };
     if !area.contains(p) {
         return None;
     }
     let span = (n as f32 - 1.0) * pitch;
     let cx = bounds.x + bounds.width / 2.0 - span / 2.0;
     let i = ((p.x - cx) / pitch).round();
-    (i >= 0.0 && (i as usize) < n && (p.x - (cx + i * pitch)).abs() <= pitch / 2.0).then_some(i as usize)
+    (i >= 0.0 && (i as usize) < n && (p.x - (cx + i * pitch)).abs() <= pitch / 2.0)
+        .then_some(i as usize)
 }
 
 impl<'a, M: 'a> From<Carousel<'a, M>> for Element<'a, M, Theme> {
@@ -424,9 +538,45 @@ mod tests {
     fn indicator_hit_tests_items() {
         let b = Rectangle::new(Point::new(0.0, 0.0), Size::new(200.0, 124.0));
         // 3 dots, pitch 14, centered: centers at 86, 100, 114; row y in 100..124.
-        assert_eq!(indicator_hit(CarouselIndicator::Dots, 3, b, 100.0, Point::new(100.0, 110.0)), Some(1));
-        assert_eq!(indicator_hit(CarouselIndicator::Dots, 3, b, 100.0, Point::new(86.0, 110.0)), Some(0));
-        assert_eq!(indicator_hit(CarouselIndicator::Dots, 3, b, 100.0, Point::new(100.0, 50.0)), None);
-        assert_eq!(indicator_hit(CarouselIndicator::None, 3, b, 100.0, Point::new(100.0, 110.0)), None);
+        assert_eq!(
+            indicator_hit(
+                CarouselIndicator::Dots,
+                3,
+                b,
+                100.0,
+                Point::new(100.0, 110.0)
+            ),
+            Some(1)
+        );
+        assert_eq!(
+            indicator_hit(
+                CarouselIndicator::Dots,
+                3,
+                b,
+                100.0,
+                Point::new(86.0, 110.0)
+            ),
+            Some(0)
+        );
+        assert_eq!(
+            indicator_hit(
+                CarouselIndicator::Dots,
+                3,
+                b,
+                100.0,
+                Point::new(100.0, 50.0)
+            ),
+            None
+        );
+        assert_eq!(
+            indicator_hit(
+                CarouselIndicator::None,
+                3,
+                b,
+                100.0,
+                Point::new(100.0, 110.0)
+            ),
+            None
+        );
     }
 }

@@ -15,7 +15,10 @@ pub fn hex(rgb: u32) -> Color {
 /// style, so `alpha(fg, 0.2)` is 16% effective, not 20%. Use [`with_alpha`] to
 /// set an absolute alpha instead.
 pub fn alpha(color: Color, a: f32) -> Color {
-    Color { a: color.a * a, ..color }
+    Color {
+        a: color.a * a,
+        ..color
+    }
 }
 
 /// Returns `color` with its alpha *replaced* by `a`.
@@ -71,7 +74,13 @@ pub fn ink(a: f32) -> Color {
 
 /// WCAG 2 relative luminance of an sRGB color (alpha is ignored).
 pub fn relative_luminance(c: Color) -> f32 {
-    let lin = |v: f32| if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+    let lin = |v: f32| {
+        if v <= 0.03928 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
     0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
 }
 
@@ -110,7 +119,12 @@ pub fn color_contrast_to(bg: Color, candidates: &[Color], target: f32) -> Color 
 pub const LIGHT_TEXT: Color = Color::WHITE;
 
 /// The dark text color used on light fills (libadwaita's near-black ink).
-pub const DARK_TEXT: Color = Color { r: 0.114, g: 0.114, b: 0.133, a: 1.0 };
+pub const DARK_TEXT: Color = Color {
+    r: 0.114,
+    g: 0.114,
+    b: 0.133,
+    a: 1.0,
+};
 
 /// The default text color for `bg`: [`LIGHT_TEXT`] or [`DARK_TEXT`], whichever has the higher
 /// contrast ratio (`color-contrast(bg vs white, ink)`). Components use this for text and icons
@@ -139,8 +153,16 @@ mod tests {
 
     #[test]
     fn readable_on_picks_the_higher_contrast() {
-        assert_eq!(readable_on(hex(0x1c71d8)), LIGHT_TEXT, "dark blue gets light text");
-        assert_eq!(readable_on(hex(0xf6d32d)), DARK_TEXT, "yellow gets dark text");
+        assert_eq!(
+            readable_on(hex(0x1c71d8)),
+            LIGHT_TEXT,
+            "dark blue gets light text"
+        );
+        assert_eq!(
+            readable_on(hex(0xf6d32d)),
+            DARK_TEXT,
+            "yellow gets dark text"
+        );
         assert_eq!(readable_on(Color::WHITE), DARK_TEXT);
         assert_eq!(readable_on(Color::BLACK), LIGHT_TEXT);
     }
@@ -152,6 +174,9 @@ mod tests {
         // The first candidate is too close; black is the first to reach AA.
         assert_eq!(color_contrast_to(bg, &list, 4.5), Color::BLACK);
         // Nothing reaches 30: fall back to the highest ratio.
-        assert_eq!(color_contrast_to(bg, &list, 30.0), color_contrast(bg, &list));
+        assert_eq!(
+            color_contrast_to(bg, &list, 30.0),
+            color_contrast(bg, &list)
+        );
     }
 }

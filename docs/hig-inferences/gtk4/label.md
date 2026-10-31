@@ -8,9 +8,9 @@ Displays text; wrap, ellipsize, `lines`, `width-chars`/`max-width-chars`, select
 
 ## Behavior
 
-* A wrapping label rewraps to all available width.
-* An ellipsized label's natural width is the full text; `width-chars`/`max-width-chars` set its minimum.
-* iced cannot ellipsize: we wrap (rows) or never wrap and clip (`typography::label`).
+- A wrapping label rewraps to all available width.
+- An ellipsized label's natural width is the full text; `width-chars`/`max-width-chars` set its minimum.
+- iced cannot ellipsize: we wrap (rows) or never wrap and clip (`typography::label`).
 
 ## CSS nodes
 

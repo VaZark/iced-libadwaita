@@ -9,30 +9,30 @@ in [../widgets](../widgets/README.md).
 libadwaita is built on GTK4 and restyles it. **When GTK4 and Adwaita disagree we
 follow Adwaita**:
 
-* Colors, opacities and radii come from libadwaita's CSS variables
+- Colors, opacities and radii come from libadwaita's CSS variables
   ([../design-language/colors.md](../design-language/colors.md)), not GTK's old
   `@theme_*` names.
-* Style classes follow libadwaita (`.dimmed` over `.dim-label`, `.boxed-list`
+- Style classes follow libadwaita (`.dimmed` over `.dim-label`, `.boxed-list`
   over `.content`, `.navigation-sidebar` over `.sidebar`, `.suggested-action`…).
-* GTK widgets that libadwaita deprecates or replaces are **mapped to the Adw
+- GTK widgets that libadwaita deprecates or replaces are **mapped to the Adw
   widget** (see the table below), and the GTK file says so.
-* GTK4 pages give structure (CSS nodes, states, behavior) but almost never pixel
+- GTK4 pages give structure (CSS nodes, states, behavior) but almost never pixel
   sizes. Sizes marked **✓** are verified against libadwaita's stylesheet source;
   **‡** are from memory and unverified.
 
 ## Replacement map (Adwaita over GTK4)
 
-| GTK4 | Prefer (Adwaita) |
-|---|---|
-| `GtkInfoBar` (deprecated 4.10) | `AdwBanner` |
-| `GtkDialog`, `GtkMessageDialog`, `GtkAboutDialog`, `GtkShortcutsWindow` | `AdwAlertDialog`, `AdwAboutDialog`, `AdwShortcutsDialog` |
-| `GtkNotebook`, `GtkStackSwitcher`, `GtkStackSidebar` | `AdwTabBar`, `AdwViewSwitcher`, `AdwSidebar` / `AdwViewSwitcherSidebar` |
-| `GtkHeaderBar` + `GtkWindow` titlebar | `AdwHeaderBar` inside `AdwToolbarView` in `AdwWindow` (no titlebar) |
-| `GtkActionBar` | `AdwToolbarView` bottom bar |
-| `GtkListBox` `.content` / `.sidebar` | `.boxed-list`, `.navigation-sidebar` |
-| `GtkPaned` | `AdwNavigationSplitView` / `AdwOverlaySplitView` |
-| `GtkExpander` | `AdwExpanderRow` |
-| `.dim-label`, `.title`, `.subtitle` | `.dimmed`, `.title-N`, `.heading`, `.caption` |
+| GTK4                                                                    | Prefer (Adwaita)                                                        |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `GtkInfoBar` (deprecated 4.10)                                          | `AdwBanner`                                                             |
+| `GtkDialog`, `GtkMessageDialog`, `GtkAboutDialog`, `GtkShortcutsWindow` | `AdwAlertDialog`, `AdwAboutDialog`, `AdwShortcutsDialog`                |
+| `GtkNotebook`, `GtkStackSwitcher`, `GtkStackSidebar`                    | `AdwTabBar`, `AdwViewSwitcher`, `AdwSidebar` / `AdwViewSwitcherSidebar` |
+| `GtkHeaderBar` + `GtkWindow` titlebar                                   | `AdwHeaderBar` inside `AdwToolbarView` in `AdwWindow` (no titlebar)     |
+| `GtkActionBar`                                                          | `AdwToolbarView` bottom bar                                             |
+| `GtkListBox` `.content` / `.sidebar`                                    | `.boxed-list`, `.navigation-sidebar`                                    |
+| `GtkPaned`                                                              | `AdwNavigationSplitView` / `AdwOverlaySplitView`                        |
+| `GtkExpander`                                                           | `AdwExpanderRow`                                                        |
+| `.dim-label`, `.title`, `.subtitle`                                     | `.dimmed`, `.title-N`, `.heading`, `.caption`                           |
 
 ## Index
 

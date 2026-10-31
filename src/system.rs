@@ -54,7 +54,10 @@ impl DecorationLayout {
                 })
                 .collect::<Vec<_>>()
         };
-        Self { start: buttons(start), end: buttons(end) }
+        Self {
+            start: buttons(start),
+            end: buttons(end),
+        }
     }
 
     /// The layout in effect: the desktop config's fixed `button-layout` if set, else the
@@ -79,7 +82,10 @@ impl DecorationLayout {
 }
 
 fn gsettings(schema: &str, key: &str) -> Option<String> {
-    let out = Command::new("gsettings").args(["get", schema, key]).output().ok()?;
+    let out = Command::new("gsettings")
+        .args(["get", schema, key])
+        .output()
+        .ok()?;
     if !out.status.success() {
         return None;
     }
@@ -102,14 +108,20 @@ pub fn animations_enabled() -> bool {
 /// dark, everything else light. `None` when GSettings is unavailable.
 pub fn color_scheme() -> Option<crate::Scheme> {
     gsettings("org.gnome.desktop.interface", "color-scheme").map(|v| {
-        if v == "prefer-dark" { crate::Scheme::Dark } else { crate::Scheme::Light }
+        if v == "prefer-dark" {
+            crate::Scheme::Dark
+        } else {
+            crate::Scheme::Light
+        }
     })
 }
 
 /// The desktop accent color (`org.gnome.desktop.interface accent-color`, GNOME 47+).
 pub fn accent_color() -> Option<crate::AccentColor> {
     let v = gsettings("org.gnome.desktop.interface", "accent-color")?;
-    crate::AccentColor::ALL.into_iter().find(|a| format!("{a:?}").eq_ignore_ascii_case(&v))
+    crate::AccentColor::ALL
+        .into_iter()
+        .find(|a| format!("{a:?}").eq_ignore_ascii_case(&v))
 }
 
 /// The current icon theme name (`icon-theme`), default `Adwaita`.
@@ -137,8 +149,13 @@ fn data_dirs() -> Vec<PathBuf> {
     if let Some(home) = std::env::var_os("HOME") {
         dirs.push(PathBuf::from(home).join(".icons"));
     }
-    let xdg = std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
-    dirs.extend(xdg.split(':').filter(|s| !s.is_empty()).map(|d| Path::new(d).join("icons")));
+    let xdg =
+        std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
+    dirs.extend(
+        xdg.split(':')
+            .filter(|s| !s.is_empty())
+            .map(|d| Path::new(d).join("icons")),
+    );
     dirs.push(PathBuf::from("/usr/share/icons"));
     dirs
 }
@@ -150,7 +167,12 @@ fn inherits(theme_dir: &Path) -> Vec<String> {
     };
     text.lines()
         .find_map(|l| l.strip_prefix("Inherits="))
-        .map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+        .map(|v| {
+            v.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -160,7 +182,9 @@ fn find_svg(dir: &Path, name: &str, depth: u32, best: &mut Option<(u32, PathBuf)
     if depth == 0 {
         return;
     }
-    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
     for e in rd.flatten() {
         let p = e.path();
         if p.is_dir() {

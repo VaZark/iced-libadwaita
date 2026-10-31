@@ -6,9 +6,9 @@
 
 use crate::style;
 use crate::{Theme, Typography};
-use iced::font::{Family, Weight};
-use iced::widget::{text, Text};
 use iced::Font;
+use iced::font::{Family, Weight};
+use iced::widget::{Text, text};
 
 fn weight(w: Weight) -> Font {
     Font {
@@ -31,13 +31,18 @@ impl Typography {
         text(content).size(self.title_4).font(weight(Weight::Bold))
     }
     pub fn heading<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
-        text(content).size(self.heading).font(weight(Weight::Bold)).wrapping(text::Wrapping::None)
+        text(content)
+            .size(self.heading)
+            .font(weight(Weight::Bold))
+            .wrapping(text::Wrapping::None)
     }
     pub fn body<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
         text(content).size(self.body)
     }
     pub fn caption_heading<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
-        text(content).size(self.caption_heading).font(weight(Weight::Bold))
+        text(content)
+            .size(self.caption_heading)
+            .font(weight(Weight::Bold))
     }
     pub fn caption<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
         text(content).size(self.caption)
@@ -68,4 +73,15 @@ macro_rules! free {
         }
     )*};
 }
-free!(title_1, title_2, title_3, title_4, heading, body, caption_heading, caption, monospace, dim_label);
+free!(
+    title_1,
+    title_2,
+    title_3,
+    title_4,
+    heading,
+    body,
+    caption_heading,
+    caption,
+    monospace,
+    dim_label
+);

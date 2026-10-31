@@ -8,11 +8,11 @@ use crate::palette::{AccentColor, Palette, Scheme};
 use crate::semantic::Semantic;
 use crate::shadow::Shadows;
 use crate::style;
-use iced::widget::{
-    button, checkbox, combo_box, container, pane_grid, pick_list, progress_bar, radio,
-    rule, scrollable, slider, svg, text, text_editor, text_input, toggler,
-};
 use iced::widget::overlay::menu;
+use iced::widget::{
+    button, checkbox, combo_box, container, pane_grid, pick_list, progress_bar, radio, rule,
+    scrollable, slider, svg, text, text_editor, text_input, toggler,
+};
 
 /// A libadwaita-flavoured iced theme.
 ///
@@ -70,12 +70,16 @@ impl Theme {
             t = t.accent(a);
         }
         let shadows = if c.shadows {
-            Shadows::default().with_scale(c.shadow_scale).with_intensity(c.shadow_intensity)
+            Shadows::default()
+                .with_scale(c.shadow_scale)
+                .with_intensity(c.shadow_intensity)
         } else {
             Shadows::none()
         };
         t.with_metrics(c.metrics())
-            .with_typography(Typography::with_base(Typography::default().base * c.text_scale))
+            .with_typography(Typography::with_base(
+                Typography::default().base * c.text_scale,
+            ))
             .with_shadows(shadows)
             .with_flat_headerbars(c.flat_headerbars)
             .with_auto_contrast(c.auto_contrast)
@@ -389,7 +393,11 @@ impl pick_list::Catalog for Theme {
         Box::new(style::pick_list::default)
     }
 
-    fn style(&self, class: &<Self as pick_list::Catalog>::Class<'_>, status: pick_list::Status) -> pick_list::Style {
+    fn style(
+        &self,
+        class: &<Self as pick_list::Catalog>::Class<'_>,
+        status: pick_list::Status,
+    ) -> pick_list::Style {
         class(self, status)
     }
 }
@@ -467,7 +475,10 @@ mod tests {
         assert_eq!(t.metrics.radius_m, Metrics::MAX_RADIUS_M);
         assert_eq!(t.metrics.radius_l, Metrics::MAX_RADIUS_L);
         // Smaller values pass through, and the pill radius is untouched.
-        let t = Theme::light().with_metrics(Metrics { radius_m: 2.0, ..Metrics::default() });
+        let t = Theme::light().with_metrics(Metrics {
+            radius_m: 2.0,
+            ..Metrics::default()
+        });
         assert_eq!(t.metrics.radius_m, 2.0);
         assert_eq!(t.metrics.radius_pill, Metrics::default().radius_pill);
     }
@@ -476,7 +487,10 @@ mod tests {
     fn accent_flows_into_semantic_layer() {
         let t = Theme::dark().accent(AccentColor::Green);
         assert_eq!(t.semantic.accent.bg, AccentColor::Green.to_color());
-        assert_eq!(t.semantic.accent.color, AccentColor::Green.to_standalone_color(Scheme::Dark));
+        assert_eq!(
+            t.semantic.accent.color,
+            AccentColor::Green.to_standalone_color(Scheme::Dark)
+        );
     }
 
     #[test]
@@ -491,7 +505,10 @@ mod tests {
 
     #[test]
     fn light_and_dark_differ() {
-        assert_ne!(Theme::light().semantic.window.bg, Theme::dark().semantic.window.bg);
+        assert_ne!(
+            Theme::light().semantic.window.bg,
+            Theme::dark().semantic.window.bg
+        );
         assert!(Theme::dark().is_dark());
     }
 }
@@ -519,11 +536,18 @@ mod shadow_and_scrollbar_tests {
     fn scrollbar_slider_levels_match_adwaita() {
         use iced::Background;
         let t = Theme::light();
-        let alpha = |s: Status| match crate::style::scrollable::default(&t, s).vertical_rail.scroller.background {
+        let alpha = |s: Status| match crate::style::scrollable::default(&t, s)
+            .vertical_rail
+            .scroller
+            .background
+        {
             Background::Color(c) => c.a / t.semantic.window.fg.a,
             _ => unreachable!(),
         };
-        let rest = Status::Active { is_horizontal_scrollbar_disabled: false, is_vertical_scrollbar_disabled: false };
+        let rest = Status::Active {
+            is_horizontal_scrollbar_disabled: false,
+            is_vertical_scrollbar_disabled: false,
+        };
         let hover = Status::Hovered {
             is_horizontal_scrollbar_hovered: false,
             is_vertical_scrollbar_hovered: true,
@@ -540,14 +564,27 @@ mod shadow_and_scrollbar_tests {
         assert!((alpha(hover) - 0.40).abs() < 1e-4);
         assert!((alpha(drag) - 0.60).abs() < 1e-4);
         // The trough only shows while hovered.
-        assert!(crate::style::scrollable::default(&t, rest).vertical_rail.background.is_none());
-        assert!(crate::style::scrollable::default(&t, hover).vertical_rail.background.is_some());
+        assert!(
+            crate::style::scrollable::default(&t, rest)
+                .vertical_rail
+                .background
+                .is_none()
+        );
+        assert!(
+            crate::style::scrollable::default(&t, hover)
+                .vertical_rail
+                .background
+                .is_some()
+        );
     }
 
     #[test]
     fn radii_follow_adwaita_scss() {
         let m = Metrics::default();
-        assert_eq!((m.radius_m, m.radius_l, m.radius_popover, m.radius_window), (9.0, 12.0, 15.0, 15.0));
+        assert_eq!(
+            (m.radius_m, m.radius_l, m.radius_popover, m.radius_window),
+            (9.0, 12.0, 15.0, 15.0)
+        );
     }
 }
 
@@ -569,7 +606,10 @@ mod header_tests {
                 let t = Theme::new(scheme).accent(accent);
                 let a = t.semantic.accent;
                 assert_eq!(a.fg, readable_on(a.bg), "{accent:?}");
-                assert!(contrast_ratio(a.bg, a.fg) >= 3.0, "{accent:?} {scheme:?} unreadable");
+                assert!(
+                    contrast_ratio(a.bg, a.fg) >= 3.0,
+                    "{accent:?} {scheme:?} unreadable"
+                );
             }
         }
         // A bright fill gets dark text; turning it off restores the palette's white.

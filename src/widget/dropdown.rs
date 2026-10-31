@@ -10,12 +10,12 @@ use crate::{Icon, Metrics, Theme};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::overlay;
 use iced::advanced::renderer::{self, Quad};
-use iced::advanced::widget::{tree, Tree, Widget};
+use iced::advanced::widget::{Tree, Widget, tree};
 use iced::advanced::{Clipboard, Renderer as _, Shell};
 use iced::alignment::Vertical;
 use iced::keyboard::{self, key::Named};
 use iced::widget::{button, column, container, row, space, text};
-use iced::{mouse, Event, Length, Padding, Point, Rectangle, Shadow, Size};
+use iced::{Event, Length, Padding, Point, Rectangle, Shadow, Size, mouse};
 
 /// How the closed dropdown is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -78,13 +78,25 @@ struct State {
 
 impl State {
     fn new(open: bool) -> Self {
-        let start = if open && crate::animation::Trigger::Popover.animated() { 0.0 } else { 1.0 };
-        Self { open, appear: crate::animation::Tween::new(start), shown: start }
+        let start = if open && crate::animation::Trigger::Popover.animated() {
+            0.0
+        } else {
+            1.0
+        };
+        Self {
+            open,
+            appear: crate::animation::Tween::new(start),
+            shown: start,
+        }
     }
     fn toggle(&mut self) {
         self.open = !self.open;
         if self.open {
-            let start = if crate::animation::Trigger::Popover.animated() { 0.0 } else { 1.0 };
+            let start = if crate::animation::Trigger::Popover.animated() {
+                0.0
+            } else {
+                1.0
+            };
             self.appear = crate::animation::Tween::new(start);
             self.shown = start;
         }
@@ -165,34 +177,51 @@ pub fn menu_item<'a, M: Clone + 'a>(
 
 /// A menu item that cannot be chosen: dimmed text, no hover or press effect, no message.
 /// (Distinct from selected, which is accent-colored.)
-pub fn menu_item_disabled<'a, M: Clone + 'a>(label: impl Into<String>, selected: bool) -> Element<'a, M> {
+pub fn menu_item_disabled<'a, M: Clone + 'a>(
+    label: impl Into<String>,
+    selected: bool,
+) -> Element<'a, M> {
     menu_item_inner(label.into(), selected, None)
 }
 
-fn menu_item_inner<'a, M: Clone + 'a>(label: String, selected: bool, on_press: Option<M>) -> Element<'a, M> {
+fn menu_item_inner<'a, M: Clone + 'a>(
+    label: String,
+    selected: bool,
+    on_press: Option<M>,
+) -> Element<'a, M> {
     let m = Metrics::desktop();
-    let mut r = row![text(label).wrapping(text::Wrapping::None).width(Length::Fill)]
-        .spacing(m.space_m)
-        .align_y(Vertical::Center);
+    let mut r = row![
+        text(label)
+            .wrapping(text::Wrapping::None)
+            .width(Length::Fill)
+    ]
+    .spacing(m.space_m)
+    .align_y(Vertical::Center);
     r = r.push(if selected {
         // The check follows the text color (accent when active, dimmed when disabled).
         let disabled = on_press.is_none();
-        Element::from(Icon::Check.view(m.icon_size).style(move |t: &Theme, _| iced::widget::svg::Style {
-            color: Some(if disabled {
-                crate::color::fade(t.semantic.accent.color, t.semantic.opacity.disabled)
-            } else {
-                t.semantic.accent.color
-            }),
+        Element::from(Icon::Check.view(m.icon_size).style(move |t: &Theme, _| {
+            iced::widget::svg::Style {
+                color: Some(if disabled {
+                    crate::color::fade(t.semantic.accent.color, t.semantic.opacity.disabled)
+                } else {
+                    t.semantic.accent.color
+                }),
+            }
         }))
     } else {
         space().width(m.icon_size).into()
     });
-    button(container(r).padding([0.0, m.space_m]).center_y(Length::Fixed(32.0)))
-        .padding(0)
-        .width(Length::Fill)
-        .style(sb::menu_item(selected))
-        .on_press_maybe(on_press)
-        .into()
+    button(
+        container(r)
+            .padding([0.0, m.space_m])
+            .center_y(Length::Fixed(32.0)),
+    )
+    .padding(0)
+    .width(Length::Fill)
+    .style(sb::menu_item(selected))
+    .on_press_maybe(on_press)
+    .into()
 }
 
 /// The popover surface wrapping `items`: scrolls past `max_height`.
@@ -201,11 +230,13 @@ pub fn popover<'a, M: 'a>(
     max_height: f32,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
-    container(super::scrolled_window(column(items).spacing(2).width(Length::Fill)))
-        .padding(m.popover_padding)
-        .max_height(max_height)
-        .style(sc::popover)
-        .into()
+    container(super::scrolled_window(
+        column(items).spacing(2).width(Length::Fill),
+    ))
+    .padding(m.popover_padding)
+    .max_height(max_height)
+    .style(sc::popover)
+    .into()
 }
 
 /// A `GtkDropDown` that is insensitive: its value and arrow are dimmed and it cannot open.
@@ -218,10 +249,17 @@ where
     let current = selected.map(ToString::to_string).unwrap_or_default();
     let trigger = container(
         row![
-            text(current).wrapping(text::Wrapping::None).style(crate::style::text::dim),
-            Icon::GoDown.view(m.icon_size).style(|t: &Theme, _| iced::widget::svg::Style {
-                color: Some(crate::color::fade(t.semantic.window.fg, t.semantic.opacity.disabled)),
-            })
+            text(current)
+                .wrapping(text::Wrapping::None)
+                .style(crate::style::text::dim),
+            Icon::GoDown
+                .view(m.icon_size)
+                .style(|t: &Theme, _| iced::widget::svg::Style {
+                    color: Some(crate::color::fade(
+                        t.semantic.window.fg,
+                        t.semantic.opacity.disabled
+                    )),
+                })
         ]
         .spacing(m.space_s)
         .align_y(Vertical::Center),
@@ -252,7 +290,11 @@ where
     )
     .center_y(Length::Fixed(m.button_min_height - m.button_padding.y()));
     let items = options.iter().map(|o| {
-        menu_item(o.to_string(), selected.as_ref() == Some(o), on_select(o.clone()))
+        menu_item(
+            o.to_string(),
+            selected.as_ref() == Some(o),
+            on_select(o.clone()),
+        )
     });
     Dropdown::custom(trigger, popover(items, 280.0))
 }
@@ -278,9 +320,16 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Dropdown<'a, M> {
         Size::new(self.width, Length::Shrink)
     }
 
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
         layout::padded(limits, self.width, Length::Shrink, self.padding, |limits| {
-            self.trigger.as_widget_mut().layout(&mut tree.children[0], renderer, limits)
+            self.trigger
+                .as_widget_mut()
+                .layout(&mut tree.children[0], renderer, limits)
         })
     }
 
@@ -360,7 +409,9 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Dropdown<'a, M> {
                 bg,
             );
         }
-        let inner = renderer::Style { text_color: st.text_color };
+        let inner = renderer::Style {
+            text_color: st.text_color,
+        };
         self.trigger.as_widget().draw(
             &tree.children[0],
             renderer,
@@ -381,7 +432,9 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Dropdown<'a, M> {
         _: &Rectangle,
         translation: iced::Vector,
     ) -> Option<overlay::Element<'b, M, Theme, iced::Renderer>> {
-        let Tree { state, children, .. } = tree;
+        let Tree {
+            state, children, ..
+        } = tree;
         let state = state.downcast_mut::<State>();
         if !state.open {
             return None;
@@ -426,7 +479,10 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for Popover<'a, 'b, M
         if self.presentation == Presentation::Page {
             // Fill the whole window.
             let limits = layout::Limits::new(bounds, bounds);
-            let node = self.content.as_widget_mut().layout(self.tree, renderer, &limits);
+            let node = self
+                .content
+                .as_widget_mut()
+                .layout(self.tree, renderer, &limits);
             return layout::Node::with_children(bounds, vec![node]);
         }
         let below = self.anchor.y + self.anchor.height + GAP;
@@ -435,9 +491,15 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for Popover<'a, 'b, M
         let max_h = space_below.max(space_above).max(80.0);
         // Items fill their container, so the popover needs a defined width:
         // the trigger's width unless the dropdown asks for another.
-        let w = self.min_width.unwrap_or(self.anchor.width).clamp(120.0, bounds.width - 2.0 * MARGIN);
+        let w = self
+            .min_width
+            .unwrap_or(self.anchor.width)
+            .clamp(120.0, bounds.width - 2.0 * MARGIN);
         let limits = layout::Limits::new(Size::new(w, 0.0), Size::new(w, max_h));
-        let node = self.content.as_widget_mut().layout(self.tree, renderer, &limits);
+        let node = self
+            .content
+            .as_widget_mut()
+            .layout(self.tree, renderer, &limits);
         let size = node.size();
 
         let x = match self.align {
@@ -555,8 +617,10 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for Popover<'a, 'b, M
             &Rectangle::with_size(Size::INFINITE),
         );
         // A completed click on an item (it captured the release) closes the menu.
-        if matches!(event, Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)))
-            && cursor.is_over(bounds)
+        if matches!(
+            event,
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+        ) && cursor.is_over(bounds)
             && shell.is_event_captured()
         {
             close(self.open, shell);

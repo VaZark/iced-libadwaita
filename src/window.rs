@@ -12,7 +12,7 @@ use crate::widget::Element;
 use crate::{Metrics, Theme};
 use iced::widget::{column, container, mouse_area, row, space, stack};
 use iced::window::{Direction, Mode, Settings};
-use iced::{mouse, Length, Size, Subscription, Task};
+use iced::{Length, Size, Subscription, Task, mouse};
 
 /// `AdwWindow`'s default minimum size.
 pub const MIN_SIZE: Size = Size::new(360.0, 200.0);
@@ -100,7 +100,11 @@ impl State {
 
     /// The corner radius to use for this state (0 when edge to edge).
     pub fn radius(&self, metrics: &Metrics) -> f32 {
-        if self.is_edge_to_edge() { 0.0 } else { metrics.radius_window }
+        if self.is_edge_to_edge() {
+            0.0
+        } else {
+            metrics.radius_window
+        }
     }
 }
 
@@ -143,7 +147,10 @@ pub fn frame<'a, M: Clone + 'a>(
         .height(Length::Fill)
         .clip(true)
         .style(move |t: &Theme| iced::widget::container::Style {
-            border: iced::Border { radius: radius.into(), ..iced::Border::default() },
+            border: iced::Border {
+                radius: radius.into(),
+                ..iced::Border::default()
+            },
             ..crate::style::container::window(t)
         });
     if edge {
@@ -163,10 +170,17 @@ pub fn frame<'a, M: Clone + 'a>(
             ..Default::default()
         });
 
-    let grip = |dir: Direction, w: Length, h: Length, cursor: mouse::Interaction| -> Element<'a, M> {
-        mouse_area(space().width(w).height(h)).on_press(on_resize(dir)).interaction(cursor).into()
+    let grip =
+        |dir: Direction, w: Length, h: Length, cursor: mouse::Interaction| -> Element<'a, M> {
+            mouse_area(space().width(w).height(h))
+                .on_press(on_resize(dir))
+                .interaction(cursor)
+                .into()
+        };
+    use mouse::Interaction::{
+        ResizingDiagonallyDown as Dd, ResizingDiagonallyUp as Du, ResizingHorizontally as H,
+        ResizingVertically as V,
     };
-    use mouse::Interaction::{ResizingDiagonallyDown as Dd, ResizingDiagonallyUp as Du, ResizingHorizontally as H, ResizingVertically as V};
     let (e, c) = (Length::Fixed(EDGE), Length::Fixed(CORNER));
     let fill = Length::Fill;
     let grips = column![
@@ -224,8 +238,22 @@ mod tests {
     fn edge_to_edge_when_maximized_or_fullscreen() {
         let m = Metrics::default();
         assert_eq!(State::default().radius(&m), 15.0);
-        assert_eq!(State { maximized: true, fullscreen: false }.radius(&m), 0.0);
-        assert_eq!(State { maximized: false, fullscreen: true }.radius(&m), 0.0);
+        assert_eq!(
+            State {
+                maximized: true,
+                fullscreen: false
+            }
+            .radius(&m),
+            0.0
+        );
+        assert_eq!(
+            State {
+                maximized: false,
+                fullscreen: true
+            }
+            .radius(&m),
+            0.0
+        );
         assert!(!State::default().is_edge_to_edge());
     }
 }

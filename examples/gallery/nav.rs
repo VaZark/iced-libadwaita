@@ -85,16 +85,36 @@ impl Page {
         let i = Entry::Inline;
         match self {
             Page::Buttons => vec![
-                ("Buttons", vec![n(Button), n(ButtonContent), i(I::LinkButton), i(I::CardButton)]),
+                (
+                    "Buttons",
+                    vec![
+                        n(Button),
+                        n(ButtonContent),
+                        i(I::LinkButton),
+                        i(I::CardButton),
+                    ],
+                ),
                 ("Groups", vec![n(ToggleGroup)]),
             ],
             Page::Inputs => vec![
                 ("Text", vec![n(TextInput), n(TextView)]),
-                ("Toggles", vec![i(I::Switch), i(I::CheckButton), i(I::RadioButton)]),
+                (
+                    "Toggles",
+                    vec![i(I::Switch), i(I::CheckButton), i(I::RadioButton)],
+                ),
                 ("Ranges & choosers", vec![i(I::Scale), n(Dropdown)]),
             ],
             Page::Lists => vec![
-                ("Rows", vec![n(ActionRow), n(SwitchAndComboRows), n(EntryRow), i(I::ExpanderRow), i(I::ButtonRow)]),
+                (
+                    "Rows",
+                    vec![
+                        n(ActionRow),
+                        n(SwitchAndComboRows),
+                        n(EntryRow),
+                        i(I::ExpanderRow),
+                        i(I::ButtonRow),
+                    ],
+                ),
                 ("Groups", vec![n(PreferencesGroup)]),
             ],
             Page::Layout => vec![
@@ -102,9 +122,15 @@ impl Page {
                 ("Flow", vec![i(I::WrapBox), i(I::Collapse)]),
             ],
             Page::Navigation => vec![
-                ("Switchers", vec![i(I::ViewSwitcher), i(I::TabBar), i(I::PathBar)]),
+                (
+                    "Switchers",
+                    vec![i(I::ViewSwitcher), i(I::TabBar), i(I::PathBar)],
+                ),
                 ("Paging", vec![i(I::Carousel)]),
-                ("Menus & shortcuts", vec![i(I::MenuButton), i(I::ShortcutLabel)]),
+                (
+                    "Menus & shortcuts",
+                    vec![i(I::MenuButton), i(I::ShortcutLabel)],
+                ),
             ],
             Page::Feedback => vec![
                 ("Messages", vec![i(I::Banner), n(Toast)]),
@@ -112,7 +138,13 @@ impl Page {
             ],
             Page::Dialogs => vec![(
                 "Overlays",
-                vec![a(AlertDialog), a(AboutDialog), a(ShortcutsDialog), a(PreferencesDialog), a(BottomSheet)],
+                vec![
+                    a(AlertDialog),
+                    a(AboutDialog),
+                    a(ShortcutsDialog),
+                    a(PreferencesDialog),
+                    a(BottomSheet),
+                ],
             )],
             Page::Theming => vec![
                 ("Look", vec![n(ThemeColors), n(ThemeShape)]),
@@ -241,7 +273,11 @@ impl Detail {
     pub fn page(self) -> Page {
         Page::ALL
             .into_iter()
-            .find(|p| p.sections().iter().any(|(_, e)| e.contains(&Entry::Nested(self))))
+            .find(|p| {
+                p.sections()
+                    .iter()
+                    .any(|(_, e)| e.contains(&Entry::Nested(self)))
+            })
             .expect("every detail belongs to a page")
     }
 

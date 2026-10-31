@@ -12,7 +12,7 @@ use iced::advanced::overlay;
 use iced::advanced::renderer;
 use iced::advanced::widget::{Operation, Tree, Widget};
 use iced::advanced::{Clipboard, Renderer as _, Shell};
-use iced::{mouse, Element, Event, Length, Point, Rectangle, Size, Vector};
+use iced::{Element, Event, Length, Point, Rectangle, Size, Vector, mouse};
 
 pub struct Slots<'a, M> {
     children: [Element<'a, M, Theme>; 3],
@@ -44,17 +44,30 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Slots<'a, M> {
     }
 
     fn diff(&self, tree: &mut Tree) {
-        tree.diff_children(&self.children.iter().map(|c| c.as_widget()).collect::<Vec<_>>());
+        tree.diff_children(
+            &self
+                .children
+                .iter()
+                .map(|c| c.as_widget())
+                .collect::<Vec<_>>(),
+        );
     }
 
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
         let width = limits.max().width.min(f32::MAX / 4.0);
         let height = self.height;
         let natural = layout::Limits::new(Size::ZERO, Size::new(width, height));
         let gap = self.spacing;
 
         let [start, title, end] = &mut self.children;
-        let [t0, t1, t2] = &mut tree.children[..] else { unreachable!() };
+        let [t0, t1, t2] = &mut tree.children[..] else {
+            unreachable!()
+        };
         let s = start.as_widget_mut().layout(t0, renderer, &natural);
         let e = end.as_widget_mut().layout(t2, renderer, &natural);
         let (sw, ew) = (s.size().width, e.size().width);
@@ -86,11 +99,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Slots<'a, M> {
         };
         layout::Node::with_children(
             Size::new(width, height),
-            vec![
-                center_y(s, 0.0),
-                center_y(t, tx),
-                center_y(e, width - ew),
-            ],
+            vec![center_y(s, 0.0), center_y(t, tx), center_y(e, width - ew)],
         )
     }
 
@@ -102,7 +111,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Slots<'a, M> {
         operation: &mut dyn Operation,
     ) {
         operation.container(None, layout.bounds());
-        for ((child, t), l) in self.children.iter_mut().zip(&mut tree.children).zip(layout.children()) {
+        for ((child, t), l) in self
+            .children
+            .iter_mut()
+            .zip(&mut tree.children)
+            .zip(layout.children())
+        {
             child.as_widget_mut().operate(t, l, renderer, operation);
         }
     }
@@ -118,8 +132,15 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Slots<'a, M> {
         shell: &mut Shell<'_, M>,
         viewport: &Rectangle,
     ) {
-        for ((child, t), l) in self.children.iter_mut().zip(&mut tree.children).zip(layout.children()) {
-            child.as_widget_mut().update(t, event, l, cursor, renderer, clipboard, shell, viewport);
+        for ((child, t), l) in self
+            .children
+            .iter_mut()
+            .zip(&mut tree.children)
+            .zip(layout.children())
+        {
+            child
+                .as_widget_mut()
+                .update(t, event, l, cursor, renderer, clipboard, shell, viewport);
         }
     }
 
@@ -135,7 +156,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Slots<'a, M> {
             .iter()
             .zip(&tree.children)
             .zip(layout.children())
-            .map(|((c, t), l)| c.as_widget().mouse_interaction(t, l, cursor, viewport, renderer))
+            .map(|((c, t), l)| {
+                c.as_widget()
+                    .mouse_interaction(t, l, cursor, viewport, renderer)
+            })
             .max()
             .unwrap_or_default()
     }
@@ -150,14 +174,24 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Slots<'a, M> {
         cursor: mouse::Cursor,
         viewport: &Rectangle,
     ) {
-        for (i, ((child, t), l)) in self.children.iter().zip(&tree.children).zip(layout.children()).enumerate() {
+        for (i, ((child, t), l)) in self
+            .children
+            .iter()
+            .zip(&tree.children)
+            .zip(layout.children())
+            .enumerate()
+        {
             if i == 1 {
                 // Clip the title to its own bounds so it can never paint over the sides.
                 renderer.with_layer(l.bounds(), |r| {
-                    child.as_widget().draw(t, r, theme, style, l, cursor, viewport)
+                    child
+                        .as_widget()
+                        .draw(t, r, theme, style, l, cursor, viewport)
                 });
             } else {
-                child.as_widget().draw(t, renderer, theme, style, l, cursor, viewport);
+                child
+                    .as_widget()
+                    .draw(t, renderer, theme, style, l, cursor, viewport);
             }
         }
     }
@@ -170,7 +204,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Slots<'a, M> {
         viewport: &Rectangle,
         translation: Vector,
     ) -> Option<overlay::Element<'b, M, Theme, iced::Renderer>> {
-        overlay::from_children(&mut self.children, tree, layout, renderer, viewport, translation)
+        overlay::from_children(
+            &mut self.children,
+            tree,
+            layout,
+            renderer,
+            viewport,
+            translation,
+        )
     }
 }
 

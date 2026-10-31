@@ -1,7 +1,7 @@
 //! `AdwNavigationSplitView`, `AdwOverlaySplitView`, `AdwNavigationView`,
 //! `.navigation-sidebar`, and `AdwBreakpoint`.
 
-use super::{header_bar, toolbar_view, Element};
+use super::{Element, header_bar, toolbar_view};
 use crate::style::{button as sb, container as sc};
 use crate::{Icon, Metrics};
 use iced::alignment::Vertical;
@@ -18,11 +18,17 @@ pub struct Breakpoint {
 impl Breakpoint {
     /// `max-width: <px>`.
     pub fn max_width(px: f32) -> Self {
-        Self { max_width: Some(px), min_width: None }
+        Self {
+            max_width: Some(px),
+            min_width: None,
+        }
     }
     /// `min-width: <px>`.
     pub fn min_width(px: f32) -> Self {
-        Self { max_width: None, min_width: Some(px) }
+        Self {
+            max_width: None,
+            min_width: Some(px),
+        }
     }
     /// Whether the breakpoint applies at `size`. Typical use inside
     /// `iced::widget::responsive`.
@@ -115,14 +121,26 @@ pub fn sidebar_row_padded<'a, M: Clone + 'a>(
     }
     // libadwaita ellipsizes; we clip at the row edge so text never paints
     // outside the selection highlight.
-    r = r.push(container(super::typography::label(label.into())).width(Length::Fill).clip(true));
+    r = r.push(
+        container(super::typography::label(label.into()))
+            .width(Length::Fill)
+            .clip(true),
+    );
     // Settings sizes its grid from the font, not a fixed ~20px line. Keep the
     // inherited font/size and allow larger interface fonts to grow the row.
     let content = if padding == SidebarPadding::Lg {
         let vertical = (padding.row_height(&m) - 20.0) / 2.0;
-        container(row![r, space().width(0).height((m.sidebar_row_height - 2.0 * vertical).max(0.0))].align_y(Vertical::Center))
-            .padding([vertical, padding.row_padding(&m)])
-            .align_y(Vertical::Center)
+        container(
+            row![
+                r,
+                space()
+                    .width(0)
+                    .height((m.sidebar_row_height - 2.0 * vertical).max(0.0))
+            ]
+            .align_y(Vertical::Center),
+        )
+        .padding([vertical, padding.row_padding(&m)])
+        .align_y(Vertical::Center)
     } else {
         container(r)
             .padding([0.0, padding.row_padding(&m)])
@@ -130,10 +148,10 @@ pub fn sidebar_row_padded<'a, M: Clone + 'a>(
     };
     // The selected background fades in and out (`Highlight`); the button keeps hover/press.
     let btn = button(content.width(Length::Fill))
-    .padding(0)
-    .width(Length::Fill)
-    .style(sb::sidebar_row(false))
-    .on_press(on_press);
+        .padding(0)
+        .width(Length::Fill)
+        .style(sb::sidebar_row(false))
+        .on_press(on_press);
     super::highlight(btn, selected, m.radius_m, 0.10).into()
 }
 
@@ -155,17 +173,21 @@ pub fn navigation_sidebar_rounded_padded<'a, M: 'a>(
     let m = Metrics::desktop();
     // CSS has top/bottom list padding as well as horizontal row margins. The
     // last row's 2px bottom margin compensates the list's bottom padding - 2px.
-    container(column(rows).spacing(padding.gap(&m)).padding(padding.inset(&m)))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(move |_: &crate::Theme| iced::widget::container::Style {
-            // Transparent: the split view's pane supplies the color (sidebar or, as a first
-            // page, content). Both bottom corners: beside content the right one reveals the pane behind
-            // (same color); when the sidebar is the whole window it is a real window corner.
-            border: iced::Border::default().rounded(iced::border::bottom(window_radius)),
-            ..Default::default()
-        })
-        .into()
+    container(
+        column(rows)
+            .spacing(padding.gap(&m))
+            .padding(padding.inset(&m)),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .style(move |_: &crate::Theme| iced::widget::container::Style {
+        // Transparent: the split view's pane supplies the color (sidebar or, as a first
+        // page, content). Both bottom corners: beside content the right one reveals the pane behind
+        // (same color); when the sidebar is the whole window it is a real window corner.
+        border: iced::Border::default().rounded(iced::border::bottom(window_radius)),
+        ..Default::default()
+    })
+    .into()
 }
 
 /// Stacks sidebar rows with `.navigation-sidebar` spacing and horizontal inset.
@@ -173,11 +195,15 @@ pub fn navigation_sidebar<'a, M: 'a>(
     rows: impl IntoIterator<Item = Element<'a, M>>,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
-    container(column(rows).spacing(m.sidebar_spacing).padding(m.sidebar_padding))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(sc::sidebar)
-        .into()
+    container(
+        column(rows)
+            .spacing(m.sidebar_spacing)
+            .padding(m.sidebar_padding),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .style(sc::sidebar)
+    .into()
 }
 
 /// One entry of a [`SidebarList`].
@@ -193,7 +219,15 @@ pub struct SidebarItem<M> {
 
 impl<M> SidebarItem<M> {
     pub fn new(title: impl Into<String>, on_press: M) -> Self {
-        Self { icon: None, title: title.into(), subtitle: None, selected: false, on_press, padding: None, divider_above: false }
+        Self {
+            icon: None,
+            title: title.into(),
+            subtitle: None,
+            selected: false,
+            on_press,
+            padding: None,
+            divider_above: false,
+        }
     }
     /// Draws a [`divider`](super::divider) above this row, to start a new section.
     pub fn divider_above(mut self) -> Self {
@@ -245,7 +279,13 @@ pub struct SidebarList<'a, M> {
 
 impl<'a, M: Clone + 'a> SidebarList<'a, M> {
     pub fn new(items: impl IntoIterator<Item = SidebarItem<M>>) -> Self {
-        Self { items: items.into_iter().collect(), style: SidebarStyle::List, window_radius: 0.0, padding: SidebarPadding::Md, _p: Default::default() }
+        Self {
+            items: items.into_iter().collect(),
+            style: SidebarStyle::List,
+            window_radius: 0.0,
+            padding: SidebarPadding::Md,
+            _p: Default::default(),
+        }
     }
     pub fn style(mut self, style: SidebarStyle) -> Self {
         self.style = style;
@@ -273,9 +313,18 @@ impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
                     l.items.into_iter().flat_map(|i| {
                         let m = Metrics::desktop();
                         let line = i.divider_above.then(|| {
-                            Element::from(super::divider().spacing((level.inset(&m) - level.gap(&m)).max(0.0)))
+                            Element::from(
+                                super::divider()
+                                    .spacing((level.inset(&m) - level.gap(&m)).max(0.0)),
+                            )
                         });
-                        let row = sidebar_row_padded(i.icon, i.title, i.selected, i.on_press, i.padding.unwrap_or(level));
+                        let row = sidebar_row_padded(
+                            i.icon,
+                            i.title,
+                            i.selected,
+                            i.on_press,
+                            i.padding.unwrap_or(level),
+                        );
                         line.into_iter().chain(std::iter::once(row))
                     }),
                     l.window_radius,
@@ -285,7 +334,10 @@ impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
             SidebarStyle::Cards => {
                 let m = Metrics::desktop();
                 let rows = l.items.into_iter().map(|i| {
-                    let mut r = super::ActionRow::new(i.title).chevron(true).on_activate(i.on_press).metrics(m);
+                    let mut r = super::ActionRow::new(i.title)
+                        .chevron(true)
+                        .on_activate(i.on_press)
+                        .metrics(m);
                     if let Some(icon) = i.icon {
                         r = r.prefix(icon.view(m.icon_size));
                     }
@@ -382,7 +434,13 @@ pub fn min_content_width() -> f32 {
 /// layout (headers, back buttons) and agree with it.
 pub fn split_collapsed(width: f32) -> bool {
     let c = crate::config::current();
-    collapses(width, c.sidebar_fraction, c.sidebar_min_width, c.sidebar_max_width, c.min_content_width)
+    collapses(
+        width,
+        c.sidebar_fraction,
+        c.sidebar_min_width,
+        c.sidebar_max_width,
+        c.min_content_width,
+    )
 }
 
 fn collapses(width: f32, fraction: f32, min: f32, max: f32, min_content: f32) -> bool {
@@ -474,11 +532,20 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
     /// [`min_content_width`](Self::min_content_width), and size the sidebar by
     /// fraction/min/max.
     pub fn adapt(mut self, width: f32) -> Self {
-        self.collapsed = collapses(width, self.fraction, self.min_width, self.max_width, self.min_content);
-        self.sidebar_width = sidebar_width_for(width, self.fraction, self.min_width, self.max_width);
+        self.collapsed = collapses(
+            width,
+            self.fraction,
+            self.min_width,
+            self.max_width,
+            self.min_content,
+        );
+        self.sidebar_width =
+            sidebar_width_for(width, self.fraction, self.min_width, self.max_width);
         // A drawer uses the maximum sidebar width when it fits, but always leaves a strip of
         // content (and the scrim) visible: never the whole screen.
-        self.drawer_width = self.max_width.min(width * crate::config::current().drawer_max_fraction);
+        self.drawer_width = self
+            .max_width
+            .min(width * crate::config::current().drawer_max_fraction);
         self
     }
 }
@@ -503,12 +570,22 @@ impl<'a, M: Clone + 'a> NavigationSplitView<'a, M> {
                 ..sc::sidebar(t)
             }
         };
-        let left = iced::border::Radius { top_left: r, top_right: 0.0, bottom_right: 0.0, bottom_left: r };
+        let left = iced::border::Radius {
+            top_left: r,
+            top_right: 0.0,
+            bottom_right: 0.0,
+            bottom_left: r,
+        };
         if v.collapsed && v.collapsed_sidebar != CollapsedSidebar::Drawer {
             // The sidebar is the first page; the content is pushed over it (and popped back)
             // with the navigation slide.
-            let first: Element<'a, M> = container(v.sidebar).width(Length::Fill).height(Length::Fill).into();
-            return super::push_stack(first, v.content, v.show_content).window_radius(r).into();
+            let first: Element<'a, M> = container(v.sidebar)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into();
+            return super::push_stack(first, v.content, v.show_content)
+                .window_radius(r)
+                .into();
         }
         // Beside the content or as a drawer, one widget moves the sidebar between the two on the
         // same spring: crossing the collapse breakpoint slides it out of the layout (or in),
@@ -518,10 +595,19 @@ impl<'a, M: Clone + 'a> NavigationSplitView<'a, M> {
             .height(Length::Fill)
             .style(pane(left))
             .into();
-        let content: Element<'a, M> = container(v.content).width(Length::Fill).height(Length::Fill).into();
-        let mut split = super::adaptive_split(sidebar, content, !v.collapsed, v.sidebar_width, v.drawer_width)
-            .drawer_open(v.drawer_open)
-            .window_radius(r);
+        let content: Element<'a, M> = container(v.content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
+        let mut split = super::adaptive_split(
+            sidebar,
+            content,
+            !v.collapsed,
+            v.sidebar_width,
+            v.drawer_width,
+        )
+        .drawer_open(v.drawer_open)
+        .window_radius(r);
         if let Some(m) = v.on_close_drawer {
             split = split.on_close(m);
         }
@@ -574,11 +660,25 @@ impl<'a, M: Clone + 'a> From<OverlaySplitView<'a, M>> for Element<'a, M> {
         if !v.show_sidebar {
             return v.content;
         }
-        let side = container(v.sidebar).width(Length::Fixed(v.sidebar_width)).height(Length::Fill);
+        let side = container(v.sidebar)
+            .width(Length::Fixed(v.sidebar_width))
+            .height(Length::Fill);
         if !v.collapsed {
-            return row![side, container(space().width(1)).height(Length::Fill).style(sc::sidebar_separator), v.content].into();
+            return row![
+                side,
+                container(space().width(1))
+                    .height(Length::Fill)
+                    .style(sc::sidebar_separator),
+                v.content
+            ]
+            .into();
         }
-        let mut scrim = mouse_area(container(space()).width(Length::Fill).height(Length::Fill).style(sc::backdrop));
+        let mut scrim = mouse_area(
+            container(space())
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .style(sc::backdrop),
+        );
         if let Some(m) = v.on_close {
             scrim = scrim.on_press(m);
         }
@@ -594,7 +694,10 @@ pub struct NavigationPage<'a, M> {
 
 impl<'a, M> NavigationPage<'a, M> {
     pub fn new(title: impl Into<String>, content: impl Into<Element<'a, M>>) -> Self {
-        Self { title: title.into(), content: content.into() }
+        Self {
+            title: title.into(),
+            content: content.into(),
+        }
     }
 }
 
@@ -634,7 +737,10 @@ mod tests {
     #[test]
     fn drawer_is_the_default_collapsed_mode() {
         assert_eq!(CollapsedSidebar::default(), CollapsedSidebar::Drawer);
-        assert_eq!(split(CollapsedSidebar::Drawer).collapsed_sidebar, CollapsedSidebar::Drawer);
+        assert_eq!(
+            split(CollapsedSidebar::Drawer).collapsed_sidebar,
+            CollapsedSidebar::Drawer
+        );
     }
 
     #[test]
@@ -655,7 +761,10 @@ mod tests {
         for w in (360..=1800).step_by(5) {
             let v = split(CollapsedSidebar::Drawer).adapt(w as f32);
             if !v.collapsed {
-                assert!(w as f32 - v.sidebar_width >= MIN_CONTENT_WIDTH, "squeezed at {w}");
+                assert!(
+                    w as f32 - v.sidebar_width >= MIN_CONTENT_WIDTH,
+                    "squeezed at {w}"
+                );
             }
         }
         // Up to just under the `md` breakpoint it collapses; from there it does not.
@@ -666,10 +775,16 @@ mod tests {
             .sidebar_width_fraction(0.4)
             .max_sidebar_width(400.0)
             .adapt(800.0);
-        assert!(wide_sidebar.collapsed, "320px sidebar leaves 480px of content");
+        assert!(
+            wide_sidebar.collapsed,
+            "320px sidebar leaves 480px of content"
+        );
         // And the app-facing helper agrees with `adapt` for the defaults.
         for w in [400.0, 700.0, 767.0, 768.0, 1000.0] {
-            assert_eq!(split_collapsed(w), split(CollapsedSidebar::Drawer).adapt(w).collapsed);
+            assert_eq!(
+                split_collapsed(w),
+                split(CollapsedSidebar::Drawer).adapt(w).collapsed
+            );
         }
     }
 
@@ -696,7 +811,10 @@ mod tests {
         assert_eq!(md.gap(&m), m.sidebar_spacing);
         // A compact density keeps the ordering and the same steps.
         let c = Metrics::compact();
-        assert_eq!(lg.row_height(&c) - md.row_height(&c), lg.row_height(&m) - md.row_height(&m));
+        assert_eq!(
+            lg.row_height(&c) - md.row_height(&c),
+            lg.row_height(&m) - md.row_height(&m)
+        );
     }
 
     #[test]

@@ -2,12 +2,17 @@
 
 use super::Element;
 use crate::{Metrics, Role, Theme};
+use iced::Length;
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{button, container, row, text};
-use iced::Length;
 
 /// The toast's dark surface in the light scheme; see [`Toast`].
-const DARK_SURFACE: iced::Color = iced::Color { r: 0.14, g: 0.14, b: 0.15, a: 1.0 };
+const DARK_SURFACE: iced::Color = iced::Color {
+    r: 0.14,
+    g: 0.14,
+    b: 0.15,
+    a: 1.0,
+};
 
 /// Where a toast sits inside its target ([`ToastTarget`]): top or bottom, and left, center or
 /// right. The default comes from the desktop config (`[toasts] position`).
@@ -205,7 +210,10 @@ impl<M> Toast<M> {
 /// elevated surface in the dark scheme (`popover`), the dark ink tone in the light scheme.
 fn default_surface(theme: &Theme) -> iced::Color {
     if theme.semantic.is_dark() {
-        iced::Color { a: 1.0, ..theme.semantic.popover.bg }
+        iced::Color {
+            a: 1.0,
+            ..theme.semantic.popover.bg
+        }
     } else {
         DARK_SURFACE
     }
@@ -219,9 +227,17 @@ fn colors(
     role: Option<Role>,
 ) -> (iced::Color, iced::Color) {
     let bg = background
-        .or_else(|| role.map(|r| iced::Color { a: 1.0, ..theme.semantic.swatch(r).bg }))
+        .or_else(|| {
+            role.map(|r| iced::Color {
+                a: 1.0,
+                ..theme.semantic.swatch(r).bg
+            })
+        })
         .unwrap_or_else(|| default_surface(theme));
-    (bg, text_color.unwrap_or_else(|| crate::color::readable_on(bg)))
+    (
+        bg,
+        text_color.unwrap_or_else(|| crate::color::readable_on(bg)),
+    )
 }
 
 /// One toast as an element: the surface, its content and its entrance.
@@ -267,17 +283,22 @@ fn toast_element<'a, M: Clone + 'a>(t: Toast<M>, position: ToastPosition) -> Ele
     if let Some(status) = t.status.filter(|s| *s != Role::Neutral) {
         // The vivid fill of the status color reads on both the dark surfaces.
         let color = move |th: &Theme| th.semantic.swatch(status).bg;
-        r = r.push(container(iced::widget::space().width(10).height(10)).style(move |th: &Theme| {
-            iced::widget::container::Style {
+        r = r.push(container(iced::widget::space().width(10).height(10)).style(
+            move |th: &Theme| iced::widget::container::Style {
                 background: Some(iced::Background::Color(color(th))),
                 border: iced::Border::default().rounded(5.0),
                 ..Default::default()
-            }
-        }));
+            },
+        ));
     }
     r = r.push(text(t.title));
     if let Some((label, msg)) = t.action {
-        r = r.push(button(text(label)).padding(m.button_padding).style(action_style).on_press(msg));
+        r = r.push(
+            button(text(label))
+                .padding(m.button_padding)
+                .style(action_style)
+                .on_press(msg),
+        );
     }
     if let Some(msg) = t.on_dismiss {
         r = r.push(
@@ -293,20 +314,26 @@ fn toast_element<'a, M: Clone + 'a>(t: Toast<M>, position: ToastPosition) -> Ele
             .on_press(msg),
         );
     }
-    let toast = container(r).padding([m.space_s, m.space_l]).style(move |th: &Theme| {
-        let (bg, fg) = colors(th, background, text_color, role);
-        iced::widget::container::Style {
-            text_color: Some(fg),
-            background: Some(iced::Background::Color(bg)),
-            border: iced::Border::default().rounded(radius.unwrap_or(th.metrics.radius_toast)),
-            shadow: th.shadows.popover().shadow,
-            snap: false,
-        }
-    });
+    let toast = container(r)
+        .padding([m.space_s, m.space_l])
+        .style(move |th: &Theme| {
+            let (bg, fg) = colors(th, background, text_color, role);
+            iced::widget::container::Style {
+                text_color: Some(fg),
+                background: Some(iced::Background::Color(bg)),
+                border: iced::Border::default().rounded(radius.unwrap_or(th.metrics.radius_toast)),
+                shadow: th.shadows.popover().shadow,
+                snap: false,
+            }
+        });
     // Slides up on show: 300ms, ADW_EASE (`SHOW_DURATION`). No hide animation: the app
     // removes the toast.
     // It slides in from the edge it is anchored to.
-    let slide = if position.vertical() == Vertical::Top { -60.0 } else { 60.0 };
+    let slide = if position.vertical() == Vertical::Top {
+        -60.0
+    } else {
+        60.0
+    };
     let toast = super::entrance(toast, iced::Vector::new(0.0, slide))
         .trigger(crate::animation::Trigger::Toast)
         .spec(crate::animation::Spec::Timed(
@@ -340,7 +367,9 @@ pub fn toast_stack<'a, M: Clone + 'a>(
         return super::layered(content, None);
     };
     let m = Metrics::desktop();
-    let position = first.position.unwrap_or_else(|| crate::config::current().toast_position);
+    let position = first
+        .position
+        .unwrap_or_else(|| crate::config::current().toast_position);
     let stack = iced::widget::column(toasts.into_iter().map(|t| toast_element(t, position)))
         .spacing(m.space_s)
         .align_x(position.horizontal());
@@ -361,7 +390,7 @@ pub fn toast_stack<'a, M: Clone + 'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::color::{contrast_ratio, DARK_TEXT, LIGHT_TEXT};
+    use crate::color::{DARK_TEXT, LIGHT_TEXT, contrast_ratio};
 
     #[test]
     fn surface_is_dark_and_opaque_in_both_schemes() {
@@ -370,8 +399,18 @@ mod tests {
         assert_eq!(fg, LIGHT_TEXT);
         let dark = Theme::dark();
         let (bg, fg) = colors(&dark, None, None, None);
-        assert_eq!(bg, iced::Color { a: 1.0, ..dark.semantic.popover.bg }, "the theme's own elevated surface");
-        assert!(crate::color::relative_luminance(bg) < 0.1, "never a light slab on a dark window");
+        assert_eq!(
+            bg,
+            iced::Color {
+                a: 1.0,
+                ..dark.semantic.popover.bg
+            },
+            "the theme's own elevated surface"
+        );
+        assert!(
+            crate::color::relative_luminance(bg) < 0.1,
+            "never a light slab on a dark window"
+        );
         assert_eq!(fg, LIGHT_TEXT);
         assert!(contrast_ratio(bg, fg) > 7.0);
         assert_eq!(bg.a, 1.0);
@@ -381,12 +420,26 @@ mod tests {
     fn role_and_hard_overrides() {
         let t = Theme::light();
         let (bg, fg) = colors(&t, None, None, Some(Role::Error));
-        assert_eq!(bg, iced::Color { a: 1.0, ..t.semantic.error.bg });
+        assert_eq!(
+            bg,
+            iced::Color {
+                a: 1.0,
+                ..t.semantic.error.bg
+            }
+        );
         assert_eq!(fg, crate::color::readable_on(bg));
         let custom = iced::Color::from_rgb(0.9, 0.9, 0.1);
         let (bg, fg) = colors(&t, Some(custom), None, Some(Role::Error));
-        assert_eq!((bg, fg), (custom, DARK_TEXT), "background wins over role; text follows contrast");
+        assert_eq!(
+            (bg, fg),
+            (custom, DARK_TEXT),
+            "background wins over role; text follows contrast"
+        );
         let pink = iced::Color::from_rgb(1.0, 0.0, 0.5);
-        assert_eq!(colors(&t, Some(custom), Some(pink), None).1, pink, "text_color is a hard override");
+        assert_eq!(
+            colors(&t, Some(custom), Some(pink), None).1,
+            pink,
+            "text_color is a hard override"
+        );
     }
 }

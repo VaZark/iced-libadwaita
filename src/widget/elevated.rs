@@ -10,9 +10,11 @@
 use crate::Theme;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
-use iced::advanced::widget::{tree, Operation, Tree, Widget};
-use iced::advanced::{overlay, Clipboard, Renderer as _, Shell};
-use iced::{mouse, Background, Border, Color, Element, Event, Length, Rectangle, Shadow, Size, Vector};
+use iced::advanced::widget::{Operation, Tree, Widget, tree};
+use iced::advanced::{Clipboard, Renderer as _, Shell, overlay};
+use iced::{
+    Background, Border, Color, Element, Event, Length, Rectangle, Shadow, Size, Vector, mouse,
+};
 
 /// iced's `blur_radius` falls off over a much shorter distance than a CSS `blur` (which is a
 /// gaussian with `sigma = blur / 2`), so with the CSS values the shadow collapses into a thin
@@ -40,7 +42,10 @@ pub struct Elevated<'a, M> {
 
 /// Wraps `content` (a surface with its own background and border) in a card elevation.
 pub fn card_shadow<'a, M>(content: impl Into<Element<'a, M, Theme>>) -> Elevated<'a, M> {
-    Elevated { content: content.into(), kind: Kind::Card }
+    Elevated {
+        content: content.into(),
+        kind: Kind::Card,
+    }
 }
 
 impl<'a, M> Widget<M, Theme, iced::Renderer> for Elevated<'a, M> {
@@ -59,7 +64,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Elevated<'a, M> {
     fn size(&self) -> Size<Length> {
         self.content.as_widget().size()
     }
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
         self.content.as_widget_mut().layout(tree, renderer, limits)
     }
     fn update(
@@ -73,7 +83,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Elevated<'a, M> {
         shell: &mut Shell<'_, M>,
         viewport: &Rectangle,
     ) {
-        self.content.as_widget_mut().update(tree, event, layout, cursor, renderer, clipboard, shell, viewport);
+        self.content.as_widget_mut().update(
+            tree, event, layout, cursor, renderer, clipboard, shell, viewport,
+        );
     }
     fn mouse_interaction(
         &self,
@@ -83,10 +95,20 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Elevated<'a, M> {
         viewport: &Rectangle,
         renderer: &iced::Renderer,
     ) -> mouse::Interaction {
-        self.content.as_widget().mouse_interaction(tree, layout, cursor, viewport, renderer)
+        self.content
+            .as_widget()
+            .mouse_interaction(tree, layout, cursor, viewport, renderer)
     }
-    fn operate(&mut self, tree: &mut Tree, layout: Layout<'_>, renderer: &iced::Renderer, operation: &mut dyn Operation) {
-        self.content.as_widget_mut().operate(tree, layout, renderer, operation);
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        self.content
+            .as_widget_mut()
+            .operate(tree, layout, renderer, operation);
     }
     fn overlay<'b>(
         &'b mut self,
@@ -96,7 +118,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Elevated<'a, M> {
         viewport: &Rectangle,
         translation: Vector,
     ) -> Option<overlay::Element<'b, M, Theme, iced::Renderer>> {
-        self.content.as_widget_mut().overlay(tree, layout, renderer, viewport, translation)
+        self.content
+            .as_widget_mut()
+            .overlay(tree, layout, renderer, viewport, translation)
     }
 
     fn draw(
@@ -129,7 +153,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Elevated<'a, M> {
                         },
                         border: Border::default().rounded(radius + spread),
                         shadow: Shadow {
-                            color: Color { a: (l.color.a * s.intensity).min(1.0), ..l.color },
+                            color: Color {
+                                a: (l.color.a * s.intensity).min(1.0),
+                                ..l.color
+                            },
                             offset: Vector::new(l.x * s.scale, (l.y + LIFT) * s.scale),
                             blur_radius: l.blur * s.scale * BLUR_GAIN,
                         },
@@ -139,7 +166,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Elevated<'a, M> {
                 );
             }
         }
-        self.content.as_widget().draw(tree, renderer, theme, style, layout, cursor, viewport);
+        self.content
+            .as_widget()
+            .draw(tree, renderer, theme, style, layout, cursor, viewport);
     }
 }
 

@@ -1,8 +1,8 @@
 //! Container styles: surfaces and `.card`, `.osd`, `.boxed-list`, …
 
+use crate::Theme;
 use crate::color::alpha;
 use crate::semantic::{Role, Surface};
-use crate::Theme;
 use iced::widget::container::Style;
 use iced::{Background, Border, Color, Shadow};
 
@@ -113,7 +113,10 @@ pub fn toast(theme: &Theme) -> Style {
 pub fn backdrop(theme: &Theme) -> Style {
     let c = theme.semantic.shade;
     Style {
-        background: Some(Background::Color(Color { a: (c.a * 2.0).min(1.0), ..c })),
+        background: Some(Background::Color(Color {
+            a: (c.a * 2.0).min(1.0),
+            ..c
+        })),
         ..Style::default()
     }
 }

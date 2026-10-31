@@ -1,9 +1,9 @@
 //! Button styles: `.default`, `.flat`, `.suggested-action`,
 //! `.destructive-action`, `.pill`, `.circular`, `.card`, `.osd`, …
 
+use crate::Theme;
 use crate::color::{alpha, fade};
 use crate::semantic::Role;
-use crate::Theme;
 use iced::widget::button::{Status, Style};
 use iced::{Background, Border, Color, Shadow, Vector};
 
@@ -44,11 +44,19 @@ fn tinted(
     let (layer, text) = match status {
         Status::Active => (rest, fg),
         Status::Hovered => (
-            if rest == 0.0 { o.flat_hover } else { o.control_hover },
+            if rest == 0.0 {
+                o.flat_hover
+            } else {
+                o.control_hover
+            },
             fg,
         ),
         Status::Pressed => (
-            if rest == 0.0 { o.flat_active } else { o.control_active },
+            if rest == 0.0 {
+                o.flat_active
+            } else {
+                o.control_active
+            },
             fg,
         ),
         Status::Disabled => (rest, fade(fg, o.disabled)),
@@ -104,12 +112,24 @@ pub fn raised(theme: &Theme, status: Status) -> Style {
 
 /// `.flat`: transparent until hovered.
 pub fn flat(theme: &Theme, status: Status) -> Style {
-    tinted(theme, status, theme.semantic.window.fg, 0.0, theme.metrics.radius_m.into())
+    tinted(
+        theme,
+        status,
+        theme.semantic.window.fg,
+        0.0,
+        theme.metrics.radius_m.into(),
+    )
 }
 
 /// `.flat` using the headerbar foreground.
 pub fn headerbar(theme: &Theme, status: Status) -> Style {
-    tinted(theme, status, theme.semantic.headerbar.fg, 0.0, theme.metrics.radius_m.into())
+    tinted(
+        theme,
+        status,
+        theme.semantic.headerbar.fg,
+        0.0,
+        theme.metrics.radius_m.into(),
+    )
 }
 
 /// `.suggested-action`.
@@ -164,7 +184,13 @@ pub fn pill(theme: &Theme, status: Status) -> Style {
 /// `.pill.suggested-action`.
 pub fn suggested_pill(theme: &Theme, status: Status) -> Style {
     let sw = theme.semantic.accent;
-    filled(theme, status, sw.bg, sw.fg, theme.metrics.radius_pill.into())
+    filled(
+        theme,
+        status,
+        sw.bg,
+        sw.fg,
+        theme.metrics.radius_pill.into(),
+    )
 }
 
 /// `.circular`: use with equal width/height.
@@ -174,7 +200,13 @@ pub fn circular(theme: &Theme, status: Status) -> Style {
 
 /// `.circular.flat`.
 pub fn circular_flat(theme: &Theme, status: Status) -> Style {
-    tinted(theme, status, theme.semantic.window.fg, 0.0, theme.metrics.radius_pill.into())
+    tinted(
+        theme,
+        status,
+        theme.semantic.window.fg,
+        0.0,
+        theme.metrics.radius_pill.into(),
+    )
 }
 
 /// `.card`: a clickable card surface.
@@ -223,7 +255,9 @@ pub fn link(theme: &Theme, status: Status) -> Style {
         background: None,
         text_color: match status {
             Status::Disabled => fade(c, theme.semantic.opacity.disabled),
-            Status::Hovered | Status::Pressed => crate::color::mix(c, theme.semantic.window.fg, 0.2),
+            Status::Hovered | Status::Pressed => {
+                crate::color::mix(c, theme.semantic.window.fg, 0.2)
+            }
             Status::Active => c,
         },
         border: border(theme.metrics.radius_s),
@@ -244,7 +278,11 @@ pub fn list_row(theme: &Theme, status: Status) -> Style {
     };
     Style {
         background: (layer > 0.0).then(|| Background::Color(alpha(fg, layer))),
-        text_color: if status == Status::Disabled { fade(fg, o.disabled) } else { fg },
+        text_color: if status == Status::Disabled {
+            fade(fg, o.disabled)
+        } else {
+            fg
+        },
         border: border(0.0),
         shadow: Shadow::default(),
         snap: false,
@@ -283,7 +321,11 @@ pub fn toggle(active: bool, pos: Position) -> impl Fn(&Theme, Status) -> Style +
             let t = theme.semantic.active_toggle;
             Style {
                 background: Some(Background::Color(t.bg)),
-                text_color: if status == Status::Disabled { fade(t.fg, o.disabled) } else { t.fg },
+                text_color: if status == Status::Disabled {
+                    fade(t.fg, o.disabled)
+                } else {
+                    t.fg
+                },
                 border: border(r),
                 shadow: Shadow {
                     color: alpha(Color::BLACK, if theme.is_dark() { 0.3 } else { 0.12 }),
@@ -332,16 +374,33 @@ pub fn menu_item(selected: bool) -> impl Fn(&Theme, Status) -> Style + Copy {
         if status == Status::Disabled {
             return Style {
                 background: None,
-                text_color: crate::color::fade(if selected { accent } else { fg }, s.opacity.disabled),
+                text_color: crate::color::fade(
+                    if selected { accent } else { fg },
+                    s.opacity.disabled,
+                ),
                 border: border(theme.metrics.radius_menu),
                 shadow: Shadow::default(),
                 snap: false,
             };
         }
         let (tint, layer) = if selected {
-            (accent, match status { Status::Hovered => 0.20, Status::Pressed => 0.26, _ => 0.14 })
+            (
+                accent,
+                match status {
+                    Status::Hovered => 0.20,
+                    Status::Pressed => 0.26,
+                    _ => 0.14,
+                },
+            )
         } else {
-            (fg, match status { Status::Hovered => 0.10, Status::Pressed => 0.16, _ => 0.0 })
+            (
+                fg,
+                match status {
+                    Status::Hovered => 0.10,
+                    Status::Pressed => 0.16,
+                    _ => 0.0,
+                },
+            )
         };
         Style {
             background: (layer > 0.0).then(|| Background::Color(alpha(tint, layer))),

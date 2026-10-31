@@ -38,7 +38,13 @@ pub struct Breakpoints {
 
 impl Default for Breakpoints {
     fn default() -> Self {
-        Self { sm: SM, md: MD, lg: LG, xl: XL, xxl: XXL }
+        Self {
+            sm: SM,
+            md: MD,
+            lg: LG,
+            xl: XL,
+            xxl: XXL,
+        }
     }
 }
 
@@ -50,7 +56,11 @@ impl Breakpoints {
 
     /// Whether the values are in increasing order (a config with a shuffled scale is ignored).
     pub fn is_ordered(&self) -> bool {
-        0.0 < self.sm && self.sm < self.md && self.md < self.lg && self.lg < self.xl && self.xl < self.xxl
+        0.0 < self.sm
+            && self.sm < self.md
+            && self.md < self.lg
+            && self.lg < self.xl
+            && self.xl < self.xxl
     }
 }
 
@@ -102,7 +112,13 @@ mod tests {
 
     #[test]
     fn the_scale_can_be_replaced() {
-        let b = Breakpoints { sm: 500.0, md: 640.0, lg: 900.0, xl: 1100.0, xxl: 1300.0 };
+        let b = Breakpoints {
+            sm: 500.0,
+            md: 640.0,
+            lg: 900.0,
+            xl: 1100.0,
+            xxl: 1300.0,
+        };
         assert!(b.is_ordered());
         assert_eq!(WidthClass::of_with(&b, 520.0), WidthClass::Sm);
         assert_eq!(WidthClass::of_with(&b, 640.0), WidthClass::Md);

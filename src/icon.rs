@@ -49,8 +49,12 @@ impl Icon {
             Icon::WindowClose => r#"<path d="M4 4l8 8M12 4l-8 8"/>"#,
             Icon::WindowMinimize => r#"<path d="M3 12h10"/>"#,
             Icon::WindowMaximize => r#"<rect x="3" y="3" width="10" height="10" rx="1"/>"#,
-            Icon::Window => r#"<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12"/>"#,
-            Icon::Sidebar => r#"<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 3v10"/>"#,
+            Icon::Window => {
+                r#"<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12"/>"#
+            }
+            Icon::Sidebar => {
+                r#"<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 3v10"/>"#
+            }
             Icon::WindowRestore => {
                 r#"<rect x="2.5" y="5.5" width="8" height="8" rx="1"/><path d="M5.5 5.5v-2a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1h-2"/>"#
             }
@@ -107,12 +111,15 @@ impl Icon {
 
     /// Renders the icon at the given size, tinted with the window foreground.
     pub fn view<'a>(self, size: f32) -> Svg<'a, Theme> {
-        svg(self.handle()).width(Length::Fixed(size)).height(Length::Fixed(size))
+        svg(self.handle())
+            .width(Length::Fixed(size))
+            .height(Length::Fixed(size))
     }
 
     /// Renders the icon at the given size with a fixed tint.
     pub fn colored<'a>(self, size: f32, color: Color) -> Svg<'a, Theme> {
-        self.view(size).style(move |_: &Theme, _| svg::Style { color: Some(color) })
+        self.view(size)
+            .style(move |_: &Theme, _| svg::Style { color: Some(color) })
     }
 }
 
@@ -126,8 +133,14 @@ mod tests {
 
     #[test]
     fn only_window_controls_use_the_system_icon_theme() {
-        assert_eq!(Icon::WindowClose.system_name(), Some("window-close-symbolic"));
-        assert_eq!(Icon::WindowRestore.system_name(), Some("window-restore-symbolic"));
+        assert_eq!(
+            Icon::WindowClose.system_name(),
+            Some("window-close-symbolic")
+        );
+        assert_eq!(
+            Icon::WindowRestore.system_name(),
+            Some("window-restore-symbolic")
+        );
         assert_eq!(Icon::Window.system_name(), None);
         assert_eq!(Icon::OpenMenu.system_name(), None);
     }

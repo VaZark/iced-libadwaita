@@ -26,4 +26,4 @@ Sidebar bg = sidebar color with a sidebar-border hairline.
 
 ## Deviations / gaps
 
-Drawer as the default for the navigation split view is a project choice (libadwaita's collapsed navigation split view is page-based; its *overlay* split view is the drawer). No swipe gesture and no spring animation yet.
+Drawer as the default for the navigation split view is a project choice (libadwaita's collapsed navigation split view is page-based; its _overlay_ split view is the drawer). No swipe gesture and no spring animation yet.

@@ -254,7 +254,9 @@ fn parse_bool(v: &str) -> Option<bool> {
 }
 
 fn parse_accent(v: &str) -> Option<AccentColor> {
-    AccentColor::ALL.into_iter().find(|a| format!("{a:?}").eq_ignore_ascii_case(v))
+    AccentColor::ALL
+        .into_iter()
+        .find(|a| format!("{a:?}").eq_ignore_ascii_case(v))
 }
 
 impl Config {
@@ -301,10 +303,14 @@ impl Config {
             }
         }
         if let Some(v) = get("appearance", "flat-headerbars") {
-            parse_bool(v).map(|b| self.flat_headerbars = b).unwrap_or_else(|| bad!("appearance", "flat-headerbars", v));
+            parse_bool(v)
+                .map(|b| self.flat_headerbars = b)
+                .unwrap_or_else(|| bad!("appearance", "flat-headerbars", v));
         }
         if let Some(v) = get("appearance", "auto-contrast") {
-            parse_bool(v).map(|b| self.auto_contrast = b).unwrap_or_else(|| bad!("appearance", "auto-contrast", v));
+            parse_bool(v)
+                .map(|b| self.auto_contrast = b)
+                .unwrap_or_else(|| bad!("appearance", "auto-contrast", v));
         }
         if let Some(v) = get("appearance", "density") {
             match v {
@@ -320,20 +326,34 @@ impl Config {
             }
         }
         if let Some(v) = get("appearance", "shadows") {
-            parse_bool(v).map(|b| self.shadows = b).unwrap_or_else(|| bad!("appearance", "shadows", v));
+            parse_bool(v)
+                .map(|b| self.shadows = b)
+                .unwrap_or_else(|| bad!("appearance", "shadows", v));
         }
         if let Some(v) = get("appearance", "shadow-scale") {
-            v.parse::<f32>().ok().filter(|f| *f >= 0.0).map(|f| self.shadow_scale = f).unwrap_or_else(|| bad!("appearance", "shadow-scale", v));
+            v.parse::<f32>()
+                .ok()
+                .filter(|f| *f >= 0.0)
+                .map(|f| self.shadow_scale = f)
+                .unwrap_or_else(|| bad!("appearance", "shadow-scale", v));
         }
         if let Some(v) = get("appearance", "shadow-intensity") {
-            v.parse::<f32>().ok().filter(|f| *f >= 0.0).map(|f| self.shadow_intensity = f).unwrap_or_else(|| bad!("appearance", "shadow-intensity", v));
+            v.parse::<f32>()
+                .ok()
+                .filter(|f| *f >= 0.0)
+                .map(|f| self.shadow_intensity = f)
+                .unwrap_or_else(|| bad!("appearance", "shadow-intensity", v));
         }
         for t in crate::animation::Trigger::ALL {
             if let Some(v) = get("motion", t.key()) {
                 match v {
                     // The default is no entry, so it also overrides an earlier file's `none`.
-                    "default" | "animated" => { self.motion.remove(&t); }
-                    "none" => { self.motion.insert(t, crate::animation::Motion::None); }
+                    "default" | "animated" => {
+                        self.motion.remove(&t);
+                    }
+                    "none" => {
+                        self.motion.insert(t, crate::animation::Motion::None);
+                    }
                     _ => bad!("motion", t.key(), v),
                 }
             }
@@ -341,11 +361,15 @@ impl Config {
         if let Some(v) = get("motion", "animations") {
             match v {
                 "system" => self.animations = Pick::System,
-                _ => parse_bool(v).map(|b| self.animations = Pick::Fixed(b)).unwrap_or_else(|| bad!("motion", "animations", v)),
+                _ => parse_bool(v)
+                    .map(|b| self.animations = Pick::Fixed(b))
+                    .unwrap_or_else(|| bad!("motion", "animations", v)),
             }
         }
         if let Some(v) = get("motion", "reduced-motion") {
-            parse_bool(v).map(|b| self.reduced_motion = b).unwrap_or_else(|| bad!("motion", "reduced-motion", v));
+            parse_bool(v)
+                .map(|b| self.reduced_motion = b)
+                .unwrap_or_else(|| bad!("motion", "reduced-motion", v));
         }
         if let Some(v) = get("windows", "decorations") {
             match v {
@@ -355,7 +379,11 @@ impl Config {
             }
         }
         if let Some(v) = get("windows", "button-layout") {
-            self.button_layout = if v == "system" { Pick::System } else { Pick::Fixed(v.to_string()) };
+            self.button_layout = if v == "system" {
+                Pick::System
+            } else {
+                Pick::Fixed(v.to_string())
+            };
         }
         // The width scale; the mobile and collapse widths follow it unless set explicitly.
         let before = self.breakpoints;
@@ -365,14 +393,30 @@ impl Config {
         num!("breakpoints", "xl", self.breakpoints.xl, 200.0, 10000.0);
         num!("breakpoints", "xxl", self.breakpoints.xxl, 200.0, 10000.0);
         if !self.breakpoints.is_ordered() {
-            warn.push("[breakpoints]: sm < md < lg < xl < xxl is required; the scale is ignored".into());
+            warn.push(
+                "[breakpoints]: sm < md < lg < xl < xxl is required; the scale is ignored".into(),
+            );
             self.breakpoints = before;
         }
         if let Some(v) = get("windows", "mobile-max-width") {
-            v.parse::<f32>().ok().filter(|f| *f >= 200.0).map(|f| { self.mobile_max_width = f; self.mobile_explicit = true; }).unwrap_or_else(|| bad!("windows", "mobile-max-width", v));
+            v.parse::<f32>()
+                .ok()
+                .filter(|f| *f >= 200.0)
+                .map(|f| {
+                    self.mobile_max_width = f;
+                    self.mobile_explicit = true;
+                })
+                .unwrap_or_else(|| bad!("windows", "mobile-max-width", v));
         }
         if let Some(v) = get("navigation", "collapse-width") {
-            v.parse::<f32>().ok().filter(|f| *f >= 200.0).map(|f| { self.collapse_width = f; self.collapse_explicit = true; }).unwrap_or_else(|| bad!("navigation", "collapse-width", v));
+            v.parse::<f32>()
+                .ok()
+                .filter(|f| *f >= 200.0)
+                .map(|f| {
+                    self.collapse_width = f;
+                    self.collapse_explicit = true;
+                })
+                .unwrap_or_else(|| bad!("navigation", "collapse-width", v));
         }
         if !self.mobile_explicit {
             self.mobile_max_width = self.breakpoints.sm - 1.0;
@@ -380,19 +424,63 @@ impl Config {
         if !self.collapse_explicit {
             self.collapse_width = self.breakpoints.md - 1.0;
         }
-        num!("navigation", "min-content-width", self.min_content_width, 200.0, 10000.0);
-        num!("navigation", "sidebar-fraction", self.sidebar_fraction, 0.1, 0.5);
-        num!("navigation", "sidebar-min-width", self.sidebar_min_width, 100.0, 600.0);
-        num!("navigation", "sidebar-max-width", self.sidebar_max_width, 100.0, 800.0);
-        num!("navigation", "drawer-max-fraction", self.drawer_max_fraction, 0.3, 0.95);
+        num!(
+            "navigation",
+            "min-content-width",
+            self.min_content_width,
+            200.0,
+            10000.0
+        );
+        num!(
+            "navigation",
+            "sidebar-fraction",
+            self.sidebar_fraction,
+            0.1,
+            0.5
+        );
+        num!(
+            "navigation",
+            "sidebar-min-width",
+            self.sidebar_min_width,
+            100.0,
+            600.0
+        );
+        num!(
+            "navigation",
+            "sidebar-max-width",
+            self.sidebar_max_width,
+            100.0,
+            800.0
+        );
+        num!(
+            "navigation",
+            "drawer-max-fraction",
+            self.drawer_max_fraction,
+            0.3,
+            0.95
+        );
         if self.sidebar_min_width > self.sidebar_max_width {
-            warn.push("[navigation]: sidebar-min-width exceeds sidebar-max-width; both reset".into());
+            warn.push(
+                "[navigation]: sidebar-min-width exceeds sidebar-max-width; both reset".into(),
+            );
             self.sidebar_min_width = crate::widget::SIDEBAR_MIN_WIDTH;
             self.sidebar_max_width = crate::widget::SIDEBAR_MAX_WIDTH;
         }
         num!("windows", "min-width", self.min_window_width, 200.0, 2000.0);
-        num!("windows", "min-height", self.min_window_height, 100.0, 2000.0);
-        num!("layout", "page-max-width", self.page_max_width, 300.0, 4000.0);
+        num!(
+            "windows",
+            "min-height",
+            self.min_window_height,
+            100.0,
+            2000.0
+        );
+        num!(
+            "layout",
+            "page-max-width",
+            self.page_max_width,
+            300.0,
+            4000.0
+        );
         if let Some(v) = get("navigation", "mobile-sidebar") {
             match v {
                 "drawer" => self.mobile_sidebar = CollapsedSidebar::Drawer,
@@ -419,7 +507,9 @@ impl Config {
                 .unwrap_or_else(|| bad!("toasts", "target", v));
         }
         if let Some(v) = get("shortcuts", "enabled") {
-            parse_bool(v).map(|b| self.shortcuts_enabled = b).unwrap_or_else(|| bad!("shortcuts", "enabled", v));
+            parse_bool(v)
+                .map(|b| self.shortcuts_enabled = b)
+                .unwrap_or_else(|| bad!("shortcuts", "enabled", v));
         }
         if let Some(v) = get("shortcuts", "hints") {
             match v {
@@ -437,13 +527,23 @@ impl Config {
             }
         }
         if let Some(v) = get("rows", "wrap-basis") {
-            v.parse::<f32>().ok().filter(|f| *f >= 0.0).map(|f| self.row_wrap_basis = f).unwrap_or_else(|| bad!("rows", "wrap-basis", v));
+            v.parse::<f32>()
+                .ok()
+                .filter(|f| *f >= 0.0)
+                .map(|f| self.row_wrap_basis = f)
+                .unwrap_or_else(|| bad!("rows", "wrap-basis", v));
         }
         if let Some(v) = get("icons", "theme") {
-            self.icon_theme = if v == "system" { Pick::System } else { Pick::Fixed(v.to_string()) };
+            self.icon_theme = if v == "system" {
+                Pick::System
+            } else {
+                Pick::Fixed(v.to_string())
+            };
         }
         if let Some(v) = get("policy", "allow-app-overrides") {
-            parse_bool(v).map(|b| self.allow_app_overrides = b).unwrap_or_else(|| bad!("policy", "allow-app-overrides", v));
+            parse_bool(v)
+                .map(|b| self.allow_app_overrides = b)
+                .unwrap_or_else(|| bad!("policy", "allow-app-overrides", v));
         }
         // Properties this toolkit does not know are ignored: never an error, never deleted or
         // rewritten (a newer toolkit may have written them). They are only recorded, so a
@@ -480,7 +580,13 @@ impl Config {
         let mut out = Vec::new();
         let dirs = std::env::var("XDG_CONFIG_DIRS").unwrap_or_else(|_| "/etc/xdg".into());
         // XDG_CONFIG_DIRS is ordered most-important first; we apply least-important first.
-        for d in dirs.split(':').filter(|s| !s.is_empty()).collect::<Vec<_>>().into_iter().rev() {
+        for d in dirs
+            .split(':')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+        {
             out.push(PathBuf::from(d).join("iced-libadwaita/desktop.conf"));
         }
         let user = std::env::var_os("XDG_CONFIG_HOME")
@@ -608,30 +714,89 @@ macro_rules! override_fn {
 impl Overrides {
     override_fn!(color_scheme, color_scheme, Scheme, Setting::ColorScheme);
     override_fn!(accent, accent, AccentColor, Setting::Accent);
-    override_fn!(flat_headerbars, flat_headerbars, bool, Setting::FlatHeaderbars);
+    override_fn!(
+        flat_headerbars,
+        flat_headerbars,
+        bool,
+        Setting::FlatHeaderbars
+    );
     override_fn!(auto_contrast, auto_contrast, bool, Setting::AutoContrast);
     override_fn!(density, density, Density, Setting::Density);
     override_fn!(text_scale, text_scale, f32, Setting::TextScale);
     override_fn!(shadows, shadows, bool, Setting::Shadows);
     override_fn!(animations, animations, bool, Setting::Animations);
     override_fn!(reduced_motion, reduced_motion, bool, Setting::ReducedMotion);
-    override_fn!(decorations, decorations, DecorationMode, Setting::Decorations);
+    override_fn!(
+        decorations,
+        decorations,
+        DecorationMode,
+        Setting::Decorations
+    );
     override_fn!(button_layout, button_layout, String, Setting::ButtonLayout);
-    override_fn!(mobile_max_width, mobile_max_width, f32, Setting::MobileMaxWidth);
+    override_fn!(
+        mobile_max_width,
+        mobile_max_width,
+        f32,
+        Setting::MobileMaxWidth
+    );
     override_fn!(collapse_width, collapse_width, f32, Setting::CollapseWidth);
-    override_fn!(min_content_width, min_content_width, f32, Setting::MinContentWidth);
-    override_fn!(mobile_sidebar, mobile_sidebar, CollapsedSidebar, Setting::MobileSidebar);
-    override_fn!(menu_presentation, menu_presentation, MenuPresentationSetting, Setting::MenuPresentation);
-    override_fn!(row_collapse, row_collapse, CollapseBehavior, Setting::RowCollapse);
-    override_fn!(toast_position, toast_position, crate::widget::ToastPosition, Setting::ToastPosition);
-    override_fn!(toast_target, toast_target, crate::widget::ToastTarget, Setting::ToastTarget);
-    override_fn!(shortcuts_enabled, shortcuts_enabled, bool, Setting::Shortcuts);
-    override_fn!(shortcut_hints, shortcut_hints, crate::shortcut::Hints, Setting::Shortcuts);
+    override_fn!(
+        min_content_width,
+        min_content_width,
+        f32,
+        Setting::MinContentWidth
+    );
+    override_fn!(
+        mobile_sidebar,
+        mobile_sidebar,
+        CollapsedSidebar,
+        Setting::MobileSidebar
+    );
+    override_fn!(
+        menu_presentation,
+        menu_presentation,
+        MenuPresentationSetting,
+        Setting::MenuPresentation
+    );
+    override_fn!(
+        row_collapse,
+        row_collapse,
+        CollapseBehavior,
+        Setting::RowCollapse
+    );
+    override_fn!(
+        toast_position,
+        toast_position,
+        crate::widget::ToastPosition,
+        Setting::ToastPosition
+    );
+    override_fn!(
+        toast_target,
+        toast_target,
+        crate::widget::ToastTarget,
+        Setting::ToastTarget
+    );
+    override_fn!(
+        shortcuts_enabled,
+        shortcuts_enabled,
+        bool,
+        Setting::Shortcuts
+    );
+    override_fn!(
+        shortcut_hints,
+        shortcut_hints,
+        crate::shortcut::Hints,
+        Setting::Shortcuts
+    );
     override_fn!(row_wrap_basis, row_wrap_basis, f32, Setting::RowWrapBasis);
     override_fn!(icon_theme, icon_theme, String, Setting::IconTheme);
 
     /// Overrides one trigger's animation for this app (discouraged).
-    pub fn motion(&mut self, trigger: crate::animation::Trigger, motion: crate::animation::Motion) -> &mut Self {
+    pub fn motion(
+        &mut self,
+        trigger: crate::animation::Trigger,
+        motion: crate::animation::Motion,
+    ) -> &mut Self {
         self.motion.push((trigger, motion));
         self.touched.push(Setting::Motion);
         self
@@ -677,29 +842,75 @@ impl Overrides {
         for (t, m) in self.motion {
             c.motion.insert(t, m);
         }
-        if let Some(v) = self.color_scheme { c.color_scheme = Pick::Fixed(v) }
-        if let Some(v) = self.accent { c.accent = Pick::Fixed(v) }
-        if let Some(v) = self.flat_headerbars { c.flat_headerbars = v }
-        if let Some(v) = self.auto_contrast { c.auto_contrast = v }
-        if let Some(v) = self.density { c.density = v }
-        if let Some(v) = self.text_scale { c.text_scale = v }
-        if let Some(v) = self.shadows { c.shadows = v }
-        if let Some(v) = self.animations { c.animations = Pick::Fixed(v) }
-        if let Some(v) = self.reduced_motion { c.reduced_motion = v }
-        if let Some(v) = self.decorations { c.decorations = v }
-        if let Some(v) = self.button_layout { c.button_layout = Pick::Fixed(v) }
-        if let Some(v) = self.mobile_max_width { c.mobile_max_width = v }
-        if let Some(v) = self.collapse_width { c.collapse_width = v }
-        if let Some(v) = self.min_content_width { c.min_content_width = v }
-        if let Some(v) = self.mobile_sidebar { c.mobile_sidebar = v }
-        if let Some(v) = self.menu_presentation { c.menu_presentation = v }
-        if let Some(v) = self.row_collapse { c.row_collapse = v }
-        if let Some(v) = self.toast_position { c.toast_position = v }
-        if let Some(v) = self.toast_target { c.toast_target = v }
-        if let Some(v) = self.shortcuts_enabled { c.shortcuts_enabled = v }
-        if let Some(v) = self.shortcut_hints { c.shortcut_hints = v }
-        if let Some(v) = self.row_wrap_basis { c.row_wrap_basis = v }
-        if let Some(v) = self.icon_theme { c.icon_theme = Pick::Fixed(v) }
+        if let Some(v) = self.color_scheme {
+            c.color_scheme = Pick::Fixed(v)
+        }
+        if let Some(v) = self.accent {
+            c.accent = Pick::Fixed(v)
+        }
+        if let Some(v) = self.flat_headerbars {
+            c.flat_headerbars = v
+        }
+        if let Some(v) = self.auto_contrast {
+            c.auto_contrast = v
+        }
+        if let Some(v) = self.density {
+            c.density = v
+        }
+        if let Some(v) = self.text_scale {
+            c.text_scale = v
+        }
+        if let Some(v) = self.shadows {
+            c.shadows = v
+        }
+        if let Some(v) = self.animations {
+            c.animations = Pick::Fixed(v)
+        }
+        if let Some(v) = self.reduced_motion {
+            c.reduced_motion = v
+        }
+        if let Some(v) = self.decorations {
+            c.decorations = v
+        }
+        if let Some(v) = self.button_layout {
+            c.button_layout = Pick::Fixed(v)
+        }
+        if let Some(v) = self.mobile_max_width {
+            c.mobile_max_width = v
+        }
+        if let Some(v) = self.collapse_width {
+            c.collapse_width = v
+        }
+        if let Some(v) = self.min_content_width {
+            c.min_content_width = v
+        }
+        if let Some(v) = self.mobile_sidebar {
+            c.mobile_sidebar = v
+        }
+        if let Some(v) = self.menu_presentation {
+            c.menu_presentation = v
+        }
+        if let Some(v) = self.row_collapse {
+            c.row_collapse = v
+        }
+        if let Some(v) = self.toast_position {
+            c.toast_position = v
+        }
+        if let Some(v) = self.toast_target {
+            c.toast_target = v
+        }
+        if let Some(v) = self.shortcuts_enabled {
+            c.shortcuts_enabled = v
+        }
+        if let Some(v) = self.shortcut_hints {
+            c.shortcut_hints = v
+        }
+        if let Some(v) = self.row_wrap_basis {
+            c.row_wrap_basis = v
+        }
+        if let Some(v) = self.icon_theme {
+            c.icon_theme = Pick::Fixed(v)
+        }
     }
 }
 
@@ -793,7 +1004,10 @@ thing=1
         assert_eq!(c.density, Density::Compact);
         assert_eq!(c.animations, Pick::Fixed(false));
         assert_eq!(c.decorations, DecorationMode::Ssd);
-        assert_eq!(c.button_layout, Pick::Fixed("close,minimize,maximize:".into()));
+        assert_eq!(
+            c.button_layout,
+            Pick::Fixed("close,minimize,maximize:".into())
+        );
         assert_eq!(c.mobile_max_width, 500.0);
         assert_eq!(c.mobile_sidebar, CollapsedSidebar::FirstPage);
         assert_eq!(c.menu_presentation, MenuPresentationSetting::Dropdown);
@@ -801,7 +1015,10 @@ thing=1
         assert_eq!(c.row_wrap_basis, 200.0);
         // The unknown section is ignored (not a warning) and reported for a settings tool.
         assert!(c.warnings().is_empty(), "{:?}", c.warnings());
-        assert_eq!(c.unknown_properties(), &[("bogus".to_string(), "thing".to_string())]);
+        assert_eq!(
+            c.unknown_properties(),
+            &[("bogus".to_string(), "thing".to_string())]
+        );
     }
 
     #[test]
@@ -814,7 +1031,9 @@ thing=1
 
     #[test]
     fn density_and_rows_feed_the_metrics() {
-        let c = Config::from_keyfile("[appearance]\ndensity=compact\n[rows]\ncollapse=flex\nwrap-basis=90\n");
+        let c = Config::from_keyfile(
+            "[appearance]\ndensity=compact\n[rows]\ncollapse=flex\nwrap-basis=90\n",
+        );
         let m = c.metrics();
         assert_eq!(m.button_min_height, Metrics::compact().button_min_height);
         assert_eq!(m.row_collapse, CollapseBehavior::Flex);
@@ -830,29 +1049,39 @@ thing=1
         std::fs::write(&sys, "[appearance]\ncolor-scheme=dark\nshadows=false\n").unwrap();
         std::fs::write(&user, "[appearance]\ncolor-scheme=light\n").unwrap();
         let c = Config::load_from(&[sys, user, dir.join("missing.conf")]);
-        assert_eq!(c.color_scheme, Pick::Fixed(Scheme::Light), "user beats system");
+        assert_eq!(
+            c.color_scheme,
+            Pick::Fixed(Scheme::Light),
+            "user beats system"
+        );
         assert!(!c.shadows, "untouched keys keep the system value");
         std::fs::remove_dir_all(dir).ok();
     }
 
     #[test]
     fn app_opt_out_overrides_and_is_reported() {
-        let c = Config::from_keyfile("[motion]\nanimations=on\n[navigation]\nmobile-sidebar=drawer\n")
-            .opt_out(|o| {
-                o.animations(false).mobile_sidebar(CollapsedSidebar::FirstPage);
-            });
+        let c =
+            Config::from_keyfile("[motion]\nanimations=on\n[navigation]\nmobile-sidebar=drawer\n")
+                .opt_out(|o| {
+                    o.animations(false)
+                        .mobile_sidebar(CollapsedSidebar::FirstPage);
+                });
         assert_eq!(c.animations, Pick::Fixed(false));
         assert_eq!(c.mobile_sidebar, CollapsedSidebar::FirstPage);
-        assert_eq!(c.overridden(), &[Setting::Animations, Setting::MobileSidebar]);
+        assert_eq!(
+            c.overridden(),
+            &[Setting::Animations, Setting::MobileSidebar]
+        );
         assert!(c.denied().is_empty());
     }
 
     #[test]
     fn desktop_policy_can_forbid_opt_outs() {
-        let c = Config::from_keyfile("[policy]\nallow-app-overrides=false\n[motion]\nanimations=on\n")
-            .opt_out(|o| {
-                o.animations(false);
-            });
+        let c =
+            Config::from_keyfile("[policy]\nallow-app-overrides=false\n[motion]\nanimations=on\n")
+                .opt_out(|o| {
+                    o.animations(false);
+                });
         assert_eq!(c.animations, Pick::Fixed(true), "the desktop value stands");
         assert!(c.overridden().is_empty());
         assert_eq!(c.denied(), &[Setting::Animations]);
@@ -861,7 +1090,8 @@ thing=1
     #[test]
     fn each_trigger_can_be_set_to_none() {
         use crate::animation::{Motion, Trigger};
-        let c = Config::from_keyfile("[motion]\npage-change=none\npopover=default\ncarousel=wobble\n");
+        let c =
+            Config::from_keyfile("[motion]\npage-change=none\npopover=default\ncarousel=wobble\n");
         assert_eq!(c.motion.get(&Trigger::PageChange), Some(&Motion::None));
         // `default` is no entry at all: it is the trigger's own animation, and it also overrides
         // an earlier file's `none`.
@@ -871,10 +1101,17 @@ thing=1
             c.apply(&parse_keyfile("[motion]\npopover=default\n"));
             c
         };
-        assert_eq!(layered.motion.get(&Trigger::Popover), None, "a later `default` overrides an earlier `none`");
+        assert_eq!(
+            layered.motion.get(&Trigger::Popover),
+            None,
+            "a later `default` overrides an earlier `none`"
+        );
         assert!(!c.motion.contains_key(&Trigger::Carousel));
         assert!(c.warnings().iter().any(|w| w.contains("carousel")));
-        assert!(!c.warnings().iter().any(|w| w.contains("unknown")), "trigger keys are known settings");
+        assert!(
+            !c.warnings().iter().any(|w| w.contains("unknown")),
+            "trigger keys are known settings"
+        );
     }
 
     #[test]
@@ -890,9 +1127,15 @@ thing=1
     fn toast_position_and_target_are_configurable() {
         use crate::widget::{ToastPosition, ToastTarget};
         let d = Config::default();
-        assert_eq!((d.toast_position, d.toast_target), (ToastPosition::BottomCenter, ToastTarget::Content));
+        assert_eq!(
+            (d.toast_position, d.toast_target),
+            (ToastPosition::BottomCenter, ToastTarget::Content)
+        );
         let c = Config::from_keyfile("[toasts]\nposition=top-right\ntarget=content\n");
-        assert_eq!((c.toast_position, c.toast_target), (ToastPosition::TopRight, ToastTarget::Content));
+        assert_eq!(
+            (c.toast_position, c.toast_target),
+            (ToastPosition::TopRight, ToastTarget::Content)
+        );
         assert!(c.warnings().is_empty());
         let bad = Config::from_keyfile("[toasts]\nposition=middle\n");
         assert_eq!(bad.toast_position, ToastPosition::BottomCenter);
@@ -903,9 +1146,18 @@ thing=1
     fn every_layout_constant_is_a_fallback() {
         let d = Config::default();
         assert_eq!((d.breakpoints.sm, d.breakpoints.md), (576.0, 768.0));
-        assert_eq!((d.mobile_max_width, d.collapse_width, d.min_content_width), (575.0, 767.0, 520.0));
-        assert_eq!((d.sidebar_fraction, d.sidebar_min_width, d.sidebar_max_width), (0.25, 180.0, 280.0));
-        assert_eq!((d.min_window_width, d.min_window_height, d.page_max_width), (360.0, 200.0, 600.0));
+        assert_eq!(
+            (d.mobile_max_width, d.collapse_width, d.min_content_width),
+            (575.0, 767.0, 520.0)
+        );
+        assert_eq!(
+            (d.sidebar_fraction, d.sidebar_min_width, d.sidebar_max_width),
+            (0.25, 180.0, 280.0)
+        );
+        assert_eq!(
+            (d.min_window_width, d.min_window_height, d.page_max_width),
+            (360.0, 200.0, 600.0)
+        );
 
         let c = Config::from_keyfile(
             "[breakpoints]\nsm=500\nmd=640\nlg=900\nxl=1100\nxxl=1300\n\
@@ -915,12 +1167,32 @@ thing=1
         assert!(c.warnings().is_empty(), "{:?}", c.warnings());
         // The mobile and collapse widths follow the scale (`sm - 1`, `md - 1`) unless set explicitly.
         assert_eq!((c.mobile_max_width, c.collapse_width), (499.0, 639.0));
-        assert_eq!((c.sidebar_fraction, c.sidebar_min_width, c.sidebar_max_width, c.drawer_max_fraction), (0.3, 200.0, 320.0, 0.7));
-        assert_eq!((c.min_content_width, c.min_window_width, c.min_window_height, c.page_max_width), (480.0, 400.0, 240.0, 720.0));
+        assert_eq!(
+            (
+                c.sidebar_fraction,
+                c.sidebar_min_width,
+                c.sidebar_max_width,
+                c.drawer_max_fraction
+            ),
+            (0.3, 200.0, 320.0, 0.7)
+        );
+        assert_eq!(
+            (
+                c.min_content_width,
+                c.min_window_width,
+                c.min_window_height,
+                c.page_max_width
+            ),
+            (480.0, 400.0, 240.0, 720.0)
+        );
         assert_eq!(c.metrics().clamp_maximum, 720.0);
 
-        let explicit = Config::from_keyfile("[breakpoints]\nsm=500\n[windows]\nmobile-max-width=450\n");
-        assert_eq!(explicit.mobile_max_width, 450.0, "an explicit width wins over the scale");
+        let explicit =
+            Config::from_keyfile("[breakpoints]\nsm=500\n[windows]\nmobile-max-width=450\n");
+        assert_eq!(
+            explicit.mobile_max_width, 450.0,
+            "an explicit width wins over the scale"
+        );
     }
 
     #[test]
@@ -928,7 +1200,8 @@ thing=1
         let c = Config::from_keyfile("[breakpoints]\nsm=900\nmd=700\n");
         assert_eq!(c.breakpoints, crate::breakpoints::Breakpoints::default());
         assert!(c.warnings().iter().any(|w| w.contains("breakpoints")));
-        let c = Config::from_keyfile("[navigation]\nsidebar-min-width=500\nsidebar-max-width=300\n");
+        let c =
+            Config::from_keyfile("[navigation]\nsidebar-min-width=500\nsidebar-max-width=300\n");
         assert_eq!((c.sidebar_min_width, c.sidebar_max_width), (180.0, 280.0));
         assert_eq!(c.warnings().len(), 1);
     }
@@ -941,18 +1214,28 @@ thing=1
         let c = Config::from_keyfile("[shortcuts]\nenabled=false\nhints=never\n");
         assert!(!c.shortcuts_enabled && c.shortcut_hints == Hints::Never);
         assert!(c.warnings().is_empty());
-        assert_eq!(Config::from_keyfile("[shortcuts]\nhints=sometimes\n").warnings().len(), 1);
+        assert_eq!(
+            Config::from_keyfile("[shortcuts]\nhints=sometimes\n")
+                .warnings()
+                .len(),
+            1
+        );
     }
 
     /// Unknown properties are ignored without a warning and are reported separately.
     #[test]
     fn unknown_properties_are_ignored_not_warned_about() {
-        let c = Config::from_keyfile("[appearance]\ndensity=compact\nfuture-key=1\n[brand-new-section]\nx=y\n");
+        let c = Config::from_keyfile(
+            "[appearance]\ndensity=compact\nfuture-key=1\n[brand-new-section]\nx=y\n",
+        );
         assert_eq!(c.density, Density::Compact, "known properties still apply");
         assert!(c.warnings().is_empty(), "{:?}", c.warnings());
         assert_eq!(
             c.unknown_properties(),
-            &[("appearance".to_string(), "future-key".to_string()), ("brand-new-section".to_string(), "x".to_string())]
+            &[
+                ("appearance".to_string(), "future-key".to_string()),
+                ("brand-new-section".to_string(), "x".to_string())
+            ]
         );
     }
 
@@ -975,13 +1258,25 @@ thing=1
         }
         let c = Config::from_keyfile(&file);
         assert!(c.warnings().is_empty(), "{:?}", c.warnings());
-        assert!(c.unknown_properties().is_empty(), "{:?}", c.unknown_properties());
+        assert!(
+            c.unknown_properties().is_empty(),
+            "{:?}",
+            c.unknown_properties()
+        );
         // An explicit `mobile-max-width` / `collapse-width` is remembered (it stops them following
         // the breakpoint scale); everything else must equal the built-in defaults.
         let mut c = c;
         c.mobile_explicit = false;
         c.collapse_explicit = false;
-        assert_eq!(c, Config::default(), "the registry's defaults must be the built-in defaults");
-        assert_eq!(Config::from_keyfile(""), Config::default(), "missing properties use defaults");
+        assert_eq!(
+            c,
+            Config::default(),
+            "the registry's defaults must be the built-in defaults"
+        );
+        assert_eq!(
+            Config::from_keyfile(""),
+            Config::default(),
+            "missing properties use defaults"
+        );
     }
 }

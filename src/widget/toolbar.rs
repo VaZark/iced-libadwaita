@@ -28,12 +28,21 @@ fn shade_strip<'a, M: 'a>(top: bool) -> Element<'a, M> {
         .height(Length::Fixed(6.0))
         .style(move |t: &Theme| {
             let s = &t.semantic;
-            let k = if t.shadows.enabled { t.shadows.intensity } else { 0.0 };
-            let c = Color { a: (s.headerbar_shade.a * 0.5 * k).min(1.0), ..s.headerbar_shade };
+            let k = if t.shadows.enabled {
+                t.shadows.intensity
+            } else {
+                0.0
+            };
+            let c = Color {
+                a: (s.headerbar_shade.a * 0.5 * k).min(1.0),
+                ..s.headerbar_shade
+            };
             let clear = Color { a: 0.0, ..c };
             // iced angles: 0 = left→right; π/2 = top→bottom.
             let (from, to) = if top { (c, clear) } else { (clear, c) };
-            let g = Linear::new(Radians(std::f32::consts::FRAC_PI_2)).add_stop(0.0, from).add_stop(1.0, to);
+            let g = Linear::new(Radians(std::f32::consts::FRAC_PI_2))
+                .add_stop(0.0, from)
+                .add_stop(1.0, to);
             iced::widget::container::Style {
                 background: Some(Background::Gradient(g.into())),
                 ..Default::default()
@@ -109,12 +118,21 @@ impl<'a, M: 'a> From<ToolbarView<'a, M>> for Element<'a, M> {
             col = col.push(border_line());
         }
 
-        let mut layers = vec![container(t.content).width(Length::Fill).height(Length::Fill).into()];
+        let mut layers = vec![
+            container(t.content)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into(),
+        ];
         if has_top && t.top_style == BarStyle::Raised {
             layers.push(container(shade_strip(true)).align_top(Length::Fill).into());
         }
         if has_bottom && t.bottom_style == BarStyle::Raised {
-            layers.push(container(shade_strip(false)).align_bottom(Length::Fill).into());
+            layers.push(
+                container(shade_strip(false))
+                    .align_bottom(Length::Fill)
+                    .into(),
+            );
         }
         col = col.push(stack(layers).width(Length::Fill).height(Length::Fill));
 

@@ -12,12 +12,12 @@
 //! separated by a hairline, like a two-segment [`ToggleGroup`](super::ToggleGroup).
 
 use super::button::sized;
-use super::dropdown::{menu_item, menu_item_disabled, popover, Align, Appearance, Dropdown};
+use super::dropdown::{Align, Appearance, Dropdown, menu_item, menu_item_disabled, popover};
 use super::{ButtonContent, Element, Menu};
 use crate::style::button::{self as sb, Position};
 use crate::{Icon, Metrics, Theme};
-use iced::widget::{container, row, space};
 use iced::Length;
+use iced::widget::{container, row, space};
 
 /// The arrow half of a split button: a linked-end dropdown that opens `popover`.
 fn joined<'a, M: Clone + 'a>(
@@ -27,12 +27,14 @@ fn joined<'a, M: Clone + 'a>(
     open: bool,
     m: &Metrics,
 ) -> Element<'a, M> {
-    let arrow = container(Icon::GoDown.view(m.icon_size).style(move |t: &Theme, _| iced::widget::svg::Style {
-        color: Some(if disabled {
-            crate::color::fade(t.semantic.window.fg, t.semantic.opacity.disabled)
-        } else {
-            t.semantic.window.fg
-        }),
+    let arrow = container(Icon::GoDown.view(m.icon_size).style(move |t: &Theme, _| {
+        iced::widget::svg::Style {
+            color: Some(if disabled {
+                crate::color::fade(t.semantic.window.fg, t.semantic.opacity.disabled)
+            } else {
+                t.semantic.window.fg
+            }),
+        }
     }))
     .center_y(Length::Fixed(m.button_min_height - m.button_padding.y()));
     let menu = Dropdown::custom(arrow, popover)
@@ -43,7 +45,8 @@ fn joined<'a, M: Clone + 'a>(
         .open_initially(open);
     row![
         main,
-        container(space().width(1).height(Length::Fill)).style(crate::style::container::bar_separator),
+        container(space().width(1).height(Length::Fill))
+            .style(crate::style::container::bar_separator),
         menu,
     ]
     .height(Length::Shrink)
@@ -72,7 +75,14 @@ pub fn split_button<'a, M: Clone + 'a>(
 
 impl<'a, M: Clone + 'a> SplitButton<'a, M> {
     pub fn new(content: impl Into<Element<'a, M>>, on_press: M, menu: Menu<M>) -> Self {
-        Self { content: content.into(), on_press, menu, disabled: false, open: false, metrics: Metrics::desktop() }
+        Self {
+            content: content.into(),
+            on_press,
+            menu,
+            disabled: false,
+            open: false,
+            metrics: Metrics::desktop(),
+        }
     }
     /// Insensitive: the button is drawn disabled and the menu cannot open.
     pub fn disabled(mut self, disabled: bool) -> Self {
@@ -94,10 +104,22 @@ impl<'a, M: Clone + 'a> From<SplitButton<'a, M>> for Element<'a, M> {
     fn from(s: SplitButton<'a, M>) -> Self {
         let m = s.metrics;
         let main = sized(s.content, &m).style(sb::linked(Position::Start));
-        let main = if s.disabled { main } else { main.on_press(s.on_press) };
-        let button = joined(main.into(), super::menu::popover_content(&s.menu, 360.0), s.disabled, s.open, &m);
+        let main = if s.disabled {
+            main
+        } else {
+            main.on_press(s.on_press)
+        };
+        let button = joined(
+            main.into(),
+            super::menu::popover_content(&s.menu, 360.0),
+            s.disabled,
+            s.open,
+            &m,
+        );
         // Like a menu button, it registers the accelerators its menu shows.
-        crate::shortcut::Shortcuts::new().from_menu(&s.menu).scope(button)
+        crate::shortcut::Shortcuts::new()
+            .from_menu(&s.menu)
+            .scope(button)
     }
 }
 
@@ -112,7 +134,12 @@ pub struct SplitAction<T> {
 
 impl<T> SplitAction<T> {
     pub fn new(value: T, label: impl Into<String>) -> Self {
-        Self { value, label: label.into(), icon: None, disabled: false }
+        Self {
+            value,
+            label: label.into(),
+            icon: None,
+            disabled: false,
+        }
     }
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
@@ -175,11 +202,17 @@ impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> SplitButtonAction<'a, T, M> {
     }
 }
 
-impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> From<SplitButtonAction<'a, T, M>> for Element<'a, M> {
+impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> From<SplitButtonAction<'a, T, M>>
+    for Element<'a, M>
+{
     fn from(s: SplitButtonAction<'a, T, M>) -> Self {
         let m = s.metrics;
         // The button shows the selected action (the first if the selection is not in the list).
-        let current = s.actions.iter().find(|a| a.value == s.selected).or_else(|| s.actions.first());
+        let current = s
+            .actions
+            .iter()
+            .find(|a| a.value == s.selected)
+            .or_else(|| s.actions.first());
         let label = current.map(|a| a.label.clone()).unwrap_or_default();
         let mut content = ButtonContent::new(label).metrics(m);
         if let Some(icon) = current.and_then(|a| a.icon) {
@@ -189,7 +222,9 @@ impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> From<SplitButtonAction<'a, T,
         let main = if s.disabled || current.is_none() {
             main
         } else {
-            main.on_press((s.on_press)(current.map(|a| a.value.clone()).expect("checked above")))
+            main.on_press((s.on_press)(
+                current.map(|a| a.value.clone()).expect("checked above"),
+            ))
         };
         let items = s.actions.iter().map(|a| {
             let selected = a.value == s.selected;
@@ -215,7 +250,10 @@ mod tests {
     }
 
     fn actions() -> Vec<SplitAction<u8>> {
-        vec![SplitAction::new(1, "One"), SplitAction::new(2, "Two").disabled()]
+        vec![
+            SplitAction::new(1, "One"),
+            SplitAction::new(2, "Two").disabled(),
+        ]
     }
 
     #[test]
@@ -224,14 +262,17 @@ mod tests {
             let _: Element<'_, Msg> =
                 SplitButtonAction::new(actions(), selected, Msg::Select, Msg::Press).into();
         }
-        let _: Element<'_, Msg> = SplitButtonAction::new(Vec::new(), 0u8, Msg::Select, Msg::Press).into();
+        let _: Element<'_, Msg> =
+            SplitButtonAction::new(Vec::new(), 0u8, Msg::Select, Msg::Press).into();
     }
 
     #[test]
     fn split_button_builds_with_and_without_items() {
-        let _: Element<'_, Msg> = split_button(iced::widget::text("Go"), Msg::Press(0), Menu::new("m")).into();
-        let _: Element<'_, Msg> = SplitButton::new(iced::widget::text("Go"), Msg::Press(0), Menu::new("m"))
-            .disabled(true)
-            .into();
+        let _: Element<'_, Msg> =
+            split_button(iced::widget::text("Go"), Msg::Press(0), Menu::new("m")).into();
+        let _: Element<'_, Msg> =
+            SplitButton::new(iced::widget::text("Go"), Msg::Press(0), Menu::new("m"))
+                .disabled(true)
+                .into();
     }
 }

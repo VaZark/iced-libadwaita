@@ -1,11 +1,11 @@
 //! `AdwBanner`.
 
 use super::Element;
-use crate::style::{button as sb, container as sc};
 use crate::Metrics;
+use crate::style::{button as sb, container as sc};
+use iced::Length;
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{button, container, row, text};
-use iced::Length;
 
 pub struct Banner<M> {
     title: String,
@@ -53,7 +53,9 @@ impl<'a, M: Clone + 'a> From<Banner<M>> for Element<'a, M> {
         let m = b.metrics;
         let override_fg = b.text_color;
         let mut r = row![
-            container(text(b.title)).width(Length::Fill).align_x(Horizontal::Center)
+            container(text(b.title))
+                .width(Length::Fill)
+                .align_x(Horizontal::Center)
         ]
         .align_y(Vertical::Center)
         .spacing(m.space_m);

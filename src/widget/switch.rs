@@ -4,13 +4,15 @@
 //! iced's own `toggler` is always 2:1 and sizes the knob from the height, which
 //! looks too wide next to Adwaita. This widget uses Adwaita's proportions.
 
-use crate::animation::{Spec, Tween};
 use crate::Theme;
+use crate::animation::{Spec, Tween};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
-use iced::advanced::widget::{tree, Tree, Widget};
+use iced::advanced::widget::{Tree, Widget, tree};
 use iced::advanced::{Clipboard, Renderer as _, Shell};
-use iced::{mouse, Background, Border, Color, Element, Event, Length, Rectangle, Shadow, Size, Vector};
+use iced::{
+    Background, Border, Color, Element, Event, Length, Rectangle, Shadow, Size, Vector, mouse,
+};
 
 pub const WIDTH: f32 = 46.0;
 pub const HEIGHT: f32 = 26.0;
@@ -31,7 +33,10 @@ struct State {
 
 /// Builds a [`Switch`]. Without `.on_toggle` it renders disabled.
 pub fn switch<'a, M>(active: bool) -> Switch<'a, M> {
-    Switch { active, on_toggle: None }
+    Switch {
+        active,
+        on_toggle: None,
+    }
 }
 
 impl<'a, M> Switch<'a, M> {
@@ -48,7 +53,11 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
 
     fn state(&self) -> tree::State {
         let initial = if self.active { 1.0 } else { 0.0 };
-        tree::State::new(State { pressed: false, progress: Tween::new(initial), shown: initial })
+        tree::State::new(State {
+            pressed: false,
+            progress: Tween::new(initial),
+            shown: initial,
+        })
     }
 
     fn size(&self) -> Size<Length> {
@@ -74,14 +83,20 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
         // Animate the knob and track toward the current value.
         if let Event::Window(iced::window::Event::RedrawRequested(now)) = event {
             let target = if self.active { 1.0 } else { 0.0 };
-            state.progress.set_target(target, *now, crate::animation::Trigger::Switch.spec(Spec::STYLE));
+            state.progress.set_target(
+                target,
+                *now,
+                crate::animation::Trigger::Switch.spec(Spec::STYLE),
+            );
             let v = state.progress.tick(*now);
             if (v - state.shown).abs() > f32::EPSILON || state.progress.is_animating() {
                 state.shown = v;
                 shell.request_redraw();
             }
         }
-        let Some(on_toggle) = &self.on_toggle else { return };
+        let Some(on_toggle) = &self.on_toggle else {
+            return;
+        };
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
                 if cursor.is_over(layout.bounds()) =>
@@ -138,8 +153,15 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
         let round = (theme.metrics.radius_m / crate::Metrics::MAX_RADIUS_M).clamp(0.0, 1.0);
 
         let p = tree.state.downcast_ref::<State>().shown.clamp(0.0, 1.0);
-        let off = crate::color::alpha(s.window.fg, s.opacity.trough + if hovered { 0.05 } else { 0.0 });
-        let on = if hovered { s.hover_fill(s.accent.bg) } else { s.accent.bg };
+        let off = crate::color::alpha(
+            s.window.fg,
+            s.opacity.trough + if hovered { 0.05 } else { 0.0 },
+        );
+        let on = if hovered {
+            s.hover_fill(s.accent.bg)
+        } else {
+            s.accent.bg
+        };
         // The track cross-fades between the off and on colors as the knob slides.
         let track = crate::color::mix(off, on, p);
         renderer.fill_quad(
@@ -154,13 +176,21 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
 
         let margin = (HEIGHT - KNOB) / 2.0;
         let x = b.x + margin + p * (b.width - 2.0 * margin - KNOB);
-        let knob = Rectangle { x, y: b.y + margin, width: KNOB, height: KNOB };
+        let knob = Rectangle {
+            x,
+            y: b.y + margin,
+            width: KNOB,
+            height: KNOB,
+        };
         renderer.fill_quad(
             Quad {
                 bounds: knob,
                 border: Border::default().rounded(KNOB / 2.0 * round),
                 shadow: Shadow {
-                    color: Color { a: 0.25 * k, ..Color::BLACK },
+                    color: Color {
+                        a: 0.25 * k,
+                        ..Color::BLACK
+                    },
                     offset: Vector::new(0.0, 1.0),
                     blur_radius: 2.0,
                 },

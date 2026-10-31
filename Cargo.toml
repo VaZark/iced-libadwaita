@@ -1,10 +1,10 @@
 [package]
 name = "iced-libadwaita"
 version = "0.1.0"
-edition = "2024"
-description = "libadwaita-style theme and widgets for iced"
-keywords = ["iced", "gui", "gnome", "libadwaita", "theme"]
 categories = ["gui"]
+edition = "2024"
+keywords = ["iced", "gui", "gnome", "libadwaita", "theme"]
+description = "libadwaita-style theme and widgets for iced"
 
 [dependencies]
 iced = { version = "0.14", features = ["advanced", "svg", "image", "tokio", "canvas"] }

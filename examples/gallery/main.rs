@@ -5,14 +5,12 @@
 //! cargo run --example gallery -- --screenshot target/shots   # renders every page, light + dark
 //! ```
 
-use iced::widget::{
-    column, container, text,
-};
-use iced::{window, Element as IcedElement, Length, Subscription, Task};
-use iced_libadwaita as adw;
 use adw::style;
 use adw::widget::{self as w, typography as ty};
 use adw::{AccentColor, Icon, Metrics, Role, Scheme, Theme};
+use iced::widget::{column, container, text};
+use iced::{Element as IcedElement, Length, Subscription, Task, window};
+use iced_libadwaita as adw;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -68,7 +66,7 @@ impl DemoMotion {
     }
 
     fn spec(self) -> adw::animation::Spec {
-        use adw::animation::{presets, Easing, Spec};
+        use adw::animation::{Easing, Spec, presets};
         let ms = std::time::Duration::from_millis(600);
         match self {
             DemoMotion::Linear => Spec::Timed(ms, Easing::Linear),
@@ -186,7 +184,11 @@ struct ToastSpec {
 
 impl ToastSpec {
     const fn plain(title: &'static str) -> Self {
-        Self { title, action: None, status: None }
+        Self {
+            title,
+            action: None,
+            status: None,
+        }
     }
 }
 
@@ -296,11 +298,16 @@ impl Gallery {
             .iter()
             .position(|a| a == "--screenshot")
             .and_then(|i| args.get(i + 1))
-            .map(|d| Shots { dir: d.into(), index: 0 });
+            .map(|d| Shots {
+                dir: d.into(),
+                index: 0,
+            });
         // GALLERY_DETAIL=textinput|switch|…: open a nested component page at startup.
-        let start_detail = std::env::var("GALLERY_DETAIL")
-            .ok()
-            .and_then(|v| Detail::all().into_iter().find(|d| format!("{d:?}").eq_ignore_ascii_case(&v)));
+        let start_detail = std::env::var("GALLERY_DETAIL").ok().and_then(|v| {
+            Detail::all()
+                .into_iter()
+                .find(|d| format!("{d:?}").eq_ignore_ascii_case(&v))
+        });
         let boot = if shots.is_some() {
             Task::done(Message::Shot(0))
         } else {
@@ -317,21 +324,31 @@ impl Gallery {
                 page: start_detail
                     .map(Detail::page)
                     .or_else(|| {
-                        std::env::var("GALLERY_PAGE")
-                            .ok()
-                            .and_then(|v| Page::ALL.into_iter().find(|p| format!("{p:?}").eq_ignore_ascii_case(&v)))
+                        std::env::var("GALLERY_PAGE").ok().and_then(|v| {
+                            Page::ALL
+                                .into_iter()
+                                .find(|p| format!("{p:?}").eq_ignore_ascii_case(&v))
+                        })
                     })
                     .unwrap_or(Page::Buttons),
                 detail: start_detail,
                 scheme: from_cfg.scheme,
                 accent: match cfg.accent {
                     adw::config::Pick::Fixed(a) => a,
-                    adw::config::Pick::System => adw::system::accent_color().unwrap_or(AccentColor::Blue),
+                    adw::config::Pick::System => {
+                        adw::system::accent_color().unwrap_or(AccentColor::Blue)
+                    }
                 },
                 compact: cfg.density == adw::config::Density::Compact,
-                radius_m: std::env::var("GALLERY_RM").ok().and_then(|v| v.parse().ok()).unwrap_or(Metrics::default().radius_m),
+                radius_m: std::env::var("GALLERY_RM")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(Metrics::default().radius_m),
                 radius_toast: Metrics::default().radius_toast,
-                radius_l: std::env::var("GALLERY_RL").ok().and_then(|v| v.parse().ok()).unwrap_or(12.0),
+                radius_l: std::env::var("GALLERY_RL")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(12.0),
                 card_override: false,
                 shadows_on: cfg.shadows,
                 shadow_scale: 1.0,
@@ -409,7 +426,11 @@ impl Gallery {
     }
 
     fn title(&self, id: window::Id) -> String {
-        if Some(id) == self.prefs { "Preferences".into() } else { "iced-libadwaita gallery".into() }
+        if Some(id) == self.prefs {
+            "Preferences".into()
+        } else {
+            "iced-libadwaita gallery".into()
+        }
     }
 
     /// Opens the preferences dialog as its own window, or brings it forward if open.
@@ -423,8 +444,17 @@ impl Gallery {
     }
 
     fn metrics(&self) -> Metrics {
-        let base = if self.compact { Metrics::compact() } else { Metrics::default() };
-        Metrics { radius_m: self.radius_m, radius_l: self.radius_l, radius_toast: self.radius_toast, ..base }
+        let base = if self.compact {
+            Metrics::compact()
+        } else {
+            Metrics::default()
+        };
+        Metrics {
+            radius_m: self.radius_m,
+            radius_l: self.radius_l,
+            radius_toast: self.radius_toast,
+            ..base
+        }
     }
 
     fn theme(&self, _window: window::Id) -> Theme {
@@ -433,7 +463,9 @@ impl Gallery {
 
     fn build_theme(&self) -> Theme {
         let shadows = if self.shadows_on {
-            adw::Shadows::default().with_scale(self.shadow_scale).with_intensity(self.shadow_intensity)
+            adw::Shadows::default()
+                .with_scale(self.shadow_scale)
+                .with_intensity(self.shadow_intensity)
         } else {
             adw::Shadows::none()
         };
@@ -485,7 +517,11 @@ impl Gallery {
                     "rebase" => "Rebased and merged",
                     _ => "Merged",
                 };
-                self.push_toast(ToastSpec { title, action: None, status: Some(Role::Success) });
+                self.push_toast(ToastSpec {
+                    title,
+                    action: None,
+                    status: Some(Role::Success),
+                });
             }
             Message::SidebarMode(m) => {
                 self.sidebar_mode = m;
@@ -550,7 +586,11 @@ impl Gallery {
             Message::DemoMotion(m) => self.demo = m,
             Message::DemoPlay => {
                 let now = std::time::Instant::now();
-                let to = if self.demo_tween.target() > 0.5 { 0.0 } else { 1.0 };
+                let to = if self.demo_tween.target() > 0.5 {
+                    0.0
+                } else {
+                    1.0
+                };
                 self.demo_tween.set_target(to, now, self.demo.spec());
             }
             Message::Noop => {}
@@ -591,7 +631,11 @@ impl Gallery {
                     window::mode(id).then(move |m| {
                         window::set_mode(
                             id,
-                            if m == window::Mode::Fullscreen { window::Mode::Windowed } else { window::Mode::Fullscreen },
+                            if m == window::Mode::Fullscreen {
+                                window::Mode::Windowed
+                            } else {
+                                window::Mode::Fullscreen
+                            },
                         )
                     })
                 });
@@ -605,18 +649,27 @@ impl Gallery {
             }
             Message::Minimize => return window::oldest().and_then(|id| window::minimize(id, true)),
             Message::ToggleMaximize => return window::oldest().and_then(window::toggle_maximize),
-            Message::Resize(d) => return window::oldest().and_then(move |id| window::drag_resize(id, d)),
+            Message::Resize(d) => {
+                return window::oldest().and_then(move |id| window::drag_resize(id, d));
+            }
             Message::Shot(i) => return self.shot_next(i),
             Message::Capture(i) => {
-                return window::screenshot(self.shot_window.unwrap_or(self.main)).map(move |s| Message::Saved(i, s));
+                return window::screenshot(self.shot_window.unwrap_or(self.main))
+                    .map(move |s| Message::Saved(i, s));
             }
             Message::Saved(i, shot) => {
                 if let Some(s) = &self.shots {
                     let name = format!(
                         "{}-{}{}{}.png",
-                        if self.scheme.is_dark() { "dark" } else { "light" },
+                        if self.scheme.is_dark() {
+                            "dark"
+                        } else {
+                            "light"
+                        },
                         format!("{:?}", self.page).to_lowercase(),
-                        self.detail.map(|d| format!("-{d:?}").to_lowercase()).unwrap_or_default(),
+                        self.detail
+                            .map(|d| format!("-{d:?}").to_lowercase())
+                            .unwrap_or_default(),
                         self.shot_tag.map(|t| format!("-{t}")).unwrap_or_default()
                     );
                     std::fs::create_dir_all(&s.dir).ok();
@@ -645,7 +698,9 @@ impl Gallery {
         if let Ok(kind) = std::env::var("GALLERY_ANIM") {
             let wait = |ms: u64, tag: &'static str, this: &mut Self| {
                 this.shot_tag = Some(tag);
-                Task::perform(tokio::time::sleep(Duration::from_millis(ms)), move |_| Message::Capture(i))
+                Task::perform(tokio::time::sleep(Duration::from_millis(ms)), move |_| {
+                    Message::Capture(i)
+                })
             };
             // GALLERY_ANIM=prefs: open the preferences window, capture the disabled parent, then
             // the preferences window itself.
@@ -655,7 +710,10 @@ impl Gallery {
                         self.scheme = Scheme::Light;
                         let open = self.open_prefs();
                         self.shot_tag = Some("parent");
-                        open.chain(Task::perform(tokio::time::sleep(Duration::from_millis(1500)), move |_| Message::Capture(i)))
+                        open.chain(Task::perform(
+                            tokio::time::sleep(Duration::from_millis(1500)),
+                            move |_| Message::Capture(i),
+                        ))
                     }
                     1 => {
                         self.shot_window = self.prefs;
@@ -666,7 +724,11 @@ impl Gallery {
             }
             return match i {
                 0 => {
-                    self.scheme = if std::env::var_os("GALLERY_DARK").is_some() { Scheme::Dark } else { Scheme::Light };
+                    self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
+                        Scheme::Dark
+                    } else {
+                        Scheme::Light
+                    };
                     wait(700, "a0-start", self)
                 }
                 // GALLERY_ANIM=keys: no trigger; send keys from outside during the wait.
@@ -718,7 +780,10 @@ impl Gallery {
                 Task::done(Message::RadiusL(0.0)),
                 Task::done(Message::RadiusToast(0.0)),
             ])
-                .chain(Task::perform(tokio::time::sleep(Duration::from_millis(500)), move |_| Message::Capture(i)));
+            .chain(Task::perform(
+                tokio::time::sleep(Duration::from_millis(500)),
+                move |_| Message::Capture(i),
+            ));
         }
         if i < views.len() {
             self.scheme = Scheme::Light;
@@ -738,17 +803,30 @@ impl Gallery {
         });
         self.toasts.clear();
         if overlays {
-            self.push_toast(ToastSpec { title: "Changes saved", action: None, status: Some(Role::Success) });
-            self.push_toast(ToastSpec { title: "File deleted", action: Some("Undo"), status: Some(Role::Error) });
+            self.push_toast(ToastSpec {
+                title: "Changes saved",
+                action: None,
+                status: Some(Role::Success),
+            });
+            self.push_toast(ToastSpec {
+                title: "File deleted",
+                action: Some("Undo"),
+                status: Some(Role::Error),
+            });
         }
         if let Some(s) = &mut self.shots {
             s.index = i;
         }
-        Task::perform(tokio::time::sleep(Duration::from_millis(900)), move |_| Message::Capture(i))
+        Task::perform(tokio::time::sleep(Duration::from_millis(900)), move |_| {
+            Message::Capture(i)
+        })
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        let frames = if self.page == Page::Feedback || self.shots.is_some() || self.demo_tween.is_animating() {
+        let frames = if self.page == Page::Feedback
+            || self.shots.is_some()
+            || self.demo_tween.is_animating()
+        {
             window::frames().map(Message::Frame)
         } else {
             Subscription::none()
@@ -778,7 +856,11 @@ impl Gallery {
         let csd = Self::csd();
         // GALLERY_ANIM=breakpoint pretends the window just got narrower (the compositor ignores
         // programmatic resizes), to capture the sidebar sliding out.
-        let width = if self.narrow { size.width.min(600.0) } else { size.width };
+        let width = if self.narrow {
+            size.width.min(600.0)
+        } else {
+            size.width
+        };
         let collapsed = w::split_collapsed(width);
 
         // Floating windows have rounded corners; maximized/fullscreen go edge to edge.
@@ -787,7 +869,11 @@ impl Gallery {
         // is actually maximized or fullscreen.
         let mobile = adw::window::is_mobile(width);
         let win_state = self.win;
-        let corner = if csd { win_state.radius(&adw::Metrics::default()) } else { 0.0 };
+        let corner = if csd {
+            win_state.radius(&adw::Metrics::default())
+        } else {
+            0.0
+        };
 
         // Primary menu (HIG): open-menu icon, above the sidebar list, standard items last.
         let presentation = match self.menu_mode {
@@ -798,12 +884,24 @@ impl Gallery {
         let dark = self.scheme.is_dark();
         let primary = w::primary_menu(
             w::Menu::new("Main Menu")
-                .section([w::MenuItem::check("Dark Style", dark, Message::Scheme(!dark))])
+                .section([w::MenuItem::check(
+                    "Dark Style",
+                    dark,
+                    Message::Scheme(!dark),
+                )])
                 .section([
-                    w::MenuItem::action("Preferences", Message::OpenDialog(Dialog::Preferences)).accel("Ctrl+,"),
-                    w::MenuItem::action("Keyboard Shortcuts", Message::OpenDialog(Dialog::Shortcuts)).accel("Ctrl+?"),
+                    w::MenuItem::action("Preferences", Message::OpenDialog(Dialog::Preferences))
+                        .accel("Ctrl+,"),
+                    w::MenuItem::action(
+                        "Keyboard Shortcuts",
+                        Message::OpenDialog(Dialog::Shortcuts),
+                    )
+                    .accel("Ctrl+?"),
                     w::MenuItem::action("Help", Message::ShowToast("Opening Help…")).accel("F1"),
-                    w::MenuItem::action("About iced-libadwaita", Message::OpenDialog(Dialog::About)),
+                    w::MenuItem::action(
+                        "About iced-libadwaita",
+                        Message::OpenDialog(Dialog::About),
+                    ),
                 ]),
         )
         .presentation(presentation)
@@ -833,7 +931,14 @@ impl Gallery {
             .metrics(m);
         let mut content_bar = w::header_bar::<Message>()
             .title(self.detail.map_or(self.page.title(), Detail::title))
-            .window_corners(if show_content_only || drawer_mode { corner } else { 0.0 }, corner)
+            .window_corners(
+                if show_content_only || drawer_mode {
+                    corner
+                } else {
+                    0.0
+                },
+                corner,
+            )
             .metrics(m);
         if self.path_bar_title {
             // Replaces the title; the window buttons are independent of it.
@@ -845,16 +950,23 @@ impl Gallery {
         }
         if self.detail.is_some() {
             // Inside a component page: back to the group's list.
-            content_bar = content_bar.pack_start(w::circular_button(Icon::GoPrevious).on_press(Message::CloseDetail));
+            content_bar = content_bar
+                .pack_start(w::circular_button(Icon::GoPrevious).on_press(Message::CloseDetail));
         } else if drawer_mode {
             // The drawer toggle: the sidebar lives behind it.
-            content_bar = content_bar.pack_start(w::circular_button(Icon::Sidebar).on_press(Message::Drawer(true)));
+            content_bar = content_bar
+                .pack_start(w::circular_button(Icon::Sidebar).on_press(Message::Drawer(true)));
         } else if show_content_only {
-            content_bar = content_bar.pack_start(w::circular_button(Icon::GoPrevious).on_press(Message::Back));
+            content_bar = content_bar
+                .pack_start(w::circular_button(Icon::GoPrevious).on_press(Message::Back));
         }
         if csd {
-            sidebar_bar = sidebar_bar.on_drag(Message::Drag).on_double_click(Message::ToggleMaximize);
-            content_bar = content_bar.on_drag(Message::Drag).on_double_click(Message::ToggleMaximize);
+            sidebar_bar = sidebar_bar
+                .on_drag(Message::Drag)
+                .on_double_click(Message::ToggleMaximize);
+            content_bar = content_bar
+                .on_drag(Message::Drag)
+                .on_double_click(Message::ToggleMaximize);
             // Controls only outside mobile mode. In a split view each pane shows only the
             // buttons at its own window edge; a collapsed single pane shows both sides.
             if !mobile {
@@ -863,8 +975,12 @@ impl Gallery {
                 } else if show_content_only {
                     content_bar = content_bar.window_controls(controls());
                 } else {
-                    sidebar_bar = sidebar_bar.window_controls(controls()).show_end_title_buttons(false);
-                    content_bar = content_bar.window_controls(controls()).show_start_title_buttons(false);
+                    sidebar_bar = sidebar_bar
+                        .window_controls(controls())
+                        .show_end_title_buttons(false);
+                    content_bar = content_bar
+                        .window_controls(controls())
+                        .show_start_title_buttons(false);
                 }
             }
         }
@@ -890,7 +1006,15 @@ impl Gallery {
         let page: Element = self.content_page();
 
         // Switching pages fades the new one in (as a first page, the push slide does that job).
-        let page = w::page_transition(page, if collapsed && self.sidebar_mode == w::CollapsedSidebar::FirstPage { 0 } else { self.view_key() }).scroll_key(self.view_key());
+        let page = w::page_transition(
+            page,
+            if collapsed && self.sidebar_mode == w::CollapsedSidebar::FirstPage {
+                0
+            } else {
+                self.view_key()
+            },
+        )
+        .scroll_key(self.view_key());
         // The toast is placed in the whole window or only the content area (the shared
         // `[toasts] target` setting). Both layers stay mounted so the tree does not change.
         let mut toasts: Vec<w::Toast<Message>> = self
@@ -912,7 +1036,11 @@ impl Gallery {
         let in_content = self.toast_target == w::ToastTarget::Content;
         let content_pane = w::toast_stack(
             Element::from(w::toolbar_view(page).top_bar(content_bar)),
-            if in_content { std::mem::take(&mut toasts) } else { Vec::new() },
+            if in_content {
+                std::mem::take(&mut toasts)
+            } else {
+                Vec::new()
+            },
         );
         let body = w::NavigationSplitView::new(sidebar_pane, content_pane)
             .adapt(width)
@@ -930,19 +1058,37 @@ impl Gallery {
 
         let base: Element = w::bottom_sheet_in_window(
             base,
-            column![ty::title_3("Sheet"), ty::body("A bottom sheet over the content."), w::suggested_button(text("Done")).on_press(Message::Sheet(false))].spacing(m.space_m),
+            column![
+                ty::title_3("Sheet"),
+                ty::body("A bottom sheet over the content."),
+                w::suggested_button(text("Done")).on_press(Message::Sheet(false))
+            ]
+            .spacing(m.space_m),
             self.sheet,
             Message::Sheet(false),
             corner,
         );
         let dialog: Option<Element<'_>> = match self.dialog {
             None => None,
-            Some(Dialog::Alert) => Some(Element::from(w::AlertDialog::new("Discard Changes?")
+            Some(Dialog::Alert) => Some(Element::from(
+                w::AlertDialog::new("Discard Changes?")
                     .body("Unsaved changes will be permanently lost.")
-                    .response("Cancel", w::ResponseAppearance::Default, Message::CloseDialog)
-                    .response("Save", w::ResponseAppearance::Suggested, Message::CloseDialog)
-                    .response("Discard", w::ResponseAppearance::Destructive, Message::CloseDialog)),
-            ),
+                    .response(
+                        "Cancel",
+                        w::ResponseAppearance::Default,
+                        Message::CloseDialog,
+                    )
+                    .response(
+                        "Save",
+                        w::ResponseAppearance::Suggested,
+                        Message::CloseDialog,
+                    )
+                    .response(
+                        "Discard",
+                        w::ResponseAppearance::Destructive,
+                        Message::CloseDialog,
+                    ),
+            )),
             Some(Dialog::Shortcuts) => Some(w::shortcuts_dialog(
                 vec![
                     (
@@ -954,21 +1100,30 @@ impl Gallery {
                             ("Quit".into(), "Ctrl+Q".into()),
                         ],
                     ),
-                    ("Window".into(), vec![("Fullscreen".into(), "F11".into()), ("Close dialog".into(), "Esc".into())]),
+                    (
+                        "Window".into(),
+                        vec![
+                            ("Fullscreen".into(), "F11".into()),
+                            ("Close dialog".into(), "Esc".into()),
+                        ],
+                    ),
                 ],
                 Message::CloseDialog,
             )),
             // The preferences dialog is a window of its own (see `prefs_window`).
             Some(Dialog::Preferences) => None,
-            Some(Dialog::About) => Some(Element::from(w::AboutDialog::new("Gallery")
+            Some(Dialog::About) => Some(Element::from(
+                w::AboutDialog::new("Gallery")
                     .developer_name("The iced-libadwaita authors")
                     .version("0.1.0")
                     .comments("Widget gallery for iced-libadwaita.")
                     .website("https://iced.rs")
                     .license("MIT OR Apache-2.0")
-                    .application_icon(Icon::Home.colored(48.0, self.build_theme().semantic.accent.color))
-                    .on_close(Message::CloseDialog)),
-            ),
+                    .application_icon(
+                        Icon::Home.colored(48.0, self.build_theme().semantic.accent.color),
+                    )
+                    .on_close(Message::CloseDialog),
+            )),
         };
         let result = w::present_dialog(base, dialog, Some(Message::CloseDialog), corner);
         // The toolkit listens: no subscription or update arm. The primary menu registers its own
@@ -988,7 +1143,11 @@ impl Gallery {
             Some(Message::FocusPrefs),
             corner,
         );
-        if csd { adw::window::frame(result, win_state, Message::Resize) } else { result }
+        if csd {
+            adw::window::frame(result, win_state, Message::Resize)
+        } else {
+            result
+        }
     }
 
     /// The preferences dialog in its own window: a header with a close button, the preference
@@ -996,7 +1155,13 @@ impl Gallery {
     fn prefs_window(&self, id: window::Id) -> IcedElement<'_, Message, Theme> {
         let m = self.metrics();
         let corner = Metrics::default().radius_window;
-        let close = w::WindowControls { on_minimize: None, on_maximize: None, on_close: Some(Message::ClosePrefs), maximized: false, layout: None };
+        let close = w::WindowControls {
+            on_minimize: None,
+            on_maximize: None,
+            on_close: Some(Message::ClosePrefs),
+            maximized: false,
+            layout: None,
+        };
         let header = w::header_bar::<Message>()
             .title("Preferences")
             .window_corners(corner, corner)
@@ -1006,9 +1171,13 @@ impl Gallery {
         // Esc closes it, like any dialog.
         let content = adw::shortcut::Shortcuts::new()
             .bind("Esc", Message::ClosePrefs)
-            .scope(Element::from(w::toolbar_view(self.preferences_demo()).top_bar(header)));
+            .scope(Element::from(
+                w::toolbar_view(self.preferences_demo()).top_bar(header),
+            ));
         if Self::csd() {
-            adw::window::frame(content, adw::window::State::default(), move |d| Message::ResizeWindow(id, d))
+            adw::window::frame(content, adw::window::State::default(), move |d| {
+                Message::ResizeWindow(id, d)
+            })
         } else {
             content
         }
@@ -1018,7 +1187,10 @@ impl Gallery {
 
     fn page_frame<'a>(&self, content: impl Into<Element<'a>>) -> Element<'a> {
         let m = self.metrics();
-        w::page(content).maximum_size(m.clamp_maximum + 120.0).metrics(m).into()
+        w::page(content)
+            .maximum_size(m.clamp_maximum + 120.0)
+            .metrics(m)
+            .into()
     }
 
     fn preferences_demo(&self) -> Element<'_> {
@@ -1030,16 +1202,26 @@ impl Gallery {
                 .title("Appearance")
                 .description("Rows, switches and choosers.")
                 .metrics(m)
-                .push(w::SwitchRow::new("Dark Style", self.scheme.is_dark(), Message::Scheme)
-                    .subtitle("Switches the whole gallery")
-                    .metrics(m))
+                .push(
+                    w::SwitchRow::new("Dark Style", self.scheme.is_dark(), Message::Scheme)
+                        .subtitle("Switches the whole gallery")
+                        .metrics(m),
+                )
                 .push(w::SwitchRow::new("Wi-Fi", self.wifi, Message::Wifi).metrics(m))
-                .push(w::ComboRow::new("Font", &COMBO, self.combo, Message::Combo)
-                    .subtitle("Interface font")
-                    // Shows the disabled state: dimmed and unselectable (selected is accent).
-                    .disabled_when(|o| *o == "Inter")
-                    .open_initially(false))
-                .push(w::SpinRow::new("Text Scale", self.spin, 1.0..=10.0, 1.0, Message::Spin)),
+                .push(
+                    w::ComboRow::new("Font", &COMBO, self.combo, Message::Combo)
+                        .subtitle("Interface font")
+                        // Shows the disabled state: dimmed and unselectable (selected is accent).
+                        .disabled_when(|o| *o == "Inter")
+                        .open_initially(false),
+                )
+                .push(w::SpinRow::new(
+                    "Text Scale",
+                    self.spin,
+                    1.0..=10.0,
+                    1.0,
+                    Message::Spin,
+                )),
         );
 
         page = page.push(
@@ -1054,7 +1236,11 @@ impl Gallery {
                         .on_activate(Message::ShowToast("Opened account"))
                         .metrics(m),
                 )
-                .push(w::EntryRow::new("Display name", &self.name).on_input(Message::Name).metrics(m))
+                .push(
+                    w::EntryRow::new("Display name", &self.name)
+                        .on_input(Message::Name)
+                        .metrics(m),
+                )
                 .push(
                     w::EntryRow::new("Password", &self.password)
                         .on_input(Message::Password)
@@ -1071,8 +1257,15 @@ impl Gallery {
                 .push(
                     w::ExpanderRow::new("Notifications", self.expanded, Message::Expanded)
                         .subtitle("Expand for details")
-                        .push(w::SwitchRow::new("Sounds", self.notifications, Message::Notifications).metrics(m))
-                        .push(w::ActionRow::new("Do Not Disturb").subtitle("Until tomorrow").metrics(m)),
+                        .push(
+                            w::SwitchRow::new("Sounds", self.notifications, Message::Notifications)
+                                .metrics(m),
+                        )
+                        .push(
+                            w::ActionRow::new("Do Not Disturb")
+                                .subtitle("Until tomorrow")
+                                .metrics(m),
+                        ),
                 )
                 .push(
                     w::ButtonRow::new("Sign Out")
@@ -1083,7 +1276,6 @@ impl Gallery {
         page.into()
     }
 }
-
 
 fn main() -> iced::Result {
     // Shared desktop behavior: ~/.config/iced-libadwaita/desktop.conf (+ system files).

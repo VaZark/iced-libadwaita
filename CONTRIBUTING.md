@@ -14,6 +14,12 @@ cargo clippy --all-targets
 
 Both `cargo test` and `cargo clippy` should be clean before committing.
 
+#### Formatting
+
+Formatting is handled by the local pre-commit hooks: dprint formats configured JSON, Markdown,
+and TOML files, while `cargo fmt --all` formats Rust. Install the hooks with `pre-commit install`;
+run them across the repository with `pre-commit run --all-files`.
+
 #### The gallery
 
 `cargo run --example gallery` is the visual test. Render every page in light and dark with
@@ -34,17 +40,17 @@ Screenshots can be stale on slow debug builds; give them time before concluding 
 
 #### Layout of the repo
 
-* `src/`: the library (`widget/`, `style/`, `theme`, `config`, `animation`, …).
-* `examples/`: `gallery/` and `catalog.rs` (prints the component catalog).
-* `docs/lib/`: guidance on using the library. `docs/hig-inferences/`: what we target.
+- `src/`: the library (`widget/`, `style/`, `theme`, `config`, `animation`, …).
+- `examples/`: `gallery/` and `catalog.rs` (prints the component catalog).
+- `docs/lib/`: guidance on using the library. `docs/hig-inferences/`: what we target.
 
 #### Working on a component
 
-1. Read its file in `docs/hig-inferences/widgets/` and its *iced mapping*.
+1. Read its file in `docs/hig-inferences/widgets/` and its _iced mapping_.
 2. Give it the shape in [docs/lib/components.md](docs/lib/components.md); add it to
    `src/catalog.rs` and regenerate the catalog: `cargo run --example catalog > docs/lib/components-catalog.md`.
 3. Show its states (including disabled) in the gallery.
-4. Record deviations from the reference in its *iced mapping* section.
+4. Record deviations from the reference in its _iced mapping_ section.
 5. Anything that wraps a child widget must forward `overlay()`; test popovers inside it.
 
 #### Docs

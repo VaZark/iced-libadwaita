@@ -1,9 +1,9 @@
 //! Remaining libadwaita gallery widgets, in stateless iced form: the app owns
 //! the state (current page, open sheet, …) and reacts to the messages.
 
-use super::{header_bar, toolbar_view, Element, EntryRow};
+use super::{Element, EntryRow, header_bar, toolbar_view};
 use crate::style::{button as sb, container as sc, text as st};
-use crate::widget::button::{toggle_group, ToggleGroup, ToggleItem};
+use crate::widget::button::{ToggleGroup, ToggleItem, toggle_group};
 use crate::widget::navigation::Breakpoint;
 use crate::{DecorationLayout, Icon, Metrics, Theme, Typography, WindowButton};
 use iced::alignment::Vertical;
@@ -35,7 +35,11 @@ pub fn wrap_box<'a, M: 'a>(
     children: impl IntoIterator<Item = Element<'a, M>>,
     spacing: f32,
 ) -> Element<'a, M> {
-    row(children).spacing(spacing).wrap().vertical_spacing(spacing).into()
+    row(children)
+        .spacing(spacing)
+        .wrap()
+        .vertical_spacing(spacing)
+        .into()
 }
 
 /// `AdwBreakpointBin`: shows `narrow` when the breakpoint matches the
@@ -164,9 +168,20 @@ fn dialog_frame<'a, M: Clone + 'a>(
     // `AdwHeaderBar` in a dialog: the dialog title and only a close button, on the
     // side the system puts it (end by default). The header is flat so it shares the
     // dialog's background.
-    let close_at_start = DecorationLayout::detect().start.contains(&WindowButton::Close);
-    let close = |at: bool| if at { vec![WindowButton::Close] } else { vec![] };
-    let layout = DecorationLayout { start: close(close_at_start), end: close(!close_at_start) };
+    let close_at_start = DecorationLayout::detect()
+        .start
+        .contains(&WindowButton::Close);
+    let close = |at: bool| {
+        if at {
+            vec![WindowButton::Close]
+        } else {
+            vec![]
+        }
+    };
+    let layout = DecorationLayout {
+        start: close(close_at_start),
+        end: close(!close_at_start),
+    };
     let bar = header_bar()
         .title(title.to_string())
         // Flat: the header flows into the dialog body instead of having its own color.
@@ -264,7 +279,10 @@ pub fn tab_bar<'a, M: Clone + 'a>(
     on_close: Option<impl Fn(usize) -> M + 'a>,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
-    let mut r = row![].spacing(m.space_xs).padding(m.space_xs).align_y(Vertical::Center);
+    let mut r = row![]
+        .spacing(m.space_xs)
+        .padding(m.space_xs)
+        .align_y(Vertical::Center);
     for (i, title) in tabs.into_iter().enumerate() {
         let mut label = row![container(super::typography::label(title)).width(Length::Fill)]
             .spacing(m.space_s)
@@ -332,7 +350,8 @@ pub fn bottom_sheet_in_window<'a, M: Clone + 'a>(
         return super::layered(content, None);
     }
     let m = Metrics::desktop();
-    let catcher = mouse_area(container(space()).width(Length::Fill).height(Length::Fill)).on_press(on_close);
+    let catcher =
+        mouse_area(container(space()).width(Length::Fill).height(Length::Fill)).on_press(on_close);
     let panel = container(sheet.into())
         .padding(m.space_l)
         .width(Length::Fill)
@@ -351,10 +370,16 @@ pub fn bottom_sheet_in_window<'a, M: Clone + 'a>(
     // Slides up on the sheet spring with a fading scrim (`AdwBottomSheet`).
     let layer = stack![
         opaque(catcher),
-        container(opaque(panel)).height(Length::Fill).align_y(Vertical::Bottom)
+        container(opaque(panel))
+            .height(Length::Fill)
+            .align_y(Vertical::Bottom)
     ];
     super::layered(
         content,
-        Some(Element::from(super::entrance(layer, iced::Vector::new(0.0, 160.0)).trigger(crate::animation::Trigger::Sheet).scrim(window_radius))),
+        Some(Element::from(
+            super::entrance(layer, iced::Vector::new(0.0, 160.0))
+                .trigger(crate::animation::Trigger::Sheet)
+                .scrim(window_radius),
+        )),
     )
 }

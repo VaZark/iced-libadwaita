@@ -2,8 +2,8 @@
 
 use super::Element;
 use crate::style::container as sc;
-use iced::widget::{container, space};
 use iced::Length;
+use iced::widget::{container, space};
 
 /// Which theme color the hairline uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -29,7 +29,11 @@ pub struct Divider {
 }
 
 pub fn divider() -> Divider {
-    Divider { vertical: false, tone: DividerTone::Border, spacing: 0.0 }
+    Divider {
+        vertical: false,
+        tone: DividerTone::Border,
+        spacing: 0.0,
+    }
 }
 
 impl Divider {
@@ -58,9 +62,21 @@ impl<'a, M: 'a> From<Divider> for Element<'a, M> {
             DividerTone::Sidebar => sc::sidebar_separator,
         };
         if d.vertical {
-            container(container(space().width(1)).height(Length::Fill).style(style)).padding([0.0, d.spacing]).into()
+            container(
+                container(space().width(1))
+                    .height(Length::Fill)
+                    .style(style),
+            )
+            .padding([0.0, d.spacing])
+            .into()
         } else {
-            container(container(space().height(1)).width(Length::Fill).style(style)).padding([d.spacing, 0.0]).into()
+            container(
+                container(space().height(1))
+                    .width(Length::Fill)
+                    .style(style),
+            )
+            .padding([d.spacing, 0.0])
+            .into()
         }
     }
 }

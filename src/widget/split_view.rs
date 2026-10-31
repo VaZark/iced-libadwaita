@@ -11,14 +11,16 @@
 //! drawer slides over the content. The only difference is the layer: in flow the content moves
 //! out of its way instead of being covered.
 
-use super::motion::{redraw_time, scrim, Progress};
-use crate::animation::{presets, Spec, Trigger};
+use super::motion::{Progress, redraw_time, scrim};
 use crate::Theme;
+use crate::animation::{Spec, Trigger, presets};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
-use iced::advanced::widget::{tree, Operation, Tree, Widget};
-use iced::advanced::{overlay, Clipboard, Renderer as _, Shell};
-use iced::{mouse, Background, Border, Color, Element, Event, Length, Point, Rectangle, Size, Vector};
+use iced::advanced::widget::{Operation, Tree, Widget, tree};
+use iced::advanced::{Clipboard, Renderer as _, Shell, overlay};
+use iced::{
+    Background, Border, Color, Element, Event, Length, Point, Rectangle, Size, Vector, mouse,
+};
 
 pub struct AdaptiveSplit<'a, M> {
     /// `[sidebar, content]`.
@@ -86,7 +88,11 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
     fn state(&self) -> tree::State {
         tree::State::new(SplitState {
             slot: Progress::new(if self.wide { 1.0 } else { 0.0 }),
-            drawer: Progress::new(if self.drawer_open && !self.wide { 1.0 } else { 0.0 }),
+            drawer: Progress::new(if self.drawer_open && !self.wide {
+                1.0
+            } else {
+                0.0
+            }),
         })
     }
     fn children(&self) -> Vec<Tree> {
@@ -99,18 +105,33 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
         Size::new(Length::Fill, Length::Fill)
     }
 
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
         let max = limits.max();
         let (slot, drawer) = {
             let st = tree.state.downcast_ref::<SplitState>();
-            (st.slot.shown.clamp(0.0, 1.0), st.drawer.shown.clamp(0.0, 1.0))
+            (
+                st.slot.shown.clamp(0.0, 1.0),
+                st.drawer.shown.clamp(0.0, 1.0),
+            )
         };
         let in_flow = self.wide || slot > 0.001;
-        let side_w = if in_flow { self.sidebar_width } else { self.drawer_width };
-        let fixed = |w: f32| layout::Limits::new(Size::new(w, max.height), Size::new(w, max.height));
+        let side_w = if in_flow {
+            self.sidebar_width
+        } else {
+            self.drawer_width
+        };
+        let fixed =
+            |w: f32| layout::Limits::new(Size::new(w, max.height), Size::new(w, max.height));
 
         let (a, b) = tree.children.split_at_mut(1);
-        let sidebar = self.children[0].as_widget_mut().layout(&mut a[0], renderer, &fixed(side_w));
+        let sidebar = self.children[0]
+            .as_widget_mut()
+            .layout(&mut a[0], renderer, &fixed(side_w));
         // The content gives up exactly the space the sidebar has slid in.
         let taken = self.sidebar_width * slot;
         let content_w = (max.width - taken).max(0.0);
@@ -118,7 +139,11 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
             .as_widget_mut()
             .layout(&mut b[0], renderer, &fixed(content_w))
             .move_to(Point::new(taken, 0.0));
-        let side_x = if in_flow { -self.sidebar_width * (1.0 - slot) } else { -side_w * (1.0 - drawer) };
+        let side_x = if in_flow {
+            -self.sidebar_width * (1.0 - slot)
+        } else {
+            -side_w * (1.0 - drawer)
+        };
         layout::Node::with_children(max, vec![sidebar.move_to(Point::new(side_x, 0.0)), content])
     }
 
@@ -136,12 +161,19 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
         let (slot, drawer) = {
             let st = tree.state.downcast_mut::<SplitState>();
             if let Some(now) = redraw_time(event) {
-                let moving = st.slot.drive(if self.wide { 1.0 } else { 0.0 }, now, Trigger::Layout.spec(spring()))
-                    | st.drawer.drive(
-                        if self.drawer_open && !self.wide { 1.0 } else { 0.0 },
-                        now,
-                        Trigger::Drawer.spec(spring()),
-                    );
+                let moving = st.slot.drive(
+                    if self.wide { 1.0 } else { 0.0 },
+                    now,
+                    Trigger::Layout.spec(spring()),
+                ) | st.drawer.drive(
+                    if self.drawer_open && !self.wide {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                    now,
+                    Trigger::Drawer.spec(spring()),
+                );
                 if moving {
                     // The content's width changes every frame while the sidebar slides.
                     shell.invalidate_layout();
@@ -161,7 +193,9 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
         if drawer_visible {
             // Settled: the drawer's own widgets work. Anything else is the scrim.
             if (drawer - 1.0).abs() < 0.001 || keyboard {
-                self.children[0].as_widget_mut().update(&mut a[0], event, side_l, cursor, renderer, clipboard, shell, viewport);
+                self.children[0].as_widget_mut().update(
+                    &mut a[0], event, side_l, cursor, renderer, clipboard, shell, viewport,
+                );
             }
             if matches!(event, Event::Mouse(_) | Event::Touch(_)) && !shell.is_event_captured() {
                 if matches!(
@@ -180,9 +214,13 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
             return;
         }
         if slot > 0.001 || keyboard {
-            self.children[0].as_widget_mut().update(&mut a[0], event, side_l, cursor, renderer, clipboard, shell, viewport);
+            self.children[0].as_widget_mut().update(
+                &mut a[0], event, side_l, cursor, renderer, clipboard, shell, viewport,
+            );
         }
-        self.children[1].as_widget_mut().update(&mut b[0], event, content_l, cursor, renderer, clipboard, shell, viewport);
+        self.children[1].as_widget_mut().update(
+            &mut b[0], event, content_l, cursor, renderer, clipboard, shell, viewport,
+        );
     }
 
     fn mouse_interaction(
@@ -198,17 +236,39 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
         let (side_l, content_l) = (kids.next().unwrap(), kids.next().unwrap());
         let drawer_visible = st.drawer.shown > 0.001 && st.slot.shown <= 0.001;
         if drawer_visible || (st.slot.shown > 0.001 && cursor.is_over(side_l.bounds())) {
-            return self.children[0].as_widget().mouse_interaction(&tree.children[0], side_l, cursor, viewport, renderer);
+            return self.children[0].as_widget().mouse_interaction(
+                &tree.children[0],
+                side_l,
+                cursor,
+                viewport,
+                renderer,
+            );
         }
-        self.children[1].as_widget().mouse_interaction(&tree.children[1], content_l, cursor, viewport, renderer)
+        self.children[1].as_widget().mouse_interaction(
+            &tree.children[1],
+            content_l,
+            cursor,
+            viewport,
+            renderer,
+        )
     }
 
-    fn operate(&mut self, tree: &mut Tree, layout: Layout<'_>, renderer: &iced::Renderer, operation: &mut dyn Operation) {
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
         let mut kids = layout.children();
         let (side_l, content_l) = (kids.next().unwrap(), kids.next().unwrap());
         let (a, b) = tree.children.split_at_mut(1);
-        self.children[0].as_widget_mut().operate(&mut a[0], side_l, renderer, operation);
-        self.children[1].as_widget_mut().operate(&mut b[0], content_l, renderer, operation);
+        self.children[0]
+            .as_widget_mut()
+            .operate(&mut a[0], side_l, renderer, operation);
+        self.children[1]
+            .as_widget_mut()
+            .operate(&mut b[0], content_l, renderer, operation);
     }
 
     fn overlay<'b>(
@@ -220,7 +280,14 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
         translation: Vector,
     ) -> Option<overlay::Element<'b, M, Theme, iced::Renderer>> {
         // Popovers from the sidebar's header (the primary menu) and from the content.
-        overlay::from_children(&mut self.children, tree, layout, renderer, viewport, translation)
+        overlay::from_children(
+            &mut self.children,
+            tree,
+            layout,
+            renderer,
+            viewport,
+            translation,
+        )
     }
 
     fn draw(
@@ -234,21 +301,49 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
         viewport: &Rectangle,
     ) {
         let st = tree.state.downcast_ref::<SplitState>();
-        let (slot, drawer) = (st.slot.shown.clamp(0.0, 1.0), st.drawer.shown.clamp(0.0, 1.0));
+        let (slot, drawer) = (
+            st.slot.shown.clamp(0.0, 1.0),
+            st.drawer.shown.clamp(0.0, 1.0),
+        );
         let b = layout.bounds();
         let mut kids = layout.children();
         let (side_l, content_l) = (kids.next().unwrap(), kids.next().unwrap());
 
-        self.children[1].as_widget().draw(&tree.children[1], renderer, theme, style, content_l, cursor, viewport);
+        self.children[1].as_widget().draw(
+            &tree.children[1],
+            renderer,
+            theme,
+            style,
+            content_l,
+            cursor,
+            viewport,
+        );
 
         if slot > 0.001 {
             // In flow: the part of the sidebar that has slid in, clipped to its slot.
-            let visible = Rectangle { x: b.x, y: b.y, width: self.sidebar_width * slot, height: b.height };
+            let visible = Rectangle {
+                x: b.x,
+                y: b.y,
+                width: self.sidebar_width * slot,
+                height: b.height,
+            };
             renderer.with_layer(visible, |r| {
-                self.children[0].as_widget().draw(&tree.children[0], r, theme, style, side_l, cursor, viewport);
+                self.children[0].as_widget().draw(
+                    &tree.children[0],
+                    r,
+                    theme,
+                    style,
+                    side_l,
+                    cursor,
+                    viewport,
+                );
                 r.fill_quad(
                     Quad {
-                        bounds: Rectangle { x: visible.x + visible.width - 1.0, width: 1.0, ..visible },
+                        bounds: Rectangle {
+                            x: visible.x + visible.width - 1.0,
+                            width: 1.0,
+                            ..visible
+                        },
                         border: Border::default(),
                         shadow: Default::default(),
                         snap: false,
@@ -285,7 +380,15 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
                     },
                     Background::Color(Color::TRANSPARENT),
                 );
-                self.children[0].as_widget().draw(&tree.children[0], r, theme, style, side_l, cursor, viewport);
+                self.children[0].as_widget().draw(
+                    &tree.children[0],
+                    r,
+                    theme,
+                    style,
+                    side_l,
+                    cursor,
+                    viewport,
+                );
             });
         }
     }

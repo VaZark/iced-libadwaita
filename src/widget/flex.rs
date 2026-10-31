@@ -12,7 +12,7 @@ use iced::advanced::renderer;
 use iced::advanced::widget::{Operation, Tree, Widget};
 use iced::advanced::{Clipboard, Shell};
 use iced::alignment::Horizontal;
-use iced::{mouse, Element, Event, Length, Point, Rectangle, Size, Vector};
+use iced::{Element, Event, Length, Point, Rectangle, Size, Vector, mouse};
 
 pub struct FlexRow<'a, M> {
     children: [Element<'a, M, Theme>; 2],
@@ -26,7 +26,10 @@ pub struct FlexRow<'a, M> {
 
 impl<'a, M> FlexRow<'a, M> {
     /// `main` takes the leftover space on the first line; `aside` is the control.
-    pub fn new(main: impl Into<Element<'a, M, Theme>>, aside: impl Into<Element<'a, M, Theme>>) -> Self {
+    pub fn new(
+        main: impl Into<Element<'a, M, Theme>>,
+        aside: impl Into<Element<'a, M, Theme>>,
+    ) -> Self {
         let m = Metrics::desktop();
         Self {
             children: [main.into(), aside.into()],
@@ -83,20 +86,39 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for FlexRow<'a, M> {
     }
 
     fn diff(&self, tree: &mut Tree) {
-        tree.diff_children(&self.children.iter().map(|c| c.as_widget()).collect::<Vec<_>>());
+        tree.diff_children(
+            &self
+                .children
+                .iter()
+                .map(|c| c.as_widget())
+                .collect::<Vec<_>>(),
+        );
     }
 
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
         let max = limits.max();
-        let width = if max.width.is_finite() { max.width } else { 0.0 };
+        let width = if max.width.is_finite() {
+            max.width
+        } else {
+            0.0
+        };
         let [main, aside] = &mut self.children;
-        let [t0, t1] = &mut tree.children[..] else { unreachable!() };
+        let [t0, t1] = &mut tree.children[..] else {
+            unreachable!()
+        };
 
         // Measure the control at its natural size.
         let measure = self.aside_basis.unwrap_or(width).min(width);
-        let a = aside
-            .as_widget_mut()
-            .layout(t1, renderer, &layout::Limits::new(Size::ZERO, Size::new(measure, f32::INFINITY)));
+        let a = aside.as_widget_mut().layout(
+            t1,
+            renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(measure, f32::INFINITY)),
+        );
         let aw = a.size().width;
 
         let fits = width - aw - self.gap >= self.main_basis;
@@ -111,7 +133,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for FlexRow<'a, M> {
             let ay = (h - a.size().height) / 2.0;
             layout::Node::with_children(
                 Size::new(width, h),
-                vec![m.move_to(Point::new(0.0, my)), a.move_to(Point::new(width - aw, ay))],
+                vec![
+                    m.move_to(Point::new(0.0, my)),
+                    a.move_to(Point::new(width - aw, ay)),
+                ],
             )
         } else {
             let m = main.as_widget_mut().layout(
@@ -144,9 +169,20 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for FlexRow<'a, M> {
         }
     }
 
-    fn operate(&mut self, tree: &mut Tree, layout: Layout<'_>, renderer: &iced::Renderer, operation: &mut dyn Operation) {
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn Operation,
+    ) {
         operation.container(None, layout.bounds());
-        for ((c, t), l) in self.children.iter_mut().zip(&mut tree.children).zip(layout.children()) {
+        for ((c, t), l) in self
+            .children
+            .iter_mut()
+            .zip(&mut tree.children)
+            .zip(layout.children())
+        {
             c.as_widget_mut().operate(t, l, renderer, operation);
         }
     }
@@ -162,8 +198,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for FlexRow<'a, M> {
         shell: &mut Shell<'_, M>,
         viewport: &Rectangle,
     ) {
-        for ((c, t), l) in self.children.iter_mut().zip(&mut tree.children).zip(layout.children()) {
-            c.as_widget_mut().update(t, event, l, cursor, renderer, clipboard, shell, viewport);
+        for ((c, t), l) in self
+            .children
+            .iter_mut()
+            .zip(&mut tree.children)
+            .zip(layout.children())
+        {
+            c.as_widget_mut()
+                .update(t, event, l, cursor, renderer, clipboard, shell, viewport);
         }
     }
 
@@ -179,7 +221,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for FlexRow<'a, M> {
             .iter()
             .zip(&tree.children)
             .zip(layout.children())
-            .map(|((c, t), l)| c.as_widget().mouse_interaction(t, l, cursor, viewport, renderer))
+            .map(|((c, t), l)| {
+                c.as_widget()
+                    .mouse_interaction(t, l, cursor, viewport, renderer)
+            })
             .max()
             .unwrap_or_default()
     }
@@ -194,8 +239,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for FlexRow<'a, M> {
         cursor: mouse::Cursor,
         viewport: &Rectangle,
     ) {
-        for ((c, t), l) in self.children.iter().zip(&tree.children).zip(layout.children()) {
-            c.as_widget().draw(t, renderer, theme, style, l, cursor, viewport);
+        for ((c, t), l) in self
+            .children
+            .iter()
+            .zip(&tree.children)
+            .zip(layout.children())
+        {
+            c.as_widget()
+                .draw(t, renderer, theme, style, l, cursor, viewport);
         }
     }
 
@@ -207,7 +258,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for FlexRow<'a, M> {
         viewport: &Rectangle,
         translation: Vector,
     ) -> Option<overlay::Element<'b, M, Theme, iced::Renderer>> {
-        overlay::from_children(&mut self.children, tree, layout, renderer, viewport, translation)
+        overlay::from_children(
+            &mut self.children,
+            tree,
+            layout,
+            renderer,
+            viewport,
+            translation,
+        )
     }
 }
 

@@ -274,7 +274,11 @@ mod tests {
     #[test]
     fn window_radius_is_15_and_capped() {
         assert_eq!(Metrics::default().radius_window, 15.0);
-        let m = Metrics { radius_window: 40.0, ..Metrics::default() }.clamped();
+        let m = Metrics {
+            radius_window: 40.0,
+            ..Metrics::default()
+        }
+        .clamped();
         assert_eq!(m.radius_window, Metrics::MAX_RADIUS_WINDOW);
     }
 }

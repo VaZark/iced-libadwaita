@@ -33,8 +33,13 @@ impl ValueType {
     /// Whether `value` is valid for this type.
     pub fn accepts(&self, value: &str) -> bool {
         match self {
-            Self::Bool => matches!(value.to_ascii_lowercase().as_str(), "true" | "yes" | "on" | "1" | "false" | "no" | "off" | "0"),
-            Self::Number { min, max } => value.parse::<f64>().is_ok_and(|n| (*min..=*max).contains(&n)),
+            Self::Bool => matches!(
+                value.to_ascii_lowercase().as_str(),
+                "true" | "yes" | "on" | "1" | "false" | "no" | "off" | "0"
+            ),
+            Self::Number { min, max } => value
+                .parse::<f64>()
+                .is_ok_and(|n| (*min..=*max).contains(&n)),
             Self::Choice(words) => words.contains(&value),
             Self::Text => true,
         }
@@ -89,28 +94,86 @@ impl Property {
     }
 }
 
-const fn p(section: &'static str, key: &'static str, ty: ValueType, default: &'static str) -> Property {
-    Property { section, key, ty, default, since: "0.1.0", deprecated: None, replacement: None }
+const fn p(
+    section: &'static str,
+    key: &'static str,
+    ty: ValueType,
+    default: &'static str,
+) -> Property {
+    Property {
+        section,
+        key,
+        ty,
+        default,
+        since: "0.1.0",
+        deprecated: None,
+        replacement: None,
+    }
 }
 
 use ValueType::{Bool, Choice, Number, Text};
 
-const ACCENTS: &[&str] = &["system", "blue", "teal", "green", "yellow", "orange", "red", "pink", "purple", "slate"];
+const ACCENTS: &[&str] = &[
+    "system", "blue", "teal", "green", "yellow", "orange", "red", "pink", "purple", "slate",
+];
 const MOTION: &[&str] = &["default", "none"];
-const POSITIONS: &[&str] = &["top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"];
+const POSITIONS: &[&str] = &[
+    "top-left",
+    "top-center",
+    "top-right",
+    "bottom-left",
+    "bottom-center",
+    "bottom-right",
+];
 
 /// The immutable historical registry shipped with this toolkit version.
 pub const PROPERTIES: &[Property] = &[
-    p("appearance", "color-scheme", Choice(&["system", "light", "dark"]), "system"),
+    p(
+        "appearance",
+        "color-scheme",
+        Choice(&["system", "light", "dark"]),
+        "system",
+    ),
     p("appearance", "accent", Choice(ACCENTS), "system"),
     p("appearance", "flat-headerbars", Bool, "true"),
     p("appearance", "auto-contrast", Bool, "true"),
-    p("appearance", "density", Choice(&["default", "compact"]), "default"),
-    p("appearance", "text-scale", Number { min: 0.5, max: 3.0 }, "1"),
+    p(
+        "appearance",
+        "density",
+        Choice(&["default", "compact"]),
+        "default",
+    ),
+    p(
+        "appearance",
+        "text-scale",
+        Number { min: 0.5, max: 3.0 },
+        "1",
+    ),
     p("appearance", "shadows", Bool, "true"),
-    p("appearance", "shadow-scale", Number { min: 0.0, max: 10.0 }, "1"),
-    p("appearance", "shadow-intensity", Number { min: 0.0, max: 10.0 }, "1"),
-    p("motion", "animations", Choice(&["system", "on", "off", "true", "false"]), "system"),
+    p(
+        "appearance",
+        "shadow-scale",
+        Number {
+            min: 0.0,
+            max: 10.0,
+        },
+        "1",
+    ),
+    p(
+        "appearance",
+        "shadow-intensity",
+        Number {
+            min: 0.0,
+            max: 10.0,
+        },
+        "1",
+    ),
+    p(
+        "motion",
+        "animations",
+        Choice(&["system", "on", "off", "true", "false"]),
+        "system",
+    ),
     p("motion", "reduced-motion", Bool, "false"),
     p("motion", "page-change", Choice(MOTION), "default"),
     p("motion", "page-push", Choice(MOTION), "default"),
@@ -124,43 +187,192 @@ pub const PROPERTIES: &[Property] = &[
     p("motion", "switch", Choice(MOTION), "default"),
     p("motion", "carousel", Choice(MOTION), "default"),
     p("motion", "layout", Choice(MOTION), "default"),
-    p("breakpoints", "sm", Number { min: 200.0, max: 10000.0 }, "576"),
-    p("breakpoints", "md", Number { min: 200.0, max: 10000.0 }, "768"),
-    p("breakpoints", "lg", Number { min: 200.0, max: 10000.0 }, "992"),
-    p("breakpoints", "xl", Number { min: 200.0, max: 10000.0 }, "1200"),
-    p("breakpoints", "xxl", Number { min: 200.0, max: 10000.0 }, "1400"),
-    p("layout", "page-max-width", Number { min: 300.0, max: 4000.0 }, "600"),
+    p(
+        "breakpoints",
+        "sm",
+        Number {
+            min: 200.0,
+            max: 10000.0,
+        },
+        "576",
+    ),
+    p(
+        "breakpoints",
+        "md",
+        Number {
+            min: 200.0,
+            max: 10000.0,
+        },
+        "768",
+    ),
+    p(
+        "breakpoints",
+        "lg",
+        Number {
+            min: 200.0,
+            max: 10000.0,
+        },
+        "992",
+    ),
+    p(
+        "breakpoints",
+        "xl",
+        Number {
+            min: 200.0,
+            max: 10000.0,
+        },
+        "1200",
+    ),
+    p(
+        "breakpoints",
+        "xxl",
+        Number {
+            min: 200.0,
+            max: 10000.0,
+        },
+        "1400",
+    ),
+    p(
+        "layout",
+        "page-max-width",
+        Number {
+            min: 300.0,
+            max: 4000.0,
+        },
+        "600",
+    ),
     p("windows", "decorations", Choice(&["csd", "ssd"]), "csd"),
     p("windows", "button-layout", Text, "system"),
-    p("windows", "mobile-max-width", Number { min: 200.0, max: 10000.0 }, "575"),
-    p("windows", "min-width", Number { min: 200.0, max: 2000.0 }, "360"),
-    p("windows", "min-height", Number { min: 100.0, max: 2000.0 }, "200"),
-    p("navigation", "collapse-width", Number { min: 200.0, max: 10000.0 }, "767"),
-    p("navigation", "min-content-width", Number { min: 200.0, max: 10000.0 }, "520"),
-    p("navigation", "sidebar-fraction", Number { min: 0.1, max: 0.5 }, "0.25"),
-    p("navigation", "sidebar-min-width", Number { min: 100.0, max: 600.0 }, "180"),
-    p("navigation", "sidebar-max-width", Number { min: 100.0, max: 800.0 }, "280"),
-    p("navigation", "drawer-max-fraction", Number { min: 0.3, max: 0.95 }, "0.85"),
-    p("navigation", "mobile-sidebar", Choice(&["drawer", "first-page"]), "drawer"),
-    p("menus", "presentation", Choice(&["auto", "dropdown", "full-page"]), "auto"),
+    p(
+        "windows",
+        "mobile-max-width",
+        Number {
+            min: 200.0,
+            max: 10000.0,
+        },
+        "575",
+    ),
+    p(
+        "windows",
+        "min-width",
+        Number {
+            min: 200.0,
+            max: 2000.0,
+        },
+        "360",
+    ),
+    p(
+        "windows",
+        "min-height",
+        Number {
+            min: 100.0,
+            max: 2000.0,
+        },
+        "200",
+    ),
+    p(
+        "navigation",
+        "collapse-width",
+        Number {
+            min: 200.0,
+            max: 10000.0,
+        },
+        "767",
+    ),
+    p(
+        "navigation",
+        "min-content-width",
+        Number {
+            min: 200.0,
+            max: 10000.0,
+        },
+        "520",
+    ),
+    p(
+        "navigation",
+        "sidebar-fraction",
+        Number { min: 0.1, max: 0.5 },
+        "0.25",
+    ),
+    p(
+        "navigation",
+        "sidebar-min-width",
+        Number {
+            min: 100.0,
+            max: 600.0,
+        },
+        "180",
+    ),
+    p(
+        "navigation",
+        "sidebar-max-width",
+        Number {
+            min: 100.0,
+            max: 800.0,
+        },
+        "280",
+    ),
+    p(
+        "navigation",
+        "drawer-max-fraction",
+        Number {
+            min: 0.3,
+            max: 0.95,
+        },
+        "0.85",
+    ),
+    p(
+        "navigation",
+        "mobile-sidebar",
+        Choice(&["drawer", "first-page"]),
+        "drawer",
+    ),
+    p(
+        "menus",
+        "presentation",
+        Choice(&["auto", "dropdown", "full-page"]),
+        "auto",
+    ),
     p("shortcuts", "enabled", Bool, "true"),
-    p("shortcuts", "hints", Choice(&["auto", "always", "never"]), "auto"),
+    p(
+        "shortcuts",
+        "hints",
+        Choice(&["auto", "always", "never"]),
+        "auto",
+    ),
     p("toasts", "position", Choice(POSITIONS), "bottom-center"),
-    p("toasts", "target", Choice(&["window", "content"]), "content"),
+    p(
+        "toasts",
+        "target",
+        Choice(&["window", "content"]),
+        "content",
+    ),
     p("rows", "collapse", Choice(&["stacked", "flex"]), "stacked"),
-    p("rows", "wrap-basis", Number { min: 0.0, max: 2000.0 }, "128"),
+    p(
+        "rows",
+        "wrap-basis",
+        Number {
+            min: 0.0,
+            max: 2000.0,
+        },
+        "128",
+    ),
     p("icons", "theme", Text, "system"),
     p("policy", "allow-app-overrides", Bool, "true"),
 ];
 
 /// The registry entry for a property, whatever its lifecycle state.
 pub fn find(section: &str, key: &str) -> Option<&'static Property> {
-    PROPERTIES.iter().find(|p| p.section == section && p.key == key)
+    PROPERTIES
+        .iter()
+        .find(|p| p.section == section && p.key == key)
 }
 
 /// The properties this toolkit reads: those introduced at or before [`TOOLKIT_VERSION`].
 pub fn supported() -> impl Iterator<Item = &'static Property> {
-    PROPERTIES.iter().filter(|p| p.is_supported_by(TOOLKIT_VERSION))
+    PROPERTIES
+        .iter()
+        .filter(|p| p.is_supported_by(TOOLKIT_VERSION))
 }
 
 /// Validates properties that a **new build** references (an app's bundled defaults, a build-time
@@ -181,7 +393,10 @@ pub fn validate_in<'a>(
 ) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
     for (section, key) in properties {
-        match registry.iter().find(|p| p.section == section && p.key == key) {
+        match registry
+            .iter()
+            .find(|p| p.section == section && p.key == key)
+        {
             Some(p) if p.is_supported_by(toolkit) => {
                 if let Some(since) = p.deprecated.filter(|_| p.is_deprecated_in(toolkit)) {
                     errors.push(format!(
@@ -193,7 +408,11 @@ pub fn validate_in<'a>(
             _ => errors.push(format!("[{section}] {key}: unknown property")),
         }
     }
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 #[cfg(test)]
@@ -204,11 +423,33 @@ mod tests {
     fn the_registry_has_unique_entries_and_valid_defaults() {
         let mut seen = std::collections::HashSet::new();
         for p in PROPERTIES {
-            assert!(seen.insert((p.section, p.key)), "duplicate [{}] {}", p.section, p.key);
-            assert!(p.ty.accepts(p.default), "[{}] {}: default {:?} is not a valid value", p.section, p.key, p.default);
-            assert!(version(p.since).is_some(), "[{}] {}: bad since {}", p.section, p.key, p.since);
+            assert!(
+                seen.insert((p.section, p.key)),
+                "duplicate [{}] {}",
+                p.section,
+                p.key
+            );
+            assert!(
+                p.ty.accepts(p.default),
+                "[{}] {}: default {:?} is not a valid value",
+                p.section,
+                p.key,
+                p.default
+            );
+            assert!(
+                version(p.since).is_some(),
+                "[{}] {}: bad since {}",
+                p.section,
+                p.key,
+                p.since
+            );
             if let Some(d) = p.deprecated {
-                assert!(at_least(d, p.since), "[{}] {}: deprecated before it was introduced", p.section, p.key);
+                assert!(
+                    at_least(d, p.since),
+                    "[{}] {}: deprecated before it was introduced",
+                    p.section,
+                    p.key
+                );
             }
         }
     }
@@ -216,7 +457,11 @@ mod tests {
     #[test]
     fn every_trigger_is_a_motion_property() {
         for t in crate::animation::Trigger::ALL {
-            assert!(find("motion", t.key()).is_some(), "motion trigger {} has no registry entry", t.key());
+            assert!(
+                find("motion", t.key()).is_some(),
+                "motion trigger {} has no registry entry",
+                t.key()
+            );
         }
     }
 
@@ -225,15 +470,26 @@ mod tests {
         assert!(at_least("0.10.0", "0.9.0"));
         assert!(at_least("1.0.0", "1.0.0"));
         assert!(!at_least("0.1.0", "0.2.0"));
-        assert!(at_least("0.2.0-rc1", "0.2.0"), "a pre-release tag is ignored");
+        assert!(
+            at_least("0.2.0-rc1", "0.2.0"),
+            "a pre-release tag is ignored"
+        );
     }
 
     /// Deprecation forbids *new builds*; it never removes support, and never rewrites anything.
     #[test]
     fn deprecation_blocks_new_builds_but_not_old_ones() {
         let registry = [
-            Property { since: "0.1.0", deprecated: Some("0.3.0"), replacement: Some("[appearance] density"), ..p("appearance", "compact", Bool, "false") },
-            Property { since: "0.2.0", ..p("appearance", "density", Bool, "false") },
+            Property {
+                since: "0.1.0",
+                deprecated: Some("0.3.0"),
+                replacement: Some("[appearance] density"),
+                ..p("appearance", "compact", Bool, "false")
+            },
+            Property {
+                since: "0.2.0",
+                ..p("appearance", "density", Bool, "false")
+            },
         ];
         let props = [("appearance", "compact")];
         // A build against 0.2.0 may still use it (and so may anything built earlier).
@@ -241,17 +497,30 @@ mod tests {
         assert!(validate_in(&registry, "0.1.0", props).is_ok());
         // From 0.3.0, a new build is rejected, with the (informational) replacement.
         let errors = validate_in(&registry, "0.3.0", props).unwrap_err();
-        assert!(errors[0].contains("deprecated since 0.3.0") && errors[0].contains("[appearance] density"), "{errors:?}");
+        assert!(
+            errors[0].contains("deprecated since 0.3.0")
+                && errors[0].contains("[appearance] density"),
+            "{errors:?}"
+        );
         // A property newer than the toolkit does not exist for it.
-        assert!(validate_in(&registry, "0.1.0", [("appearance", "density")]).unwrap_err()[0].contains("unknown property"));
+        assert!(
+            validate_in(&registry, "0.1.0", [("appearance", "density")]).unwrap_err()[0]
+                .contains("unknown property")
+        );
         // The entry stays in the history.
         assert!(registry.iter().any(|p| p.key == "compact"));
     }
 
     #[test]
     fn current_properties_validate_and_unknown_ones_do_not() {
-        assert!(validate_build_properties([("appearance", "density"), ("toasts", "position")]).is_ok());
+        assert!(
+            validate_build_properties([("appearance", "density"), ("toasts", "position")]).is_ok()
+        );
         assert!(validate_build_properties([("appearance", "not-a-key")]).is_err());
-        assert_eq!(supported().count(), PROPERTIES.len(), "nothing in the registry is newer than this toolkit");
+        assert_eq!(
+            supported().count(),
+            PROPERTIES.len(),
+            "nothing in the registry is newer than this toolkit"
+        );
     }
 }

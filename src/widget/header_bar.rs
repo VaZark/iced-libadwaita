@@ -41,10 +41,13 @@ impl<M> Default for WindowControls<M> {
 
 /// `AdwWindowTitle`: centered title with optional subtitle.
 pub fn window_title<'a, M: 'a>(title: &str, subtitle: Option<&str>) -> Element<'a, M> {
-    let mut c = column![typography::heading(title.to_string())]
-        .align_x(Horizontal::Center);
+    let mut c = column![typography::heading(title.to_string())].align_x(Horizontal::Center);
     if let Some(s) = subtitle {
-        c = c.push(typography::caption(s.to_string()).wrapping(text::Wrapping::None).style(crate::style::text::dim));
+        c = c.push(
+            typography::caption(s.to_string())
+                .wrapping(text::Wrapping::None)
+                .style(crate::style::text::dim),
+        );
     }
     c.into()
 }
@@ -191,9 +194,18 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
             let layout = c.layout.clone().unwrap_or_else(DecorationLayout::detect);
             let make = |b: WindowButton| -> Option<Element<'a, M>> {
                 match b {
-                    WindowButton::Minimize => c.on_minimize.clone().map(|m| ctl(Icon::WindowMinimize, m)),
+                    WindowButton::Minimize => {
+                        c.on_minimize.clone().map(|m| ctl(Icon::WindowMinimize, m))
+                    }
                     WindowButton::Maximize => c.on_maximize.clone().map(|m| {
-                        ctl(if c.maximized { Icon::WindowRestore } else { Icon::WindowMaximize }, m)
+                        ctl(
+                            if c.maximized {
+                                Icon::WindowRestore
+                            } else {
+                                Icon::WindowMaximize
+                            },
+                            m,
+                        )
                     }),
                     WindowButton::Close => c.on_close.clone().map(|m| ctl(Icon::WindowClose, m)),
                 }
@@ -213,7 +225,10 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
             (None, None) => space().into(),
         };
         let side = |items: Vec<Element<'a, M>>| -> Element<'a, M> {
-            row(items).spacing(m.space_s).align_y(Vertical::Center).into()
+            row(items)
+                .spacing(m.space_s)
+                .align_y(Vertical::Center)
+                .into()
         };
         let bar = container(super::slots::slots(
             side(start),

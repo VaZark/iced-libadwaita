@@ -30,11 +30,11 @@ Row height ≈36 ‡, row side margin 6 and bottom margin 2, radius 9 (`$menu_ra
 `sidebar_row_padded` for the bare function). Each level steps the row height, the row's side
 padding, the gap between rows and the horizontal list inset together, relative to the density's base:
 
-| Level | Resembles | Height | Side | Gap | Horizontal inset |
-|---|---|---|---|---|---|
-| `Sm` | Mantine `NavLink` (dense) | 28 | 8 | 1 | 4 |
-| `Md` (default) | Nautilus | 36 | 12 | 2 | 6 |
-| `Lg` | GNOME Settings | text height + 24 (≈43–44) | 14 | 2 | 6 |
+| Level          | Resembles                 | Height                    | Side | Gap | Horizontal inset |
+| -------------- | ------------------------- | ------------------------- | ---- | --- | ---------------- |
+| `Sm`           | Mantine `NavLink` (dense) | 28                        | 8    | 1   | 4                |
+| `Md` (default) | Nautilus                  | 36                        | 12   | 2   | 6                |
+| `Lg`           | GNOME Settings            | text height + 24 (≈43–44) | 14   | 2   | 6                |
 
 `Lg` is from the source (✓): gnome-control-center's `cc-panel-list.c` `row_data_new()` puts a
 `GtkGrid` in each row with margins 12 top and bottom, 6 at the sides and 12 column spacing, inside

@@ -1,10 +1,10 @@
 //! `AdwPreferencesGroup` and `AdwPreferencesPage`.
 
-use super::{boxed_list, clamp, Element};
+use super::{Element, boxed_list, clamp};
 use crate::style::text as st;
 use crate::{Metrics, Typography};
-use iced::widget::{column, space};
 use iced::Length;
+use iced::widget::{column, space};
 
 /// `AdwPreferencesGroup`: a titled boxed list.
 pub struct PreferencesGroup<'a, M> {
@@ -129,7 +129,9 @@ impl<'a, M: 'a> From<PreferencesPage<'a, M>> for Element<'a, M> {
     fn from(p: PreferencesPage<'a, M>) -> Self {
         let m = p.metrics;
         let body = iced::widget::container(
-            column(p.groups).spacing(m.group_spacing).width(Length::Fill),
+            column(p.groups)
+                .spacing(m.group_spacing)
+                .width(Length::Fill),
         )
         .padding(m.page_padding);
         super::scrolled_window(clamp(body, m.clamp_maximum))

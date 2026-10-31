@@ -8,10 +8,10 @@ Container that scrolls a child; a non-scrollable child is wrapped in a `GtkViewp
 
 ## Behavior
 
-* Policies per axis (`hscrollbar-policy`, `vscrollbar-policy`); no internal scrollbars when both are *never*/*external*.
-* `overlay-scrolling`, `kinetic-scrolling` (touch), `window-placement`.
-* `min-content-width/height`, `max-content-width/height`, `propagate-natural-width/height` control sizing.
-* Signals `edge-overshot`, `edge-reached`.
+- Policies per axis (`hscrollbar-policy`, `vscrollbar-policy`); no internal scrollbars when both are _never_/_external_.
+- `overlay-scrolling`, `kinetic-scrolling` (touch), `window-placement`.
+- `min-content-width/height`, `max-content-width/height`, `propagate-natural-width/height` control sizing.
+- Signals `edge-overshot`, `edge-reached`.
 
 ## CSS nodes
 

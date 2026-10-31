@@ -3,9 +3,9 @@
 use super::Element;
 use crate::style::{button as sb, container as sc, text as st};
 use crate::{Metrics, Role, Theme, Typography};
+use iced::Length;
 use iced::alignment::Horizontal;
 use iced::widget::{button, column, container, mouse_area, opaque, row, space, stack, text};
-use iced::Length;
 
 /// Presents `dialog` modally over `base` with a dimmed backdrop.
 /// `on_backdrop` is sent when the backdrop is clicked.
@@ -34,11 +34,15 @@ pub fn dialog_in_window<'a, M: Clone + 'a>(
     }
     let layer = stack![
         opaque(catcher),
-        container(opaque(dialog.into())).center(Length::Fill).padding(12)
+        container(opaque(dialog.into()))
+            .center(Length::Fill)
+            .padding(12)
     ];
     super::layered(
         base,
-        Some(Element::from(super::entrance(layer, iced::Vector::new(0.0, 24.0)).scrim(window_radius))),
+        Some(Element::from(
+            super::entrance(layer, iced::Vector::new(0.0, 24.0)).scrim(window_radius),
+        )),
     )
 }
 
@@ -111,11 +115,17 @@ impl<'a, M> AlertDialog<'a, M> {
 }
 
 fn separator_v<'a, M: 'a>() -> Element<'a, M> {
-    container(space().width(1)).height(Length::Fill).style(sc::card_separator).into()
+    container(space().width(1))
+        .height(Length::Fill)
+        .style(sc::card_separator)
+        .into()
 }
 
 fn separator_h<'a, M: 'a>() -> Element<'a, M> {
-    container(space().height(1)).width(Length::Fill).style(sc::card_separator).into()
+    container(space().height(1))
+        .width(Length::Fill)
+        .style(sc::card_separator)
+        .into()
 }
 
 impl<'a, M: Clone + 'a> From<AlertDialog<'a, M>> for Element<'a, M> {
@@ -147,7 +157,11 @@ impl<'a, M: Clone + 'a> From<AlertDialog<'a, M>> for Element<'a, M> {
             };
             let lbl = text(label)
                 .font(iced::Font {
-                    weight: if bold { iced::font::Weight::Bold } else { iced::font::Weight::Normal },
+                    weight: if bold {
+                        iced::font::Weight::Bold
+                    } else {
+                        iced::font::Weight::Normal
+                    },
                     ..iced::Font::DEFAULT
                 })
                 .style(move |th: &Theme| iced::widget::text::Style {
@@ -176,9 +190,11 @@ impl<'a, M: Clone + 'a> From<AlertDialog<'a, M>> for Element<'a, M> {
             );
         }
 
-        container(
-            column![container(body).padding(m.dialog_padding), separator_h(), buttons]
-        )
+        container(column![
+            container(body).padding(m.dialog_padding),
+            separator_h(),
+            buttons
+        ])
         .width(Length::Fill)
         .max_width(m.dialog_width)
         .clip(true)
@@ -246,7 +262,10 @@ impl<'a, M: Clone + 'a> From<AboutDialog<'a, M>> for Element<'a, M> {
     fn from(a: AboutDialog<'a, M>) -> Self {
         let m = Metrics::desktop();
         let t = Typography::default();
-        let mut col = column![].spacing(m.space_s).align_x(Horizontal::Center).width(Length::Fill);
+        let mut col = column![]
+            .spacing(m.space_s)
+            .align_x(Horizontal::Center)
+            .width(Length::Fill);
         if let Some(i) = a.icon {
             col = col.push(i);
         }

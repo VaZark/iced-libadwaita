@@ -3,9 +3,9 @@
 use super::Element;
 use crate::style::{container as sc, text as st};
 use crate::{Metrics, Typography};
+use iced::Length;
 use iced::alignment::Horizontal;
 use iced::widget::{column, container};
-use iced::Length;
 
 /// `AdwClamp`: limits the width of `content`, centering it.
 pub fn clamp<'a, M: 'a>(content: impl Into<Element<'a, M>>, maximum: f32) -> Element<'a, M> {
@@ -82,11 +82,22 @@ impl<'a, M: 'a> From<Card<'a, M>> for Element<'a, M> {
         let mut col = column![].width(Length::Fill);
         for (i, child) in c.children.into_iter().enumerate() {
             if i > 0 && c.separators {
-                col = col.push(container(iced::widget::space().height(1)).width(Length::Fill).style(sc::card_separator));
+                col = col.push(
+                    container(iced::widget::space().height(1))
+                        .width(Length::Fill)
+                        .style(sc::card_separator),
+                );
             }
             col = col.push(container(child).padding(c.padding).width(Length::Fill));
         }
-        super::card_shadow(container(col).width(c.width).height(c.height).clip(true).style(sc::card_surface)).into()
+        super::card_shadow(
+            container(col)
+                .width(c.width)
+                .height(c.height)
+                .clip(true)
+                .style(sc::card_surface),
+        )
+        .into()
     }
 }
 
@@ -105,7 +116,11 @@ pub fn page<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Page<'a, M> {
 
 impl<'a, M: 'a> Page<'a, M> {
     pub fn new(content: impl Into<Element<'a, M>>) -> Self {
-        Self { content: content.into(), maximum: 720.0, metrics: Metrics::desktop() }
+        Self {
+            content: content.into(),
+            maximum: 720.0,
+            metrics: Metrics::desktop(),
+        }
     }
     /// `AdwClamp:maximum-size`.
     pub fn maximum_size(mut self, px: f32) -> Self {
@@ -121,7 +136,9 @@ impl<'a, M: 'a> Page<'a, M> {
 impl<'a, M: 'a> From<Page<'a, M>> for Element<'a, M> {
     fn from(p: Page<'a, M>) -> Self {
         super::scrolled_window(clamp(
-            container(p.content).padding(p.metrics.page_padding).width(Length::Fill),
+            container(p.content)
+                .padding(p.metrics.page_padding)
+                .width(Length::Fill),
             p.maximum,
         ))
         .width(Length::Fill)
@@ -201,7 +218,11 @@ impl<'a, M: 'a> From<StatusPage<'a, M>> for Element<'a, M> {
             col = col.push(i);
         }
         if let Some(title) = s.title {
-            col = col.push(if s.compact { t.title_2(title) } else { t.title_1(title) });
+            col = col.push(if s.compact {
+                t.title_2(title)
+            } else {
+                t.title_1(title)
+            });
         }
         if let Some(d) = s.description {
             col = col.push(t.body(d).style(st::dim).align_x(Horizontal::Center));

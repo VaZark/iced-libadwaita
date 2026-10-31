@@ -5,11 +5,11 @@ desktop config unless you have a reason not to: `Theme::from_config(&config::cur
 
 #### Layers
 
-| Layer | Type | Holds |
-|---|---|---|
-| Named colors | `Palette` | libadwaita-style variable names (`accent_bg_color`, …), light and dark |
-| Semantic | `Semantic` | What components ask for: surfaces, status swatches, opacities |
-| Metrics | `Metrics`, `Typography` | Spacing, radii, sizes, text scale |
+| Layer        | Type                    | Holds                                                                  |
+| ------------ | ----------------------- | ---------------------------------------------------------------------- |
+| Named colors | `Palette`               | libadwaita-style variable names (`accent_bg_color`, …), light and dark |
+| Semantic     | `Semantic`              | What components ask for: surfaces, status swatches, opacities          |
+| Metrics      | `Metrics`, `Typography` | Spacing, radii, sizes, text scale                                      |
 
 ```rust
 let theme = adw::Theme::dark()
@@ -21,17 +21,17 @@ let theme = adw::Theme::dark()
 
 #### Rules of thumb
 
-* **Use roles, not colors.** `Role::{Accent, Success, Warning, Error, Destructive}` for status;
+- **Use roles, not colors.** `Role::{Accent, Success, Warning, Error, Destructive}` for status;
   never a fixed hue for meaning.
-* **Text on colored fills is chosen by contrast** (CSS `color-contrast()`): light or dark,
+- **Text on colored fills is chosen by contrast** (CSS `color-contrast()`): light or dark,
   whichever contrasts more. Override with a component's `text_color`, `Theme::with_semantic`, or
   turn it off with `with_auto_contrast(false)`.
-* **Radii are capped** at the HIG values (controls 9, cards 12, popovers and windows 15); you can
+- **Radii are capped** at the HIG values (controls 9, cards 12, popovers and windows 15); you can
   lower them (`radius_m`, `radius_l`, `radius_toast`), not raise them.
-* **Shadows are settings**: `Shadows::none()`, `.with_scale`, `.with_intensity`. Cards draw each
+- **Shadows are settings**: `Shadows::none()`, `.with_scale`, `.with_intensity`. Cards draw each
   layer as its own rounded shape so the shadow follows the border.
-* **Density**: `Metrics::compact()` or `[appearance] density=compact`.
-* Dimmed text is for secondary information and the disabled state, not for chosen values.
+- **Density**: `Metrics::compact()` or `[appearance] density=compact`.
+- Dimmed text is for secondary information and the disabled state, not for chosen values.
 
 #### Limitation: layout tokens are fixed at build time
 

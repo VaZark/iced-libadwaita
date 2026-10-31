@@ -7,30 +7,30 @@ with the toolkit.
 
 #### What it records
 
-| Metadata | Purpose |
-|---|---|
-| `section`, `key` | the property identifier |
-| `ty` | the value type: `Bool`, `Number { min, max }`, `Choice([...])`, `Text` |
-| `default` | the value used when the property is missing |
-| `since` | the first toolkit version that supports it |
-| `deprecated` | the first version in which **new builds** must not reference it |
-| `replacement` | a newer property to use instead; informational only |
+| Metadata         | Purpose                                                                |
+| ---------------- | ---------------------------------------------------------------------- |
+| `section`, `key` | the property identifier                                                |
+| `ty`             | the value type: `Bool`, `Number { min, max }`, `Choice([...])`, `Text` |
+| `default`        | the value used when the property is missing                            |
+| `since`          | the first toolkit version that supports it                             |
+| `deprecated`     | the first version in which **new builds** must not reference it        |
+| `replacement`    | a newer property to use instead; informational only                    |
 
 #### Rules
 
-* An application reads **only the properties its bundled toolkit knows** (those with `since` at or
+- An application reads **only the properties its bundled toolkit knows** (those with `since` at or
   below its version).
-* **Unknown properties are ignored, never deleted or rewritten.** A newer toolkit may have written
+- **Unknown properties are ignored, never deleted or rewritten.** A newer toolkit may have written
   them. They are not warnings; `Config::unknown_properties()` lists them for a settings tool.
-* **Missing properties use their defaults.** Invalid values of known properties are warnings and
+- **Missing properties use their defaults.** Invalid values of known properties are warnings and
   fall back to the default.
-* **Deprecation never removes historical support.** An application built with an older toolkit
+- **Deprecation never removes historical support.** An application built with an older toolkit
   keeps using the property. Releases only append to the registry and set `deprecated`.
-* **New builds that reference a deprecated property fail validation**
+- **New builds that reference a deprecated property fail validation**
   (`validate_build_properties`, called from a `build.rs`). So do builds that reference a property the toolkit does not know.
-* **No automatic translation or migration** between a deprecated property and its replacement.
+- **No automatic translation or migration** between a deprecated property and its replacement.
   Different toolkit generations may use independent values.
-* A user's `desktop.conf` is runtime input, not a build artifact: it is never validated at build
+- A user's `desktop.conf` is runtime input, not a build artifact: it is never validated at build
   time and never fails a build.
 
 ```mermaid

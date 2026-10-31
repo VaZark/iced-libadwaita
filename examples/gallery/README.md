@@ -8,7 +8,7 @@ gallery itself is organized; they are about the example, not the library.
 Two levels:
 
 1. **Sidebar: functional groups** (Buttons, Inputs, Rows & Lists, Layout, Navigation,
-   Feedback, Dialogs & Sheets). Components are grouped by what they are *for*, not by what
+   Feedback, Dialogs & Sheets). Components are grouped by what they are _for_, not by what
    they look like: every text field, switch, check and radio is under Inputs. Typography and
    Theming are single pages.
 2. **A group page** lists its components in sections. Each component is presented in one of
@@ -23,11 +23,11 @@ built, such as validation state, password mode, color override, width, icon, sha
 placeholder, read-only, children. **States** (enabled, disabled, checked, selected) are values
 of a property and do not count as separate properties. Then:
 
-| The component has… | It is shown as | `Entry` |
-|---|---|---|
-| **Two or more significantly different properties** | a row with a chevron that opens a **nested page**; the page has one group per property | `Nested(Detail)` |
-| **One trigger and nothing else to show** (a dialog, a sheet, a toast) | a row with the **button on it** (`Open`, `Show`) instead of a chevron | `Action(Action)` |
-| **One demo** (a single property, with its states) | its demo **inline** on the group page, under its own heading | `Inline(Inline)` |
+| The component has…                                                    | It is shown as                                                                         | `Entry`          |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------- |
+| **Two or more significantly different properties**                    | a row with a chevron that opens a **nested page**; the page has one group per property | `Nested(Detail)` |
+| **One trigger and nothing else to show** (a dialog, a sheet, a toast) | a row with the **button on it** (`Open`, `Show`) instead of a chevron                  | `Action(Action)` |
+| **One demo** (a single property, with its states)                     | its demo **inline** on the group page, under its own heading                           | `Inline(Inline)` |
 
 ```mermaid
 flowchart TD
@@ -44,12 +44,12 @@ is inline or actions, so it has no nested pages.
 
 Guidelines:
 
-* Show the **disabled** state of every control that can be disabled, next to its enabled
+- Show the **disabled** state of every control that can be disabled, next to its enabled
   form, on whichever page presents it.
-* A nested page is a group per property, each with a heading, not a flat list.
-* Do not add a nested page to hold a single card. If a component grows a second property,
+- A nested page is a group per property, each with a heading, not a flat list.
+- Do not add a nested page to hold a single card. If a component grows a second property,
   promote it from `Inline` to `Detail` (move its demo into `detail_page`, add the groups).
-* Keep demos small. Anything that only repeats another component's demo belongs there.
+- Keep demos small. Anything that only repeats another component's demo belongs there.
 
 ## Running
 

@@ -4,7 +4,7 @@ use super::Element;
 use crate::style::button as sb;
 use crate::{Icon, Metrics, Theme};
 use iced::alignment::Vertical;
-use iced::widget::{button, container, row, Button};
+use iced::widget::{Button, button, container, row};
 use iced::{Length, Padding};
 
 /// `AdwButtonContent`: an optional icon next to a label.
@@ -44,7 +44,10 @@ impl<'a, M: 'a> From<ButtonContent<'a, M>> for Element<'a, M> {
     }
 }
 
-pub(super) fn sized<'a, M: 'a>(content: impl Into<Element<'a, M>>, m: &Metrics) -> Button<'a, M, Theme> {
+pub(super) fn sized<'a, M: 'a>(
+    content: impl Into<Element<'a, M>>,
+    m: &Metrics,
+) -> Button<'a, M, Theme> {
     button(
         container(content)
             .center_y(Length::Fixed(m.button_min_height - m.button_padding.y()))
@@ -76,7 +79,9 @@ pub fn destructive_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Butt
 /// `.pill` button.
 pub fn pill_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
     let m = Metrics::desktop();
-    button(content.into()).padding(m.pill_padding).style(sb::pill)
+    button(content.into())
+        .padding(m.pill_padding)
+        .style(sb::pill)
 }
 
 /// `.pill.suggested-action` button.
@@ -84,7 +89,9 @@ pub fn suggested_pill_button<'a, M: 'a>(
     content: impl Into<Element<'a, M>>,
 ) -> Button<'a, M, Theme> {
     let m = Metrics::desktop();
-    button(content.into()).padding(m.pill_padding).style(sb::suggested_pill)
+    button(content.into())
+        .padding(m.pill_padding)
+        .style(sb::suggested_pill)
 }
 
 /// `GtkProgressBar` with Adwaita's 6px thickness.
@@ -98,12 +105,9 @@ pub fn progress_bar<'a>(
 /// A square `.circular` icon button (flat by default, like header bar buttons).
 pub fn circular_button<'a, M: 'a>(icon: Icon) -> Button<'a, M, Theme> {
     let m = Metrics::desktop();
-    button(
-        container(icon.view(m.icon_size))
-            .center(Length::Fixed(m.button_min_height)),
-    )
-    .padding(Padding::from(0.0))
-    .style(sb::circular_flat)
+    button(container(icon.view(m.icon_size)).center(Length::Fixed(m.button_min_height)))
+        .padding(Padding::from(0.0))
+        .style(sb::circular_flat)
 }
 
 /// A flat icon button with a rounded-rect hover (`.flat` + icon-only).
@@ -125,15 +129,30 @@ pub struct ToggleItem<'a, T, M> {
 impl<'a, T, M> ToggleItem<'a, T, M> {
     /// A text segment.
     pub fn new(value: T, label: impl Into<String>) -> Self {
-        Self { value, label: Some(label.into()), icon: None, custom: None }
+        Self {
+            value,
+            label: Some(label.into()),
+            icon: None,
+            custom: None,
+        }
     }
     /// An icon-only segment.
     pub fn icon_only(value: T, icon: Icon) -> Self {
-        Self { value, label: None, icon: Some(icon), custom: None }
+        Self {
+            value,
+            label: None,
+            icon: Some(icon),
+            custom: None,
+        }
     }
     /// A segment with any content (an avatar, a badge, a row of widgets…).
     pub fn custom(value: T, content: impl Into<Element<'a, M>>) -> Self {
-        Self { value, label: None, icon: None, custom: Some(content.into()) }
+        Self {
+            value,
+            label: None,
+            icon: None,
+            custom: Some(content.into()),
+        }
     }
     /// Adds an icon before the label. When the group is too narrow for icon and
     /// label together, the segment falls back to the icon alone.
@@ -210,25 +229,29 @@ impl<'a, T, M> ToggleGroup<'a, T, M> {
 impl<'a, T: Clone + PartialEq + 'a, M: 'a> From<ToggleGroup<'a, T, M>> for Element<'a, M> {
     fn from(g: ToggleGroup<'a, T, M>) -> Self {
         let m = g.metrics;
-        let active = g.active.as_ref().and_then(|a| g.items.iter().position(|i| &i.value == a));
+        let active = g
+            .active
+            .as_ref()
+            .and_then(|a| g.items.iter().position(|i| &i.value == a));
         let segments = g
             .items
             .into_iter()
             .map(|item| {
                 let icon = |ic: Icon| -> Element<'a, M> { ic.view(m.icon_size).into() };
-                let (full, compact): (Element<'a, M>, Option<Element<'a, M>>) = match (item.custom, item.icon, item.label) {
-                    (Some(c), _, _) => (c, None),
-                    (None, Some(ic), Some(l)) => (
-                        row![icon(ic), super::typography::label(l)]
-                            .spacing(m.space_s)
-                            .align_y(Vertical::Center)
-                            .into(),
-                        Some(icon(ic)),
-                    ),
-                    (None, Some(ic), None) => (icon(ic), None),
-                    (None, None, Some(l)) => (super::typography::label(l).into(), None),
-                    (None, None, None) => (iced::widget::space().into(), None),
-                };
+                let (full, compact): (Element<'a, M>, Option<Element<'a, M>>) =
+                    match (item.custom, item.icon, item.label) {
+                        (Some(c), _, _) => (c, None),
+                        (None, Some(ic), Some(l)) => (
+                            row![icon(ic), super::typography::label(l)]
+                                .spacing(m.space_s)
+                                .align_y(Vertical::Center)
+                                .into(),
+                            Some(icon(ic)),
+                        ),
+                        (None, Some(ic), None) => (icon(ic), None),
+                        (None, None, Some(l)) => (super::typography::label(l).into(), None),
+                        (None, None, None) => (iced::widget::space().into(), None),
+                    };
                 (item.value, full, compact)
             })
             .collect();

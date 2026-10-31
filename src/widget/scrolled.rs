@@ -6,9 +6,9 @@
 //! hover), 2px from the edge. See `docs/hig-inferences/gtk4/scrollbar.md`.
 
 use crate::{Metrics, Theme};
-use iced::widget::scrollable::{Direction, Scrollbar};
-use iced::widget::{scrollable, Scrollable};
 use iced::Element;
+use iced::widget::scrollable::{Direction, Scrollbar};
+use iced::widget::{Scrollable, scrollable};
 
 /// The Adwaita scrollbar configuration (overlay, thin).
 pub fn scrollbar() -> Scrollbar {
@@ -20,7 +20,9 @@ pub fn scrollbar() -> Scrollbar {
 }
 
 /// Vertical scrolling with the Adwaita scrollbar.
-pub fn scrolled_window<'a, M: 'a>(content: impl Into<Element<'a, M, Theme>>) -> Scrollable<'a, M, Theme> {
+pub fn scrolled_window<'a, M: 'a>(
+    content: impl Into<Element<'a, M, Theme>>,
+) -> Scrollable<'a, M, Theme> {
     scrollable(content).direction(Direction::Vertical(scrollbar()))
 }
 

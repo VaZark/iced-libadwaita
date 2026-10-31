@@ -32,7 +32,13 @@ pub struct Layer {
 
 impl Layer {
     pub const fn new(x: f32, y: f32, blur: f32, spread: f32, color: Color) -> Self {
-        Self { x, y, blur, spread, color }
+        Self {
+            x,
+            y,
+            blur,
+            spread,
+            color,
+        }
     }
 
     /// A pure 1px outline (`0 0 0 1px color`), which we draw as a border.
@@ -53,7 +59,9 @@ impl Elevation {
     }
 
     pub fn new(layers: impl IntoIterator<Item = Layer>) -> Self {
-        Self { layers: layers.into_iter().collect() }
+        Self {
+            layers: layers.into_iter().collect(),
+        }
     }
 }
 
@@ -122,7 +130,16 @@ impl Shadows {
                 Layer::new(0.0, 0.0, 0.0, 1.0, black(0.05)),
             ]),
             // _popovers.scss `.osd popover > contents`: 0 0 1px white 10%
-            osd: Elevation::new([Layer::new(0.0, 0.0, 0.0, 1.0, Color { a: 0.10, ..Color::WHITE })]),
+            osd: Elevation::new([Layer::new(
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                Color {
+                    a: 0.10,
+                    ..Color::WHITE
+                },
+            )]),
         }
     }
 
@@ -150,19 +167,24 @@ impl Shadows {
     /// the largest extent (`blur + spread`); alpha is summed, capped at 0.5.
     pub fn resolve(&self, e: &Elevation) -> Resolved {
         if !self.enabled {
-            return Resolved { shadow: Shadow::default(), ring: None };
+            return Resolved {
+                shadow: Shadow::default(),
+                ring: None,
+            };
         }
         let k = self.intensity;
-        let ring = e
-            .layers
-            .iter()
-            .find(|l| l.is_ring())
-            .map(|l| Color { a: (l.color.a * k).min(1.0), ..l.color });
+        let ring = e.layers.iter().find(|l| l.is_ring()).map(|l| Color {
+            a: (l.color.a * k).min(1.0),
+            ..l.color
+        });
 
         let soft: Vec<&Layer> = e.layers.iter().filter(|l| !l.is_ring()).collect();
         let total: f32 = soft.iter().map(|l| l.color.a).sum();
         if soft.is_empty() || total <= 0.0 {
-            return Resolved { shadow: Shadow::default(), ring };
+            return Resolved {
+                shadow: Shadow::default(),
+                ring,
+            };
         }
         let (mut x, mut y, mut extent) = (0.0, 0.0, 0.0f32);
         for l in &soft {
@@ -174,7 +196,10 @@ impl Shadows {
         let base = soft[0].color;
         Resolved {
             shadow: Shadow {
-                color: Color { a: (total * k).min(0.5), ..base },
+                color: Color {
+                    a: (total * k).min(0.5),
+                    ..base
+                },
                 offset: Vector::new(x * self.scale, y * self.scale),
                 blur_radius: extent * self.scale,
             },
@@ -225,7 +250,10 @@ mod tests {
     #[test]
     fn scale_and_intensity_apply() {
         let a = Shadows::adwaita().dialog();
-        let b = Shadows::adwaita().with_scale(2.0).with_intensity(0.5).dialog();
+        let b = Shadows::adwaita()
+            .with_scale(2.0)
+            .with_intensity(0.5)
+            .dialog();
         assert_eq!(b.shadow.blur_radius, a.shadow.blur_radius * 2.0);
         assert!(b.shadow.color.a < a.shadow.color.a);
     }

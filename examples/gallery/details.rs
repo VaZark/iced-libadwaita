@@ -22,9 +22,12 @@ fn flush<'a>(
 
 /// A label on the start edge and a control on the end edge.
 fn labeled<'a>(label: &'static str, control: impl Into<Element<'a>>) -> Element<'a> {
-    row![container(ty::body(label)).width(Length::Fill), control.into()]
-        .align_y(iced::Alignment::Center)
-        .into()
+    row![
+        container(ty::body(label)).width(Length::Fill),
+        control.into()
+    ]
+    .align_y(iced::Alignment::Center)
+    .into()
 }
 
 impl Gallery {
@@ -42,7 +45,9 @@ impl Gallery {
     }
 
     fn group<'a>(&self, title: &'static str) -> w::PreferencesGroup<'a, Message> {
-        w::PreferencesGroup::<Message>::new().title(title).metrics(self.metrics())
+        w::PreferencesGroup::<Message>::new()
+            .title(title)
+            .metrics(self.metrics())
     }
 
     /// Level 1: the group's components. Components with two or more significantly different
@@ -65,7 +70,11 @@ impl Gallery {
                             .metrics(m);
                         let mut g = list.take().unwrap_or_else(|| {
                             let g = self.group(title);
-                            if std::mem::take(&mut first) { g.description(page.description()) } else { g }
+                            if std::mem::take(&mut first) {
+                                g.description(page.description())
+                            } else {
+                                g
+                            }
                         });
                         g = g.push(row);
                         list = Some(g);
@@ -73,11 +82,17 @@ impl Gallery {
                     Entry::Action(a) => {
                         let row = w::ActionRow::new(a.title())
                             .subtitle(a.description())
-                            .suffix(w::raised_button(text(a.button())).on_press(self.action_message(a)))
+                            .suffix(
+                                w::raised_button(text(a.button())).on_press(self.action_message(a)),
+                            )
                             .metrics(m);
                         let mut g = list.take().unwrap_or_else(|| {
                             let g = self.group(title);
-                            if std::mem::take(&mut first) { g.description(page.description()) } else { g }
+                            if std::mem::take(&mut first) {
+                                g.description(page.description())
+                            } else {
+                                g
+                            }
                         });
                         g = g.push(row);
                         list = Some(g);
@@ -919,8 +934,11 @@ impl Gallery {
         .spacing(m.space_l)
         .wrap();
         self.page_frame(
-            column![self.group("Text styles").push(w::card(typo)), self.group("Text colors").push(w::card(colors))]
-                .spacing(m.group_spacing),
+            column![
+                self.group("Text styles").push(w::card(typo)),
+                self.group("Text colors").push(w::card(colors))
+            ]
+            .spacing(m.group_spacing),
         )
     }
 }

@@ -80,28 +80,56 @@ impl Easing {
             EaseInQuad => t * t,
             EaseOutQuad => -t * (t - 2.0),
             EaseInOutQuad => {
-                if t < 0.5 { 2.0 * t * t } else { -2.0 * t * t + 4.0 * t - 1.0 }
+                if t < 0.5 {
+                    2.0 * t * t
+                } else {
+                    -2.0 * t * t + 4.0 * t - 1.0
+                }
             }
             EaseInCubic => t * t * t,
             EaseOutCubic => (t - 1.0).powi(3) + 1.0,
             EaseInOutCubic => {
-                if t < 0.5 { 4.0 * t * t * t } else { (t - 1.0) * (2.0 * t - 2.0) * (2.0 * t - 2.0) + 1.0 }
+                if t < 0.5 {
+                    4.0 * t * t * t
+                } else {
+                    (t - 1.0) * (2.0 * t - 2.0) * (2.0 * t - 2.0) + 1.0
+                }
             }
             EaseInQuart => t.powi(4),
             EaseOutQuart => 1.0 - (t - 1.0).powi(4),
             EaseInOutQuart => {
-                if t < 0.5 { 8.0 * t.powi(4) } else { 1.0 - 8.0 * (t - 1.0).powi(4) }
+                if t < 0.5 {
+                    8.0 * t.powi(4)
+                } else {
+                    1.0 - 8.0 * (t - 1.0).powi(4)
+                }
             }
             EaseInQuint => t.powi(5),
             EaseOutQuint => (t - 1.0).powi(5) + 1.0,
             EaseInOutQuint => {
-                if t < 0.5 { 16.0 * t.powi(5) } else { 1.0 + 16.0 * (t - 1.0).powi(5) }
+                if t < 0.5 {
+                    16.0 * t.powi(5)
+                } else {
+                    1.0 + 16.0 * (t - 1.0).powi(5)
+                }
             }
             EaseInSine => 1.0 - (t * PI / 2.0).cos(),
             EaseOutSine => (t * PI / 2.0).sin(),
             EaseInOutSine => -((PI * t).cos() - 1.0) / 2.0,
-            EaseInExpo => if t == 0.0 { 0.0 } else { 2f64.powf(10.0 * (t - 1.0)) },
-            EaseOutExpo => if t == 1.0 { 1.0 } else { 1.0 - 2f64.powf(-10.0 * t) },
+            EaseInExpo => {
+                if t == 0.0 {
+                    0.0
+                } else {
+                    2f64.powf(10.0 * (t - 1.0))
+                }
+            }
+            EaseOutExpo => {
+                if t == 1.0 {
+                    1.0
+                } else {
+                    1.0 - 2f64.powf(-10.0 * t)
+                }
+            }
             EaseInOutExpo => {
                 if t == 0.0 {
                     0.0
@@ -124,11 +152,23 @@ impl Easing {
             }
             EaseInElastic => {
                 let c4 = 2.0 * PI / 3.0;
-                if t == 0.0 { 0.0 } else if t == 1.0 { 1.0 } else { -(2f64.powf(10.0 * t - 10.0)) * ((t * 10.0 - 10.75) * c4).sin() }
+                if t == 0.0 {
+                    0.0
+                } else if t == 1.0 {
+                    1.0
+                } else {
+                    -(2f64.powf(10.0 * t - 10.0)) * ((t * 10.0 - 10.75) * c4).sin()
+                }
             }
             EaseOutElastic => {
                 let c4 = 2.0 * PI / 3.0;
-                if t == 0.0 { 0.0 } else if t == 1.0 { 1.0 } else { 2f64.powf(-10.0 * t) * ((t * 10.0 - 0.75) * c4).sin() + 1.0 }
+                if t == 0.0 {
+                    0.0
+                } else if t == 1.0 {
+                    1.0
+                } else {
+                    2f64.powf(-10.0 * t) * ((t * 10.0 - 0.75) * c4).sin() + 1.0
+                }
             }
             EaseInOutElastic => {
                 let c5 = 2.0 * PI / 4.5;
@@ -161,7 +201,11 @@ impl Easing {
             EaseInBounce => 1.0 - bounce_out(1.0 - t),
             EaseOutBounce => bounce_out(t),
             EaseInOutBounce => {
-                if t < 0.5 { (1.0 - bounce_out(1.0 - 2.0 * t)) / 2.0 } else { (1.0 + bounce_out(2.0 * t - 1.0)) / 2.0 }
+                if t < 0.5 {
+                    (1.0 - bounce_out(1.0 - 2.0 * t)) / 2.0
+                } else {
+                    (1.0 + bounce_out(2.0 * t - 1.0)) / 2.0
+                }
             }
             Ease => bezier(0.25, 0.1, 0.25, 1.0, t),
             EaseIn => bezier(0.42, 0.0, 1.0, 1.0, t),
@@ -190,11 +234,17 @@ fn bounce_out(t: f64) -> f64 {
 
 /// CSS `cubic-bezier(x1, y1, x2, y2)`: solves `x(s) = t` then returns `y(s)`.
 fn bezier(x1: f64, y1: f64, x2: f64, y2: f64, t: f64) -> f64 {
-    let sample = |a: f64, b: f64, s: f64| 3.0 * a * (1.0 - s).powi(2) * s + 3.0 * b * (1.0 - s) * s * s + s.powi(3);
+    let sample = |a: f64, b: f64, s: f64| {
+        3.0 * a * (1.0 - s).powi(2) * s + 3.0 * b * (1.0 - s) * s * s + s.powi(3)
+    };
     let (mut lo, mut hi) = (0.0, 1.0);
     for _ in 0..40 {
         let mid = (lo + hi) / 2.0;
-        if sample(x1, x2, mid) < t { lo = mid } else { hi = mid }
+        if sample(x1, x2, mid) < t {
+            lo = mid
+        } else {
+            hi = mid
+        }
     }
     sample(y1, y2, (lo + hi) / 2.0)
 }
@@ -222,7 +272,15 @@ pub struct TimedAnimation {
 
 impl TimedAnimation {
     pub fn new(from: f64, to: f64, duration: Duration, easing: Easing) -> Self {
-        Self { from, to, duration, easing, repeat: Repeat::Times(1), reverse: false, alternate: false }
+        Self {
+            from,
+            to,
+            duration,
+            easing,
+            repeat: Repeat::Times(1),
+            reverse: false,
+            alternate: false,
+        }
     }
     pub fn repeat(mut self, r: Repeat) -> Self {
         self.repeat = r;
@@ -289,11 +347,19 @@ impl SpringParams {
     /// From a damping ratio (`adw_spring_params_new`): 0 undamped, <1 underdamped,
     /// 1 critically damped (fastest without oscillating), >1 overdamped.
     pub fn new(damping_ratio: f64, mass: f64, stiffness: f64) -> Self {
-        Self { mass, stiffness, damping: damping_ratio * 2.0 * (mass * stiffness).sqrt() }
+        Self {
+            mass,
+            stiffness,
+            damping: damping_ratio * 2.0 * (mass * stiffness).sqrt(),
+        }
     }
     /// From raw damping (`adw_spring_params_new_full`).
     pub fn new_full(mass: f64, stiffness: f64, damping: f64) -> Self {
-        Self { mass, stiffness, damping }
+        Self {
+            mass,
+            stiffness,
+            damping,
+        }
     }
     pub fn damping_ratio(&self) -> f64 {
         self.damping / (2.0 * (self.mass * self.stiffness).sqrt())
@@ -315,7 +381,14 @@ pub struct SpringAnimation {
 
 impl SpringAnimation {
     pub fn new(from: f64, to: f64, params: SpringParams) -> Self {
-        Self { from, to, initial_velocity: 0.0, params, epsilon: 0.001, clamp: false }
+        Self {
+            from,
+            to,
+            initial_velocity: 0.0,
+            params,
+            epsilon: 0.001,
+            clamp: false,
+        }
     }
     pub fn initial_velocity(mut self, v: f64) -> Self {
         self.initial_velocity = v;
@@ -331,7 +404,11 @@ impl SpringAnimation {
     }
 
     fn raw(&self, t: f64) -> f64 {
-        let SpringParams { mass: m, stiffness: k, damping: b } = self.params;
+        let SpringParams {
+            mass: m,
+            stiffness: k,
+            damping: b,
+        } = self.params;
         let beta = b / (2.0 * m);
         let omega0 = (k / m).sqrt();
         let x0 = self.from - self.to;
@@ -355,7 +432,11 @@ impl SpringAnimation {
         if self.clamp && self.crossed(t) {
             return self.to;
         }
-        if self.is_finished(elapsed) { self.to } else { self.raw(t) }
+        if self.is_finished(elapsed) {
+            self.to
+        } else {
+            self.raw(t)
+        }
     }
 
     /// The velocity `elapsed` after the start (`adw_spring_animation_calculate_velocity`).
@@ -379,17 +460,26 @@ impl SpringAnimation {
         if self.params.damping <= 0.0 {
             return None;
         }
-        if (self.from - self.to).abs() < self.epsilon && self.initial_velocity.abs() < self.epsilon {
+        if (self.from - self.to).abs() < self.epsilon && self.initial_velocity.abs() < self.epsilon
+        {
             return Some(Duration::ZERO);
         }
         // Bound the scan with the decay envelope instead of simulating 30 seconds.
-        let SpringParams { mass: m, stiffness: k, damping: b } = self.params;
+        let SpringParams {
+            mass: m,
+            stiffness: k,
+            damping: b,
+        } = self.params;
         let beta = b / (2.0 * m);
         let omega0 = (k / m).sqrt();
         let x0 = (self.from - self.to).abs();
         let w = (omega0 * omega0 - beta * beta).abs().sqrt().max(1e-3);
         let amplitude = x0 + (beta * x0 + self.initial_velocity.abs()) / w + 1.0;
-        let decay = if beta > omega0 { (beta - w).max(1e-3) } else { beta };
+        let decay = if beta > omega0 {
+            (beta - w).max(1e-3)
+        } else {
+            beta
+        };
         let t_max = ((amplitude / self.epsilon).ln() / decay * 1.5 + 0.1).clamp(0.05, 30.0);
         let step = 0.002;
         let mut last_unsettled = 0.0;
@@ -442,7 +532,8 @@ pub mod presets {
     pub const TOAST_HIDE_SCALE: f64 = 0.05;
     /// Widget state transitions in the stylesheet (buttons, toggles, switch focus,
     /// separators): 200ms, `$ease-out-quad`.
-    pub const STYLE_TRANSITION: (Duration, Easing) = (Duration::from_millis(200), Easing::STYLE_EASE_OUT_QUAD);
+    pub const STYLE_TRANSITION: (Duration, Easing) =
+        (Duration::from_millis(200), Easing::STYLE_EASE_OUT_QUAD);
     /// Scrollbar slider/trough: 200ms linear.
     pub const SCROLLBAR: (Duration, Easing) = (Duration::from_millis(200), Easing::Linear);
 }
@@ -536,8 +627,17 @@ pub enum Motion {
 
 impl Trigger {
     pub const ALL: [Trigger; 12] = [
-        Trigger::PageChange, Trigger::PagePush, Trigger::Popover, Trigger::Selection, Trigger::Drawer,
-        Trigger::Dialog, Trigger::Sheet, Trigger::Toast, Trigger::Reveal, Trigger::Switch, Trigger::Carousel,
+        Trigger::PageChange,
+        Trigger::PagePush,
+        Trigger::Popover,
+        Trigger::Selection,
+        Trigger::Drawer,
+        Trigger::Dialog,
+        Trigger::Sheet,
+        Trigger::Toast,
+        Trigger::Reveal,
+        Trigger::Switch,
+        Trigger::Carousel,
         Trigger::Layout,
     ];
 
@@ -567,17 +667,25 @@ impl Trigger {
     pub fn animation(self) -> &'static str {
         match self {
             Self::PageChange => "content fades in, 200ms ease-out-quad (AdwViewStack cross-fade)",
-            Self::PagePush => "page slides in over the old one, which moves a third out and dims; navigation spring (1, 1, 1000)",
-            Self::Popover => "rises 8px into place (a full-page menu slides in); 200ms ease-out-quad",
+            Self::PagePush => {
+                "page slides in over the old one, which moves a third out and dims; navigation spring (1, 1, 1000)"
+            }
+            Self::Popover => {
+                "rises 8px into place (a full-page menu slides in); 200ms ease-out-quad"
+            }
             Self::Selection => "highlight fades in/out, 200ms ease-out-quad",
-            Self::Drawer => "slides from the start edge over a fading scrim; sidebar spring (1, 0.5, 500)",
+            Self::Drawer => {
+                "slides from the start edge over a fading scrim; sidebar spring (1, 0.5, 500)"
+            }
             Self::Dialog => "scrim fades in, dialog slides up; sheet spring (0.8, 1, 400)",
             Self::Sheet => "scrim fades in, sheet slides up; sheet spring (0.8, 1, 400)",
             Self::Toast => "slides up, 300ms ease",
             Self::Reveal => "slides open/closed, 250ms ease",
             Self::Switch => "knob slides and track cross-fades, 200ms ease-out-quad",
             Self::Carousel => "scroll spring (1, 0.5, 500) with drag velocity hand-off",
-            Self::Layout => "the sidebar slides in or out of the layout and displaces the content, on the drawer's sidebar spring (1, 0.5, 500)",
+            Self::Layout => {
+                "the sidebar slides in or out of the layout and displaces the content, on the drawer's sidebar spring (1, 0.5, 500)"
+            }
         }
     }
 
@@ -626,7 +734,12 @@ pub struct Tween {
 
 impl Tween {
     pub fn new(value: f32) -> Self {
-        Self { value: value as f64, target: value as f64, start: None, running: None }
+        Self {
+            value: value as f64,
+            target: value as f64,
+            start: None,
+            running: None,
+        }
     }
 
     pub fn target(&self) -> f32 {
@@ -647,7 +760,10 @@ impl Tween {
     pub fn fling_to(&mut self, target: f32, velocity: f32, now: Instant, spec: Spec) {
         let current = self.value_at(now);
         self.target = target as f64;
-        if !enabled() || spec == Spec::Instant || (current - target as f64).abs() < 1e-6 && velocity.abs() < 1e-3 {
+        if !enabled()
+            || spec == Spec::Instant
+            || (current - target as f64).abs() < 1e-6 && velocity.abs() < 1e-3
+        {
             self.value = target as f64;
             self.running = None;
             self.start = None;
@@ -659,7 +775,8 @@ impl Tween {
             Spec::Timed(d, e) => Running::Timed(TimedAnimation::new(current, target as f64, d, e)),
             Spec::Instant => unreachable!("handled above"),
             Spec::Spring(p) => {
-                let a = SpringAnimation::new(current, target as f64, p).initial_velocity(velocity as f64);
+                let a = SpringAnimation::new(current, target as f64, p)
+                    .initial_velocity(velocity as f64);
                 Running::Spring(a, a.estimated_duration())
             }
         });
@@ -676,7 +793,9 @@ impl Tween {
         }
         let current = self.value_at(now);
         let velocity = match (&self.running, self.start) {
-            (Some(Running::Spring(s, _)), Some(st)) => s.velocity_at(now.saturating_duration_since(st)),
+            (Some(Running::Spring(s, _)), Some(st)) => {
+                s.velocity_at(now.saturating_duration_since(st))
+            }
             _ => 0.0,
         };
         self.target = target;
@@ -704,7 +823,11 @@ impl Tween {
             (Some(Running::Timed(a)), Some(s)) => a.value_at(now.saturating_duration_since(s)),
             (Some(Running::Spring(a, est)), Some(s)) => {
                 let e = now.saturating_duration_since(s);
-                if est.is_some_and(|d| e >= d) { a.to } else { a.value_at(e) }
+                if est.is_some_and(|d| e >= d) {
+                    a.to
+                } else {
+                    a.value_at(e)
+                }
             }
             _ => self.value,
         }
@@ -750,15 +873,49 @@ mod tests {
     fn every_easing_starts_at_zero_and_ends_at_one() {
         use Easing::*;
         for e in [
-            Linear, EaseInQuad, EaseOutQuad, EaseInOutQuad, EaseInCubic, EaseOutCubic, EaseInOutCubic,
-            EaseInQuart, EaseOutQuart, EaseInOutQuart, EaseInQuint, EaseOutQuint, EaseInOutQuint,
-            EaseInSine, EaseOutSine, EaseInOutSine, EaseInExpo, EaseOutExpo, EaseInOutExpo, EaseInCirc,
-            EaseOutCirc, EaseInOutCirc, EaseInElastic, EaseOutElastic, EaseInOutElastic, EaseInBack,
-            EaseOutBack, EaseInOutBack, EaseInBounce, EaseOutBounce, EaseInOutBounce, Ease, EaseIn,
-            EaseOut, EaseInOut, Easing::STYLE_EASE_OUT_QUAD,
+            Linear,
+            EaseInQuad,
+            EaseOutQuad,
+            EaseInOutQuad,
+            EaseInCubic,
+            EaseOutCubic,
+            EaseInOutCubic,
+            EaseInQuart,
+            EaseOutQuart,
+            EaseInOutQuart,
+            EaseInQuint,
+            EaseOutQuint,
+            EaseInOutQuint,
+            EaseInSine,
+            EaseOutSine,
+            EaseInOutSine,
+            EaseInExpo,
+            EaseOutExpo,
+            EaseInOutExpo,
+            EaseInCirc,
+            EaseOutCirc,
+            EaseInOutCirc,
+            EaseInElastic,
+            EaseOutElastic,
+            EaseInOutElastic,
+            EaseInBack,
+            EaseOutBack,
+            EaseInOutBack,
+            EaseInBounce,
+            EaseOutBounce,
+            EaseInOutBounce,
+            Ease,
+            EaseIn,
+            EaseOut,
+            EaseInOut,
+            Easing::STYLE_EASE_OUT_QUAD,
         ] {
             assert!(e.ease(0.0).abs() < 1e-3, "{e:?} at 0 = {}", e.ease(0.0));
-            assert!((e.ease(1.0) - 1.0).abs() < 1e-3, "{e:?} at 1 = {}", e.ease(1.0));
+            assert!(
+                (e.ease(1.0) - 1.0).abs() < 1e-3,
+                "{e:?} at 1 = {}",
+                e.ease(1.0)
+            );
         }
     }
 
@@ -781,7 +938,9 @@ mod tests {
         assert!(approx(a.value_at(Duration::ZERO), 10.0));
         assert!(approx(a.value_at(Duration::from_millis(100)), 15.0));
         assert!(approx(a.value_at(Duration::from_millis(500)), 20.0));
-        assert!(a.is_finished(Duration::from_millis(200)) && !a.is_finished(Duration::from_millis(199)));
+        assert!(
+            a.is_finished(Duration::from_millis(200)) && !a.is_finished(Duration::from_millis(199))
+        );
     }
 
     #[test]
@@ -799,7 +958,11 @@ mod tests {
         let alt = base.repeat(Repeat::Times(2)).alternate(true);
         assert!(approx(alt.value_at(Duration::from_millis(125)), 0.75));
         // forever never finishes.
-        assert!(!base.repeat(Repeat::Forever).is_finished(Duration::from_secs(100)));
+        assert!(
+            !base
+                .repeat(Repeat::Forever)
+                .is_finished(Duration::from_secs(100))
+        );
     }
 
     #[test]
@@ -807,7 +970,10 @@ mod tests {
         let p = SpringParams::new(0.8, 1.0, 400.0);
         assert!(approx(p.damping_ratio(), 0.8));
         assert!(approx(p.damping, 2.0 * 0.8 * 20.0));
-        assert!(approx(SpringParams::new_full(1.0, 400.0, 32.0).damping_ratio(), 0.8));
+        assert!(approx(
+            SpringParams::new_full(1.0, 400.0, 32.0).damping_ratio(),
+            0.8
+        ));
     }
 
     #[test]
@@ -816,11 +982,17 @@ mod tests {
         let mut prev = -1.0;
         for ms in 0..400 {
             let v = a.value_at(Duration::from_millis(ms));
-            assert!(v <= 1.0 + 1e-9 && v >= prev - 1e-9, "monotonic, no overshoot");
+            assert!(
+                v <= 1.0 + 1e-9 && v >= prev - 1e-9,
+                "monotonic, no overshoot"
+            );
             prev = v;
         }
         let d = a.estimated_duration().unwrap();
-        assert!(d > Duration::from_millis(100) && d < Duration::from_millis(800), "{d:?}");
+        assert!(
+            d > Duration::from_millis(100) && d < Duration::from_millis(800),
+            "{d:?}"
+        );
         assert!(approx(a.value_at(d + Duration::from_millis(10)), 1.0));
     }
 
@@ -828,10 +1000,14 @@ mod tests {
     fn underdamped_spring_overshoots_unless_clamped() {
         let p = presets::sheet(false); // damping ratio 0.8
         let a = SpringAnimation::new(0.0, 1.0, p);
-        let peak = (0..600).map(|ms| a.value_at(Duration::from_millis(ms))).fold(0.0, f64::max);
+        let peak = (0..600)
+            .map(|ms| a.value_at(Duration::from_millis(ms)))
+            .fold(0.0, f64::max);
         assert!(peak > 1.0, "ratio 0.8 overshoots, got {peak}");
         let clamped = a.clamp(true);
-        let peak = (0..600).map(|ms| clamped.value_at(Duration::from_millis(ms))).fold(0.0, f64::max);
+        let peak = (0..600)
+            .map(|ms| clamped.value_at(Duration::from_millis(ms)))
+            .fold(0.0, f64::max);
         assert!(peak <= 1.0 + 1e-9, "clamp never overshoots, got {peak}");
         // reduced motion uses ratio 1: no overshoot.
         let calm = SpringAnimation::new(0.0, 1.0, presets::sheet(true));
@@ -841,9 +1017,15 @@ mod tests {
     #[test]
     fn spring_initial_velocity_and_undamped() {
         let a = SpringAnimation::new(1.0, 1.0, presets::navigation()).initial_velocity(5.0);
-        let peak = (0..300).map(|ms| a.value_at(Duration::from_millis(ms))).fold(1.0, f64::max);
+        let peak = (0..300)
+            .map(|ms| a.value_at(Duration::from_millis(ms)))
+            .fold(1.0, f64::max);
         assert!(peak > 1.0, "equal from/to with velocity bounces");
-        assert!(SpringAnimation::new(0.0, 1.0, SpringParams::new(0.0, 1.0, 100.0)).estimated_duration().is_none());
+        assert!(
+            SpringAnimation::new(0.0, 1.0, SpringParams::new(0.0, 1.0, 100.0))
+                .estimated_duration()
+                .is_none()
+        );
     }
 
     #[test]
@@ -851,12 +1033,20 @@ mod tests {
         set_enabled(Some(true));
         let t0 = Instant::now();
         let mut t = Tween::new(0.0);
-        t.set_target(1.0, t0, Spec::Timed(Duration::from_millis(200), Easing::Linear));
+        t.set_target(
+            1.0,
+            t0,
+            Spec::Timed(Duration::from_millis(200), Easing::Linear),
+        );
         let mid = t.value_at(t0 + Duration::from_millis(100));
         assert!((mid - 0.5).abs() < 1e-6);
         // Retarget mid-flight: restarts from the current value, no jump.
         let t1 = t0 + Duration::from_millis(100);
-        t.set_target(0.0, t1, Spec::Timed(Duration::from_millis(200), Easing::Linear));
+        t.set_target(
+            0.0,
+            t1,
+            Spec::Timed(Duration::from_millis(200), Easing::Linear),
+        );
         assert!((t.value_at(t1) - 0.5).abs() < 1e-6);
         assert!(t.is_animating());
         assert_eq!(t.tick(t1 + Duration::from_millis(300)), 0.0);

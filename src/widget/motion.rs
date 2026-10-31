@@ -12,13 +12,15 @@
 //!   are mounted by the app only while shown, so they animate *in*; there is no exit
 //!   animation because the widget is gone as soon as the app unmounts it.
 
-use crate::animation::{presets, Spec, Trigger, Tween};
 use crate::Theme;
+use crate::animation::{Spec, Trigger, Tween, presets};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
-use iced::advanced::widget::{tree, Tree, Widget};
+use iced::advanced::widget::{Tree, Widget, tree};
 use iced::advanced::{Clipboard, Renderer as _, Shell};
-use iced::{mouse, window, Background, Border, Color, Element, Event, Length, Rectangle, Size, Vector};
+use iced::{
+    Background, Border, Color, Element, Event, Length, Rectangle, Size, Vector, mouse, window,
+};
 use std::time::Instant;
 
 /// Animated progress in `[0, 1]` (overshoot allowed for underdamped springs).
@@ -29,7 +31,10 @@ pub(super) struct Progress {
 
 impl Progress {
     pub(super) fn new(initial: f32) -> Self {
-        Self { tween: Tween::new(initial), shown: initial }
+        Self {
+            tween: Tween::new(initial),
+            shown: initial,
+        }
     }
 
     /// Moves toward `target` and advances to `now`. Returns whether it changed or is
@@ -53,7 +58,10 @@ pub(super) fn redraw_time(event: &Event) -> Option<Instant> {
 /// The scrim color: `--shade-color` at double alpha, scaled by `k`.
 pub(super) fn scrim(theme: &Theme, k: f32) -> Color {
     let c = theme.semantic.shade;
-    Color { a: (c.a * 2.0).min(1.0) * k.clamp(0.0, 1.0), ..c }
+    Color {
+        a: (c.a * 2.0).min(1.0) * k.clamp(0.0, 1.0),
+        ..c
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +115,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Reveal<'a, M> {
         Size::new(Length::Fill, Length::Shrink)
     }
 
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
         let width = limits.max().width;
         let child = self.content.as_widget_mut().layout(
             &mut tree.children[0],
@@ -133,14 +146,22 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Reveal<'a, M> {
     ) {
         let state = tree.state.downcast_mut::<RevealState>();
         if let Some(now) = redraw_time(event)
-            && state.progress.drive(if self.revealed { 1.0 } else { 0.0 }, now, Trigger::Reveal.spec(self.spec))
+            && state.progress.drive(
+                if self.revealed { 1.0 } else { 0.0 },
+                now,
+                Trigger::Reveal.spec(self.spec),
+            )
         {
             shell.invalidate_layout();
             shell.request_redraw();
         }
         if state.progress.shown > 0.001 {
             let bounds = layout.bounds();
-            let cursor = if cursor.is_over(bounds) { cursor } else { mouse::Cursor::Unavailable };
+            let cursor = if cursor.is_over(bounds) {
+                cursor
+            } else {
+                mouse::Cursor::Unavailable
+            };
             self.content.as_widget_mut().update(
                 &mut tree.children[0],
                 event,
@@ -165,7 +186,13 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Reveal<'a, M> {
         if tree.state.downcast_ref::<RevealState>().progress.shown <= 0.001 {
             return None;
         }
-        self.content.as_widget_mut().overlay(&mut tree.children[0], layout.children().next()?, renderer, viewport, translation)
+        self.content.as_widget_mut().overlay(
+            &mut tree.children[0],
+            layout.children().next()?,
+            renderer,
+            viewport,
+            translation,
+        )
     }
 
     fn mouse_interaction(
@@ -224,7 +251,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Reveal<'a, M> {
         operation: &mut dyn iced::advanced::widget::Operation,
     ) {
         if tree.state.downcast_ref::<RevealState>().progress.shown > 0.001 {
-            self.content.as_widget_mut().operate(&mut tree.children[0], layout.children().next().unwrap(), renderer, operation);
+            self.content.as_widget_mut().operate(
+                &mut tree.children[0],
+                layout.children().next().unwrap(),
+                renderer,
+                operation,
+            );
         }
     }
 }
@@ -286,7 +318,9 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
         tree::Tag::of::<DrawerState>()
     }
     fn state(&self) -> tree::State {
-        tree::State::new(DrawerState { progress: Progress::new(if self.open { 1.0 } else { 0.0 }) })
+        tree::State::new(DrawerState {
+            progress: Progress::new(if self.open { 1.0 } else { 0.0 }),
+        })
     }
     fn children(&self) -> Vec<Tree> {
         vec![Tree::new(&self.pane)]
@@ -298,12 +332,20 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
         Size::new(Length::Fill, Length::Fill)
     }
 
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
         let max = limits.max();
         let pane = self.pane.as_widget_mut().layout(
             &mut tree.children[0],
             renderer,
-            &layout::Limits::new(Size::new(self.width, max.height), Size::new(self.width, max.height)),
+            &layout::Limits::new(
+                Size::new(self.width, max.height),
+                Size::new(self.width, max.height),
+            ),
         );
         layout::Node::with_children(max, vec![pane])
     }
@@ -321,7 +363,11 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
     ) {
         let state = tree.state.downcast_mut::<DrawerState>();
         if let Some(now) = redraw_time(event)
-            && state.progress.drive(if self.open { 1.0 } else { 0.0 }, now, Trigger::Drawer.spec(self.spec))
+            && state.progress.drive(
+                if self.open { 1.0 } else { 0.0 },
+                now,
+                Trigger::Drawer.spec(self.spec),
+            )
         {
             shell.request_redraw();
         }
@@ -334,12 +380,24 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
         let is_mouse = matches!(event, Event::Mouse(_) | Event::Touch(_));
 
         if settled {
-            self.pane.as_widget_mut().update(&mut tree.children[0], event, pane_layout, cursor, renderer, clipboard, shell, viewport);
+            self.pane.as_widget_mut().update(
+                &mut tree.children[0],
+                event,
+                pane_layout,
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
         }
         if is_mouse && !shell.is_event_captured() {
             // Anything not caught by the pane is the scrim: block it, and close on press.
-            if matches!(event, Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) | Event::Touch(iced::touch::Event::FingerPressed { .. }))
-                && !cursor.is_over(pane_layout.bounds())
+            if matches!(
+                event,
+                Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
+                    | Event::Touch(iced::touch::Event::FingerPressed { .. })
+            ) && !cursor.is_over(pane_layout.bounds())
                 && let Some(m) = &self.on_close
             {
                 shell.publish(m.clone());
@@ -361,7 +419,13 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
         if tree.state.downcast_ref::<DrawerState>().progress.shown <= 0.001 && !self.open {
             return None;
         }
-        self.pane.as_widget_mut().overlay(&mut tree.children[0], layout.children().next()?, renderer, viewport, translation)
+        self.pane.as_widget_mut().overlay(
+            &mut tree.children[0],
+            layout.children().next()?,
+            renderer,
+            viewport,
+            translation,
+        )
     }
 
     fn mouse_interaction(
@@ -376,7 +440,13 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
         if p <= 0.001 && !self.open {
             return mouse::Interaction::None;
         }
-        self.pane.as_widget().mouse_interaction(&tree.children[0], layout.children().next().unwrap(), cursor, viewport, renderer)
+        self.pane.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+            renderer,
+        )
     }
 
     fn draw(
@@ -405,7 +475,15 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
         );
         let dx = -(1.0 - p) * self.width;
         renderer.with_translation(Vector::new(dx, 0.0), |r| {
-            self.pane.as_widget().draw(&tree.children[0], r, theme, style, layout.children().next().unwrap(), cursor, viewport);
+            self.pane.as_widget().draw(
+                &tree.children[0],
+                r,
+                theme,
+                style,
+                layout.children().next().unwrap(),
+                cursor,
+                viewport,
+            );
         });
     }
 }
@@ -446,7 +524,10 @@ pub fn layered<'a, M: 'a>(
     .into()
 }
 
-pub fn entrance<'a, M>(content: impl Into<Element<'a, M, Theme>>, offset: Vector) -> Entrance<'a, M> {
+pub fn entrance<'a, M>(
+    content: impl Into<Element<'a, M, Theme>>,
+    offset: Vector,
+) -> Entrance<'a, M> {
     Entrance {
         content: content.into(),
         offset,
@@ -484,7 +565,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
     }
     fn state(&self) -> tree::State {
         // Starts hidden and animates to 1 on the first redraw (mounting is the trigger).
-        tree::State::new(EntranceState { progress: Progress::new(if self.trigger.animated() { 0.0 } else { 1.0 }) })
+        tree::State::new(EntranceState {
+            progress: Progress::new(if self.trigger.animated() { 0.0 } else { 1.0 }),
+        })
     }
     fn children(&self) -> Vec<Tree> {
         vec![Tree::new(&self.content)]
@@ -496,8 +579,16 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         self.content.as_widget().size()
     }
 
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
-        let child = self.content.as_widget_mut().layout(&mut tree.children[0], renderer, limits);
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let child = self
+            .content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits);
         layout::Node::with_children(child.size(), vec![child])
     }
 
@@ -520,8 +611,19 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         }
         let settled = (state.progress.shown - 1.0).abs() < 0.002;
         if settled {
-            self.content.as_widget_mut().update(&mut tree.children[0], event, layout.children().next().unwrap(), cursor, renderer, clipboard, shell, viewport);
-        } else if matches!(event, Event::Mouse(_) | Event::Touch(_)) && cursor.is_over(layout.bounds()) {
+            self.content.as_widget_mut().update(
+                &mut tree.children[0],
+                event,
+                layout.children().next().unwrap(),
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
+        } else if matches!(event, Event::Mouse(_) | Event::Touch(_))
+            && cursor.is_over(layout.bounds())
+        {
             shell.capture_event(); // no click-through while sliding in
         }
     }
@@ -534,7 +636,13 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         viewport: &Rectangle,
         translation: Vector,
     ) -> Option<iced::advanced::overlay::Element<'b, M, Theme, iced::Renderer>> {
-        self.content.as_widget_mut().overlay(&mut tree.children[0], layout.children().next()?, renderer, viewport, translation)
+        self.content.as_widget_mut().overlay(
+            &mut tree.children[0],
+            layout.children().next()?,
+            renderer,
+            viewport,
+            translation,
+        )
     }
 
     fn mouse_interaction(
@@ -545,7 +653,13 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         viewport: &Rectangle,
         renderer: &iced::Renderer,
     ) -> mouse::Interaction {
-        self.content.as_widget().mouse_interaction(&tree.children[0], layout.children().next().unwrap(), cursor, viewport, renderer)
+        self.content.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+            renderer,
+        )
     }
 
     fn draw(
@@ -561,13 +675,26 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         let p = tree.state.downcast_ref::<EntranceState>().progress.shown;
         if let Some(radius) = self.scrim_radius {
             renderer.fill_quad(
-                Quad { bounds: layout.bounds(), border: Border::default().rounded(radius), shadow: Default::default(), snap: false },
+                Quad {
+                    bounds: layout.bounds(),
+                    border: Border::default().rounded(radius),
+                    shadow: Default::default(),
+                    snap: false,
+                },
                 Background::Color(scrim(theme, p.min(1.0))),
             );
         }
         let d = Vector::new(self.offset.x * (1.0 - p), self.offset.y * (1.0 - p));
         renderer.with_translation(d, |r| {
-            self.content.as_widget().draw(&tree.children[0], r, theme, style, layout.children().next().unwrap(), cursor, viewport);
+            self.content.as_widget().draw(
+                &tree.children[0],
+                r,
+                theme,
+                style,
+                layout.children().next().unwrap(),
+                cursor,
+                viewport,
+            );
         });
     }
 }
@@ -592,8 +719,16 @@ pub struct PageTransition<'a, M> {
     trigger: Trigger,
 }
 
-pub fn page_transition<'a, M>(content: impl Into<Element<'a, M, Theme>>, key: impl Into<u64>) -> PageTransition<'a, M> {
-    PageTransition { content: content.into(), key: key.into(), scroll_key: None, trigger: Trigger::PageChange }
+pub fn page_transition<'a, M>(
+    content: impl Into<Element<'a, M, Theme>>,
+    key: impl Into<u64>,
+) -> PageTransition<'a, M> {
+    PageTransition {
+        content: content.into(),
+        key: key.into(),
+        scroll_key: None,
+        trigger: Trigger::PageChange,
+    }
 }
 
 impl<'a, M> PageTransition<'a, M> {
@@ -660,7 +795,10 @@ impl iced::advanced::widget::Operation for RestoreScroll {
         state: &mut dyn iced::advanced::widget::operation::Scrollable,
     ) {
         if let Some(y) = self.0.take() {
-            state.scroll_to(iced::widget::scrollable::AbsoluteOffset { x: None, y: Some(y) });
+            state.scroll_to(iced::widget::scrollable::AbsoluteOffset {
+                x: None,
+                y: Some(y),
+            });
         }
     }
 }
@@ -702,8 +840,16 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
     fn size(&self) -> Size<Length> {
         self.content.as_widget().size()
     }
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
-        let child = self.content.as_widget_mut().layout(&mut tree.children[0], renderer, limits);
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let child = self
+            .content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits);
         layout::Node::with_children(child.size(), vec![child])
     }
     fn update(
@@ -718,23 +864,51 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         viewport: &Rectangle,
     ) {
         if let Some(now) = redraw_time(event)
-            && tree.state.downcast_mut::<PageState>().progress.drive(1.0, now, self.trigger.spec(Spec::STYLE))
+            && tree.state.downcast_mut::<PageState>().progress.drive(
+                1.0,
+                now,
+                self.trigger.spec(Spec::STYLE),
+            )
         {
             shell.request_redraw();
         }
         let child_layout = layout.children().next().unwrap();
         // Back to a page seen before: put its scroll position back once it has a layout.
-        if matches!(event, Event::Window(iced::window::Event::RedrawRequested(_)))
-            && let Some(y) = tree.state.downcast_mut::<PageState>().restore.take()
+        if matches!(
+            event,
+            Event::Window(iced::window::Event::RedrawRequested(_))
+        ) && let Some(y) = tree.state.downcast_mut::<PageState>().restore.take()
         {
-            self.content.as_widget_mut().operate(&mut tree.children[0], child_layout, renderer, &mut RestoreScroll(Some(y)));
+            self.content.as_widget_mut().operate(
+                &mut tree.children[0],
+                child_layout,
+                renderer,
+                &mut RestoreScroll(Some(y)),
+            );
             shell.request_redraw();
         }
-        self.content.as_widget_mut().update(&mut tree.children[0], event, child_layout, cursor, renderer, clipboard, shell, viewport);
+        self.content.as_widget_mut().update(
+            &mut tree.children[0],
+            event,
+            child_layout,
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
         // Remember where this page is scrolled to (wheel, drag, keys).
-        if matches!(event, Event::Mouse(_) | Event::Touch(_) | Event::Keyboard(_)) {
+        if matches!(
+            event,
+            Event::Mouse(_) | Event::Touch(_) | Event::Keyboard(_)
+        ) {
             let mut read = ReadScroll::default();
-            self.content.as_widget_mut().operate(&mut tree.children[0], child_layout, renderer, &mut read);
+            self.content.as_widget_mut().operate(
+                &mut tree.children[0],
+                child_layout,
+                renderer,
+                &mut read,
+            );
             if let Some(y) = read.0 {
                 let state = tree.state.downcast_mut::<PageState>();
                 let key = state.scroll_key;
@@ -750,7 +924,13 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         viewport: &Rectangle,
         translation: Vector,
     ) -> Option<iced::advanced::overlay::Element<'b, M, Theme, iced::Renderer>> {
-        self.content.as_widget_mut().overlay(&mut tree.children[0], layout.children().next()?, renderer, viewport, translation)
+        self.content.as_widget_mut().overlay(
+            &mut tree.children[0],
+            layout.children().next()?,
+            renderer,
+            viewport,
+            translation,
+        )
     }
 
     fn mouse_interaction(
@@ -761,7 +941,13 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         viewport: &Rectangle,
         renderer: &iced::Renderer,
     ) -> mouse::Interaction {
-        self.content.as_widget().mouse_interaction(&tree.children[0], layout.children().next().unwrap(), cursor, viewport, renderer)
+        self.content.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+            renderer,
+        )
     }
     fn operate(
         &mut self,
@@ -770,7 +956,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         renderer: &iced::Renderer,
         operation: &mut dyn iced::advanced::widget::Operation,
     ) {
-        self.content.as_widget_mut().operate(&mut tree.children[0], layout.children().next().unwrap(), renderer, operation);
+        self.content.as_widget_mut().operate(
+            &mut tree.children[0],
+            layout.children().next().unwrap(),
+            renderer,
+            operation,
+        );
     }
     fn draw(
         &self,
@@ -784,19 +975,43 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
     ) {
         let p = tree.state.downcast_ref::<PageState>().progress.shown;
         if p >= 0.999 {
-            return self.content.as_widget().draw(&tree.children[0], renderer, theme, style, layout.children().next().unwrap(), cursor, viewport);
+            return self.content.as_widget().draw(
+                &tree.children[0],
+                renderer,
+                theme,
+                style,
+                layout.children().next().unwrap(),
+                cursor,
+                viewport,
+            );
         }
         let bounds = layout.bounds();
         renderer.with_layer(bounds, |r| {
-            self.content.as_widget().draw(&tree.children[0], r, theme, style, layout.children().next().unwrap(), cursor, viewport);
+            self.content.as_widget().draw(
+                &tree.children[0],
+                r,
+                theme,
+                style,
+                layout.children().next().unwrap(),
+                cursor,
+                viewport,
+            );
         });
         // Fading the page in = fading the window background out over it. A later layer, so
         // it covers the page's text as well as its quads.
         let bg = theme.semantic.window.bg;
         renderer.with_layer(bounds, |r| {
             r.fill_quad(
-                Quad { bounds, border: Border::default(), shadow: Default::default(), snap: false },
-                Background::Color(Color { a: 1.0 - p.clamp(0.0, 1.0), ..bg }),
+                Quad {
+                    bounds,
+                    border: Border::default(),
+                    shadow: Default::default(),
+                    snap: false,
+                },
+                Background::Color(Color {
+                    a: 1.0 - p.clamp(0.0, 1.0),
+                    ..bg
+                }),
             );
         });
     }
@@ -828,7 +1043,12 @@ pub fn push_stack<'a, M>(
     top: impl Into<Element<'a, M, Theme>>,
     pushed: bool,
 ) -> PushStack<'a, M> {
-    PushStack { root: root.into(), top: top.into(), pushed, window_radius: 0.0 }
+    PushStack {
+        root: root.into(),
+        top: top.into(),
+        pushed,
+        window_radius: 0.0,
+    }
 }
 
 impl<'a, M> PushStack<'a, M> {
@@ -848,7 +1068,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
         tree::Tag::of::<PushState>()
     }
     fn state(&self) -> tree::State {
-        tree::State::new(PushState { progress: Progress::new(if self.pushed { 1.0 } else { 0.0 }) })
+        tree::State::new(PushState {
+            progress: Progress::new(if self.pushed { 1.0 } else { 0.0 }),
+        })
     }
     fn children(&self) -> Vec<Tree> {
         vec![Tree::new(&self.root), Tree::new(&self.top)]
@@ -859,11 +1081,22 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
     fn size(&self) -> Size<Length> {
         Size::new(Length::Fill, Length::Fill)
     }
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
         let max = limits.max();
         let l = layout::Limits::new(max, max);
-        let root = self.root.as_widget_mut().layout(&mut tree.children[0], renderer, &l);
-        let top = self.top.as_widget_mut().layout(&mut tree.children[1], renderer, &l);
+        let root = self
+            .root
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, &l);
+        let top = self
+            .top
+            .as_widget_mut()
+            .layout(&mut tree.children[1], renderer, &l);
         layout::Node::with_children(max, vec![root, top])
     }
     fn update(
@@ -879,7 +1112,11 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
     ) {
         let state = tree.state.downcast_mut::<PushState>();
         if let Some(now) = redraw_time(event)
-            && state.progress.drive(if self.pushed { 1.0 } else { 0.0 }, now, Trigger::PagePush.spec(Spec::Spring(presets::navigation())))
+            && state.progress.drive(
+                if self.pushed { 1.0 } else { 0.0 },
+                now,
+                Trigger::PagePush.spec(Spec::Spring(presets::navigation())),
+            )
         {
             shell.request_redraw();
         }
@@ -888,12 +1125,48 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
         let (root_l, top_l) = (kids.next().unwrap(), kids.next().unwrap());
         if matches!(event, Event::Keyboard(_)) {
             // Keys reach both pages, so shortcuts registered by a hidden page still work.
-            self.root.as_widget_mut().update(&mut tree.children[0], event, root_l, cursor, renderer, clipboard, shell, viewport);
-            self.top.as_widget_mut().update(&mut tree.children[1], event, top_l, cursor, renderer, clipboard, shell, viewport);
+            self.root.as_widget_mut().update(
+                &mut tree.children[0],
+                event,
+                root_l,
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
+            self.top.as_widget_mut().update(
+                &mut tree.children[1],
+                event,
+                top_l,
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
         } else if p <= 0.001 {
-            self.root.as_widget_mut().update(&mut tree.children[0], event, root_l, cursor, renderer, clipboard, shell, viewport);
+            self.root.as_widget_mut().update(
+                &mut tree.children[0],
+                event,
+                root_l,
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
         } else if p >= 0.999 {
-            self.top.as_widget_mut().update(&mut tree.children[1], event, top_l, cursor, renderer, clipboard, shell, viewport);
+            self.top.as_widget_mut().update(
+                &mut tree.children[1],
+                event,
+                top_l,
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
         } else if matches!(event, Event::Mouse(_) | Event::Touch(_)) {
             shell.capture_event(); // no clicks while a page is sliding
         }
@@ -912,9 +1185,13 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
         let (root_l, top_l) = (kids.next()?, kids.next()?);
         let (a, b) = tree.children.split_at_mut(1);
         if top {
-            self.top.as_widget_mut().overlay(&mut b[0], top_l, renderer, viewport, translation)
+            self.top
+                .as_widget_mut()
+                .overlay(&mut b[0], top_l, renderer, viewport, translation)
         } else {
-            self.root.as_widget_mut().overlay(&mut a[0], root_l, renderer, viewport, translation)
+            self.root
+                .as_widget_mut()
+                .overlay(&mut a[0], root_l, renderer, viewport, translation)
         }
     }
 
@@ -930,9 +1207,21 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
         let mut kids = layout.children();
         let (root_l, top_l) = (kids.next().unwrap(), kids.next().unwrap());
         if p <= 0.001 {
-            self.root.as_widget().mouse_interaction(&tree.children[0], root_l, cursor, viewport, renderer)
+            self.root.as_widget().mouse_interaction(
+                &tree.children[0],
+                root_l,
+                cursor,
+                viewport,
+                renderer,
+            )
         } else if p >= 0.999 {
-            self.top.as_widget().mouse_interaction(&tree.children[1], top_l, cursor, viewport, renderer)
+            self.top.as_widget().mouse_interaction(
+                &tree.children[1],
+                top_l,
+                cursor,
+                viewport,
+                renderer,
+            )
         } else {
             mouse::Interaction::None
         }
@@ -949,10 +1238,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
         let (root_l, top_l) = (kids.next().unwrap(), kids.next().unwrap());
         let (a, b) = tree.children.split_at_mut(1);
         if p < 0.999 {
-            self.root.as_widget_mut().operate(&mut a[0], root_l, renderer, operation);
+            self.root
+                .as_widget_mut()
+                .operate(&mut a[0], root_l, renderer, operation);
         }
         if p > 0.001 {
-            self.top.as_widget_mut().operate(&mut b[0], top_l, renderer, operation);
+            self.top
+                .as_widget_mut()
+                .operate(&mut b[0], top_l, renderer, operation);
         }
     }
     fn draw(
@@ -970,10 +1263,20 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
         let mut kids = layout.children();
         let (root_l, top_l) = (kids.next().unwrap(), kids.next().unwrap());
         let draw_root = |r: &mut iced::Renderer| {
-            self.root.as_widget().draw(&tree.children[0], r, theme, style, root_l, cursor, viewport);
+            self.root.as_widget().draw(
+                &tree.children[0],
+                r,
+                theme,
+                style,
+                root_l,
+                cursor,
+                viewport,
+            );
         };
         let draw_top = |r: &mut iced::Renderer| {
-            self.top.as_widget().draw(&tree.children[1], r, theme, style, top_l, cursor, viewport);
+            self.top
+                .as_widget()
+                .draw(&tree.children[1], r, theme, style, top_l, cursor, viewport);
         };
         if p <= 0.001 {
             return draw_root(renderer);
@@ -989,7 +1292,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
         // The old page dims as the new one covers it.
         renderer.with_layer(bounds, |r| {
             r.fill_quad(
-                Quad { bounds, border: Border::default().rounded(self.window_radius), shadow: Default::default(), snap: false },
+                Quad {
+                    bounds,
+                    border: Border::default().rounded(self.window_radius),
+                    shadow: Default::default(),
+                    snap: false,
+                },
                 Background::Color(scrim(theme, p * 0.5)),
             );
         });
@@ -1002,7 +1310,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
                         bounds,
                         border: Border::default().rounded(self.window_radius),
                         shadow: iced::Shadow {
-                            color: Color { a: 0.25, ..Color::BLACK },
+                            color: Color {
+                                a: 0.25,
+                                ..Color::BLACK
+                            },
                             offset: Vector::new(-2.0, 0.0),
                             blur_radius: 12.0,
                         },
@@ -1041,7 +1352,12 @@ pub fn highlight<'a, M>(
     radius: f32,
     alpha: f32,
 ) -> Highlight<'a, M> {
-    Highlight { content: content.into(), selected, radius, alpha }
+    Highlight {
+        content: content.into(),
+        selected,
+        radius,
+        alpha,
+    }
 }
 
 struct HighlightState {
@@ -1053,7 +1369,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Highlight<'a, M> {
         tree::Tag::of::<HighlightState>()
     }
     fn state(&self) -> tree::State {
-        tree::State::new(HighlightState { progress: Progress::new(if self.selected { 1.0 } else { 0.0 }) })
+        tree::State::new(HighlightState {
+            progress: Progress::new(if self.selected { 1.0 } else { 0.0 }),
+        })
     }
     fn children(&self) -> Vec<Tree> {
         vec![Tree::new(&self.content)]
@@ -1064,8 +1382,16 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Highlight<'a, M> {
     fn size(&self) -> Size<Length> {
         self.content.as_widget().size()
     }
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
-        let child = self.content.as_widget_mut().layout(&mut tree.children[0], renderer, limits);
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let child = self
+            .content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits);
         layout::Node::with_children(child.size(), vec![child])
     }
     fn update(
@@ -1088,7 +1414,16 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Highlight<'a, M> {
         {
             shell.request_redraw();
         }
-        self.content.as_widget_mut().update(&mut tree.children[0], event, layout.children().next().unwrap(), cursor, renderer, clipboard, shell, viewport);
+        self.content.as_widget_mut().update(
+            &mut tree.children[0],
+            event,
+            layout.children().next().unwrap(),
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
     }
     fn overlay<'b>(
         &'b mut self,
@@ -1098,7 +1433,13 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Highlight<'a, M> {
         viewport: &Rectangle,
         translation: Vector,
     ) -> Option<iced::advanced::overlay::Element<'b, M, Theme, iced::Renderer>> {
-        self.content.as_widget_mut().overlay(&mut tree.children[0], layout.children().next()?, renderer, viewport, translation)
+        self.content.as_widget_mut().overlay(
+            &mut tree.children[0],
+            layout.children().next()?,
+            renderer,
+            viewport,
+            translation,
+        )
     }
 
     fn mouse_interaction(
@@ -1109,7 +1450,13 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Highlight<'a, M> {
         viewport: &Rectangle,
         renderer: &iced::Renderer,
     ) -> mouse::Interaction {
-        self.content.as_widget().mouse_interaction(&tree.children[0], layout.children().next().unwrap(), cursor, viewport, renderer)
+        self.content.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+            renderer,
+        )
     }
     fn draw(
         &self,
@@ -1124,11 +1471,27 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Highlight<'a, M> {
         let p = tree.state.downcast_ref::<HighlightState>().progress.shown;
         if p > 0.001 {
             renderer.fill_quad(
-                Quad { bounds: layout.bounds(), border: Border::default().rounded(self.radius), shadow: Default::default(), snap: false },
-                Background::Color(crate::color::alpha(theme.semantic.sidebar.fg, self.alpha * p)),
+                Quad {
+                    bounds: layout.bounds(),
+                    border: Border::default().rounded(self.radius),
+                    shadow: Default::default(),
+                    snap: false,
+                },
+                Background::Color(crate::color::alpha(
+                    theme.semantic.sidebar.fg,
+                    self.alpha * p,
+                )),
             );
         }
-        self.content.as_widget().draw(&tree.children[0], renderer, theme, style, layout.children().next().unwrap(), cursor, viewport);
+        self.content.as_widget().draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+        );
     }
 }
 
@@ -1146,8 +1509,10 @@ mod layered_tests {
     #[test]
     fn content_keeps_its_tree_position_with_or_without_a_layer() {
         let bare: iced::Element<'_, (), Theme> = layered(iced::widget::text("content"), None);
-        let over: iced::Element<'_, (), Theme> =
-            layered(iced::widget::text("content"), Some(iced::widget::text("layer").into()));
+        let over: iced::Element<'_, (), Theme> = layered(
+            iced::widget::text("content"),
+            Some(iced::widget::text("layer").into()),
+        );
         let (a, b) = (Tree::new(&bare), Tree::new(&over));
         // Same shape: the content is child 0 either way, so its state survives showing
         // or hiding the layer and it never moves.

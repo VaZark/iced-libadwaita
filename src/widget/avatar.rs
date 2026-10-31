@@ -73,13 +73,22 @@ impl<'a, M: 'a> From<Avatar> for Element<'a, M> {
             .color
             .unwrap_or_else(|| crate::color::hex(COLORS[hash as usize % COLORS.len()]));
         let fill = crate::color::darken(bg, 0.08);
-        let label = if a.show_initials { initials(&a.text) } else { String::new() };
+        let label = if a.show_initials {
+            initials(&a.text)
+        } else {
+            String::new()
+        };
         container(text(label).size(a.size * 0.4).font(iced::Font {
             weight: iced::font::Weight::Bold,
             ..iced::Font::DEFAULT
         }))
         .center(Length::Fixed(a.size))
-        .style(sc::avatar(fill, a.text_color.unwrap_or_else(|| crate::color::readable_on(fill)), a.size))
+        .style(sc::avatar(
+            fill,
+            a.text_color
+                .unwrap_or_else(|| crate::color::readable_on(fill)),
+            a.size,
+        ))
         .into()
     }
 }

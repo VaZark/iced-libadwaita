@@ -33,6 +33,6 @@ Use `adw::Theme` as the application theme. Try `cargo run --example gallery`.
 
 #### Where to go next
 
-* [DESIGN.md](DESIGN.md): how it is put together and what it targets.
-* [docs/lib/](docs/lib/README.md): how and when to use each component.
-* [CONTRIBUTING.md](CONTRIBUTING.md): building, testing and working on it.
+- [DESIGN.md](DESIGN.md): how it is put together and what it targets.
+- [docs/lib/](docs/lib/README.md): how and when to use each component.
+- [CONTRIBUTING.md](CONTRIBUTING.md): building, testing and working on it.

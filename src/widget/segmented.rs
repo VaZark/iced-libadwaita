@@ -25,10 +25,10 @@ use crate::style::button::Position;
 use crate::{Metrics, Theme};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
-use iced::advanced::widget::{tree, Tree, Widget};
+use iced::advanced::widget::{Tree, Widget, tree};
 use iced::advanced::{Clipboard, Renderer as _, Shell};
 use iced::widget::button::Status;
-use iced::{mouse, Background, Border, Element, Event, Length, Point, Rectangle, Size};
+use iced::{Background, Border, Element, Event, Length, Point, Rectangle, Size, mouse};
 
 const TROUGH_PADDING: f32 = 2.0;
 
@@ -226,7 +226,12 @@ fn needs_compact(widths: &[f32], nat_full: &[f32], nat_compact: &[Option<f32>]) 
 
 /// Whether the segments take their compact form: as told by the breakpoint (`forced`), else
 /// because the space is short.
-fn use_compact(forced: Option<bool>, widths: &[f32], nat_full: &[f32], nat_compact: &[Option<f32>]) -> bool {
+fn use_compact(
+    forced: Option<bool>,
+    widths: &[f32],
+    nat_full: &[f32],
+    nat_compact: &[Option<f32>],
+) -> bool {
     forced.unwrap_or_else(|| needs_compact(widths, nat_full, nat_compact))
 }
 
@@ -260,7 +265,13 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
     }
 
     fn diff(&self, tree: &mut Tree) {
-        tree.diff_children(&self.children.iter().map(|c| c.as_widget()).collect::<Vec<_>>());
+        tree.diff_children(
+            &self
+                .children
+                .iter()
+                .map(|c| c.as_widget())
+                .collect::<Vec<_>>(),
+        );
     }
 
     fn size(&self) -> Size<Length> {
@@ -268,7 +279,12 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
         Size::new(self.width, Length::Fixed(m.button_min_height))
     }
 
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
         let m = self.metrics;
         let n = self.values.len();
         let seg_h = m.button_min_height - 2.0 * TROUGH_PADDING;
@@ -288,13 +304,18 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
         let mut content_full = Vec::with_capacity(n);
         let mut content_compact = vec![0.0f32; n];
         for i in 0..n {
-            let w = self.children[i].as_widget_mut().layout(&mut tree.children[i], renderer, &natural);
+            let w =
+                self.children[i]
+                    .as_widget_mut()
+                    .layout(&mut tree.children[i], renderer, &natural);
             content_full.push(w.size().width);
             nat_full.push(w.size().width + 2.0 * hpad);
             if self.has_compact[i] {
-                let c = self.children[n + i]
-                    .as_widget_mut()
-                    .layout(&mut tree.children[n + i], renderer, &natural);
+                let c = self.children[n + i].as_widget_mut().layout(
+                    &mut tree.children[n + i],
+                    renderer,
+                    &natural,
+                );
                 content_compact[i] = c.size().width;
                 nat_compact[i] = Some(c.size().width + 2.0 * hpad);
             }
@@ -304,7 +325,10 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
         if self.homogeneous {
             let widest = nat_full.iter().copied().fold(0.0, f32::max);
             nat_full.iter_mut().for_each(|w| *w = widest);
-            nat_compact.iter_mut().flatten().for_each(|w| *w = widest.min(*w));
+            nat_compact
+                .iter_mut()
+                .flatten()
+                .for_each(|w| *w = widest.min(*w));
         }
         let avail = (max_w - 2.0 * TROUGH_PADDING).max(0.0);
         let total: f32 = nat_full.iter().sum();
@@ -312,7 +336,9 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
         let target = if fills && max_w < f32::MAX / 8.0 {
             avail
         } else {
-            total.max((min_w - 2.0 * TROUGH_PADDING).max(0.0)).min(avail)
+            total
+                .max((min_w - 2.0 * TROUGH_PADDING).max(0.0))
+                .min(avail)
         };
 
         // First pass with full content. If *any* segment would be squeezed below its
@@ -339,7 +365,11 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
             let w = widths[i];
             let idx = if self.use_compact[i] { n + i } else { i };
             let room = (w - 2.0 * hpad).max(0.0);
-            let content = if self.use_compact[i] { content_compact[i] } else { content_full[i] };
+            let content = if self.use_compact[i] {
+                content_compact[i]
+            } else {
+                content_full[i]
+            };
             // Lay out at the *same* bounds used for measuring unless the content has to
             // be squeezed: re-laying text out at different bounds mutates its paragraph
             // every frame (and invalidates the renderer's references to it).
@@ -348,15 +378,29 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
             } else {
                 layout::Limits::new(Size::ZERO, Size::new(room, seg_h))
             };
-            let node = self.children[idx].as_widget_mut().layout(&mut tree.children[idx], renderer, &limits);
+            let node = self.children[idx].as_widget_mut().layout(
+                &mut tree.children[idx],
+                renderer,
+                &limits,
+            );
             let size = node.size();
-            let pos = Point::new(x + (w - size.width) / 2.0, TROUGH_PADDING + (seg_h - size.height) / 2.0);
+            let pos = Point::new(
+                x + (w - size.width) / 2.0,
+                TROUGH_PADDING + (seg_h - size.height) / 2.0,
+            );
             nodes.push(node.move_to(pos));
-            self.rects.push(Rectangle::new(Point::new(x, TROUGH_PADDING), Size::new(w, seg_h)));
+            self.rects.push(Rectangle::new(
+                Point::new(x, TROUGH_PADDING),
+                Size::new(w, seg_h),
+            ));
             x += w;
         }
 
-        let width = if fills && max_w < f32::MAX / 8.0 { max_w } else { x + TROUGH_PADDING };
+        let width = if fills && max_w < f32::MAX / 8.0 {
+            max_w
+        } else {
+            x + TROUGH_PADDING
+        };
         layout::Node::with_children(Size::new(width, m.button_min_height), nodes)
     }
 
@@ -380,7 +424,9 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
                 shell.capture_event();
                 shell.request_redraw();
             }
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) if state.pressed.is_some() => {
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+                if state.pressed.is_some() =>
+            {
                 if hit == state.pressed
                     && let Some(i) = hit
                 {
@@ -422,7 +468,11 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
     ) {
         let bounds = layout.bounds();
         let n = self.values.len();
-        let radius = if theme.metrics.radius_m > 0.0 { theme.metrics.radius_m + TROUGH_PADDING } else { 0.0 };
+        let radius = if theme.metrics.radius_m > 0.0 {
+            theme.metrics.radius_m + TROUGH_PADDING
+        } else {
+            0.0
+        };
 
         // Trough.
         renderer.fill_quad(
@@ -432,14 +482,21 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
                 shadow: Default::default(),
                 snap: false,
             },
-            Background::Color(crate::color::alpha(theme.semantic.window.fg, theme.semantic.opacity.control)),
+            Background::Color(crate::color::alpha(
+                theme.semantic.window.fg,
+                theme.semantic.opacity.control,
+            )),
         );
 
         let hover = self.hit(bounds, cursor);
         let pressed = tree.state.downcast_ref::<State>().pressed;
         for (i, node) in layout.children().enumerate() {
             let rel = self.rects[i];
-            let seg = Rectangle { x: rel.x + bounds.x, y: rel.y + bounds.y, ..rel };
+            let seg = Rectangle {
+                x: rel.x + bounds.x,
+                y: rel.y + bounds.y,
+                ..rel
+            };
             let status = if pressed == Some(i) {
                 Status::Pressed
             } else if hover == Some(i) {
@@ -450,7 +507,12 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
             let st = sb::toggle(self.active == Some(i), Self::position(i, n))(theme, status);
             if let Some(bg) = st.background {
                 renderer.fill_quad(
-                    Quad { bounds: seg, border: st.border, shadow: st.shadow, snap: false },
+                    Quad {
+                        bounds: seg,
+                        border: st.border,
+                        shadow: st.shadow,
+                        snap: false,
+                    },
                     bg,
                 );
             }
@@ -461,7 +523,9 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
                     &tree.children[idx],
                     r,
                     theme,
-                    &renderer::Style { text_color: st.text_color },
+                    &renderer::Style {
+                        text_color: st.text_color,
+                    },
                     node,
                     cursor,
                     viewport,
@@ -515,9 +579,15 @@ mod tests {
         let w = super::distribute(&[30.0, 30.0], 100.0, false);
         assert_eq!(w, vec![50.0, 50.0]);
         // Exactly natural -> unchanged (no stretching when not asked to).
-        assert_eq!(super::distribute(&[30.0, 50.0], 80.0, false), vec![30.0, 50.0]);
+        assert_eq!(
+            super::distribute(&[30.0, 50.0], 80.0, false),
+            vec![30.0, 50.0]
+        );
         // Homogeneous -> strictly equal regardless of content.
-        assert_eq!(super::distribute(&[30.0, 90.0], 100.0, true), vec![50.0, 50.0]);
+        assert_eq!(
+            super::distribute(&[30.0, 90.0], 100.0, true),
+            vec![50.0, 50.0]
+        );
     }
 
     #[test]
@@ -529,7 +599,11 @@ mod tests {
         // One squeezed segment triggers compact for the whole control.
         assert!(super::needs_compact(&[100.0, 100.0, 60.0], &nat, &comp));
         // A squeezed segment with no compact form cannot trigger it.
-        assert!(!super::needs_compact(&[100.0, 100.0, 60.0], &nat, &[Some(36.0), Some(36.0), None]));
+        assert!(!super::needs_compact(
+            &[100.0, 100.0, 60.0],
+            &nat,
+            &[Some(36.0), Some(36.0), None]
+        ));
     }
 
     /// Five segments with icons, crowded: one squeezed segment turns *all five* into icons, so
@@ -544,7 +618,10 @@ mod tests {
         assert!(super::use_compact(None, &widths, &nat, &comp));
         // Compact, all five fit with room to spare and share it equally.
         let compact = super::distribute(&[36.0; 5], 300.0, false);
-        assert!(compact.iter().all(|w| (w - 60.0).abs() < 1e-3), "{compact:?}");
+        assert!(
+            compact.iter().all(|w| (w - 60.0).abs() < 1e-3),
+            "{compact:?}"
+        );
         // Room for the labels: nothing collapses.
         let roomy = super::distribute(&nat, 400.0, false);
         assert!(!super::use_compact(None, &roomy, &nat, &comp));
@@ -556,9 +633,15 @@ mod tests {
         let nat = [70.0; 5];
         let comp = [Some(36.0); 5];
         let roomy = super::distribute(&nat, 600.0, false);
-        assert!(super::use_compact(Some(true), &roomy, &nat, &comp), "mobile: icons even with room");
+        assert!(
+            super::use_compact(Some(true), &roomy, &nat, &comp),
+            "mobile: icons even with room"
+        );
         let tight = super::distribute(&nat, 200.0, false);
-        assert!(!super::use_compact(Some(false), &tight, &nat, &comp), "desktop: never icons");
+        assert!(
+            !super::use_compact(Some(false), &tight, &nat, &comp),
+            "desktop: never icons"
+        );
     }
 
     #[test]

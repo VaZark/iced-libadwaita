@@ -7,8 +7,10 @@
 use super::Element;
 use crate::style;
 use crate::{AccentColor, Icon, Metrics, Role, Surface, Swatch, Theme};
-use iced::widget::{button, checkbox, container, radio, row, slider, text, text_editor, text_input};
 use iced::widget::{Button, Checkbox, Radio, Slider};
+use iced::widget::{
+    button, checkbox, container, radio, row, slider, text, text_editor, text_input,
+};
 use iced::{Length, Padding};
 use std::ops::RangeInclusive;
 
@@ -45,7 +47,10 @@ pub fn entry<'a, M>(placeholder: impl Into<String>, value: impl Into<String>) ->
 }
 
 /// `GtkPasswordEntry`: hides its contents.
-pub fn password_entry<'a, M>(placeholder: impl Into<String>, value: impl Into<String>) -> Entry<'a, M> {
+pub fn password_entry<'a, M>(
+    placeholder: impl Into<String>,
+    value: impl Into<String>,
+) -> Entry<'a, M> {
     Entry::new(placeholder, value).password(true)
 }
 
@@ -142,7 +147,13 @@ pub struct TextView<'a, M> {
 }
 
 pub fn text_view<'a, M>(content: &'a text_editor::Content) -> TextView<'a, M> {
-    TextView { content, on_action: None, placeholder: None, height: Length::Fixed(90.0), metrics: Metrics::desktop() }
+    TextView {
+        content,
+        on_action: None,
+        placeholder: None,
+        height: Length::Fixed(90.0),
+        metrics: Metrics::desktop(),
+    }
 }
 
 impl<'a, M> TextView<'a, M> {
@@ -218,12 +229,16 @@ where
 
 /// `GtkLinkButton`: accent-colored text button (`.link`).
 pub fn link_button<'a, M: 'a>(label: impl Into<String>) -> Button<'a, M, Theme> {
-    button(super::typography::label(label.into())).padding(Metrics::desktop().space_xs).style(style::button::link)
+    button(super::typography::label(label.into()))
+        .padding(Metrics::desktop().space_xs)
+        .style(style::button::link)
 }
 
 /// A clickable `.card`: any content on a card surface that reacts to hover and press.
 pub fn card_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    button(content).padding(Metrics::desktop().card_padding).style(style::button::card)
+    button(content)
+        .padding(Metrics::desktop().card_padding)
+        .style(style::button::card)
 }
 
 // -------------------------------------------------------------------- Tag
@@ -231,10 +246,14 @@ pub fn card_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, 
 /// A small rounded label tinted with a [`Role`] (status chip). Not a libadwaita widget; the
 /// pattern behind `.tag`-style badges in GNOME apps.
 pub fn tag<'a, M: 'a>(label: impl Into<String>, role: Role) -> Element<'a, M> {
-    container(text(label.into()).size(Metrics::desktop().space_m + 1.0).wrapping(text::Wrapping::None))
-        .padding(Padding::from([2.0, 10.0]))
-        .style(style::container::tinted(role))
-        .into()
+    container(
+        text(label.into())
+            .size(Metrics::desktop().space_m + 1.0)
+            .wrapping(text::Wrapping::None),
+    )
+    .padding(Padding::from([2.0, 10.0]))
+    .style(style::container::tinted(role))
+    .into()
 }
 
 // ----------------------------------------------------------------- Swatches
@@ -271,7 +290,9 @@ pub fn accent_picker<'a, M: Clone + 'a>(
     row(AccentColor::ALL.iter().map(|a| {
         let color = a.to_color();
         let content: Element<'a, M> = if *a == selected {
-            Icon::Check.colored(14.0, crate::color::readable_on(color)).into()
+            Icon::Check
+                .colored(14.0, crate::color::readable_on(color))
+                .into()
         } else {
             iced::widget::space().into()
         };
