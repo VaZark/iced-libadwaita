@@ -143,18 +143,37 @@ impl<'a, M: 'a> Dropdown<'a, M> {
     }
 }
 
-/// A menu item for a dropdown popover: label with a trailing check when selected.
+/// A menu item for a dropdown popover: label with a trailing check when selected. The
+/// selected item is the active one, in the accent color.
 pub fn menu_item<'a, M: Clone + 'a>(
     label: impl Into<String>,
     selected: bool,
     on_press: M,
 ) -> Element<'a, M> {
+    menu_item_inner(label.into(), selected, Some(on_press))
+}
+
+/// A menu item that cannot be chosen: dimmed text, no hover or press effect, no message.
+/// (Distinct from selected, which is accent-colored.)
+pub fn menu_item_disabled<'a, M: Clone + 'a>(label: impl Into<String>, selected: bool) -> Element<'a, M> {
+    menu_item_inner(label.into(), selected, None)
+}
+
+fn menu_item_inner<'a, M: Clone + 'a>(label: String, selected: bool, on_press: Option<M>) -> Element<'a, M> {
     let m = Metrics::desktop();
-    let mut r = row![text(label.into()).wrapping(text::Wrapping::None).width(Length::Fill)]
+    let mut r = row![text(label).wrapping(text::Wrapping::None).width(Length::Fill)]
         .spacing(m.space_m)
         .align_y(Vertical::Center);
     r = r.push(if selected {
-        Element::from(Icon::Check.view(m.icon_size))
+        // The check follows the text color (accent when active, dimmed when disabled).
+        let disabled = on_press.is_none();
+        Element::from(Icon::Check.view(m.icon_size).style(move |t: &Theme, _| iced::widget::svg::Style {
+            color: Some(if disabled {
+                crate::color::fade(t.semantic.accent.color, t.semantic.opacity.disabled)
+            } else {
+                t.semantic.accent.color
+            }),
+        }))
     } else {
         space().width(m.icon_size).into()
     });
@@ -162,7 +181,7 @@ pub fn menu_item<'a, M: Clone + 'a>(
         .padding(0)
         .width(Length::Fill)
         .style(sb::menu_item(selected))
-        .on_press(on_press)
+        .on_press_maybe(on_press)
         .into()
 }
 

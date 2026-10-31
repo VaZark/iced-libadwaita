@@ -372,6 +372,7 @@ where
     options: &'a [T],
     selected: Option<T>,
     on_select: Box<dyn Fn(T) -> M + 'a>,
+    disabled: Option<Box<dyn Fn(&T) -> bool + 'a>>,
     open_initially: bool,
 }
 
@@ -388,8 +389,14 @@ impl<'a, T: ToString + PartialEq + Clone, M> ComboRow<'a, T, M> {
             options,
             selected,
             on_select: Box::new(on_select),
+            disabled: None,
             open_initially: false,
         }
+    }
+    /// Options for which `f` is true are shown dimmed and cannot be chosen.
+    pub fn disabled_when(mut self, f: impl Fn(&T) -> bool + 'a) -> Self {
+        self.disabled = Some(Box::new(f));
+        self
     }
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {
         self.row = self.row.subtitle(s);
@@ -421,10 +428,15 @@ where
         let header: Element<'a, M> = c.row.suffix(value).into();
         let on_select = c.on_select;
         let selected = c.selected;
-        let items = c
-            .options
-            .iter()
-            .map(|o| super::menu_item(o.to_string(), selected.as_ref() == Some(o), on_select(o.clone())));
+        let disabled = c.disabled;
+        let items = c.options.iter().map(|o| {
+            let is_selected = selected.as_ref() == Some(o);
+            if disabled.as_ref().is_some_and(|f| f(o)) {
+                super::menu_item_disabled(o.to_string(), is_selected)
+            } else {
+                super::menu_item(o.to_string(), is_selected, on_select(o.clone()))
+            }
+        });
         super::Dropdown::custom(header, super::popover(items, 280.0))
             .appearance(super::DropdownAppearance::Row)
             .align(super::PopoverAlign::End)

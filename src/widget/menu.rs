@@ -71,17 +71,18 @@ pub struct MenuItem<M> {
     accel: Option<String>,
     icon: Option<Icon>,
     destructive: bool,
+    disabled: bool,
     kind: Kind<M>,
 }
 
 impl<M> MenuItem<M> {
     /// A command (verb label, header capitalization).
     pub fn action(label: impl Into<String>, on_press: M) -> Self {
-        Self { label: label.into(), accel: None, icon: None, destructive: false, kind: Kind::Action { on_press } }
+        Self { label: label.into(), accel: None, icon: None, destructive: false, disabled: false, kind: Kind::Action { on_press } }
     }
     /// A setting with a check mark (adjective label).
     pub fn check(label: impl Into<String>, checked: bool, on_press: M) -> Self {
-        Self { label: label.into(), accel: None, icon: None, destructive: false, kind: Kind::Check { checked, on_press } }
+        Self { label: label.into(), accel: None, icon: None, destructive: false, disabled: false, kind: Kind::Check { checked, on_press } }
     }
     /// Shown dimmed at the end, e.g. `"Ctrl+Q"`.
     pub fn accel(mut self, accel: impl Into<String>) -> Self {
@@ -90,6 +91,11 @@ impl<M> MenuItem<M> {
     }
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
+        self
+    }
+    /// Not available right now: dimmed text, no hover or press effect, cannot be activated.
+    pub fn disabled(mut self) -> Self {
+        self.disabled = true;
         self
     }
     /// Colors the label with the destructive color.
@@ -182,8 +188,11 @@ fn row_content<'a, M: 'a>(item: &MenuItem<M>, any_check: bool) -> Element<'a, M>
     let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
     if any_check {
         let checked = matches!(item.kind, Kind::Check { checked: true, .. });
+        let disabled = item.disabled;
         r = r.push(if checked {
-            Element::from(Icon::Check.view(m.icon_size))
+            Element::from(Icon::Check.view(m.icon_size).style(move |t: &Theme, _| iced::widget::svg::Style {
+                color: Some(if disabled { t.semantic.dim_solid() } else { t.semantic.popover.fg }),
+            }))
         } else {
             space().width(m.icon_size).into()
         });
@@ -194,6 +203,9 @@ fn row_content<'a, M: 'a>(item: &MenuItem<M>, any_check: bool) -> Element<'a, M>
     let mut lbl = super::typography::label(text_label).width(Length::Fill);
     if destructive {
         lbl = lbl.style(st::destructive);
+    }
+    if item.disabled {
+        lbl = lbl.style(st::dim);
     }
     r = r.push(lbl);
     if let Some(a) = accel {
@@ -232,7 +244,7 @@ fn dropdown_items<'a, M: Clone + 'a>(menu: &Menu<M>) -> Vec<Element<'a, M>> {
                 .padding(0)
                 .width(Length::Fill)
                 .style(sb::menu_item(false))
-                .on_press(message(item))
+                .on_press_maybe((!item.disabled).then(|| message(item)))
                 .into(),
             );
         }
@@ -277,7 +289,7 @@ fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M>
             .padding(0)
             .width(Length::Fill)
             .style(sb::list_row)
-            .on_press(message(item))
+            .on_press_maybe((!item.disabled).then(|| message(item)))
             .into()
         });
         lists = lists.push(boxed_list(rows));

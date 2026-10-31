@@ -862,6 +862,8 @@ impl Gallery {
                 .push(w::SwitchRow::new("Wi-Fi", self.wifi, Message::Wifi).metrics(m))
                 .push(w::ComboRow::new("Font", &COMBO, self.combo, Message::Combo)
                     .subtitle("Interface font")
+                    // Shows the disabled state: dimmed and unselectable (selected is accent).
+                    .disabled_when(|o| o.to_string() == "Inter")
                     .open_initially(self.shots.is_some()))
                 .push(w::SpinRow::new("Text Scale", self.spin, 1.0..=10.0, 1.0, Message::Spin)),
         );

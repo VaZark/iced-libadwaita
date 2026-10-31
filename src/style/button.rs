@@ -313,21 +313,27 @@ pub fn flat_toggle(active: bool) -> impl Fn(&Theme, Status) -> Style + Copy {
 /// slightly stronger layer when selected.
 pub fn menu_item(selected: bool) -> impl Fn(&Theme, Status) -> Style + Copy {
     move |theme, status| {
-        let fg = theme.semantic.popover.fg;
-        let layer = match status {
-            Status::Hovered => 0.10,
-            Status::Pressed => 0.16,
-            _ => {
-                if selected {
-                    0.06
-                } else {
-                    0.0
-                }
-            }
+        let s = &theme.semantic;
+        let fg = s.popover.fg;
+        // Selected is the *active* state, in the accent color; disabled is dimmed and inert.
+        let accent = s.accent.color;
+        if status == Status::Disabled {
+            return Style {
+                background: None,
+                text_color: crate::color::fade(if selected { accent } else { fg }, s.opacity.disabled),
+                border: border(theme.metrics.radius_menu),
+                shadow: Shadow::default(),
+                snap: false,
+            };
+        }
+        let (tint, layer) = if selected {
+            (accent, match status { Status::Hovered => 0.20, Status::Pressed => 0.26, _ => 0.14 })
+        } else {
+            (fg, match status { Status::Hovered => 0.10, Status::Pressed => 0.16, _ => 0.0 })
         };
         Style {
-            background: (layer > 0.0).then(|| Background::Color(alpha(fg, layer))),
-            text_color: fg,
+            background: (layer > 0.0).then(|| Background::Color(alpha(tint, layer))),
+            text_color: if selected { accent } else { fg },
             border: border(theme.metrics.radius_menu),
             shadow: Shadow::default(),
             snap: false,
