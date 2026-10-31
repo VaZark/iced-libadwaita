@@ -44,6 +44,12 @@ Screenshots can be stale on slow debug builds; give them time before concluding 
 4. Record deviations from the reference in its *iced mapping* section.
 5. Anything that wraps a child widget must forward `overlay()`; test popovers inside it.
 
+#### Docs
+
+Diagrams and charts are [Mermaid](https://mermaid.js.org/) fenced blocks (` ```mermaid `), not ASCII
+art or images. The GTK CSS-node listings under `docs/hig-inferences/gtk4/` are verbatim text from
+the GTK documentation and stay as they are.
+
 #### Commits
 
 Small, logical groups; each commit should build. This project is managed primarily by AI; review

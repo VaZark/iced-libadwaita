@@ -29,6 +29,15 @@ of a property and do not count as separate properties. Then:
 | **One trigger and nothing else to show** (a dialog, a sheet, a toast) | a row with the **button on it** (`Open`, `Show`) instead of a chevron | `Action(Action)` |
 | **One demo** (a single property, with its states) | its demo **inline** on the group page, under its own heading | `Inline(Inline)` |
 
+```mermaid
+flowchart TD
+    Q{"Two or more significantly<br/>different properties?"}
+    Q -- yes --> N["Nested page<br/>chevron row, one group per property"]
+    Q -- no --> T{"Only a single trigger<br/>to show?"}
+    T -- yes --> A["Action row<br/>button on the row"]
+    T -- no --> I["Inline demo<br/>on the group page"]
+```
+
 Examples: Text input (validation, password, color override, width) is nested; a Check button
 (checked, unchecked, disabled) is inline; Alert dialog is an action row; the whole Feedback group
 is inline or actions, so it has no nested pages.

@@ -2,6 +2,15 @@
 
 Motion explains change; it should be quick and never required to understand the interface.
 
+```mermaid
+flowchart TD
+    S["Trigger fires"] --> E{"Animations enabled<br/>and not reduced motion?"}
+    E -- no --> None["Motion::None: instant"]
+    E -- yes --> C{"Config sets this<br/>trigger to none?"}
+    C -- yes --> None
+    C -- no --> An["Its own animation"]
+```
+
 * Components animate themselves (switch, reveal, drawer, dialogs, sheets, toasts, popovers,
   page changes, navigation push, carousel). The app needs no subscription or timers.
 * Every animation is a **trigger** with its own animation and a `None` fallback. Under reduced

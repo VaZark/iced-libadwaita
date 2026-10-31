@@ -12,6 +12,16 @@ Pick by the job, then check the [gallery](../../examples/gallery/README.md) for 
 | A question needing an answer | `AlertDialog` | Blocks, with 2-3 responses |
 | Nothing to show yet or an error state | `status_page` | Explain and offer one action |
 
+```mermaid
+flowchart TD
+    Q{"Needs an answer?"} -- yes --> Dlg["AlertDialog"]
+    Q -- no --> P{"Still true later?"}
+    P -- yes --> B["banner"]
+    P -- no --> R{"Result of their action?"}
+    R -- yes --> T["toast, with an action for Undo"]
+    R -- no --> S["status_page, if there is nothing to show"]
+```
+
 A toast must not be the only way to learn something important; use a banner or dialog for that.
 
 #### Overlays

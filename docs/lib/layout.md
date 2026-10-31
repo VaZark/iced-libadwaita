@@ -10,6 +10,14 @@ is clamped to a readable width, has the standard padding) or `PreferencesPage` f
 
 * Build the window with `responsive` and pass the width to `NavigationSplitView::adapt(width)`:
   it collapses at 400px, and the sidebar is 25% of the width clamped to 180-280.
+```mermaid
+flowchart TD
+    W{"Width at most 400px?"} -- no --> Split["Sidebar beside the content"]
+    W -- yes --> M{"collapsed_sidebar"}
+    M -- Drawer --> D["Drawer over the content"]
+    M -- FirstPage --> F["Sidebar is the first page;<br/>content is pushed on top"]
+```
+
 * Collapsed, choose what the sidebar becomes: `Drawer` (default, over the content, never the whole
   screen) or `FirstPage` (the landing page of a stack, in the content color, content pushed on
   top with a back button). Use `FirstPage` for settings-like apps.

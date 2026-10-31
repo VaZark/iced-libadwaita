@@ -30,6 +30,17 @@ Three overridable layers (see [theming](docs/lib/theming.md)):
 | Semantic | `Semantic` | Surfaces, status swatches, opacities; text on fills chosen by contrast |
 | Metrics | `Metrics`, `Typography` | Spacing, radii (capped at HIG maxima), sizes, text scale |
 
+```mermaid
+flowchart LR
+    Config["Desktop config"] --> Theme
+    Palette --> Semantic
+    Semantic --> Theme
+    Metrics --> Theme
+    Typography --> Theme
+    Shadows --> Theme
+    Theme --> Components["Components and stock iced widgets"]
+```
+
 `Theme` implements iced's `theme::Base` and every widget `Catalog`, so stock widgets are restyled.
 Colors, radii and opacities resolve at draw time; layout tokens at view-build time.
 

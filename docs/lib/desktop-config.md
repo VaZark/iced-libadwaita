@@ -13,6 +13,14 @@ GLib key-file format (`[section]` / `key=value`, `#` comments), no dependencies.
 3. the user file: `$XDG_CONFIG_HOME/iced-libadwaita/desktop.conf` (`~/.config`);
 4. the **app's opt-outs**, if the desktop allows them.
 
+```mermaid
+flowchart LR
+    A["Built-in defaults"] --> B["System files"]
+    B --> C["User file"]
+    C --> D["App opt-outs"]
+    P{{"policy: allow-app-overrides"}} -.-> D
+```
+
 Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 with one file
 (testing). Invalid or unknown values are ignored with a warning (`Config::warnings`).
 
