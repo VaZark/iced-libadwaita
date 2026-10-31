@@ -111,10 +111,10 @@ pub static COMPONENTS: &[Component] = &[
     c("about_dialog", "AdwAboutDialog", "AboutDialog::new(name)", &["developer_name", "version", "comments", "website", "license"], &["application_icon"], &["on_close"]),
     c("shortcuts_dialog", "AdwShortcutsDialog", "shortcuts_dialog(sections, on_close)", &["sections"], &[], &["on_close"]),
     c("preferences_dialog", "AdwPreferencesDialog", "preferences_dialog(title, page, on_close)", &["title"], &["page"], &["on_close"]),
-    c("banner", "AdwBanner", "banner(title)", &["revealed"], &[], &["button"]),
+    c("banner", "AdwBanner", "banner(title)", &["revealed", "text_color"], &[], &["button"]),
     c("toast_overlay", "AdwToastOverlay", "toast_overlay(content, toast)", &[], &["content"], &["action", "on_dismiss"]),
     c("status_page", "AdwStatusPage", "status_page()", &["title", "description", "compact", "metrics"], &["icon", "child"], &[]),
-    c("avatar", "AdwAvatar", "avatar(size, text)", &["show_initials", "color"], &[], &[]),
+    c("avatar", "AdwAvatar", "avatar(size, text)", &["show_initials", "color", "text_color"], &[], &[]),
     c("tag", "-", "tag(label, role)", &[], &[], &[]),
     c("shortcut_label", "AdwShortcutLabel", "shortcut_label(accelerator)", &[], &[], &[]),
     // -- layout & surfaces

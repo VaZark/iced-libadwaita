@@ -271,7 +271,7 @@ pub fn accent_picker<'a, M: Clone + 'a>(
     row(AccentColor::ALL.iter().map(|a| {
         let color = a.to_color();
         let content: Element<'a, M> = if *a == selected {
-            Icon::Check.colored(14.0, iced::Color::WHITE).into()
+            Icon::Check.colored(14.0, crate::color::readable_on(color)).into()
         } else {
             iced::widget::space().into()
         };

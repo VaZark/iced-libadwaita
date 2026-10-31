@@ -23,6 +23,7 @@ Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 wi
 | appearance | `color-scheme` | system / light / dark (system) | `Theme::from_config` (system = `color-scheme`) |
 | | `accent` | system / blue … slate (system) | accent (system = GNOME `accent-color`) |
 | | `flat-headerbars` | bool (true) | continuous Nautilus-style header bars |
+| | `auto-contrast` | bool (true) | text on colored fills chosen by contrast (CSS `color-contrast()`) |
 | | `density` | default / compact | `Metrics` used by all widgets |
 | | `text-scale` | 0.5 … 3.0 (1.0) | `Typography` base size |
 | | `shadows`, `shadow-scale`, `shadow-intensity` | true, 1.0, 1.0 | `Shadows` |

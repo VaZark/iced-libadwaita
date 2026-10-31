@@ -9,6 +9,7 @@
 color-scheme=system      # system | light | dark
 accent=system            # system | blue | teal | green | yellow | orange | red | pink | purple | slate
 flat-headerbars=false    # header bars with no color of their own (Nautilus-style)
+auto-contrast=true        # light/dark text on colored fills by contrast; false = fixed white
 density=default          # default | compact
 text-scale=1.0           # 0.5 .. 3.0
 shadows=true

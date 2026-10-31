@@ -157,9 +157,9 @@ pub fn tinted(r: Role) -> impl Fn(&Theme) -> Style + Copy {
 }
 
 /// Circular colored badge (used by `Avatar`).
-pub fn avatar(bg: Color, size: f32) -> impl Fn(&Theme) -> Style {
+pub fn avatar(bg: Color, fg: Color, size: f32) -> impl Fn(&Theme) -> Style {
     move |_| Style {
-        text_color: Some(Color::WHITE),
+        text_color: Some(fg),
         background: Some(Background::Color(bg)),
         border: Border::default().rounded(size / 2.0),
         shadow: Shadow::default(),

@@ -197,6 +197,17 @@ impl Semantic {
         }
     }
 
+    /// Chooses the text color on every status fill (`accent`, `destructive`, `success`,
+    /// `warning`, `error`) with the CSS `color-contrast()` rule: light or dark, whichever
+    /// contrasts more with the fill ([`crate::color::readable_on`]). Replaces the palette's
+    /// fixed `*_fg_color`s; [`Theme::with_auto_contrast`](crate::Theme::with_auto_contrast)
+    /// turns it off, and a component's own `text_color` overrides it.
+    pub fn apply_contrast(&mut self) {
+        for sw in [&mut self.accent, &mut self.destructive, &mut self.success, &mut self.warning, &mut self.error] {
+            sw.fg = crate::color::readable_on(sw.bg);
+        }
+    }
+
     pub fn is_dark(&self) -> bool {
         self.scheme.is_dark()
     }

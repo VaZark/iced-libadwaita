@@ -48,6 +48,7 @@ pub enum Setting {
     ColorScheme,
     Accent,
     FlatHeaderbars,
+    AutoContrast,
     Density,
     TextScale,
     Shadows,
@@ -104,6 +105,8 @@ pub struct Config {
     pub color_scheme: Pick<Scheme>,
     pub accent: Pick<AccentColor>,
     pub flat_headerbars: bool,
+    /// Choose text colors on colored fills by contrast (`color-contrast()`).
+    pub auto_contrast: bool,
     pub density: Density,
     pub text_scale: f32,
     pub shadows: bool,
@@ -143,6 +146,7 @@ impl Default for Config {
             color_scheme: Pick::System,
             accent: Pick::System,
             flat_headerbars: true,
+            auto_contrast: true,
             density: Density::Default,
             text_scale: 1.0,
             shadows: true,
@@ -240,6 +244,9 @@ impl Config {
         if let Some(v) = get("appearance", "flat-headerbars") {
             parse_bool(v).map(|b| self.flat_headerbars = b).unwrap_or_else(|| bad!("appearance", "flat-headerbars", v));
         }
+        if let Some(v) = get("appearance", "auto-contrast") {
+            parse_bool(v).map(|b| self.auto_contrast = b).unwrap_or_else(|| bad!("appearance", "auto-contrast", v));
+        }
         if let Some(v) = get("appearance", "density") {
             match v {
                 "default" => self.density = Density::Default,
@@ -329,7 +336,7 @@ impl Config {
         }
         // Unknown keys are reported, not fatal.
         const KNOWN: &[(&str, &str)] = &[
-            ("appearance", "color-scheme"), ("appearance", "accent"), ("appearance", "flat-headerbars"),
+            ("appearance", "color-scheme"), ("appearance", "accent"), ("appearance", "flat-headerbars"), ("appearance", "auto-contrast"),
             ("appearance", "density"), ("appearance", "text-scale"), ("appearance", "shadows"),
             ("appearance", "shadow-scale"), ("appearance", "shadow-intensity"), ("motion", "animations"),
             ("motion", "reduced-motion"), ("windows", "decorations"), ("windows", "button-layout"),
@@ -444,6 +451,7 @@ pub struct Overrides {
     color_scheme: Option<Scheme>,
     accent: Option<AccentColor>,
     flat_headerbars: Option<bool>,
+    auto_contrast: Option<bool>,
     density: Option<Density>,
     text_scale: Option<f32>,
     shadows: Option<bool>,
@@ -476,6 +484,7 @@ impl Overrides {
     override_fn!(color_scheme, color_scheme, Scheme, Setting::ColorScheme);
     override_fn!(accent, accent, AccentColor, Setting::Accent);
     override_fn!(flat_headerbars, flat_headerbars, bool, Setting::FlatHeaderbars);
+    override_fn!(auto_contrast, auto_contrast, bool, Setting::AutoContrast);
     override_fn!(density, density, Density, Setting::Density);
     override_fn!(text_scale, text_scale, f32, Setting::TextScale);
     override_fn!(shadows, shadows, bool, Setting::Shadows);
@@ -505,6 +514,7 @@ impl Overrides {
         if let Some(v) = self.color_scheme { c.color_scheme = Pick::Fixed(v) }
         if let Some(v) = self.accent { c.accent = Pick::Fixed(v) }
         if let Some(v) = self.flat_headerbars { c.flat_headerbars = v }
+        if let Some(v) = self.auto_contrast { c.auto_contrast = v }
         if let Some(v) = self.density { c.density = v }
         if let Some(v) = self.text_scale { c.text_scale = v }
         if let Some(v) = self.shadows { c.shadows = v }

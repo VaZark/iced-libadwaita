@@ -138,6 +138,18 @@ pub fn role(r: Role) -> impl Fn(&Theme, Status) -> Style + Copy {
     }
 }
 
+/// [`role`] with a **hard-coded** text color, overriding the contrast-chosen default.
+/// `Role::Neutral` falls back to [`default`].
+pub fn role_with_text(r: Role, fg: Color) -> impl Fn(&Theme, Status) -> Style + Copy {
+    move |theme, status| match r {
+        Role::Neutral => default(theme, status),
+        _ => {
+            let sw = theme.semantic.swatch(r);
+            filled(theme, status, sw.bg, fg, theme.metrics.radius_m.into())
+        }
+    }
+}
+
 /// `.pill`: fully rounded standard button.
 pub fn pill(theme: &Theme, status: Status) -> Style {
     tinted(

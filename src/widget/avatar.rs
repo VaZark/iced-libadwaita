@@ -18,6 +18,7 @@ pub struct Avatar {
     text: String,
     show_initials: bool,
     color: Option<Color>,
+    text_color: Option<Color>,
 }
 
 pub fn avatar(size: f32, text: impl Into<String>) -> Avatar {
@@ -31,10 +32,17 @@ impl Avatar {
             text: text.into(),
             show_initials: true,
             color: None,
+            text_color: None,
         }
     }
     pub fn show_initials(mut self, show: bool) -> Self {
         self.show_initials = show;
+        self
+    }
+    /// Hard override for the initials' color; by default it is chosen by contrast with the
+    /// background (CSS `color-contrast()`).
+    pub fn text_color(mut self, c: Color) -> Self {
+        self.text_color = Some(c);
         self
     }
     /// Overrides the generated background color.
@@ -64,13 +72,14 @@ impl<'a, M: 'a> From<Avatar> for Element<'a, M> {
         let bg = a
             .color
             .unwrap_or_else(|| crate::color::hex(COLORS[hash as usize % COLORS.len()]));
+        let fill = crate::color::darken(bg, 0.08);
         let label = if a.show_initials { initials(&a.text) } else { String::new() };
         container(text(label).size(a.size * 0.4).font(iced::Font {
             weight: iced::font::Weight::Bold,
             ..iced::Font::DEFAULT
         }))
         .center(Length::Fixed(a.size))
-        .style(sc::avatar(crate::color::darken(bg, 0.08), a.size))
+        .style(sc::avatar(fill, a.text_color.unwrap_or_else(|| crate::color::readable_on(fill)), a.size))
         .into()
     }
 }

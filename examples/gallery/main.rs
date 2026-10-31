@@ -346,6 +346,7 @@ impl Gallery {
             .accent(self.accent)
             .with_metrics(self.metrics())
             .with_shadows(shadows)
+            .with_auto_contrast(adw::config::current().auto_contrast)
             .with_transparent_window(Self::csd());
         if self.card_override {
             t = t.with_semantic(|s| {

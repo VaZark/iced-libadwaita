@@ -35,6 +35,9 @@ pub struct Theme {
     /// Nautilus look). Default `false` (libadwaita's `--headerbar-bg-color`). A
     /// bar's own `.flat(..)` overrides this; dialog headers are always flat.
     pub flat_headerbars: bool,
+    /// Choose the text color on colored fills (accent, destructive, …) by contrast, like CSS
+    /// `color-contrast()`. Default `true`; `false` keeps the palette's fixed `*_fg_color`s.
+    pub auto_contrast: bool,
     name: String,
     iced: iced::Theme,
 }
@@ -75,6 +78,7 @@ impl Theme {
             .with_typography(Typography::with_base(Typography::default().base * c.text_scale))
             .with_shadows(shadows)
             .with_flat_headerbars(c.flat_headerbars)
+            .with_auto_contrast(c.auto_contrast)
             .with_transparent_window(c.decorations == crate::config::DecorationMode::Csd)
     }
 
@@ -84,7 +88,8 @@ impl Theme {
 
     /// Builds a theme from a custom palette; the semantic layer is derived.
     pub fn from_palette(scheme: Scheme, palette: Palette) -> Self {
-        let semantic = Semantic::from_palette(&palette, scheme);
+        let mut semantic = Semantic::from_palette(&palette, scheme);
+        semantic.apply_contrast();
         let name = match scheme {
             Scheme::Light => "Adwaita Light",
             Scheme::Dark => "Adwaita Dark",
@@ -100,6 +105,7 @@ impl Theme {
             shadows: Shadows::default(),
             transparent_window: true,
             flat_headerbars: true,
+            auto_contrast: true,
             name,
         }
     }
@@ -115,8 +121,18 @@ impl Theme {
     pub fn with_palette(mut self, f: impl FnOnce(&mut Palette)) -> Self {
         f(&mut self.palette);
         self.semantic = Semantic::from_palette(&self.palette, self.scheme);
+        if self.auto_contrast {
+            self.semantic.apply_contrast();
+        }
         self.iced = build_iced(&self.name, &self.semantic);
         self
+    }
+
+    /// Turns CSS-`color-contrast()` text selection on colored fills on or off. Off restores
+    /// the palette's fixed foregrounds (libadwaita's white).
+    pub fn with_auto_contrast(mut self, on: bool) -> Self {
+        self.auto_contrast = on;
+        self.with_palette(|_| {})
     }
 
     /// Edits semantic tokens directly (card color, opacities, …).
@@ -543,5 +559,23 @@ mod header_tests {
     fn header_bars_follow_libadwaita_unless_made_continuous() {
         assert!(Theme::light().flat_headerbars);
         assert!(!Theme::light().with_flat_headerbars(false).flat_headerbars);
+    }
+
+    #[test]
+    fn text_on_status_fills_is_chosen_by_contrast() {
+        use crate::color::{contrast_ratio, readable_on};
+        for accent in AccentColor::ALL {
+            for scheme in [Scheme::Light, Scheme::Dark] {
+                let t = Theme::new(scheme).accent(accent);
+                let a = t.semantic.accent;
+                assert_eq!(a.fg, readable_on(a.bg), "{accent:?}");
+                assert!(contrast_ratio(a.bg, a.fg) >= 3.0, "{accent:?} {scheme:?} unreadable");
+            }
+        }
+        // A bright fill gets dark text; turning it off restores the palette's white.
+        let t = Theme::light().accent(AccentColor::Yellow);
+        assert_eq!(t.semantic.accent.fg, crate::color::DARK_TEXT);
+        let off = t.with_auto_contrast(false);
+        assert_eq!(off.semantic.accent.fg, iced::Color::WHITE);
     }
 }
