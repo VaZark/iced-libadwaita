@@ -46,6 +46,10 @@ mobile-sidebar=drawer    # drawer | first-page
 [menus]
 presentation=auto        # auto (full page in mobile mode) | dropdown | full-page
 
+[toasts]
+position=bottom-center   # top|bottom - left|center|right, e.g. top-right
+target=window            # window (over the sidebar too) | content (content area only)
+
 [rows]
 collapse=stacked         # stacked | flex  (what a wrapped row suffix does)
 wrap-basis=128           # minimum title width before the suffix wraps

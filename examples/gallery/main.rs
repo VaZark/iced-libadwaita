@@ -154,6 +154,8 @@ struct Gallery {
     carousel: usize,
     carousel_indicator: w::CarouselIndicator,
     toast: Option<ToastSpec>,
+    toast_position: w::ToastPosition,
+    toast_target: w::ToastTarget,
     banner: bool,
     angle: f32,
 
@@ -221,6 +223,8 @@ enum Message {
     CarouselIndicator(w::CarouselIndicator),
     ShowToast(&'static str),
     ShowToastSpec(ToastSpec),
+    ToastPosition(w::ToastPosition),
+    ToastTarget(w::ToastTarget),
     ToastAction,
     DismissToast,
     Frame(std::time::Instant),
@@ -248,6 +252,7 @@ enum Message {
 
 static SIDEBAR_MODES: [w::CollapsedSidebar; 2] = w::CollapsedSidebar::ALL;
 static INDICATORS: [w::CarouselIndicator; 3] = w::CarouselIndicator::ALL;
+static TOAST_POSITIONS: [w::ToastPosition; 6] = w::ToastPosition::ALL;
 static MOTIONS: [DemoMotion; 8] = DemoMotion::ALL;
 const FRUITS: [&str; 3] = ["Apple", "Banana", "Cherry"];
 const COMBO: [&str; 3] = ["Adwaita Sans", "Cantarell", "Inter"];
@@ -339,6 +344,8 @@ impl Gallery {
                 carousel: 0,
                 carousel_indicator: w::CarouselIndicator::default(),
                 toast: None,
+                toast_position: cfg.toast_position,
+                toast_target: cfg.toast_target,
                 banner: true,
                 angle: 0.0,
                 shots,
@@ -429,6 +436,8 @@ impl Gallery {
             Message::CarouselIndicator(i) => self.carousel_indicator = i,
             Message::ShowToast(s) => self.toast = Some(ToastSpec::plain(s)),
             Message::ShowToastSpec(t) => self.toast = Some(t),
+            Message::ToastPosition(p) => self.toast_position = p,
+            Message::ToastTarget(t) => self.toast_target = t,
             // The action runs and the toast is replaced by a plain confirmation.
             Message::ToastAction => self.toast = Some(ToastSpec::plain("File restored")),
             Message::DismissToast => self.toast = None,
@@ -733,7 +742,26 @@ impl Gallery {
 
         // Switching pages fades the new one in (collapsed, the push slide does that job).
         let page = w::page_transition(page, if collapsed { 0 } else { self.view_key() });
-        let content_pane = w::toolbar_view(page).top_bar(content_bar);
+        // The toast is placed in the whole window or only the content area (the shared
+        // `[toasts] target` setting). Both layers stay mounted so the tree does not change.
+        let mut toast = self.toast.map(|spec| {
+            let mut t = w::Toast::new(spec.title)
+                .on_dismiss(Message::DismissToast)
+                .indicator(spec.indicator)
+                .position(self.toast_position);
+            if let Some(label) = spec.action {
+                t = t.action(label, Message::ToastAction);
+            }
+            if let Some(status) = spec.status {
+                t = t.status(status);
+            }
+            t
+        });
+        let in_content = self.toast_target == w::ToastTarget::Content;
+        let content_pane = w::toast_overlay(
+            Element::from(w::toolbar_view(page).top_bar(content_bar)),
+            if in_content { toast.take() } else { None },
+        );
         let body = w::NavigationSplitView::new(sidebar_pane, content_pane)
             .adapt(size.width)
             .window_radius(corner)
@@ -742,19 +770,10 @@ impl Gallery {
             .on_close_drawer(Message::Drawer(false))
             .show_content(self.show_content);
 
+        // The window background comes from `adw::window::frame` (rounded when floating).
         let base: Element = w::toast_overlay(
-            // The window background comes from `adw::window::frame` (rounded when floating).
             container(body).width(Length::Fill).height(Length::Fill),
-            self.toast.map(|spec| {
-                let mut t = w::Toast::new(spec.title).on_dismiss(Message::DismissToast).indicator(spec.indicator);
-                if let Some(label) = spec.action {
-                    t = t.action(label, Message::ToastAction);
-                }
-                if let Some(status) = spec.status {
-                    t = t.status(status);
-                }
-                t
-            }),
+            if in_content { None } else { toast },
         );
 
         let base: Element = w::bottom_sheet_in_window(

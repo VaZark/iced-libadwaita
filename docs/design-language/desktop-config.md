@@ -36,6 +36,8 @@ Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 wi
 | navigation | `collapse-width` | px (400) | `NavigationSplitView::adapt` |
 | | `mobile-sidebar` | drawer / first-page (drawer) | `NavigationSplitView` default |
 | menus | `presentation` | auto / dropdown / full-page (auto) | `MenuPresentation::resolve` |
+| toasts | `position` | top-left / top-center / top-right / bottom-left / bottom-center / bottom-right (bottom-center) | `Toast::position` default |
+| | `target` | window / content (window) | `widget::toast_target()`: where the app places `toast_overlay` |
 | rows | `collapse` | stacked / flex (stacked) | rows' wrapped suffix |
 | | `wrap-basis` | px (128) | when a suffix wraps |
 | icons | `theme` | system / name (system) | window-control icon lookup |

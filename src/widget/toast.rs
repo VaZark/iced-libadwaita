@@ -9,6 +9,115 @@ use iced::Length;
 /// The toast's dark surface in the light scheme; see [`Toast`].
 const DARK_SURFACE: iced::Color = iced::Color { r: 0.14, g: 0.14, b: 0.15, a: 1.0 };
 
+/// Where a toast sits inside its target ([`ToastTarget`]): top or bottom, and left, center or
+/// right. The default comes from the desktop config (`[toasts] position`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum ToastPosition {
+    TopLeft,
+    TopCenter,
+    TopRight,
+    BottomLeft,
+    #[default]
+    BottomCenter,
+    BottomRight,
+}
+
+impl ToastPosition {
+    pub const ALL: [ToastPosition; 6] = [
+        ToastPosition::TopLeft,
+        ToastPosition::TopCenter,
+        ToastPosition::TopRight,
+        ToastPosition::BottomLeft,
+        ToastPosition::BottomCenter,
+        ToastPosition::BottomRight,
+    ];
+
+    pub fn vertical(self) -> Vertical {
+        match self {
+            Self::TopLeft | Self::TopCenter | Self::TopRight => Vertical::Top,
+            _ => Vertical::Bottom,
+        }
+    }
+
+    pub fn horizontal(self) -> Horizontal {
+        match self {
+            Self::TopLeft | Self::BottomLeft => Horizontal::Left,
+            Self::TopCenter | Self::BottomCenter => Horizontal::Center,
+            _ => Horizontal::Right,
+        }
+    }
+
+    /// The `[toasts] position` config value.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::TopLeft => "top-left",
+            Self::TopCenter => "top-center",
+            Self::TopRight => "top-right",
+            Self::BottomLeft => "bottom-left",
+            Self::BottomCenter => "bottom-center",
+            Self::BottomRight => "bottom-right",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.key() == key)
+    }
+}
+
+impl std::fmt::Display for ToastPosition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::TopLeft => "Top left",
+            Self::TopCenter => "Top center",
+            Self::TopRight => "Top right",
+            Self::BottomLeft => "Bottom left",
+            Self::BottomCenter => "Bottom center",
+            Self::BottomRight => "Bottom right",
+        })
+    }
+}
+
+/// The container a toast is placed in: the **whole window** (over the sidebar too) or only the
+/// **content area** (beside the sidebar). The widget fills whatever it wraps, so the app chooses
+/// by wrapping the window or the content pane with [`toast_overlay`]; this is the shared setting
+/// to read ([`toast_target`], `[toasts] target` in the desktop config) so every app agrees.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum ToastTarget {
+    #[default]
+    Window,
+    Content,
+}
+
+impl ToastTarget {
+    pub const ALL: [ToastTarget; 2] = [ToastTarget::Window, ToastTarget::Content];
+
+    /// The `[toasts] target` config value.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Window => "window",
+            Self::Content => "content",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|t| t.key() == key)
+    }
+}
+
+impl std::fmt::Display for ToastTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Window => "Window",
+            Self::Content => "Content area",
+        })
+    }
+}
+
+/// The target in effect: the desktop config's `[toasts] target`.
+pub fn toast_target() -> ToastTarget {
+    crate::config::current().toast_target
+}
+
 /// How a toast marks its type of message ([`Toast::status`]), like a Mantine notification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ToastIndicator {
@@ -38,6 +147,7 @@ pub struct Toast<M> {
     role: Option<Role>,
     status: Option<Role>,
     indicator: ToastIndicator,
+    position: Option<ToastPosition>,
 }
 
 impl<M> Toast<M> {
@@ -51,7 +161,14 @@ impl<M> Toast<M> {
             role: None,
             status: None,
             indicator: ToastIndicator::default(),
+            position: None,
         }
+    }
+    /// Where the toast sits in its target. Without this it follows the desktop config
+    /// (`[toasts] position`, default bottom center).
+    pub fn position(mut self, position: ToastPosition) -> Self {
+        self.position = Some(position);
+        self
     }
     /// The type of message (`Success`, `Warning`, `Error`, `Accent`, `Destructive`): shown as a
     /// colored [`indicator`](Toast::indicator) next to the title. The surface stays neutral;
@@ -127,6 +244,7 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
     };
     let m = Metrics::desktop();
     let (background, text_color, role) = (t.background, t.text_color, t.role);
+    let position = t.position.unwrap_or_else(|| crate::config::current().toast_position);
     // Buttons on the toast: the text color, with a state layer of it over the surface.
     let on_surface = move |th: &Theme, status: button::Status| {
         let (bg, fg) = colors(th, background, text_color, role);
@@ -210,7 +328,9 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
     });
     // Slides up on show: 300ms, ADW_EASE (`SHOW_DURATION`). No hide animation: the app
     // removes the toast.
-    let toast = super::entrance(toast, iced::Vector::new(0.0, 60.0))
+    // It slides in from the edge it is anchored to.
+    let slide = if position.vertical() == Vertical::Top { -60.0 } else { 60.0 };
+    let toast = super::entrance(toast, iced::Vector::new(0.0, slide))
         .trigger(crate::animation::Trigger::Toast)
         .spec(crate::animation::Spec::Timed(
             crate::animation::presets::TOAST_SHOW.0,
@@ -222,8 +342,8 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
             container(toast)
                 .width(Length::Fill)
                 .height(Length::Fill)
-                .align_x(Horizontal::Center)
-                .align_y(Vertical::Bottom)
+                .align_x(position.horizontal())
+                .align_y(position.vertical())
                 .padding(m.space_xl)
                 .into(),
         ),

@@ -356,6 +356,22 @@ impl Gallery {
                     g("Call to action").description("An optional button on the toast.").push(w::card(action)),
                     g("Status dot").description("A colored dot marks the type of message.").push(w::card(statuses(dot))),
                     g("Status line").description("Or a colored line at the start edge.").push(w::card(statuses(line))),
+                    g("Placement")
+                        .description("Where toasts appear, and the container they are placed in. Both are desktop config settings (`[toasts]`).")
+                        .push(w::ComboRow::new("Position", &TOAST_POSITIONS, Some(self.toast_position), Message::ToastPosition))
+                        .push(
+                            w::ToggleGroupRow::new(
+                                "Container",
+                                vec![
+                                    w::ToggleItem::new(w::ToastTarget::Window, "Window").icon(Icon::Window),
+                                    w::ToggleItem::new(w::ToastTarget::Content, "Content").icon(Icon::Sidebar),
+                                ],
+                                Some(self.toast_target),
+                                Message::ToastTarget,
+                            )
+                            .subtitle("The whole window, or only the content area beside the sidebar")
+                            .metrics(m),
+                        ),
                 ]
                 .spacing(m.group_spacing)
                 .into()

@@ -47,3 +47,15 @@ neutral; `role` is the separate option that fills it.
 The call-to-action button (`Toast::action`) is filled with the **accent color** (text chosen by
 contrast) so it reads as a button on the dark surface, with the usual hover and pressed fills. On a
 toast filled with the accent (`role(Role::Accent)`) it falls back to a text-colored tint.
+
+## Position and target
+
+`Toast::position(ToastPosition::…)` places the toast at `TopLeft`, `TopCenter`, `TopRight`,
+`BottomLeft`, `BottomCenter` (default) or `BottomRight`, and it slides in from the edge it is
+anchored to. Without the call it follows `[toasts] position` in the desktop config.
+
+The **target** is the container the toast is placed in: the whole **window** (over the sidebar too)
+or only the **content area** beside the sidebar. `toast_overlay` fills whatever it wraps, so the
+app chooses by wrapping the window or the content pane, and reads the shared setting with
+`widget::toast_target()` (`[toasts] target`). Keep both layers mounted
+(`toast_overlay(x, None)` for the inactive one) so switching the target does not rebuild the tree.

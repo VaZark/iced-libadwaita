@@ -62,6 +62,8 @@ pub enum Setting {
     MobileSidebar,
     MenuPresentation,
     RowCollapse,
+    ToastPosition,
+    ToastTarget,
     RowWrapBasis,
     IconTheme,
 }
@@ -126,6 +128,10 @@ pub struct Config {
     pub mobile_sidebar: CollapsedSidebar,
     pub menu_presentation: MenuPresentationSetting,
     pub row_collapse: CollapseBehavior,
+    /// `[toasts] position`: where toasts sit in their target.
+    pub toast_position: crate::widget::ToastPosition,
+    /// `[toasts] target`: the whole window or only the content area.
+    pub toast_target: crate::widget::ToastTarget,
     pub row_wrap_basis: f32,
     /// `system` follows `icon-theme`.
     pub icon_theme: Pick<String>,
@@ -162,6 +168,8 @@ impl Default for Config {
             mobile_sidebar: CollapsedSidebar::Drawer,
             menu_presentation: MenuPresentationSetting::Auto,
             row_collapse: CollapseBehavior::Stacked,
+            toast_position: Default::default(),
+            toast_target: Default::default(),
             row_wrap_basis: 128.0,
             icon_theme: Pick::System,
             allow_app_overrides: true,
@@ -318,6 +326,16 @@ impl Config {
                 _ => bad!("menus", "presentation", v),
             }
         }
+        if let Some(v) = get("toasts", "position") {
+            crate::widget::ToastPosition::from_key(v)
+                .map(|p| self.toast_position = p)
+                .unwrap_or_else(|| bad!("toasts", "position", v));
+        }
+        if let Some(v) = get("toasts", "target") {
+            crate::widget::ToastTarget::from_key(v)
+                .map(|t| self.toast_target = t)
+                .unwrap_or_else(|| bad!("toasts", "target", v));
+        }
         if let Some(v) = get("rows", "collapse") {
             match v {
                 "stacked" => self.row_collapse = CollapseBehavior::Stacked,
@@ -341,7 +359,7 @@ impl Config {
             ("appearance", "shadow-scale"), ("appearance", "shadow-intensity"), ("motion", "animations"),
             ("motion", "reduced-motion"), ("windows", "decorations"), ("windows", "button-layout"),
             ("windows", "mobile-max-width"), ("navigation", "collapse-width"), ("navigation", "mobile-sidebar"),
-            ("menus", "presentation"), ("rows", "collapse"), ("rows", "wrap-basis"), ("icons", "theme"),
+            ("menus", "presentation"), ("rows", "collapse"), ("toasts", "position"), ("toasts", "target"), ("rows", "wrap-basis"), ("icons", "theme"),
             ("policy", "allow-app-overrides"),
         ];
         for (s, k) in m.keys() {
@@ -464,6 +482,8 @@ pub struct Overrides {
     mobile_sidebar: Option<CollapsedSidebar>,
     menu_presentation: Option<MenuPresentationSetting>,
     row_collapse: Option<CollapseBehavior>,
+    toast_position: Option<crate::widget::ToastPosition>,
+    toast_target: Option<crate::widget::ToastTarget>,
     row_wrap_basis: Option<f32>,
     icon_theme: Option<String>,
     motion: Vec<(crate::animation::Trigger, crate::animation::Motion)>,
@@ -497,6 +517,8 @@ impl Overrides {
     override_fn!(mobile_sidebar, mobile_sidebar, CollapsedSidebar, Setting::MobileSidebar);
     override_fn!(menu_presentation, menu_presentation, MenuPresentationSetting, Setting::MenuPresentation);
     override_fn!(row_collapse, row_collapse, CollapseBehavior, Setting::RowCollapse);
+    override_fn!(toast_position, toast_position, crate::widget::ToastPosition, Setting::ToastPosition);
+    override_fn!(toast_target, toast_target, crate::widget::ToastTarget, Setting::ToastTarget);
     override_fn!(row_wrap_basis, row_wrap_basis, f32, Setting::RowWrapBasis);
     override_fn!(icon_theme, icon_theme, String, Setting::IconTheme);
 
@@ -527,6 +549,8 @@ impl Overrides {
         if let Some(v) = self.mobile_sidebar { c.mobile_sidebar = v }
         if let Some(v) = self.menu_presentation { c.menu_presentation = v }
         if let Some(v) = self.row_collapse { c.row_collapse = v }
+        if let Some(v) = self.toast_position { c.toast_position = v }
+        if let Some(v) = self.toast_target { c.toast_target = v }
         if let Some(v) = self.row_wrap_basis { c.row_wrap_basis = v }
         if let Some(v) = self.icon_theme { c.icon_theme = Pick::Fixed(v) }
     }
@@ -703,5 +727,18 @@ thing=1
             assert_eq!(Trigger::from_key(t.key()), Some(t));
             assert!(!t.animation().is_empty());
         }
+    }
+
+    #[test]
+    fn toast_position_and_target_are_configurable() {
+        use crate::widget::{ToastPosition, ToastTarget};
+        let d = Config::default();
+        assert_eq!((d.toast_position, d.toast_target), (ToastPosition::BottomCenter, ToastTarget::Window));
+        let c = Config::from_keyfile("[toasts]\nposition=top-right\ntarget=content\n");
+        assert_eq!((c.toast_position, c.toast_target), (ToastPosition::TopRight, ToastTarget::Content));
+        assert!(c.warnings().is_empty());
+        let bad = Config::from_keyfile("[toasts]\nposition=middle\n");
+        assert_eq!(bad.toast_position, ToastPosition::BottomCenter);
+        assert_eq!(bad.warnings().len(), 1);
     }
 }
