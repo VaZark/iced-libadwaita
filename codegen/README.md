@@ -1,12 +1,40 @@
 # Build-time XML UI code generation
 
-This optional crate generates normal Rust view code. It is not a runtime dependency.
-XML uses `<interface><element type="..."><property name="...">value</property></element></interface>`.
+XML tags and attribute names follow `iced_libadwaita::catalog::COMPONENTS`
+(the same vocabulary documented in `docs/components.md`).
 
-Supported initial mappings: Text, Row, Column, Button, PreferencesPage, PreferencesGroup, ActionRow.
-Unsupported components, properties and malformed XML fail the build. More catalog mappings can be added incrementally.
+```xml
+<toolbar_view>
+  <header_bar slot="top_bar" title="Settings"/>
+  <page>
+    <preferences_group title="Appearance">
+      <action_row title="Theme" subtitle="System"/>
+    </preferences_group>
+  </page>
+</toolbar_view>
+```
 
-In the application's `build.rs`:
+The build-time compiler validates component names, attribute names, and child slots
+against the **existing** component catalog. It then emits ordinary Rust code.
+The catalog describes the public vocabulary, while typed code-generation adapters
+are needed for each constructor signature. Components without an adapter are
+rejected explicitly. The initial supported set is `toolbar_view`, `header_bar`,
+`page`, `preferences_group`, `preferences_page`, and `action_row`.
+Only a subset of each component's catalogued attributes has a typed adapter so far.
+
+This is analogous to schema validation, but **not yet a full XSD**: the catalog
+currently records property and slot names, not all value types, required
+constructor arguments, child cardinality, or event signatures. Those constraints
+must be added as typed metadata to make validation complete.
+
+In the application's `Cargo.toml`:
+
+```toml
+[build-dependencies]
+iced-libadwaita-codegen = { path = "../iced-libadwaita/codegen" }
+```
+
+In `build.rs`:
 
 ```rust
 fn main() {
@@ -17,17 +45,14 @@ fn main() {
 }
 ```
 
-In application code, include the generated module and invoke its `view` function.
-The generated function uses `Message` paths from the XML; message types and callbacks
-are checked by Rust during compilation. The generated module's message type is generic,
-so messages referenced in the XML must be in scope at its inclusion site.
+In the application:
 
 ```rust
 mod ui {
-    use super::Message;
     include!(concat!(env!("OUT_DIR"), "/ui.rs"));
 }
 ```
 
-The generated UI uses ordinary iced and iced-libadwaita constructors. There is no
-separate runtime or dynamic linking.
+The generated `view` function returns an iced-libadwaita element with the
+application's `crate::Message` type. No runtime XML parser or dynamic linking
+is needed.
