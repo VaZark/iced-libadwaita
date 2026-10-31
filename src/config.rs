@@ -146,6 +146,7 @@ pub struct Config {
     pub page_max_width: f32,
     mobile_explicit: bool,
     collapse_explicit: bool,
+    unknown: Vec<(String, String)>,
     pub mobile_sidebar: CollapsedSidebar,
     pub menu_presentation: MenuPresentationSetting,
     pub row_collapse: CollapseBehavior,
@@ -201,6 +202,7 @@ impl Default for Config {
             page_max_width: Metrics::default().clamp_maximum,
             mobile_explicit: false,
             collapse_explicit: false,
+            unknown: Vec::new(),
             mobile_sidebar: CollapsedSidebar::Drawer,
             menu_presentation: MenuPresentationSetting::Auto,
             row_collapse: CollapseBehavior::Stacked,
@@ -329,7 +331,8 @@ impl Config {
         for t in crate::animation::Trigger::ALL {
             if let Some(v) = get("motion", t.key()) {
                 match v {
-                    "default" | "animated" => { self.motion.insert(t, crate::animation::Motion::Animated); }
+                    // The default is no entry, so it also overrides an earlier file's `none`.
+                    "default" | "animated" => { self.motion.remove(&t); }
                     "none" => { self.motion.insert(t, crate::animation::Motion::None); }
                     _ => bad!("motion", t.key(), v),
                 }
@@ -442,23 +445,14 @@ impl Config {
         if let Some(v) = get("policy", "allow-app-overrides") {
             parse_bool(v).map(|b| self.allow_app_overrides = b).unwrap_or_else(|| bad!("policy", "allow-app-overrides", v));
         }
-        // Unknown keys are reported, not fatal.
-        const KNOWN: &[(&str, &str)] = &[
-            ("appearance", "color-scheme"), ("appearance", "accent"), ("appearance", "flat-headerbars"), ("appearance", "auto-contrast"),
-            ("appearance", "density"), ("appearance", "text-scale"), ("appearance", "shadows"),
-            ("appearance", "shadow-scale"), ("appearance", "shadow-intensity"), ("motion", "animations"),
-            ("motion", "reduced-motion"), ("windows", "decorations"), ("windows", "button-layout"),
-            ("windows", "mobile-max-width"), ("navigation", "collapse-width"), ("navigation", "min-content-width"),
-            ("breakpoints", "sm"), ("breakpoints", "md"), ("breakpoints", "lg"), ("breakpoints", "xl"), ("breakpoints", "xxl"),
-            ("navigation", "sidebar-fraction"), ("navigation", "sidebar-min-width"), ("navigation", "sidebar-max-width"),
-            ("navigation", "drawer-max-fraction"), ("windows", "min-width"), ("windows", "min-height"), ("layout", "page-max-width"), ("navigation", "mobile-sidebar"),
-            ("menus", "presentation"), ("rows", "collapse"), ("toasts", "position"), ("toasts", "target"), ("shortcuts", "enabled"), ("shortcuts", "hints"), ("rows", "wrap-basis"), ("icons", "theme"),
-            ("policy", "allow-app-overrides"),
-        ];
-        for (s, k) in m.keys() {
-            let trigger = s == "motion" && crate::animation::Trigger::from_key(k).is_some();
-            if !trigger && !KNOWN.contains(&(s.as_str(), k.as_str())) {
-                warn.push(format!("[{s}] {k}: unknown setting"));
+        // Properties this toolkit does not know are ignored: never an error, never deleted or
+        // rewritten (a newer toolkit may have written them). They are only recorded, so a
+        // settings tool can show them. What counts as known is the versioned registry.
+        for (section, key) in m.keys() {
+            let known = crate::config_history::find(section, key)
+                .is_some_and(|p| p.is_supported_by(crate::config_history::TOOLKIT_VERSION));
+            if !known && !self.unknown.contains(&(section.clone(), key.clone())) {
+                self.unknown.push((section.clone(), key.clone()));
             }
         }
         self.warnings.extend(warn);
@@ -549,9 +543,16 @@ impl Config {
     pub fn denied(&self) -> &[Setting] {
         &self.denied
     }
-    /// Problems found while reading the files (invalid or unknown values).
+    /// Problems found while reading the files: invalid values of known properties.
     pub fn warnings(&self) -> &[String] {
         &self.warnings
+    }
+
+    /// `(section, key)` of the properties found in the files that this toolkit version does not
+    /// know. They are ignored (not warnings: a newer toolkit may have written them) and never
+    /// deleted; this is only for a settings tool to show.
+    pub fn unknown_properties(&self) -> &[(String, String)] {
+        &self.unknown
     }
 
     /// The metrics this config implies (density and row behavior).
@@ -798,7 +799,9 @@ thing=1
         assert_eq!(c.menu_presentation, MenuPresentationSetting::Dropdown);
         assert_eq!(c.row_collapse, CollapseBehavior::Flex);
         assert_eq!(c.row_wrap_basis, 200.0);
-        assert!(c.warnings().iter().any(|w| w.contains("[bogus] thing")));
+        // The unknown section is ignored (not a warning) and reported for a settings tool.
+        assert!(c.warnings().is_empty(), "{:?}", c.warnings());
+        assert_eq!(c.unknown_properties(), &[("bogus".to_string(), "thing".to_string())]);
     }
 
     #[test]
@@ -860,7 +863,15 @@ thing=1
         use crate::animation::{Motion, Trigger};
         let c = Config::from_keyfile("[motion]\npage-change=none\npopover=default\ncarousel=wobble\n");
         assert_eq!(c.motion.get(&Trigger::PageChange), Some(&Motion::None));
-        assert_eq!(c.motion.get(&Trigger::Popover), Some(&Motion::Animated));
+        // `default` is no entry at all: it is the trigger's own animation, and it also overrides
+        // an earlier file's `none`.
+        assert_eq!(c.motion.get(&Trigger::Popover), None);
+        let layered = {
+            let mut c = Config::from_keyfile("[motion]\npopover=none\n");
+            c.apply(&parse_keyfile("[motion]\npopover=default\n"));
+            c
+        };
+        assert_eq!(layered.motion.get(&Trigger::Popover), None, "a later `default` overrides an earlier `none`");
         assert!(!c.motion.contains_key(&Trigger::Carousel));
         assert!(c.warnings().iter().any(|w| w.contains("carousel")));
         assert!(!c.warnings().iter().any(|w| w.contains("unknown")), "trigger keys are known settings");
@@ -931,5 +942,46 @@ thing=1
         assert!(!c.shortcuts_enabled && c.shortcut_hints == Hints::Never);
         assert!(c.warnings().is_empty());
         assert_eq!(Config::from_keyfile("[shortcuts]\nhints=sometimes\n").warnings().len(), 1);
+    }
+
+    /// Unknown properties are ignored without a warning and are reported separately.
+    #[test]
+    fn unknown_properties_are_ignored_not_warned_about() {
+        let c = Config::from_keyfile("[appearance]\ndensity=compact\nfuture-key=1\n[brand-new-section]\nx=y\n");
+        assert_eq!(c.density, Density::Compact, "known properties still apply");
+        assert!(c.warnings().is_empty(), "{:?}", c.warnings());
+        assert_eq!(
+            c.unknown_properties(),
+            &[("appearance".to_string(), "future-key".to_string()), ("brand-new-section".to_string(), "x".to_string())]
+        );
+    }
+
+    /// The registry and the parser agree: every registered property is understood with its own
+    /// default (so no warning, and nothing reported unknown), and a file of all the defaults
+    /// reads back as the default configuration. Missing properties use defaults.
+    #[test]
+    fn the_registry_defaults_are_the_defaults() {
+        use crate::config_history::PROPERTIES;
+        let mut file = String::new();
+        let mut sections: Vec<&str> = PROPERTIES.iter().map(|p| p.section).collect();
+        sections.dedup();
+        sections.sort_unstable();
+        sections.dedup();
+        for s in &sections {
+            file.push_str(&format!("[{s}]\n"));
+            for p in PROPERTIES.iter().filter(|p| p.section == *s) {
+                file.push_str(&format!("{}={}\n", p.key, p.default));
+            }
+        }
+        let c = Config::from_keyfile(&file);
+        assert!(c.warnings().is_empty(), "{:?}", c.warnings());
+        assert!(c.unknown_properties().is_empty(), "{:?}", c.unknown_properties());
+        // An explicit `mobile-max-width` / `collapse-width` is remembered (it stops them following
+        // the breakpoint scale); everything else must equal the built-in defaults.
+        let mut c = c;
+        c.mobile_explicit = false;
+        c.collapse_explicit = false;
+        assert_eq!(c, Config::default(), "the registry's defaults must be the built-in defaults");
+        assert_eq!(Config::from_keyfile(""), Config::default(), "missing properties use defaults");
     }
 }

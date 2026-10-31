@@ -11,3 +11,5 @@ see the rustdoc, and for why things look the way they do see [`../hig-inferences
 * [components.md](components.md): the shape every component has; [catalog](components-catalog.md)
   lists every tag.
 * [desktop-config.md](desktop-config.md): the shared desktop config; [sample](desktop.conf.example).
+* [config-registry.md](config-registry.md): the versioned registry behind it: types, defaults,
+  `since`, deprecation, and what apps ignore.

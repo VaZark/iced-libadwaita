@@ -68,6 +68,13 @@ density, shadows, motion per trigger, decorations, breakpoints, menus, sidebar, 
 Apps opt out per setting with `Config::opt_out` (discouraged, reported at startup, can be
 forbidden by `[policy]`). See [desktop-config](docs/lib/desktop-config.md).
 
+#### Configuration registry
+
+The desktop configuration has a versioned, read-only registry (types, defaults, `since`,
+deprecation) so applications of different toolkit versions share one file safely: unknown
+properties are ignored, never deleted, and deprecation only stops *new builds*. See
+[config registry](docs/lib/config-registry.md).
+
 #### Shortcuts
 
 The toolkit listens for them: a wrapper widget publishes the bound message, menus register the
