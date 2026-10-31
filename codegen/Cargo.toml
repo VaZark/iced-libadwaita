@@ -1,0 +1,10 @@
+[package]
+name = "iced-libadwaita-codegen"
+version = "0.1.0"
+edition = "2024"
+description = "Build-time XML to Rust UI generation for iced-libadwaita"
+
+[dependencies]
+roxmltree = "0.20"
+
+[dev-dependencies]
