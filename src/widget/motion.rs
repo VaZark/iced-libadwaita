@@ -22,19 +22,19 @@ use iced::{mouse, window, Background, Border, Color, Element, Event, Length, Rec
 use std::time::Instant;
 
 /// Animated progress in `[0, 1]` (overshoot allowed for underdamped springs).
-struct Progress {
+pub(super) struct Progress {
     tween: Tween,
-    shown: f32,
+    pub(super) shown: f32,
 }
 
 impl Progress {
-    fn new(initial: f32) -> Self {
+    pub(super) fn new(initial: f32) -> Self {
         Self { tween: Tween::new(initial), shown: initial }
     }
 
     /// Moves toward `target` and advances to `now`. Returns whether it changed or is
     /// still moving (the caller then requests a redraw/relayout).
-    fn drive(&mut self, target: f32, now: Instant, spec: Spec) -> bool {
+    pub(super) fn drive(&mut self, target: f32, now: Instant, spec: Spec) -> bool {
         self.tween.set_target(target, now, spec);
         let v = self.tween.tick(now);
         let changed = (v - self.shown).abs() > f32::EPSILON;
@@ -43,7 +43,7 @@ impl Progress {
     }
 }
 
-fn redraw_time(event: &Event) -> Option<Instant> {
+pub(super) fn redraw_time(event: &Event) -> Option<Instant> {
     match event {
         Event::Window(window::Event::RedrawRequested(now)) => Some(*now),
         _ => None,
@@ -51,7 +51,7 @@ fn redraw_time(event: &Event) -> Option<Instant> {
 }
 
 /// The scrim color: `--shade-color` at double alpha, scaled by `k`.
-fn scrim(theme: &Theme, k: f32) -> Color {
+pub(super) fn scrim(theme: &Theme, k: f32) -> Color {
     let c = theme.semantic.shade;
     Color { a: (c.a * 2.0).min(1.0) * k.clamp(0.0, 1.0), ..c }
 }
@@ -589,11 +589,10 @@ pub struct PageTransition<'a, M> {
     content: Element<'a, M, Theme>,
     key: u64,
     trigger: Trigger,
-    radius: f32,
 }
 
 pub fn page_transition<'a, M>(content: impl Into<Element<'a, M, Theme>>, key: impl Into<u64>) -> PageTransition<'a, M> {
-    PageTransition { content: content.into(), key: key.into(), trigger: Trigger::PageChange, radius: 0.0 }
+    PageTransition { content: content.into(), key: key.into(), trigger: Trigger::PageChange }
 }
 
 impl<'a, M> PageTransition<'a, M> {
@@ -601,11 +600,6 @@ impl<'a, M> PageTransition<'a, M> {
     /// reduced motion, can turn it off.
     pub fn trigger(mut self, t: Trigger) -> Self {
         self.trigger = t;
-        self
-    }
-    /// Rounds the fading cover to a window's corners, so it never paints outside them.
-    pub fn corner_radius(mut self, r: f32) -> Self {
-        self.radius = r;
         self
     }
 }
@@ -712,7 +706,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         let bg = theme.semantic.window.bg;
         renderer.with_layer(bounds, |r| {
             r.fill_quad(
-                Quad { bounds, border: Border::default().rounded(self.radius), shadow: Default::default(), snap: false },
+                Quad { bounds, border: Border::default(), shadow: Default::default(), snap: false },
                 Background::Color(Color { a: 1.0 - p.clamp(0.0, 1.0), ..bg }),
             );
         });

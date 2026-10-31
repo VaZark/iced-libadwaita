@@ -9,6 +9,11 @@ different, we do the different thing. Deviations are *usually* recorded in the *
 section of the relevant file under [docs/hig-inferences/](docs/hig-inferences/README.md).
 
 Components are named after their libadwaita counterparts only so they are easy to recognize.
+**Responsive behavior** has a second reference: Mantine (notably its AppShell) and Bootstrap are
+alternative references for breakpoints, collapsing and shell layout, used to fill gaps Adwaita
+leaves or where its choices are not optimal (libadwaita collapses a sidebar at 400sp, for
+example). The HIG still decides; these inform. See
+[adaptive layouts](docs/hig-inferences/design-language/adaptive-layouts.md#other-references).
 
 #### Principles
 
@@ -75,7 +80,8 @@ Breakpoints follow the scale of popular UI kits (Bootstrap, Mantine): 576, 768, 
 (`breakpoints`). Content must never feel squeezed, so a split view collapses below 768px *or*
 whenever the content beside the sidebar would be under 520px; the collapsed sidebar is a drawer
 or the first page of a stack. Mobile mode (no window buttons, full-page menus) is below 576px.
-Crossing a breakpoint fades the new layout in rather than jumping. Every layout number is a named
+Crossing a breakpoint slides the sidebar out of (or into) the layout on the drawer's spring,
+displacing the content rather than covering it. Every layout number is a named
 fallback constant that the desktop config can override. Rows wrap their control when they cannot
 share a line.
 

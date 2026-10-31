@@ -13,6 +13,8 @@ libadwaita. Read these before changing a component.
 
 #### How to read them
 
+* Responsive behavior also draws on Mantine and Bootstrap where Adwaita is thin; see
+  [adaptive layouts](design-language/adaptive-layouts.md#other-references).
 * The primary sources are the [libadwaita docs](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/index.html)
   (v1.11 alpha), the HIG and the GTK4 docs. They describe behavior, structure (CSS nodes) and
   colors but rarely pixel sizes.

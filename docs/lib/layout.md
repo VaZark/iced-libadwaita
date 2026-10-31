@@ -23,8 +23,10 @@ flowchart TD
 * Collapsed, choose what the sidebar becomes: `Drawer` (default, over the content, never the whole
   screen) or `FirstPage` (the landing page of a stack, in the content color, content pushed on
   top with a back button). Use `FirstPage` for settings-like apps.
-* Crossing a breakpoint is not a jump: the new layout fades in (`Trigger::Layout`, `[motion] layout`).
-  Every threshold is configurable (`[breakpoints]`, `[navigation]`); the constants are fallbacks.
+* Crossing a breakpoint is not a jump: the sidebar slides out of the layout (or in) on the same
+  spring as the drawer, displacing the content instead of covering it (`Trigger::Layout`,
+  `[motion] layout`). Every threshold is configurable (`[breakpoints]`, `[navigation]`); the
+  constants are fallbacks. In `FirstPage` mode the flip is not animated.
 * In `FirstPage` show the sidebar as `SidebarStyle::Cards` (rows with icon, title, description and
   chevron); beside the content or in a drawer use `SidebarStyle::List`.
 * Mobile mode is `window::is_mobile(width)` (below 576px, Bootstrap's `sm`): hide window controls,

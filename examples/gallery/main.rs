@@ -159,6 +159,8 @@ struct Gallery {
     /// The toasts on screen, oldest first, each with its id (stacked notifications).
     toasts: Vec<(u32, ToastSpec)>,
     toast_seq: u32,
+    /// Screenshot harness: behave as if the window were narrow.
+    narrow: bool,
     toast_position: w::ToastPosition,
     toast_target: w::ToastTarget,
     banner: bool,
@@ -241,6 +243,7 @@ enum Message {
     DemoPlay,
     Noop,
     Drag,
+    Narrow(bool),
     Close,
     Minimize,
     ToggleMaximize,
@@ -355,6 +358,7 @@ impl Gallery {
                 carousel_indicator: w::CarouselIndicator::default(),
                 toasts: Vec::new(),
                 toast_seq: 0,
+                narrow: false,
                 toast_position: cfg.toast_position,
                 toast_target: cfg.toast_target,
                 banner: true,
@@ -492,6 +496,7 @@ impl Gallery {
             }
             Message::Noop => {}
             Message::Drag => return window::oldest().and_then(window::drag),
+            Message::Narrow(n) => self.narrow = n,
             Message::Close => return iced::exit(),
             Message::ToggleFullscreen => {
                 return window::oldest().and_then(|id| {
@@ -568,6 +573,7 @@ impl Gallery {
                         "reveal" => Message::Expanded(!self.expanded),
                         "carousel" => Message::Carousel(1),
                         "page" => Message::Page(Page::Theming),
+                        "breakpoint" => Message::Narrow(true),
                         "push" => Message::Page(Page::Dialogs),
                         "dialog" => Message::OpenDialog(Dialog::Alert),
                         "toast-action" => Message::ShowToastSpec(ToastSpec {
@@ -668,19 +674,22 @@ impl Gallery {
     fn root(&self, size: iced::Size) -> IcedElement<'_, Message, Theme> {
         let m = self.metrics();
         let csd = Self::csd();
-        let collapsed = w::split_collapsed(size.width);
+        // GALLERY_ANIM=breakpoint pretends the window just got narrower (the compositor ignores
+        // programmatic resizes), to capture the sidebar sliding out.
+        let width = if self.narrow { size.width.min(600.0) } else { size.width };
+        let collapsed = w::split_collapsed(width);
 
         // Floating windows have rounded corners; maximized/fullscreen go edge to edge.
         // Mobile mode (narrow): no window decorations at all. Corners still follow the
         // real window state: rounded while floating, edge to edge only when the window
         // is actually maximized or fullscreen.
-        let mobile = adw::window::is_mobile(size.width);
+        let mobile = adw::window::is_mobile(width);
         let win_state = self.win;
         let corner = if csd { win_state.radius(&adw::Metrics::default()) } else { 0.0 };
 
         // Primary menu (HIG): open-menu icon, above the sidebar list, standard items last.
         let presentation = match self.menu_mode {
-            MenuMode::Auto => w::MenuPresentation::resolve(size.width),
+            MenuMode::Auto => w::MenuPresentation::resolve(width),
             MenuMode::Dropdown => w::MenuPresentation::Dropdown,
             MenuMode::FullPage => w::MenuPresentation::FullPage,
         };
@@ -777,8 +786,8 @@ impl Gallery {
 
         let page: Element = self.content_page();
 
-        // Switching pages fades the new one in (collapsed, the push slide does that job).
-        let page = w::page_transition(page, if collapsed { 0 } else { self.view_key() });
+        // Switching pages fades the new one in (as a first page, the push slide does that job).
+        let page = w::page_transition(page, if collapsed && self.sidebar_mode == w::CollapsedSidebar::FirstPage { 0 } else { self.view_key() });
         // The toast is placed in the whole window or only the content area (the shared
         // `[toasts] target` setting). Both layers stay mounted so the tree does not change.
         let mut toasts: Vec<w::Toast<Message>> = self
@@ -803,7 +812,7 @@ impl Gallery {
             if in_content { std::mem::take(&mut toasts) } else { Vec::new() },
         );
         let body = w::NavigationSplitView::new(sidebar_pane, content_pane)
-            .adapt(size.width)
+            .adapt(width)
             .window_radius(corner)
             .collapsed_sidebar(self.sidebar_mode)
             .show_sidebar(self.drawer_open)

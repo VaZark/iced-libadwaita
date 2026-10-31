@@ -91,7 +91,7 @@ is the per-trigger `[motion] <key>=default|none` setting. A `None` trigger jumps
 | `Reveal` | `reveal` | slides open/closed, 250ms ease |
 | `Switch` | `switch` | knob slides and track cross-fades, 200ms ease-out-quad |
 | `Carousel` | `carousel` | scroll spring (1, 0.5, 500) with drag velocity hand-off |
-| `Layout` | `layout` | when a breakpoint is crossed (sidebar appearing or disappearing, mobile mode) the new layout fades in from the window background, 200ms ease-out-quad |
+| `Layout` | `layout` | at the collapse breakpoint the sidebar slides out of (or into) the layout and displaces the content, on the drawer's sidebar spring (1, 0.5, 500). The drawer is the same motion on a higher layer, over a scrim |
 
 An app can override one trigger (discouraged, reported like any opt-out):
 `Config::load().opt_out(|o| { o.motion(Trigger::Toast, Motion::None); })`.

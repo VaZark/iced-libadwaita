@@ -33,7 +33,7 @@ toast=default            # toast slides up
 reveal=default           # expanders and banners slide open
 switch=default           # switch knob slides
 carousel=default         # carousel spring
-layout=default           # the new layout fades in when a breakpoint is crossed
+layout=default           # the sidebar slides in/out of the layout at the collapse breakpoint
 
 [windows]
 decorations=csd          # csd (Adwaita) | ssd (discouraged)

@@ -228,8 +228,7 @@ pub struct NavigationSplitView<'a, M> {
     drawer_open: bool,
     on_close_drawer: Option<M>,
     min_content: f32,
-    /// Identifies the layout (collapsed or not, mobile or not) so a change fades in.
-    layout_key: u64,
+    drawer_width: f32,
 }
 
 /// libadwaita's width for a split-view sidebar: `fraction` of the total width
@@ -296,7 +295,7 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
             drawer_open: false,
             on_close_drawer: None,
             min_content: min_content_width(),
-            layout_key: 0,
+            drawer_width: 280.0,
         }
     }
     /// What the sidebar becomes when collapsed: [`CollapsedSidebar::Drawer`]
@@ -359,28 +358,17 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
     /// fraction/min/max.
     pub fn adapt(mut self, width: f32) -> Self {
         self.collapsed = collapses(width, self.fraction, self.min_width, self.max_width, self.min_content);
-        self.layout_key = u64::from(self.collapsed) | (u64::from(crate::window::is_mobile(width)) << 1);
-        self.sidebar_width = if self.collapsed && self.collapsed_sidebar == CollapsedSidebar::Drawer {
-            // A drawer uses the maximum sidebar width when it fits, but always leaves a
-            // strip of content (and the scrim) visible: never the whole screen.
-            self.max_width.min(width * crate::config::current().drawer_max_fraction)
-        } else {
-            sidebar_width_for(width, self.fraction, self.min_width, self.max_width)
-        };
+        self.sidebar_width = sidebar_width_for(width, self.fraction, self.min_width, self.max_width);
+        // A drawer uses the maximum sidebar width when it fits, but always leaves a strip of
+        // content (and the scrim) visible: never the whole screen.
+        self.drawer_width = self.max_width.min(width * crate::config::current().drawer_max_fraction);
         self
     }
 }
 
 impl<'a, M: Clone + 'a> From<NavigationSplitView<'a, M>> for Element<'a, M> {
-    /// The split view, wrapped so that a change of layout at a breakpoint (the sidebar appearing
-    /// or disappearing, mobile mode) fades in instead of jumping ([`Trigger::Layout`]).
     fn from(v: NavigationSplitView<'a, M>) -> Self {
-        let key = v.layout_key;
-        let r = v.window_radius;
-        super::page_transition(v.build(), key)
-            .trigger(crate::animation::Trigger::Layout)
-            .corner_radius(r)
-            .into()
+        v.build()
     }
 }
 
@@ -399,42 +387,28 @@ impl<'a, M: Clone + 'a> NavigationSplitView<'a, M> {
             }
         };
         let left = iced::border::Radius { top_left: r, top_right: 0.0, bottom_right: 0.0, bottom_left: r };
-        if v.collapsed {
-            if v.collapsed_sidebar != CollapsedSidebar::Drawer {
-                // The sidebar is the first page; the content is pushed over it (and popped
-                // back) with the navigation slide.
-                let first: Element<'a, M> = container(v.sidebar).width(Length::Fill).height(Length::Fill).into();
-                return super::push_stack(first, v.content, v.show_content).window_radius(r).into();
-            }
-            // Drawer: the content is always there; the sidebar slides over it. The layer
-            // is always mounted so it animates open *and* closed (spring, scrim fade).
-            let content: Element<'a, M> = container(v.content).width(Length::Fill).height(Length::Fill).into();
-            let drawer = container(v.sidebar)
-                .width(Length::Fixed(v.sidebar_width))
-                .height(Length::Fill)
-                .style(move |t: &crate::Theme| {
-                    let shadow = t.shadows.dialog().shadow;
-                    iced::widget::container::Style {
-                        border: iced::Border::default().rounded(left),
-                        shadow,
-                        ..sc::sidebar(t)
-                    }
-                });
-            let mut layer = super::drawer_layer(drawer, v.drawer_open, v.sidebar_width).window_radius(r);
-            if let Some(m) = v.on_close_drawer {
-                layer = layer.on_close(m);
-            }
-            return stack![content, Element::from(layer)].into();
+        if v.collapsed && v.collapsed_sidebar != CollapsedSidebar::Drawer {
+            // The sidebar is the first page; the content is pushed over it (and popped back)
+            // with the navigation slide.
+            let first: Element<'a, M> = container(v.sidebar).width(Length::Fill).height(Length::Fill).into();
+            return super::push_stack(first, v.content, v.show_content).window_radius(r).into();
         }
-        row![
-            container(v.sidebar)
-                .width(Length::Fixed(v.sidebar_width))
-                .height(Length::Fill)
-                .style(pane(left)),
-            container(space().width(1)).height(Length::Fill).style(sc::sidebar_separator),
-            container(v.content).width(Length::Fill).height(Length::Fill),
-        ]
-        .into()
+        // Beside the content or as a drawer, one widget moves the sidebar between the two on the
+        // same spring: crossing the collapse breakpoint slides it out of the layout (or in),
+        // displacing the content, the way a drawer slides over it.
+        let sidebar: Element<'a, M> = container(v.sidebar)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(pane(left))
+            .into();
+        let content: Element<'a, M> = container(v.content).width(Length::Fill).height(Length::Fill).into();
+        let mut split = super::adaptive_split(sidebar, content, !v.collapsed, v.sidebar_width, v.drawer_width)
+            .drawer_open(v.drawer_open)
+            .window_radius(r);
+        if let Some(m) = v.on_close_drawer {
+            split = split.on_close(m);
+        }
+        split.into()
     }
 }
 
@@ -550,9 +524,9 @@ mod tests {
     fn drawer_never_takes_the_whole_screen() {
         // At 380px the drawer uses the max sidebar width; at 300px it is capped to 85%.
         let d = split(CollapsedSidebar::Drawer).adapt(380.0);
-        assert!(d.collapsed && (d.sidebar_width - 280.0).abs() < 1e-3);
+        assert!(d.collapsed && (d.drawer_width - 280.0).abs() < 1e-3);
         let d = split(CollapsedSidebar::Drawer).adapt(300.0);
-        assert!((d.sidebar_width - 255.0).abs() < 1e-3 && d.sidebar_width < 300.0);
+        assert!((d.drawer_width - 255.0).abs() < 1e-3 && d.drawer_width < 300.0);
         // Not collapsed: the usual fraction/min/max rule.
         let wide = split(CollapsedSidebar::Drawer).adapt(1000.0);
         assert!(!wide.collapsed && (wide.sidebar_width - 250.0).abs() < 1e-3);
@@ -580,17 +554,6 @@ mod tests {
         for w in [400.0, 700.0, 767.0, 768.0, 1000.0] {
             assert_eq!(split_collapsed(w), split(CollapsedSidebar::Drawer).adapt(w).collapsed);
         }
-    }
-
-    #[test]
-    fn crossing_a_breakpoint_changes_the_layout_key_so_it_fades() {
-        let key = |w: f32| split(CollapsedSidebar::Drawer).adapt(w).layout_key;
-        // Same layout on either side of nothing: no transition while resizing within a mode.
-        assert_eq!(key(900.0), key(1200.0));
-        assert_eq!(key(600.0), key(700.0));
-        // The sidebar appearing / disappearing (md) and mobile mode (sm) each change the key.
-        assert_ne!(key(767.0), key(768.0));
-        assert_ne!(key(575.0), key(576.0));
     }
 
     #[test]

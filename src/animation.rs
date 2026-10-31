@@ -520,7 +520,7 @@ pub enum Trigger {
     Switch,
     /// A carousel moving between pages.
     Carousel,
-    /// The layout changing at a breakpoint (a sidebar appearing or disappearing, mobile mode).
+    /// The sidebar entering or leaving the layout at a breakpoint.
     Layout,
 }
 
@@ -577,7 +577,7 @@ impl Trigger {
             Self::Reveal => "slides open/closed, 250ms ease",
             Self::Switch => "knob slides and track cross-fades, 200ms ease-out-quad",
             Self::Carousel => "scroll spring (1, 0.5, 500) with drag velocity hand-off",
-            Self::Layout => "the new layout fades in from the window background, 200ms ease-out-quad (a sidebar appearing or disappearing at a breakpoint)",
+            Self::Layout => "the sidebar slides in or out of the layout and displaces the content, on the drawer's sidebar spring (1, 0.5, 500)",
         }
     }
 

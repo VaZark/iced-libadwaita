@@ -78,3 +78,25 @@ message) and presented by `SidebarStyle`:
 | `Cards` | the collapsed `FirstPage` sidebar | scrolling page padding, one boxed list on the content color; each row has its icon, title, **subtitle** and a chevron |
 
 Choose `Cards` when `collapsed && mode == FirstPage`; the gallery does exactly that.
+
+## Other references
+
+libadwaita is the reference for GNOME behavior, but its responsive rules are thin (a few `sp`
+breakpoints on split views and dialogs). For responsive behavior in general we use **Mantine** and
+**Bootstrap** as alternative references: to fill gaps Adwaita does not cover, and where its
+choices are not optimal for us. They do not override the HIG; they inform decisions the HIG leaves
+open, and each use is recorded here or in the component's *iced mapping*.
+
+* **Bootstrap 5 and Mantine, the width scale.** 576, 768, 992, 1200, 1400 (Mantine's names are
+  shifted by one). Used for the mobile and collapse defaults (`breakpoints`).
+* **Content must keep a usable width.** The web kits collapse navigation well before the content
+  gets narrow; Adwaita's 400sp leaves a phone-width content area beside a sidebar. We add a
+  minimum content width on top of the scale.
+* **Mantine AppShell** (header, navbar, aside, footer, main): the navbar has a `breakpoint` below
+  which it is `collapsed` into an overlay, separate `collapsed` flags for mobile and desktop, and
+  a transition on the change. We take the navbar breakpoint, the mobile overlay (our drawer), the
+  collapse as a first-class animated state, and the main area's guaranteed width. We do not take
+  per-breakpoint navbar widths, an aside and a footer (the HIG has bottom bars and secondary
+  sidebars, handled separately), or CSS-timed transitions (we use the drawer's spring).
+* Not yet used, candidates for later: responsive props per breakpoint (Mantine's `{ base, sm, lg }`
+  style values), container queries (sizing by the parent, not the window).

@@ -22,7 +22,8 @@ Both `cargo test` and `cargo clippy` should be clean before committing.
 ```text
 GALLERY_SIZE=WxH        GALLERY_DETAIL=textinput     GALLERY_PAGE=inputs
 GALLERY_SIDEBAR_MODE=first-page   GALLERY_MENU=page|dropdown
-GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push   
+GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push|breakpoint
+GALLERY_DARK=1          # dark scheme for GALLERY_ANIM captures
 ICED_LIBADWAITA_CONFIG=path.conf     # try a desktop config
 ```
 
