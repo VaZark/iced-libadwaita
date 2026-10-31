@@ -651,7 +651,7 @@ impl Gallery {
                 let page = |icon: Icon, title: &'static str, desc: &'static str| {
                     w::Card::new(
                         w::status_page::<Message>()
-                            .icon(icon.colored(64.0, self.theme().semantic.dim_solid()))
+                            .icon(icon.colored(64.0, self.build_theme().semantic.dim_solid()))
                             .title(title)
                             .description(desc)
                             .child(w::suggested_pill_button(text("Try Again")).on_press(Message::Noop))
@@ -839,7 +839,7 @@ impl Gallery {
                 column![g("Avatar").push(w::card(avatars))].into()
             }
             Inline::Surfaces => {
-                let sem = self.theme().semantic;
+                let sem = self.build_theme().semantic;
                 let surfaces = column![
                     row![w::color_swatch("window", sem.window), w::color_swatch("view", sem.view), w::color_swatch("headerbar", sem.headerbar)].spacing(m.space_s),
                     row![w::color_swatch("card", sem.card), w::color_swatch("dialog", sem.dialog), w::color_swatch("popover", sem.popover)].spacing(m.space_s),

@@ -30,6 +30,25 @@ adw::window::frame(
 * In a split view give each pane its own header bar; only the pane at a window edge shows the
   window buttons.
 
+#### Dialogs in their own window
+
+A dialog that is large or long-lived (preferences) can be a window of its own that the user moves
+independently of its parent, while the parent is disabled.
+
+* Open it with `window::open(adw::window::dialog_settings(size))` (client-side decorations,
+  resizable, centered, never narrower than a phone) from an `iced::daemon` app, and give it its
+  own view: a header bar with only a close button and `adw::window::frame` for corners and grips.
+  Header drags and grips need the window's id (`window::drag(id)`, `window::drag_resize(id, d)`).
+* Disable the parent while it is open by covering the parent's view with
+  `dialog_in_window(root, space(), Some(Msg::FocusDialog), corner)`: an empty dialog is a scrim
+  that swallows input, and a click on it can `window::gain_focus` the dialog.
+* Handle `window::close_events()` to forget the window when the user closes it, and quit when the
+  main window closes.
+
+Limits: iced has no transient-parent or system-modal window, so the compositor does not keep the
+dialog above its parent or center it on the parent, and Wayland ignores requested positions. Use
+this for preferences-style windows; short questions stay in-window (`AlertDialog`).
+
 #### Header bars
 
 Header bars are continuous: no color of their own, they take the pane behind. A header holds the

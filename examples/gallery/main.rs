@@ -153,6 +153,11 @@ struct Gallery {
     sidebar_mode: w::CollapsedSidebar,
     drawer_open: bool,
     win: adw::window::State,
+    /// The main window, and the preferences window while it is open (a separate OS window).
+    main: window::Id,
+    prefs: Option<window::Id>,
+    /// Screenshot harness: the window to capture instead of the main one.
+    shot_window: Option<window::Id>,
     sheet: bool,
     carousel: usize,
     carousel_indicator: w::CarouselIndicator,
@@ -243,6 +248,14 @@ enum Message {
     DemoPlay,
     Noop,
     Drag,
+    DragWindow(window::Id),
+    ResizeWindow(window::Id, window::Direction),
+    /// Closes the preferences window.
+    ClosePrefs,
+    /// The window was closed (by the user or the compositor).
+    WindowClosed(window::Id),
+    /// A click on the disabled parent: bring the preferences window forward.
+    FocusPrefs,
     /// Escape: dismisses the topmost overlay.
     Escape,
     Narrow(bool),
@@ -291,8 +304,14 @@ impl Gallery {
         } else {
             Task::none()
         };
+        // A daemon opens its windows itself: the main one now, the preferences window on demand.
+        let (main, open_main) = window::open(Self::main_settings());
+        let boot = Task::batch([open_main.map(|_| Message::Noop), boot]);
         (
             Self {
+                main,
+                prefs: None,
+                shot_window: None,
                 page: start_detail
                     .map(Detail::page)
                     .or_else(|| {
@@ -372,12 +391,44 @@ impl Gallery {
         )
     }
 
+    fn main_settings() -> window::Settings {
+        window::Settings {
+            size: std::env::var("GALLERY_SIZE")
+                .ok()
+                .and_then(|v| {
+                    let (w, h) = v.split_once('x')?;
+                    Some(iced::Size::new(w.parse().ok()?, h.parse().ok()?))
+                })
+                .unwrap_or(iced::Size::new(1040.0, 760.0)),
+            // Adwaita has no server-side decorations; opt back in with GALLERY_SSD=1.
+            ..adw::window::settings_with_ssd(!Self::csd())
+        }
+    }
+
+    fn title(&self, id: window::Id) -> String {
+        if Some(id) == self.prefs { "Preferences".into() } else { "iced-libadwaita gallery".into() }
+    }
+
+    /// Opens the preferences dialog as its own window, or brings it forward if open.
+    fn open_prefs(&mut self) -> Task<Message> {
+        if let Some(id) = self.prefs {
+            return window::gain_focus(id);
+        }
+        let (id, open) = window::open(adw::window::dialog_settings(iced::Size::new(620.0, 640.0)));
+        self.prefs = Some(id);
+        open.map(|_| Message::Noop)
+    }
+
     fn metrics(&self) -> Metrics {
         let base = if self.compact { Metrics::compact() } else { Metrics::default() };
         Metrics { radius_m: self.radius_m, radius_l: self.radius_l, radius_toast: self.radius_toast, ..base }
     }
 
-    fn theme(&self) -> Theme {
+    fn theme(&self, _window: window::Id) -> Theme {
+        self.build_theme()
+    }
+
+    fn build_theme(&self) -> Theme {
         let shadows = if self.shadows_on {
             adw::Shadows::default().with_scale(self.shadow_scale).with_intensity(self.shadow_intensity)
         } else {
@@ -465,6 +516,8 @@ impl Gallery {
             Message::Editor(a) => self.editor.perform(a),
             Message::EditorEmpty(a) => self.editor_empty.perform(a),
             Message::Picked(s) => self.picked = Some(s),
+            // Preferences is a window of its own; the other dialogs stay in the window.
+            Message::OpenDialog(Dialog::Preferences) => return self.open_prefs(),
             Message::OpenDialog(d) => self.dialog = Some(d),
             Message::CloseDialog => self.dialog = None,
             Message::Sheet(o) => self.sheet = o,
@@ -497,7 +550,27 @@ impl Gallery {
                 self.demo_tween.set_target(to, now, self.demo.spec());
             }
             Message::Noop => {}
-            Message::Drag => return window::oldest().and_then(window::drag),
+            Message::Drag => return window::drag(self.main),
+            Message::DragWindow(id) => return window::drag(id),
+            Message::ResizeWindow(id, d) => return window::drag_resize(id, d),
+            Message::ClosePrefs => {
+                if let Some(id) = self.prefs.take() {
+                    return window::close(id);
+                }
+            }
+            Message::FocusPrefs => {
+                if let Some(id) = self.prefs {
+                    return window::gain_focus(id);
+                }
+            }
+            Message::WindowClosed(id) => {
+                if id == self.main {
+                    return iced::exit();
+                }
+                if Some(id) == self.prefs {
+                    self.prefs = None;
+                }
+            }
             Message::Escape => {
                 if self.dialog.is_some() {
                     self.dialog = None;
@@ -531,9 +604,7 @@ impl Gallery {
             Message::Resize(d) => return window::oldest().and_then(move |id| window::drag_resize(id, d)),
             Message::Shot(i) => return self.shot_next(i),
             Message::Capture(i) => {
-                return window::oldest()
-                    .and_then(window::screenshot)
-                    .map(move |s| Message::Saved(i, s));
+                return window::screenshot(self.shot_window.unwrap_or(self.main)).map(move |s| Message::Saved(i, s));
             }
             Message::Saved(i, shot) => {
                 if let Some(s) = &self.shots {
@@ -572,6 +643,23 @@ impl Gallery {
                 this.shot_tag = Some(tag);
                 Task::perform(tokio::time::sleep(Duration::from_millis(ms)), move |_| Message::Capture(i))
             };
+            // GALLERY_ANIM=prefs: open the preferences window, capture the disabled parent, then
+            // the preferences window itself.
+            if kind == "prefs" {
+                return match i {
+                    0 => {
+                        self.scheme = Scheme::Light;
+                        let open = self.open_prefs();
+                        self.shot_tag = Some("parent");
+                        open.chain(Task::perform(tokio::time::sleep(Duration::from_millis(1500)), move |_| Message::Capture(i)))
+                    }
+                    1 => {
+                        self.shot_window = self.prefs;
+                        wait(300, "prefs", self)
+                    }
+                    _ => iced::exit(),
+                };
+            }
             return match i {
                 0 => {
                     self.scheme = if std::env::var_os("GALLERY_DARK").is_some() { Scheme::Dark } else { Scheme::Light };
@@ -662,10 +750,14 @@ impl Gallery {
         Subscription::batch([
             frames,
             adw::window::changes().map(|_| Message::WindowChanged),
+            window::close_events().map(Message::WindowClosed),
         ])
     }
 
-    fn view(&self) -> IcedElement<'_, Message, Theme> {
+    fn view(&self, id: window::Id) -> IcedElement<'_, Message, Theme> {
+        if Some(id) == self.prefs {
+            return self.prefs_window(id);
+        }
         iced::widget::responsive(|size| self.root(size)).into()
     }
 
@@ -859,15 +951,15 @@ impl Gallery {
                 ],
                 Message::CloseDialog,
             )),
-            Some(Dialog::Preferences) => Some(                w::preferences_dialog("Preferences", self.preferences_demo(), Message::CloseDialog),
-            ),
+            // The preferences dialog is a window of its own (see `prefs_window`).
+            Some(Dialog::Preferences) => None,
             Some(Dialog::About) => Some(Element::from(w::AboutDialog::new("Gallery")
                     .developer_name("The iced-libadwaita authors")
                     .version("0.1.0")
                     .comments("Widget gallery for iced-libadwaita.")
                     .website("https://iced.rs")
                     .license("MIT OR Apache-2.0")
-                    .application_icon(Icon::Home.colored(48.0, self.theme().semantic.accent.color))
+                    .application_icon(Icon::Home.colored(48.0, self.build_theme().semantic.accent.color))
                     .on_close(Message::CloseDialog)),
             ),
         };
@@ -880,7 +972,39 @@ impl Gallery {
             .into_shortcuts()
             .bind("Esc", Message::Escape)
             .scope(result);
+        // While the preferences window is open the parent is disabled: a scrim that swallows
+        // input, and a click on it brings the preferences window forward. Both windows can still
+        // be moved on the screen independently.
+        let result = w::present_dialog(
+            result,
+            self.prefs.map(|_| Element::from(iced::widget::space())),
+            Some(Message::FocusPrefs),
+            corner,
+        );
         if csd { adw::window::frame(result, win_state, Message::Resize) } else { result }
+    }
+
+    /// The preferences dialog in its own window: a header with a close button, the preference
+    /// page, rounded corners and resize grips like the main window.
+    fn prefs_window(&self, id: window::Id) -> IcedElement<'_, Message, Theme> {
+        let m = self.metrics();
+        let corner = Metrics::default().radius_window;
+        let close = w::WindowControls { on_minimize: None, on_maximize: None, on_close: Some(Message::ClosePrefs), maximized: false, layout: None };
+        let header = w::header_bar::<Message>()
+            .title("Preferences")
+            .window_corners(corner, corner)
+            .window_controls(close)
+            .on_drag(Message::DragWindow(id))
+            .metrics(m);
+        // Esc closes it, like any dialog.
+        let content = adw::shortcut::Shortcuts::new()
+            .bind("Esc", Message::ClosePrefs)
+            .scope(Element::from(w::toolbar_view(self.preferences_demo()).top_bar(header)));
+        if Self::csd() {
+            adw::window::frame(content, adw::window::State::default(), move |d| Message::ResizeWindow(id, d))
+        } else {
+            content.into()
+        }
     }
 
     // --- pages ----------------------------------------------------------
@@ -965,25 +1089,15 @@ fn main() -> iced::Result {
         });
     }
     adw::config::install(cfg);
-    iced::application(Gallery::new, Gallery::update, Gallery::view)
-        .title("iced-libadwaita gallery")
+    // A daemon, so the preferences dialog can be a window of its own.
+    iced::daemon(Gallery::new, Gallery::update, Gallery::view)
+        .title(Gallery::title)
         .theme(Gallery::theme)
         .subscription(Gallery::subscription)
         .settings(iced::Settings {
             default_text_size: 14.67.into(),
             antialiasing: true,
             ..Default::default()
-        })
-        .window(window::Settings {
-            size: std::env::var("GALLERY_SIZE")
-                .ok()
-                .and_then(|v| {
-                    let (w, h) = v.split_once('x')?;
-                    Some(iced::Size::new(w.parse().ok()?, h.parse().ok()?))
-                })
-                .unwrap_or(iced::Size::new(1040.0, 760.0)),
-            // Adwaita has no server-side decorations; opt back in with GALLERY_SSD=1.
-            ..adw::window::settings_with_ssd(!Gallery::csd())
         })
         .run()
 }

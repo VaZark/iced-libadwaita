@@ -38,6 +38,20 @@ pub fn settings() -> Settings {
     }
 }
 
+/// Settings for a dialog in its own window (a preferences window, say): client-side
+/// decorations like [`settings`], resizable, opened centered, and never smaller than a phone
+/// width. A window the user can move and resize independently of its parent; the parent is
+/// disabled while it is open by covering it with [`dialog_in_window`](crate::widget::dialog_in_window)
+/// (an empty dialog is a scrim that swallows input).
+pub fn dialog_settings(size: Size) -> Settings {
+    Settings {
+        size,
+        position: iced::window::Position::Centered,
+        min_size: Some(Size::new(min_size().width, 240.0)),
+        ..settings()
+    }
+}
+
 /// Like [`settings`], but lets the caller opt back into server-side
 /// decorations (for compositors or platforms without client-side support).
 pub fn settings_with_ssd(ssd: bool) -> Settings {
@@ -182,6 +196,15 @@ pub fn frame<'a, M: Clone + 'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dialog_windows_are_decorated_by_us_and_opened_centered() {
+        let s = dialog_settings(Size::new(620.0, 640.0));
+        assert!(!s.decorations && s.transparent && s.resizable);
+        assert_eq!(s.size, Size::new(620.0, 640.0));
+        assert!(matches!(s.position, iced::window::Position::Centered));
+        assert!(s.min_size.is_some());
+    }
 
     #[test]
     fn ssd_is_off_by_default() {
