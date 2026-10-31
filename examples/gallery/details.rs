@@ -103,6 +103,7 @@ impl Gallery {
             Action::PreferencesDialog => Message::OpenDialog(Dialog::Preferences),
             Action::BottomSheet => Message::Sheet(true),
             Action::ShowToast => Message::ShowToast("Settings saved"),
+            Action::ShowUndoToast => Message::ShowUndoToast,
         }
     }
 

@@ -153,7 +153,8 @@ struct Gallery {
     sheet: bool,
     carousel: usize,
     carousel_indicator: w::CarouselIndicator,
-    toast: Option<String>,
+    /// The toast shown: its title and the label of its optional call-to-action button.
+    toast: Option<(String, Option<&'static str>)>,
     banner: bool,
     angle: f32,
 
@@ -205,6 +206,8 @@ enum Message {
     Carousel(usize),
     CarouselIndicator(w::CarouselIndicator),
     ShowToast(&'static str),
+    ShowUndoToast,
+    ToastAction,
     DismissToast,
     Frame(std::time::Instant),
     Animations(bool),
@@ -410,7 +413,10 @@ impl Gallery {
             Message::Sheet(o) => self.sheet = o,
             Message::Carousel(i) => self.carousel = i,
             Message::CarouselIndicator(i) => self.carousel_indicator = i,
-            Message::ShowToast(s) => self.toast = Some(s.into()),
+            Message::ShowToast(s) => self.toast = Some((s.into(), None)),
+            Message::ShowUndoToast => self.toast = Some(("File deleted".into(), Some("Undo"))),
+            // The action runs and the toast is replaced by a plain confirmation.
+            Message::ToastAction => self.toast = Some(("File restored".into(), None)),
             Message::DismissToast => self.toast = None,
             Message::Frame(now) => {
                 self.angle += 0.12;
@@ -506,6 +512,7 @@ impl Gallery {
                         "page" => Message::Page(Page::Theming),
                         "push" => Message::Page(Page::Dialogs),
                         "dialog" => Message::OpenDialog(Dialog::Alert),
+                        "toast-action" => Message::ShowUndoToast,
                         _ => Message::ShowToast("Settings saved"),
                     };
                     Task::done(trigger).chain(wait(70, "a1-70ms", self))
@@ -552,7 +559,7 @@ impl Gallery {
             Ok("about") => Dialog::About,
             _ => Dialog::Alert,
         });
-        self.toast = overlays.then(|| "Settings saved".to_string());
+        self.toast = overlays.then(|| ("File deleted".to_string(), Some("Undo")));
         if let Some(s) = &mut self.shots {
             s.index = i;
         }
@@ -714,7 +721,13 @@ impl Gallery {
         let base: Element = w::toast_overlay(
             // The window background comes from `adw::window::frame` (rounded when floating).
             container(body).width(Length::Fill).height(Length::Fill),
-            self.toast.clone().map(|t| w::Toast::new(t).on_dismiss(Message::DismissToast)),
+            self.toast.clone().map(|(title, action)| {
+                let t = w::Toast::new(title).on_dismiss(Message::DismissToast);
+                match action {
+                    Some(label) => t.action(label, Message::ToastAction),
+                    None => t,
+                }
+            }),
         );
 
         let base: Element = w::bottom_sheet_in_window(
