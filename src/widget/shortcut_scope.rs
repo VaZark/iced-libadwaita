@@ -57,10 +57,10 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for ShortcutScope<'a, M> {
         viewport: &Rectangle,
     ) {
         self.content.as_widget_mut().update(tree, event, layout, cursor, renderer, clipboard, shell, viewport);
-        if let Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. }) = event
+        if let Event::Keyboard(keyboard::Event::KeyPressed { key, modified_key, modifiers, .. }) = event
             && !shell.is_event_captured()
         {
-            let press = KeyPress { key: key.clone(), modifiers: *modifiers, captured: false };
+            let press = KeyPress { key: key.clone(), modified_key: modified_key.clone(), modifiers: *modifiers, captured: false };
             if let Some(message) = self.shortcuts.handle(&press) {
                 shell.publish(message);
                 shell.capture_event();

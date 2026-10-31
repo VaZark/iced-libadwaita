@@ -78,6 +78,10 @@ for them.
   Wrap the window once; the messages arrive in `update` like any other.
 * A focused widget has precedence: a text input or an open popover that handles the key stops the
   shortcut. Plain-character shortcuts never fire while typing.
+* Accelerators are written as the character the user types and are **layout independent**:
+  `Ctrl+?` fires for Ctrl+Shift+`/` on a US keyboard and Ctrl+Shift+`,` on AZERTY, and then
+  `Ctrl+,` does not also fire. A literal `Shift+` (`Ctrl+Shift+,`) means the unmodified key with
+  Shift held.
 
 | Action | Accelerator |
 |---|---|

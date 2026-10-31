@@ -1003,7 +1003,7 @@ impl Gallery {
         if Self::csd() {
             adw::window::frame(content, adw::window::State::default(), move |d| Message::ResizeWindow(id, d))
         } else {
-            content.into()
+            content
         }
     }
 
