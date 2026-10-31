@@ -420,9 +420,11 @@ where
         let m = Metrics::desktop();
         let current = c.selected.as_ref().map(ToString::to_string).unwrap_or_default();
         let value = row![
-            typography::label(current).style(st::dim),
+            // The chosen value is live content, in the normal text color (like text in an
+            // entry); dimmed is reserved for secondary text and the disabled state.
+            typography::label(current),
             Icon::GoDown.view(m.icon_size).style(|t: &Theme, _| iced::widget::svg::Style {
-                color: Some(t.semantic.dim_solid()),
+                color: Some(t.semantic.window.fg),
             }),
         ]
         .spacing(m.space_s)
