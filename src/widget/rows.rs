@@ -363,6 +363,8 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
     }
 }
 
+type OptionPredicate<'a, T> = Box<dyn Fn(&T) -> bool + 'a>;
+
 /// `AdwComboRow`.
 pub struct ComboRow<'a, T, M>
 where
@@ -372,7 +374,7 @@ where
     options: &'a [T],
     selected: Option<T>,
     on_select: Box<dyn Fn(T) -> M + 'a>,
-    disabled: Option<Box<dyn Fn(&T) -> bool + 'a>>,
+    disabled: Option<OptionPredicate<'a, T>>,
     open_initially: bool,
 }
 
