@@ -885,7 +885,7 @@ impl Gallery {
         let page: Element = self.content_page();
 
         // Switching pages fades the new one in (as a first page, the push slide does that job).
-        let page = w::page_transition(page, if collapsed && self.sidebar_mode == w::CollapsedSidebar::FirstPage { 0 } else { self.view_key() });
+        let page = w::page_transition(page, if collapsed && self.sidebar_mode == w::CollapsedSidebar::FirstPage { 0 } else { self.view_key() }).scroll_key(self.view_key());
         // The toast is placed in the whole window or only the content area (the shared
         // `[toasts] target` setting). Both layers stay mounted so the tree does not change.
         let mut toasts: Vec<w::Toast<Message>> = self

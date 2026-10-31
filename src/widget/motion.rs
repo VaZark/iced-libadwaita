@@ -588,11 +588,12 @@ impl<'a, M: 'a> From<Entrance<'a, M>> for Element<'a, M, Theme> {
 pub struct PageTransition<'a, M> {
     content: Element<'a, M, Theme>,
     key: u64,
+    scroll_key: Option<u64>,
     trigger: Trigger,
 }
 
 pub fn page_transition<'a, M>(content: impl Into<Element<'a, M, Theme>>, key: impl Into<u64>) -> PageTransition<'a, M> {
-    PageTransition { content: content.into(), key: key.into(), trigger: Trigger::PageChange }
+    PageTransition { content: content.into(), key: key.into(), scroll_key: None, trigger: Trigger::PageChange }
 }
 
 impl<'a, M> PageTransition<'a, M> {
@@ -602,11 +603,66 @@ impl<'a, M> PageTransition<'a, M> {
         self.trigger = t;
         self
     }
+
+    /// Identifies the page for its scroll position, when that differs from the fade's key (a
+    /// page that is not faded, like the first page of a collapsed split view, still scrolls on
+    /// its own). Defaults to the fade's key.
+    pub fn scroll_key(mut self, key: impl Into<u64>) -> Self {
+        self.scroll_key = Some(key.into());
+        self
+    }
 }
 
+/// Where each page was scrolled to, for the session (as long as the transition stays mounted).
+/// A page never seen before starts at the top; the offset of one page is never applied to
+/// another.
 struct PageState {
     key: u64,
+    scroll_key: u64,
     progress: Progress,
+    offsets: std::collections::HashMap<u64, f32>,
+    restore: Option<f32>,
+}
+
+/// Reads the vertical offset of the outermost scrollable.
+#[derive(Default)]
+struct ReadScroll(Option<f32>);
+
+impl iced::advanced::widget::Operation for ReadScroll {
+    fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn iced::advanced::widget::Operation)) {
+        operate(self);
+    }
+    fn scrollable(
+        &mut self,
+        _id: Option<&iced::advanced::widget::Id>,
+        _bounds: Rectangle,
+        _content_bounds: Rectangle,
+        translation: Vector,
+        _state: &mut dyn iced::advanced::widget::operation::Scrollable,
+    ) {
+        self.0.get_or_insert(translation.y);
+    }
+}
+
+/// Scrolls the outermost scrollable to a vertical offset.
+struct RestoreScroll(Option<f32>);
+
+impl iced::advanced::widget::Operation for RestoreScroll {
+    fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn iced::advanced::widget::Operation)) {
+        operate(self);
+    }
+    fn scrollable(
+        &mut self,
+        _id: Option<&iced::advanced::widget::Id>,
+        _bounds: Rectangle,
+        _content_bounds: Rectangle,
+        _translation: Vector,
+        state: &mut dyn iced::advanced::widget::operation::Scrollable,
+    ) {
+        if let Some(y) = self.0.take() {
+            state.scroll_to(iced::widget::scrollable::AbsoluteOffset { x: None, y: Some(y) });
+        }
+    }
 }
 
 impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
@@ -614,7 +670,13 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         tree::Tag::of::<PageState>()
     }
     fn state(&self) -> tree::State {
-        tree::State::new(PageState { key: self.key, progress: Progress::new(1.0) })
+        tree::State::new(PageState {
+            key: self.key,
+            scroll_key: self.scroll_key.unwrap_or(self.key),
+            progress: Progress::new(1.0),
+            offsets: Default::default(),
+            restore: None,
+        })
     }
     fn children(&self) -> Vec<Tree> {
         vec![Tree::new(&self.content)]
@@ -625,6 +687,15 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
             // A different page: restart hidden, so the very next frame is already faded.
             state.key = self.key;
             state.progress = Progress::new(if self.trigger.animated() { 0.0 } else { 1.0 });
+        }
+        let scroll_key = self.scroll_key.unwrap_or(self.key);
+        if state.scroll_key != scroll_key {
+            // A different page has its own scroll position: its last one this session, else the
+            // top. The old widget state is dropped so the scrollable does not keep the old
+            // page's offset.
+            state.scroll_key = scroll_key;
+            state.restore = state.offsets.get(&scroll_key).copied();
+            tree.children = vec![Tree::new(&self.content)];
         }
         tree.diff_children(&[self.content.as_widget()]);
     }
@@ -651,7 +722,25 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         {
             shell.request_redraw();
         }
-        self.content.as_widget_mut().update(&mut tree.children[0], event, layout.children().next().unwrap(), cursor, renderer, clipboard, shell, viewport);
+        let child_layout = layout.children().next().unwrap();
+        // Back to a page seen before: put its scroll position back once it has a layout.
+        if matches!(event, Event::Window(iced::window::Event::RedrawRequested(_)))
+            && let Some(y) = tree.state.downcast_mut::<PageState>().restore.take()
+        {
+            self.content.as_widget_mut().operate(&mut tree.children[0], child_layout, renderer, &mut RestoreScroll(Some(y)));
+            shell.request_redraw();
+        }
+        self.content.as_widget_mut().update(&mut tree.children[0], event, child_layout, cursor, renderer, clipboard, shell, viewport);
+        // Remember where this page is scrolled to (wheel, drag, keys).
+        if matches!(event, Event::Mouse(_) | Event::Touch(_) | Event::Keyboard(_)) {
+            let mut read = ReadScroll::default();
+            self.content.as_widget_mut().operate(&mut tree.children[0], child_layout, renderer, &mut read);
+            if let Some(y) = read.0 {
+                let state = tree.state.downcast_mut::<PageState>();
+                let key = state.scroll_key;
+                state.offsets.insert(key, y);
+            }
+        }
     }
     fn overlay<'b>(
         &'b mut self,
