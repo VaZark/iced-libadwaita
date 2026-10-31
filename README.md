@@ -37,8 +37,11 @@ fn view(&self) -> iced::Element<'_, Message, adw::Theme> {
 Use `adw::Theme` as the application theme: it implements iced's `theme::Base`
 and every widget `Catalog`, so stock iced widgets (`button`, `text_input`,
 `toggler`, `pick_list`, `scrollable`, …) are restyled too. Run
-`cargo run --example gallery` for a tour (`-- --screenshot DIR` renders every
-page in light and dark).
+`cargo run --example gallery` for a tour: the sidebar lists functional groups (Buttons, Inputs,
+Rows & Lists, Layout, Navigation, Feedback, Dialogs & Sheets, Typography, Theming); a group lists
+its components, and each component opens a nested page showing all of its properties and states
+(disabled, validation, color override, …). `-- --screenshot DIR` renders every page in light and
+dark; `GALLERY_DETAIL=textinput` opens a component page directly.
 
 ## A component library
 
@@ -226,7 +229,7 @@ lookup (a small built-in SVG set, `Icon`, is provided), markdown/table catalogs.
 ## Status
 
 * Builds against iced 0.14 with the `advanced`, `svg`, `canvas` features.
-* Verified by rendering the gallery (`examples/gallery.rs`) in light and dark and
+* Verified by rendering the gallery (`examples/gallery/`) in light and dark and
   inspecting the output; `cargo test` covers theme token behavior.
 * `iced::window::screenshot` does not capture `text_editor` text (reproduced on
   stock iced with no code from this crate); the editor is styled but cannot be

@@ -18,62 +18,10 @@ use std::time::Duration;
 
 type Element<'a> = adw::Element<'a, Message>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Page {
-    Buttons,
-    Lists,
-    Inputs,
-    Feedback,
-    Dialogs,
-    Navigation,
-    Theming,
-}
+mod details;
+mod nav;
 
-impl Page {
-    const ALL: [Page; 7] = [
-        Page::Buttons,
-        Page::Lists,
-        Page::Inputs,
-        Page::Feedback,
-        Page::Dialogs,
-        Page::Navigation,
-        Page::Theming,
-    ];
-    fn title(self) -> &'static str {
-        match self {
-            Page::Buttons => "Buttons & Text",
-            Page::Lists => "Rows & Preferences",
-            Page::Inputs => "Inputs",
-            Page::Feedback => "Feedback",
-            Page::Dialogs => "Dialogs",
-            Page::Navigation => "Navigation",
-            Page::Theming => "Theming",
-        }
-    }
-    /// Shown under the title when the sidebar is presented as cards.
-    fn description(self) -> &'static str {
-        match self {
-            Page::Buttons => "Button styles, shapes and typography",
-            Page::Lists => "Rows, groups and choosers",
-            Page::Inputs => "Entries, checks, sliders and text",
-            Page::Feedback => "Banners, progress and status pages",
-            Page::Dialogs => "Alerts, about, shortcuts and toasts",
-            Page::Navigation => "Switchers, tabs and carousels",
-            Page::Theming => "Colors, radii, shadows and motion",
-        }
-    }
-    fn icon(self) -> Icon {
-        match self {
-            Page::Buttons => Icon::Check,
-            Page::Lists => Icon::OpenMenu,
-            Page::Inputs => Icon::Edit,
-            Page::Feedback => Icon::DialogInformation,
-            Page::Dialogs => Icon::Window,
-            Page::Navigation => Icon::GoNext,
-            Page::Theming => Icon::Settings,
-        }
-    }
-}
+use nav::{Detail, Page};
 
 /// The motions the Theming page can play: libadwaita easings and the sheet spring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -160,6 +108,8 @@ enum Tab {
 
 struct Gallery {
     page: Page,
+    /// The nested component page open inside `page`, if any.
+    detail: Option<Detail>,
     scheme: Scheme,
     accent: AccentColor,
     compact: bool,
@@ -187,6 +137,11 @@ struct Gallery {
     radio: Option<u8>,
     slider: f32,
     editor: w::TextContent,
+    editor_empty: w::TextContent,
+    editor_ro: w::TextContent,
+    sw: bool,
+    row_sw: bool,
+    combo2: Option<&'static str>,
     picked: Option<&'static str>,
 
     dialog: Option<Dialog>,
@@ -214,6 +169,12 @@ struct Shots {
 #[derive(Debug, Clone)]
 enum Message {
     Page(Page),
+    OpenDetail(Detail),
+    CloseDetail,
+    Banner(bool),
+    Sw(bool),
+    RowSw(bool),
+    Combo2(&'static str),
     Scheme(bool),
     Accent(AccentColor),
     Compact(bool),
@@ -236,6 +197,7 @@ enum Message {
     Radio(u8),
     Slider(f32),
     Editor(w::TextAction),
+    EditorEmpty(w::TextAction),
     Picked(&'static str),
     OpenDialog(Dialog),
     CloseDialog,
@@ -244,7 +206,6 @@ enum Message {
     CarouselIndicator(w::CarouselIndicator),
     ShowToast(&'static str),
     DismissToast,
-    DismissBanner,
     Frame(std::time::Instant),
     Animations(bool),
     DemoMotion(DemoMotion),
@@ -286,6 +247,10 @@ impl Gallery {
             .position(|a| a == "--screenshot")
             .and_then(|i| args.get(i + 1))
             .map(|d| Shots { dir: d.into(), index: 0 });
+        // GALLERY_DETAIL=textinput|switch|…: open a nested component page at startup.
+        let start_detail = std::env::var("GALLERY_DETAIL")
+            .ok()
+            .and_then(|v| Detail::all().into_iter().find(|d| format!("{d:?}").eq_ignore_ascii_case(&v)));
         let boot = if shots.is_some() {
             Task::done(Message::Shot(0))
         } else {
@@ -293,10 +258,15 @@ impl Gallery {
         };
         (
             Self {
-                page: std::env::var("GALLERY_PAGE")
-                    .ok()
-                    .and_then(|v| Page::ALL.into_iter().find(|p| format!("{p:?}").eq_ignore_ascii_case(&v)))
+                page: start_detail
+                    .map(Detail::page)
+                    .or_else(|| {
+                        std::env::var("GALLERY_PAGE")
+                            .ok()
+                            .and_then(|v| Page::ALL.into_iter().find(|p| format!("{p:?}").eq_ignore_ascii_case(&v)))
+                    })
                     .unwrap_or(Page::Buttons),
+                detail: start_detail,
                 scheme: from_cfg.scheme,
                 accent: match cfg.accent {
                     adw::config::Pick::Fixed(a) => a,
@@ -326,6 +296,11 @@ impl Gallery {
                 radio: Some(1),
                 slider: 40.0,
                 editor: w::TextContent::with_text("Multi-line text editor\nstyled by the theme."),
+                editor_empty: w::TextContent::new(),
+                editor_ro: w::TextContent::with_text("Read-only text.\nIt cannot be edited."),
+                sw: true,
+                row_sw: false,
+                combo2: None,
                 picked: None,
                 dialog: None,
                 show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
@@ -385,9 +360,19 @@ impl Gallery {
         match msg {
             Message::Page(p) => {
                 self.page = p;
+                self.detail = None;
                 self.show_content = true;
                 self.drawer_open = false;
             }
+            Message::OpenDetail(d) => {
+                self.page = d.page();
+                self.detail = Some(d);
+            }
+            Message::CloseDetail => self.detail = None,
+            Message::Banner(v) => self.banner = v,
+            Message::Sw(v) => self.sw = v,
+            Message::RowSw(v) => self.row_sw = v,
+            Message::Combo2(s) => self.combo2 = Some(s),
             Message::SidebarMode(m) => {
                 self.sidebar_mode = m;
                 self.drawer_open = false;
@@ -417,6 +402,7 @@ impl Gallery {
             Message::Radio(r) => self.radio = Some(r),
             Message::Slider(v) => self.slider = v,
             Message::Editor(a) => self.editor.perform(a),
+            Message::EditorEmpty(a) => self.editor_empty.perform(a),
             Message::Picked(s) => self.picked = Some(s),
             Message::OpenDialog(d) => self.dialog = Some(d),
             Message::CloseDialog => self.dialog = None,
@@ -425,7 +411,6 @@ impl Gallery {
             Message::CarouselIndicator(i) => self.carousel_indicator = i,
             Message::ShowToast(s) => self.toast = Some(s.into()),
             Message::DismissToast => self.toast = None,
-            Message::DismissBanner => self.banner = false,
             Message::Frame(now) => {
                 self.angle += 0.12;
                 self.demo_value = self.demo_tween.tick(now);
@@ -472,9 +457,10 @@ impl Gallery {
             Message::Saved(i, shot) => {
                 if let Some(s) = &self.shots {
                     let name = format!(
-                        "{}-{}{}.png",
+                        "{}-{}{}{}.png",
                         if self.scheme.is_dark() { "dark" } else { "light" },
                         format!("{:?}", self.page).to_lowercase(),
+                        self.detail.map(|d| format!("-{d:?}").to_lowercase()).unwrap_or_default(),
                         self.shot_tag.map(|t| format!("-{t}")).unwrap_or_default()
                     );
                     std::fs::create_dir_all(&s.dir).ok();
@@ -528,7 +514,13 @@ impl Gallery {
                 _ => iced::exit(),
             };
         }
-        let total = 2 * Page::ALL.len();
+        // Every group page, then every component page (light), then the groups again (dark).
+        let views: Vec<(Page, Option<Detail>)> = Page::ALL
+            .iter()
+            .map(|p| (*p, None))
+            .chain(Detail::all().into_iter().map(|d| (d.page(), Some(d))))
+            .collect();
+        let total = views.len() + Page::ALL.len();
         if i > total {
             return iced::exit();
         }
@@ -536,21 +528,30 @@ impl Gallery {
             // Drive the real update path with the radius slider messages.
             self.scheme = Scheme::Light;
             self.page = Page::Theming;
+            self.detail = None;
             self.dialog = None;
             self.toast = None;
             self.shot_tag = Some("radius0");
             return Task::batch([Task::done(Message::RadiusM(0.0)), Task::done(Message::RadiusL(0.0))])
                 .chain(Task::perform(tokio::time::sleep(Duration::from_millis(500)), move |_| Message::Capture(i)));
         }
-        self.scheme = if i < Page::ALL.len() { Scheme::Light } else { Scheme::Dark };
-        self.page = Page::ALL[i % Page::ALL.len()];
-        self.dialog = (self.page == Page::Dialogs).then(|| match std::env::var("GALLERY_DIALOG").as_deref() {
+        if i < views.len() {
+            self.scheme = Scheme::Light;
+            (self.page, self.detail) = views[i];
+        } else {
+            self.scheme = Scheme::Dark;
+            self.page = Page::ALL[i - views.len()];
+            self.detail = None;
+        }
+        // The Dialogs group page also shows an open dialog and a toast, so overlays are covered.
+        let overlays = self.page == Page::Dialogs && self.detail.is_none();
+        self.dialog = overlays.then(|| match std::env::var("GALLERY_DIALOG").as_deref() {
             Ok("preferences") => Dialog::Preferences,
             Ok("shortcuts") => Dialog::Shortcuts,
             Ok("about") => Dialog::About,
             _ => Dialog::Alert,
         });
-        self.toast = (self.page == Page::Dialogs).then(|| "Settings saved".to_string());
+        self.toast = overlays.then(|| "Settings saved".to_string());
         if let Some(s) = &mut self.shots {
             s.index = i;
         }
@@ -558,7 +559,7 @@ impl Gallery {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        let frames = if self.page == Page::Feedback || self.shots.is_some() || self.demo_tween.is_animating() {
+        let frames = if self.detail == Some(Detail::Progress) || self.shots.is_some() || self.demo_tween.is_animating() {
             window::frames().map(Message::Frame)
         } else {
             Subscription::none()
@@ -642,7 +643,7 @@ impl Gallery {
             .window_corners(corner, if show_sidebar_only { corner } else { 0.0 })
             .metrics(m);
         let mut content_bar = w::header_bar::<Message>()
-            .title(self.page.title())
+            .title(self.detail.map_or(self.page.title(), Detail::title))
             .window_corners(if show_content_only || drawer_mode { corner } else { 0.0 }, corner)
             .metrics(m);
         if self.path_bar_title {
@@ -653,11 +654,13 @@ impl Gallery {
                 |_| Message::Noop,
             ));
         }
-        if drawer_mode {
+        if self.detail.is_some() {
+            // Inside a component page: back to the group's list.
+            content_bar = content_bar.pack_start(w::circular_button(Icon::GoPrevious).on_press(Message::CloseDetail));
+        } else if drawer_mode {
             // The drawer toggle: the sidebar lives behind it.
             content_bar = content_bar.pack_start(w::circular_button(Icon::Sidebar).on_press(Message::Drawer(true)));
-        }
-        if show_content_only {
+        } else if show_content_only {
             content_bar = content_bar.pack_start(w::circular_button(Icon::GoPrevious).on_press(Message::Back));
         }
         if csd {
@@ -694,18 +697,10 @@ impl Gallery {
         .window_radius(corner);
         let sidebar_pane = w::toolbar_view(Element::from(sidebar_list)).top_bar(sidebar_bar);
 
-        let page: Element = match self.page {
-            Page::Buttons => self.buttons_page(),
-            Page::Lists => self.lists_page(),
-            Page::Inputs => self.inputs_page(),
-            Page::Feedback => self.feedback_page(),
-            Page::Dialogs => self.dialogs_page(),
-            Page::Navigation => self.navigation_page(),
-            Page::Theming => self.theming_page(),
-        };
+        let page: Element = self.content_page();
 
         // Switching pages fades the new one in (collapsed, the push slide does that job).
-        let page = w::page_transition(page, if collapsed { 0 } else { self.page as u64 });
+        let page = w::page_transition(page, if collapsed { 0 } else { self.view_key() });
         let content_pane = w::toolbar_view(page).top_bar(content_bar);
         let body = w::NavigationSplitView::new(sidebar_pane, content_pane)
             .adapt(size.width)
@@ -744,7 +739,7 @@ impl Gallery {
                     Message::CloseDialog,
                 ),
             ),
-            Some(Dialog::Preferences) => Some(                w::preferences_dialog("Preferences", self.lists_page(), Message::CloseDialog),
+            Some(Dialog::Preferences) => Some(                w::preferences_dialog("Preferences", self.preferences_demo(), Message::CloseDialog),
             ),
             Some(Dialog::About) => Some(Element::from(w::AboutDialog::new("Gallery")
                     .developer_name("The iced-libadwaita authors")
@@ -767,87 +762,7 @@ impl Gallery {
         w::page(content).maximum_size(m.clamp_maximum + 120.0).metrics(m).into()
     }
 
-    fn buttons_page(&self) -> Element<'_> {
-        let m = self.metrics();
-        let g = |title: &'static str| w::PreferencesGroup::<Message>::new().title(title).metrics(m);
-        let lbl = |s: &'static str| -> Element<'static> { w::typography::label(s).into() };
-
-        let plain = row![
-            w::raised_button(lbl("Default")).on_press(Message::Noop),
-            w::flat_button(lbl("Flat")).on_press(Message::Noop),
-            w::suggested_button(lbl("Suggested")).on_press(Message::Noop),
-            w::destructive_button(lbl("Destructive")).on_press(Message::Noop),
-            w::raised_button(lbl("Disabled")),
-        ]
-        .spacing(m.space_m)
-        .wrap();
-
-        let shapes = row![
-            w::pill_button(lbl("Pill")).on_press(Message::Noop),
-            w::suggested_pill_button(lbl("Suggested Pill")).on_press(Message::Noop),
-            w::circular_button(Icon::ListAdd).on_press(Message::Noop),
-            w::icon_button(Icon::Delete).on_press(Message::Noop),
-            w::link_button("Link").on_press(Message::Noop),
-            w::card_button(text("Card button").width(Length::Fixed(110.0))).on_press(Message::Noop),
-        ]
-        .spacing(m.space_m)
-        .align_y(iced::Alignment::Center)
-        .wrap();
-
-        let with_icon = row![
-            w::raised_button(Element::from(w::ButtonContent::new("Open").icon(Icon::Home).metrics(m)))
-                .on_press(Message::Noop),
-            w::suggested_button(Element::from(w::ButtonContent::new("Add").icon(Icon::ListAdd)))
-                .on_press(Message::Noop),
-            w::split_button(text("Split"), Message::Noop, Message::ShowToast("Split menu")),
-            Element::from(w::toggle_group(
-                vec![
-                    w::ToggleItem::new(Tab::One, "One"),
-                    w::ToggleItem::new(Tab::Two, "Two"),
-                    w::ToggleItem::new(Tab::Three, "Three"),
-                ],
-                Some(self.tab),
-                Message::Tab,
-            )),
-        ]
-        .spacing(m.space_m)
-        .align_y(iced::Alignment::Center)
-        .wrap();
-
-        let typo = column![
-            ty::title_1("Title 1"),
-            ty::title_2("Title 2"),
-            ty::title_3("Title 3"),
-            ty::title_4("Title 4"),
-            ty::heading("Heading"),
-            ty::body("Body text, the default."),
-            ty::caption_heading("Caption heading"),
-            ty::caption("Caption"),
-            ty::monospace("monospace 0123456789"),
-            ty::dim_label("Dim label"),
-            row![
-                ty::body("Accent").style(style::text::accent),
-                ty::body("Success").style(style::text::success),
-                ty::body("Warning").style(style::text::warning),
-                ty::body("Error").style(style::text::error),
-                ty::body("Destructive").style(style::text::destructive),
-            ]
-            .spacing(m.space_l),
-        ]
-        .spacing(m.space_xs);
-
-        self.page_frame(
-            column![
-                g("Styles").push(w::card(plain)),
-                g("Shapes").push(w::card(shapes)),
-                g("Content").push(w::card(with_icon)),
-                g("Typography").push(w::card(typo)),
-            ]
-            .spacing(m.group_spacing),
-        )
-    }
-
-    fn lists_page(&self) -> Element<'_> {
+    fn preferences_demo(&self) -> Element<'_> {
         let m = self.metrics();
         let mut page = w::PreferencesPage::<Message>::new().metrics(m);
 
@@ -864,7 +779,7 @@ impl Gallery {
                     .subtitle("Interface font")
                     // Shows the disabled state: dimmed and unselectable (selected is accent).
                     .disabled_when(|o| *o == "Inter")
-                    .open_initially(self.shots.is_some()))
+                    .open_initially(false))
                 .push(w::SpinRow::new("Text Scale", self.spin, 1.0..=10.0, 1.0, Message::Spin)),
         );
 
@@ -907,217 +822,6 @@ impl Gallery {
                 ),
         );
         page.into()
-    }
-
-    fn inputs_page(&self) -> Element<'_> {
-        let m = self.metrics();
-        let g = |title: &'static str| w::PreferencesGroup::<Message>::new().title(title).metrics(m);
-        let entries = column![
-            w::entry("Search…", &self.name).on_input(Message::Name).metrics(m),
-            w::entry("Invalid value", "oops").on_input(Message::Name).state(w::EntryState::Error).metrics(m),
-            w::entry("Warning", "careful").on_input(Message::Name).state(w::EntryState::Warning).metrics(m),
-            w::entry("Disabled", "read only").metrics(m),
-            w::password_entry("Password", &self.password).on_input(Message::Password).metrics(m),
-            w::text_view(&self.editor).on_action(Message::Editor),
-        ]
-        .spacing(m.space_m);
-
-        let toggles = column![
-            w::check_button("Checkbox", self.check).on_toggle(Message::Check),
-            w::check_button("Unchecked", false),
-            w::check_button("Disabled checked", true),
-            row![
-                w::radio_button("Radio A", 0u8, self.radio, Message::Radio),
-                w::radio_button("Radio B", 1u8, self.radio, Message::Radio),
-                w::radio_button("Radio C", 2u8, self.radio, Message::Radio),
-            ]
-            .spacing(m.space_l)
-            .wrap(),
-            row![
-                w::switch(self.wifi).on_toggle(Message::Wifi),
-                ty::body("Switch"),
-            ]
-            .spacing(m.space_m)
-            .align_y(iced::Alignment::Center),
-        ]
-        .spacing(m.space_m);
-
-        let range = column![
-            w::scale(0.0..=100.0, self.slider, Message::Slider),
-            w::progress_bar(0.0..=100.0, self.slider),
-            w::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::success),
-            w::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::warning),
-            w::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::error),
-            Element::from(w::dropdown(&FRUITS, self.picked, Message::Picked)),
-        ]
-        .spacing(m.space_m);
-
-        self.page_frame(
-            column![
-                g("Entries").push(w::card(entries)),
-                g("Toggles").push(w::card(toggles)),
-                g("Ranges & Choosers").push(w::card(range)),
-            ]
-            .spacing(m.group_spacing),
-        )
-    }
-
-    fn feedback_page(&self) -> Element<'_> {
-        let m = self.metrics();
-        let g = |title: &'static str| w::PreferencesGroup::<Message>::new().title(title).metrics(m);
-
-        let avatars = row![
-            w::avatar(32.0, "Ada Lovelace"),
-            w::avatar(48.0, "Grace Hopper"),
-            w::avatar(64.0, "Linus"),
-            w::avatar(48.0, "Margaret Hamilton").show_initials(false),
-            w::spinner(32.0, self.angle),
-        ]
-        .spacing(m.space_m)
-        .align_y(iced::Alignment::Center);
-
-        let tags = row![
-            w::tag("Accent", Role::Accent),
-            w::tag("Success", Role::Success),
-            w::tag("Warning", Role::Warning),
-            w::tag("Error", Role::Error),
-            w::tag("Destructive", Role::Destructive),
-        ]
-        .spacing(m.space_s);
-
-        let status = w::Card::new(
-            w::status_page::<Message>()
-                .icon(Icon::DialogInformation.colored(64.0, self.theme().semantic.dim_solid()))
-                .title("No Results")
-                .description("Try a different search term.")
-                .child(w::suggested_pill_button(text("Clear Search")).on_press(Message::Noop))
-                .compact(true)
-                .metrics(m),
-        )
-        .padding(0)
-        .height(Length::Fixed(300.0));
-
-        let banner: Element = w::banner("Network connection lost")
-            .button("Retry", Message::DismissBanner)
-            .revealed(self.banner)
-            .into();
-
-        column![
-            banner,
-            self.page_frame(
-                column![
-                    g("Avatars & Spinner").push(w::card(avatars)),
-                    g("Tags").push(w::card(tags)),
-                    g("Status Page").push(status),
-                ]
-                .spacing(m.group_spacing)
-            )
-        ]
-        .into()
-    }
-
-    fn dialogs_page(&self) -> Element<'_> {
-        let m = self.metrics();
-        let buttons = row![
-            w::raised_button(text("Alert Dialog")).on_press(Message::OpenDialog(Dialog::Alert)),
-            w::raised_button(text("About Dialog")).on_press(Message::OpenDialog(Dialog::About)),
-            w::raised_button(text("Shortcuts Dialog")).on_press(Message::OpenDialog(Dialog::Shortcuts)),
-            w::raised_button(text("Preferences Dialog")).on_press(Message::OpenDialog(Dialog::Preferences)),
-            w::raised_button(text("Show Toast")).on_press(Message::ShowToast("Settings saved")),
-        ]
-        .spacing(m.space_m)
-        .wrap();
-        self.page_frame(
-            w::PreferencesGroup::<Message>::new()
-                .title("Overlays")
-                .description("Modal dialogs and toasts are layered with iced's stack.")
-                .metrics(m)
-                .push(w::card(buttons)),
-        )
-    }
-
-    fn navigation_page(&self) -> Element<'_> {
-        let m = self.metrics();
-        let g = |title: &'static str| w::PreferencesGroup::<Message>::new().title(title).metrics(m);
-        let items = || {
-            vec![
-                w::ToggleItem::new(Tab::One, "Files").icon(Icon::Home),
-                w::ToggleItem::new(Tab::Two, "Search").icon(Icon::Search),
-                w::ToggleItem::new(Tab::Three, "Settings").icon(Icon::Settings),
-            ]
-        };
-        // Each page has its own tint so the slide is easy to follow.
-        let carousel_pages = || -> Vec<Element<'_>> {
-            [("First page", Role::Accent), ("Second page", Role::Success), ("Third page", Role::Warning)]
-                .into_iter()
-                .map(|(t, role)| -> Element {
-                    container(ty::title_2(t))
-                        .center(Length::Fill)
-                        .style(move |t: &adw::Theme| iced::widget::container::Style {
-                            border: iced::Border::default(),
-                            ..style::container::tinted(role)(t)
-                        })
-                        .into()
-                })
-                .collect()
-        };
-        // One card: the carousel and its control share a single frame and shadow.
-        let car = w::Card::new(
-            container(w::carousel(carousel_pages(), self.carousel, Message::Carousel).indicator(self.carousel_indicator))
-                .height(Length::Fixed(160.0)),
-        )
-        .padding(0)
-        .push(
-            w::ComboRow::new(
-                "Indicator",
-                &INDICATORS,
-                Some(self.carousel_indicator),
-                Message::CarouselIndicator,
-            )
-            .subtitle("Drag the pages, or click the indicator"),
-        );
-        let tabs = w::tab_bar(
-            vec!["Home".into(), "Docs".into(), "Settings".into()],
-            self.tab as usize,
-            |i| Message::Tab([Tab::One, Tab::Two, Tab::Three][i]),
-            Some(|_| Message::Noop),
-        );
-        let shortcuts = column![
-            row![ty::body("Copy"), w::shortcut_label("Ctrl+C")].spacing(m.space_m),
-            row![ty::body("Palette"), w::shortcut_label("Ctrl+Shift+P")].spacing(m.space_m),
-        ]
-        .spacing(m.space_s);
-        let tags: Vec<Element> = ["rust", "iced", "gnome", "adwaita", "libadwaita", "theming", "widgets"]
-            .into_iter()
-            .map(|t| w::tag(t, Role::Accent))
-            .collect();
-        self.page_frame(
-            column![
-                g("View Switcher").push(w::card(Element::from(w::view_switcher(items(), Some(self.tab), Message::Tab)))),
-                g("Crowded Switcher (fills, shrinks, falls back to icons)").push(w::card(Element::from(
-                    w::toggle_group(
-                        vec![
-                            w::ToggleItem::new(Tab::One, "Files").icon(Icon::Home),
-                            w::ToggleItem::new(Tab::Two, "Search").icon(Icon::Search),
-                            w::ToggleItem::new(Tab::Three, "Settings").icon(Icon::Settings),
-                            w::ToggleItem::new(Tab::One, "Library").icon(Icon::Edit),
-                            w::ToggleItem::new(Tab::Two, "Archive").icon(Icon::Delete),
-                        ],
-                        Some(self.tab),
-                        Message::Tab,
-                    )
-                    .width(Length::Fill),
-                ))),
-                g("Tab Bar").push(w::Card::new(tabs).padding(0)),
-                g("Carousel").push(car),
-                g("Shortcut Labels").push(w::card(shortcuts)),
-                g("Wrap Box").push(w::card(w::wrap_box(tags, m.space_s))),
-                g("Bottom Sheet").push(w::card(
-                    w::raised_button(text("Open Sheet")).on_press(Message::Sheet(true)),
-                )),
-            ]
-            .spacing(m.group_spacing),
-        )
     }
 
     fn theming_page(&self) -> Element<'_> {
