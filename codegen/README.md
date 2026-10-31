@@ -1,20 +1,20 @@
 # Build-time XML UI code generation
 
-XML tags and attribute names follow `iced_libadwaita::catalog::COMPONENTS`
+XML uses HTML-style kebab-case tags, attributes and slot names, mapped to Rust snake_case. Names follow `iced_libadwaita::catalog::COMPONENTS`
 (the same vocabulary documented in `docs/components.md`).
 
 ```xml
-<toolbar_view>
-  <header_bar slot="top_bar" title="Settings"/>
+<toolbar-view>
+  <header-bar slot="top-bar" title="Settings"/>
   <page>
-    <preferences_group title="Appearance">
-      <action_row title="Theme" subtitle="System"/>
-    </preferences_group>
+    <preferences-group title="Appearance">
+      <action-row title="Theme" subtitle="System"/>
+    </preferences-group>
   </page>
-</toolbar_view>
+</toolbar-view>
 ```
 
-The build-time compiler validates component names, attribute names, and child slots
+Underscored XML names are rejected. The build-time compiler validates component names, attribute names, and child slots
 against the **existing** component catalog. It then emits ordinary Rust code.
 The catalog describes the public vocabulary, while typed code-generation adapters
 are needed for each constructor signature. Components without an adapter are
