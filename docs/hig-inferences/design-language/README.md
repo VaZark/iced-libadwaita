@@ -7,7 +7,6 @@
 * [metrics.md](metrics.md): sizes, spacing, radii
 * [shadows.md](shadows.md): elevation layers, rings, scrim, raised bars
 * [animations.md](animations.md): timed and spring animations, libadwaita's parameters, motion widgets
-* [desktop-config.md](desktop-config.md): the shared desktop config file, precedence, opt-outs
 * [adaptive-layouts.md](adaptive-layouts.md): breakpoints, collapsing, clamping, min size
 * [windows-and-csd.md](windows-and-csd.md): client-side decorations (no SSD), window radius, resizing, button layout, icons, mobile mode
 * [menus.md](menus.md): primary/secondary menus, dropdown vs full-page presentation

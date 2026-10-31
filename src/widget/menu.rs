@@ -5,7 +5,7 @@
 //!   with a header (back button + title) and large touch rows, for narrow or
 //!   mobile windows.
 //!
-//! Conventions (see `docs/design-language/menus.md`):
+//! Conventions (see `docs/hig-inferences/design-language/menus.md`):
 //! * GNOME HIG: the primary menu button uses `open-menu-symbolic`, sits at the
 //!   end of the header bar (above the list when there is a sidebar), is called
 //!   "Main Menu", and ends with Preferences, Keyboard Shortcuts, Help, About.

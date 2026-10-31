@@ -6,7 +6,7 @@
 //! [`settings`] for the iced window and [`frame`] to get rounded corners and
 //! edge resize grips, which a decoration-less window otherwise lacks.
 //!
-//! See `docs/design-language/windows-and-csd.md`.
+//! See `docs/hig-inferences/design-language/windows-and-csd.md`.
 
 use crate::widget::Element;
 use crate::{Metrics, Theme};

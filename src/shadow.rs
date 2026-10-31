@@ -15,7 +15,7 @@
 //! ```
 //!
 //! Layer values (light) come from libadwaita `_lists.scss`, `_popovers.scss`,
-//! `_dialogs.scss` and `_toolbars.scss`; see `docs/design-language/shadows.md`.
+//! `_dialogs.scss` and `_toolbars.scss`; see `docs/hig-inferences/design-language/shadows.md`.
 
 use crate::color::{black, ink};
 use iced::{Color, Shadow, Vector};

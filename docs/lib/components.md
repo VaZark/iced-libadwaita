@@ -22,7 +22,7 @@ uniform shape, so layouts can be written in code, or generated from a declarativ
    state, such as animation progress, hover or an open popover, lives inside the component.)
 6. **Conversion.** Every component implements `Into<Element<'a, Message>>`; nest freely.
 7. **Theme-driven.** Colors, radii, shadows and motion come from the `Theme` and the desktop
-   [config](design-language/desktop-config.md), never from the component call site.
+   [config](desktop-config.md), never from the component call site.
 8. **No raw widgets in app code.** Entries, check/radio buttons, scales, text views, tags,
    swatches, cards, pages, rows with sliders and so on all have components; only layout
    primitives (`row`, `column`, `container`, `text`, `space`, `responsive`) remain, re-exported by

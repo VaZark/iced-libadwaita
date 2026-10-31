@@ -1,4 +1,4 @@
-//! Prints the component catalog as Markdown: `cargo run --example catalog > docs/components-catalog.md`.
+//! Prints the component catalog as Markdown: `cargo run --example catalog > docs/lib/components-catalog.md`.
 //! The catalog (`iced_libadwaita::catalog`) is the single source of truth for tags, so docs and
 //! any declarative layer (XML / JSX-like) stay in sync with the code.
 

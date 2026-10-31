@@ -4,7 +4,7 @@
 //! each component it lists the **tag**, the libadwaita/GTK class it mirrors, the Rust
 //! **constructor**, its **properties** (builder methods, named after libadwaita's properties),
 //! its child **slots**, and its **events** (callbacks). All components follow the conventions
-//! in `docs/components.md`:
+//! in `docs/lib/components.md`:
 //!
 //! * constructed with `Component::new(required…)` or the free function of the same name;
 //! * properties are chained builder methods; `.metrics(..)` is accepted everywhere sizes matter;

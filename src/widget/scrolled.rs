@@ -3,7 +3,7 @@
 //! iced's `scrollable` defaults to a 10px bar. Adwaita (and GTK4 with overlay
 //! scrolling) uses a thin floating indicator that does not take layout space:
 //! an 8px rail around a 4px slider (3px in Adwaita; iced cannot grow it on
-//! hover), 2px from the edge. See `docs/gtk4/scrollbar.md`.
+//! hover), 2px from the edge. See `docs/hig-inferences/gtk4/scrollbar.md`.
 
 use crate::{Metrics, Theme};
 use iced::widget::scrollable::{Direction, Scrollbar};
