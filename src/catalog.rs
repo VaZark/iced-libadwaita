@@ -112,7 +112,7 @@ pub static COMPONENTS: &[Component] = &[
     c("shortcuts_dialog", "AdwShortcutsDialog", "shortcuts_dialog(sections, on_close)", &["sections"], &[], &["on_close"]),
     c("preferences_dialog", "AdwPreferencesDialog", "preferences_dialog(title, page, on_close)", &["title"], &["page"], &["on_close"]),
     c("banner", "AdwBanner", "banner(title)", &["revealed", "text_color"], &[], &["button"]),
-    c("toast_overlay", "AdwToastOverlay", "toast_overlay(content, toast)", &["position", "role", "status", "indicator", "background", "text_color"], &["content"], &["action", "on_dismiss"]),
+    c("toast_overlay", "AdwToastOverlay", "toast_overlay(content, toast)", &["position", "radius", "stack", "role", "status", "background", "text_color"], &["content"], &["action", "on_dismiss"]),
     c("status_page", "AdwStatusPage", "status_page()", &["title", "description", "compact", "metrics"], &["icon", "child"], &[]),
     c("avatar", "AdwAvatar", "avatar(size, text)", &["show_initials", "color", "text_color"], &[], &[]),
     c("tag", "-", "tag(label, role)", &[], &[], &[]),

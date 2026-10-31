@@ -47,6 +47,9 @@ pub struct Metrics {
     pub radius_menu: f32,
     /// Popovers (`$popover_radius` = menu radius + 6).
     pub radius_popover: f32,
+    /// Toasts and notifications. The default is a full pill (iced caps a radius at half the
+    /// height); lower it for a squarer toast. A toast's own `radius` overrides it.
+    pub radius_toast: f32,
     /// Floating dialogs and windows (`--window-radius`).
     pub radius_window: f32,
     /// Pill buttons, circular widgets.
@@ -127,6 +130,7 @@ impl Default for Metrics {
             radius_l: 12.0,
             radius_menu: 9.0,
             radius_popover: 15.0,
+            radius_toast: 24.0,
             radius_window: 15.0,
             radius_pill: 999.0,
 
@@ -188,6 +192,8 @@ impl Metrics {
     pub const MAX_RADIUS_L: f32 = 12.0;
     pub const MAX_RADIUS_MENU: f32 = 9.0;
     pub const MAX_RADIUS_POPOVER: f32 = 15.0;
+    /// A toast is about 44px tall, so anything above 22px is the same full pill.
+    pub const MAX_RADIUS_TOAST: f32 = 24.0;
     pub const MAX_RADIUS_WINDOW: f32 = 15.0;
 
     /// Returns a copy with radii limited to the HIG maxima.
@@ -197,6 +203,7 @@ impl Metrics {
         self.radius_l = self.radius_l.clamp(0.0, Self::MAX_RADIUS_L);
         self.radius_menu = self.radius_menu.clamp(0.0, Self::MAX_RADIUS_MENU);
         self.radius_popover = self.radius_popover.clamp(0.0, Self::MAX_RADIUS_POPOVER);
+        self.radius_toast = self.radius_toast.clamp(0.0, Self::MAX_RADIUS_TOAST);
         self.radius_window = self.radius_window.clamp(0.0, Self::MAX_RADIUS_WINDOW);
         self
     }

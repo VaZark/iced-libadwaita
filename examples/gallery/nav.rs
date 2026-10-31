@@ -114,7 +114,12 @@ impl Page {
                 "Overlays",
                 vec![a(AlertDialog), a(AboutDialog), a(ShortcutsDialog), a(PreferencesDialog), a(BottomSheet)],
             )],
-            Page::Typography | Page::Theming => vec![],
+            Page::Theming => vec![
+                ("Look", vec![n(ThemeColors), n(ThemeShape)]),
+                ("Behavior", vec![n(ThemeMotion), n(ThemeWindow)]),
+                ("Reference", vec![i(I::Surfaces)]),
+            ],
+            Page::Typography => vec![],
         }
     }
 }
@@ -150,6 +155,11 @@ pub enum Detail {
     Card,
     // Feedback
     Toast,
+    // Theming
+    ThemeColors,
+    ThemeShape,
+    ThemeMotion,
+    ThemeWindow,
 }
 
 /// A component with one demo, rendered inline on its group page.
@@ -177,6 +187,7 @@ pub enum Inline {
     Progress,
     Avatar,
     Tag,
+    Surfaces,
 }
 
 /// A component whose whole demo is one trigger.
@@ -248,6 +259,10 @@ impl Detail {
             Detail::PreferencesGroup => "Preferences group",
             Detail::Card => "Card",
             Detail::Toast => "Toast",
+            Detail::ThemeColors => "Colors",
+            Detail::ThemeShape => "Shape & shadows",
+            Detail::ThemeMotion => "Motion",
+            Detail::ThemeWindow => "Window & menus",
         }
     }
 
@@ -264,7 +279,11 @@ impl Detail {
             Detail::EntryRow => "Entry and password rows",
             Detail::PreferencesGroup => "Title, description and a header suffix",
             Detail::Card => "Padding, chained children, separators and size",
-            Detail::Toast => "Call to action, status dot or line, and colors",
+            Detail::Toast => "Call to action, status dot, radius, placement and colors",
+            Detail::ThemeColors => "Scheme, accent, density and a card color override",
+            Detail::ThemeShape => "Control, card and toast radii, shadows, with a live preview",
+            Detail::ThemeMotion => "Animations on or off, easings and springs",
+            Detail::ThemeWindow => "Menu presentation, mobile sidebar and the path bar title",
         }
     }
 }

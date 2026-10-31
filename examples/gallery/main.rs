@@ -6,7 +6,7 @@
 //! ```
 
 use iced::widget::{
-    column, container, row, text,
+    column, container, text,
 };
 use iced::{window, Element as IcedElement, Length, Subscription, Task};
 use iced_libadwaita as adw;
@@ -115,6 +115,7 @@ struct Gallery {
     compact: bool,
     radius_m: f32,
     radius_l: f32,
+    radius_toast: f32,
     card_override: bool,
     shadows_on: bool,
     shadow_scale: f32,
@@ -153,7 +154,9 @@ struct Gallery {
     sheet: bool,
     carousel: usize,
     carousel_indicator: w::CarouselIndicator,
-    toast: Option<ToastSpec>,
+    /// The toasts on screen, oldest first, each with its id (stacked notifications).
+    toasts: Vec<(u32, ToastSpec)>,
+    toast_seq: u32,
     toast_position: w::ToastPosition,
     toast_target: w::ToastTarget,
     banner: bool,
@@ -163,18 +166,17 @@ struct Gallery {
     shot_tag: Option<&'static str>,
 }
 
-/// A toast to show: its title, optional call-to-action label, and status indicator.
+/// A toast to show: its title, optional call-to-action label, and status dot.
 #[derive(Debug, Clone, Copy)]
 struct ToastSpec {
     title: &'static str,
     action: Option<&'static str>,
     status: Option<Role>,
-    indicator: w::ToastIndicator,
 }
 
 impl ToastSpec {
     const fn plain(title: &'static str) -> Self {
-        Self { title, action: None, status: None, indicator: w::ToastIndicator::Dot }
+        Self { title, action: None, status: None }
     }
 }
 
@@ -197,6 +199,7 @@ enum Message {
     Compact(bool),
     RadiusM(f32),
     RadiusL(f32),
+    RadiusToast(f32),
     CardOverride(bool),
     Shadows(bool),
     ShadowScale(f32),
@@ -225,8 +228,9 @@ enum Message {
     ShowToastSpec(ToastSpec),
     ToastPosition(w::ToastPosition),
     ToastTarget(w::ToastTarget),
-    ToastAction,
-    DismissToast,
+    ToastAction(u32),
+    DismissToast(u32),
+    ClearToasts,
     Frame(std::time::Instant),
     Animations(bool),
     DemoMotion(DemoMotion),
@@ -296,6 +300,7 @@ impl Gallery {
                 },
                 compact: cfg.density == adw::config::Density::Compact,
                 radius_m: std::env::var("GALLERY_RM").ok().and_then(|v| v.parse().ok()).unwrap_or(Metrics::default().radius_m),
+                radius_toast: Metrics::default().radius_toast,
                 radius_l: std::env::var("GALLERY_RL").ok().and_then(|v| v.parse().ok()).unwrap_or(12.0),
                 card_override: false,
                 shadows_on: cfg.shadows,
@@ -343,7 +348,8 @@ impl Gallery {
                 sheet: false,
                 carousel: 0,
                 carousel_indicator: w::CarouselIndicator::default(),
-                toast: None,
+                toasts: Vec::new(),
+                toast_seq: 0,
                 toast_position: cfg.toast_position,
                 toast_target: cfg.toast_target,
                 banner: true,
@@ -357,7 +363,7 @@ impl Gallery {
 
     fn metrics(&self) -> Metrics {
         let base = if self.compact { Metrics::compact() } else { Metrics::default() };
-        Metrics { radius_m: self.radius_m, radius_l: self.radius_l, ..base }
+        Metrics { radius_m: self.radius_m, radius_l: self.radius_l, radius_toast: self.radius_toast, ..base }
     }
 
     fn theme(&self) -> Theme {
@@ -379,6 +385,15 @@ impl Gallery {
             });
         }
         t
+    }
+
+    /// Adds a toast to the stack; at most four are kept, the oldest dropped first.
+    fn push_toast(&mut self, spec: ToastSpec) {
+        self.toast_seq += 1;
+        self.toasts.push((self.toast_seq, spec));
+        if self.toasts.len() > 4 {
+            self.toasts.remove(0);
+        }
     }
 
     fn update(&mut self, msg: Message) -> Task<Message> {
@@ -410,6 +425,7 @@ impl Gallery {
             Message::Compact(c) => self.compact = c,
             Message::RadiusM(r) => self.radius_m = r,
             Message::RadiusL(r) => self.radius_l = r,
+            Message::RadiusToast(r) => self.radius_toast = r,
             Message::CardOverride(c) => self.card_override = c,
             Message::Shadows(v) => self.shadows_on = v,
             Message::ShadowScale(v) => self.shadow_scale = v,
@@ -434,13 +450,18 @@ impl Gallery {
             Message::Sheet(o) => self.sheet = o,
             Message::Carousel(i) => self.carousel = i,
             Message::CarouselIndicator(i) => self.carousel_indicator = i,
-            Message::ShowToast(s) => self.toast = Some(ToastSpec::plain(s)),
-            Message::ShowToastSpec(t) => self.toast = Some(t),
+            Message::ShowToast(s) => self.push_toast(ToastSpec::plain(s)),
+            Message::ShowToastSpec(t) => self.push_toast(t),
             Message::ToastPosition(p) => self.toast_position = p,
             Message::ToastTarget(t) => self.toast_target = t,
             // The action runs and the toast is replaced by a plain confirmation.
-            Message::ToastAction => self.toast = Some(ToastSpec::plain("File restored")),
-            Message::DismissToast => self.toast = None,
+            Message::ToastAction(id) => {
+                if let Some((_, t)) = self.toasts.iter_mut().find(|(i, _)| *i == id) {
+                    *t = ToastSpec::plain("File restored");
+                }
+            }
+            Message::DismissToast(id) => self.toasts.retain(|(i, _)| *i != id),
+            Message::ClearToasts => self.toasts.clear(),
             Message::Frame(now) => {
                 self.angle += 0.12;
                 self.demo_value = self.demo_tween.tick(now);
@@ -539,7 +560,6 @@ impl Gallery {
                             title: "File deleted",
                             action: Some("Undo"),
                             status: Some(Role::Error),
-                            indicator: w::ToastIndicator::Line,
                         }),
                         _ => Message::ShowToast("Settings saved"),
                     };
@@ -564,11 +584,15 @@ impl Gallery {
             // Drive the real update path with the radius slider messages.
             self.scheme = Scheme::Light;
             self.page = Page::Theming;
-            self.detail = None;
+            self.detail = Some(Detail::ThemeShape);
             self.dialog = None;
-            self.toast = None;
+            self.toasts.clear();
             self.shot_tag = Some("radius0");
-            return Task::batch([Task::done(Message::RadiusM(0.0)), Task::done(Message::RadiusL(0.0))])
+            return Task::batch([
+                Task::done(Message::RadiusM(0.0)),
+                Task::done(Message::RadiusL(0.0)),
+                Task::done(Message::RadiusToast(0.0)),
+            ])
                 .chain(Task::perform(tokio::time::sleep(Duration::from_millis(500)), move |_| Message::Capture(i)));
         }
         if i < views.len() {
@@ -587,16 +611,15 @@ impl Gallery {
             Ok("about") => Dialog::About,
             _ => Dialog::Alert,
         });
-        self.toast = overlays.then_some(ToastSpec {
-            title: "File deleted",
-            action: Some("Undo"),
-            status: Some(Role::Error),
-            indicator: w::ToastIndicator::Dot,
-        });
+        self.toasts.clear();
+        if overlays {
+            self.push_toast(ToastSpec { title: "Changes saved", action: None, status: Some(Role::Success) });
+            self.push_toast(ToastSpec { title: "File deleted", action: Some("Undo"), status: Some(Role::Error) });
+        }
         if let Some(s) = &mut self.shots {
             s.index = i;
         }
-        Task::perform(tokio::time::sleep(Duration::from_millis(500)), move |_| Message::Capture(i))
+        Task::perform(tokio::time::sleep(Duration::from_millis(900)), move |_| Message::Capture(i))
     }
 
     fn subscription(&self) -> Subscription<Message> {
@@ -744,23 +767,26 @@ impl Gallery {
         let page = w::page_transition(page, if collapsed { 0 } else { self.view_key() });
         // The toast is placed in the whole window or only the content area (the shared
         // `[toasts] target` setting). Both layers stay mounted so the tree does not change.
-        let mut toast = self.toast.map(|spec| {
-            let mut t = w::Toast::new(spec.title)
-                .on_dismiss(Message::DismissToast)
-                .indicator(spec.indicator)
-                .position(self.toast_position);
-            if let Some(label) = spec.action {
-                t = t.action(label, Message::ToastAction);
-            }
-            if let Some(status) = spec.status {
-                t = t.status(status);
-            }
-            t
-        });
+        let mut toasts: Vec<w::Toast<Message>> = self
+            .toasts
+            .iter()
+            .map(|&(id, spec)| {
+                let mut t = w::Toast::new(spec.title)
+                    .on_dismiss(Message::DismissToast(id))
+                    .position(self.toast_position);
+                if let Some(label) = spec.action {
+                    t = t.action(label, Message::ToastAction(id));
+                }
+                if let Some(status) = spec.status {
+                    t = t.status(status);
+                }
+                t
+            })
+            .collect();
         let in_content = self.toast_target == w::ToastTarget::Content;
-        let content_pane = w::toast_overlay(
+        let content_pane = w::toast_stack(
             Element::from(w::toolbar_view(page).top_bar(content_bar)),
-            if in_content { toast.take() } else { None },
+            if in_content { std::mem::take(&mut toasts) } else { Vec::new() },
         );
         let body = w::NavigationSplitView::new(sidebar_pane, content_pane)
             .adapt(size.width)
@@ -771,9 +797,9 @@ impl Gallery {
             .show_content(self.show_content);
 
         // The window background comes from `adw::window::frame` (rounded when floating).
-        let base: Element = w::toast_overlay(
+        let base: Element = w::toast_stack(
             container(body).width(Length::Fill).height(Length::Fill),
-            if in_content { None } else { toast },
+            if in_content { Vec::new() } else { toasts },
         );
 
         let base: Element = w::bottom_sheet_in_window(
@@ -882,157 +908,6 @@ impl Gallery {
                 ),
         );
         page.into()
-    }
-
-    fn theming_page(&self) -> Element<'_> {
-        let m = self.metrics();
-        let sem = self.theme().semantic;
-
-        let surfaces = column![
-            row![w::color_swatch("window", sem.window), w::color_swatch("view", sem.view), w::color_swatch("headerbar", sem.headerbar)].spacing(m.space_s),
-            row![w::color_swatch("card", sem.card), w::color_swatch("dialog", sem.dialog), w::color_swatch("popover", sem.popover)].spacing(m.space_s),
-            row![w::color_swatch("sidebar", sem.sidebar), w::color_swatch("thumbnail", sem.thumbnail), w::color_swatch("osd", sem.osd)].spacing(m.space_s),
-            row![w::status_swatch("accent", sem.accent), w::status_swatch("destructive", sem.destructive), w::status_swatch("success", sem.success)].spacing(m.space_s),
-            row![w::status_swatch("warning", sem.warning), w::status_swatch("error", sem.error)].spacing(m.space_s),
-        ]
-        .spacing(m.space_s);
-
-        let rows = w::PreferencesGroup::new()
-            .title("Theme Variables")
-            .description("Everything here is a token on Theme: palette, semantic, metrics.")
-            .metrics(m)
-            .push(w::SwitchRow::new("Dark", self.scheme.is_dark(), Message::Scheme).metrics(m))
-            .push(w::SwitchRow::new("Compact metrics", self.compact, Message::Compact).metrics(m))
-            .push(w::SwitchRow::new("Override card color", self.card_override, Message::CardOverride).metrics(m))
-            .push(
-                w::ActionRow::new("Accent color")
-                    .suffix(w::accent_picker(self.accent, Message::Accent))
-                    .metrics(m),
-            )
-            .push(
-                w::ToggleGroupRow::new(
-                    "Menu presentation",
-                    vec![
-                        w::ToggleItem::new(MenuMode::Auto, "Auto").icon(Icon::Settings),
-                        w::ToggleItem::new(MenuMode::Dropdown, "Dropdown").icon(Icon::GoDown),
-                        w::ToggleItem::new(MenuMode::FullPage, "Full page").icon(Icon::Window),
-                    ],
-                    Some(self.menu_mode),
-                    Message::MenuMode,
-                )
-                .subtitle("Auto follows the desktop config (full page at the mobile breakpoint)")
-                .metrics(m),
-            )
-            .push(
-                w::ComboRow::new(
-                    "Mobile sidebar",
-                    &SIDEBAR_MODES,
-                    Some(self.sidebar_mode),
-                    Message::SidebarMode,
-                )
-                .subtitle("Drawer over the content, or the first page of a stack"),
-            )
-            .push(w::SwitchRow::new("Shadows", self.shadows_on, Message::Shadows).subtitle("Adwaita elevation: cards, popovers, dialogs").metrics(m))
-            .push(
-                w::SliderRow::new("Shadow intensity", self.shadow_intensity, 0.0..=2.0, Message::ShadowIntensity)
-                    .subtitle(format!("{:.1}x", self.shadow_intensity))
-                    .step(0.1)
-                    .metrics(m),
-            )
-            .push(
-                w::SliderRow::new("Shadow size", self.shadow_scale, 0.0..=2.0, Message::ShadowScale)
-                    .subtitle(format!("{:.1}x", self.shadow_scale))
-                    .step(0.1)
-                    .metrics(m),
-            )
-            .push(w::SwitchRow::new("Path bar title", self.path_bar_title, Message::PathBarTitle).subtitle("A title_widget replaces the title; window buttons stay").metrics(m))
-            .push(
-                w::SliderRow::new("Control radius", self.radius_m, 0.0..=Metrics::MAX_RADIUS_M, Message::RadiusM)
-                    .subtitle(format!("radius_m = {:.0}px", self.radius_m))
-                    .metrics(m),
-            )
-            .push(
-                w::SliderRow::new("Card radius", self.radius_l, 0.0..=Metrics::MAX_RADIUS_L, Message::RadiusL)
-                    .subtitle(format!("radius_l = {:.0}px", self.radius_l))
-                    .metrics(m),
-            );
-
-        // Everything here reads the theme's radii at draw time, so the sliders above
-        // visibly change it: control radius (radius_m) rounds buttons, entries and
-        // toggles; card radius (radius_l) rounds the card and boxed list.
-        let preview = column![
-            row![
-                w::raised_button(w::typography::label("Default")).on_press(Message::Noop),
-                w::suggested_button(w::typography::label("Suggested")).on_press(Message::Noop),
-                w::destructive_button(w::typography::label("Destructive")).on_press(Message::Noop),
-            ]
-            .spacing(m.space_s)
-            .wrap(),
-            w::entry("Entry", &self.name).on_input(Message::Name).metrics(m),
-            Element::from(w::toggle_group(
-                vec![
-                    w::ToggleItem::new(Tab::One, "One"),
-                    w::ToggleItem::new(Tab::Two, "Two"),
-                    w::ToggleItem::new(Tab::Three, "Three"),
-                ],
-                Some(self.tab),
-                Message::Tab,
-            )),
-            w::boxed_list([
-                Element::from(w::ActionRow::new("Row in a boxed list").subtitle("Rounded by the card radius").metrics(m)),
-                Element::from(w::ActionRow::new("Second row").metrics(m)),
-            ]),
-        ]
-        .spacing(m.space_m);
-
-        self.page_frame(
-            column![
-                rows,
-                w::PreferencesGroup::<Message>::new()
-                    .title("Animations")
-                    .description("libadwaita's easings and springs; honors the system enable-animations setting.")
-                    .metrics(m)
-                    .push(w::SwitchRow::new("Animations", self.anim_enabled, Message::Animations).subtitle("Off: every transition jumps to its end value").metrics(m))
-                    .push(
-                        w::ComboRow::new("Motion", &MOTIONS, Some(self.demo), Message::DemoMotion)
-                            .subtitle("Pick an easing or the sheet spring, then Play"),
-                    )
-                    .push(
-                        w::ActionRow::new("Play")
-                            .subtitle(format!("value {:.2}", self.demo_value))
-                            .suffix(
-                                row![
-                                    w::progress_bar(0.0..=1.0, self.demo_value.clamp(0.0, 1.0)).length(Length::Fixed(120.0)),
-                                    w::suggested_button(w::typography::label("Play")).on_press(Message::DemoPlay),
-                                ]
-                                .spacing(m.space_m)
-                                .align_y(iced::Alignment::Center),
-                            )
-                            .metrics(m),
-                    ),
-                w::PreferencesGroup::<Message>::new()
-                    .title("Collapse Behavior")
-                    .description("Narrow the window: the control wraps. Stacked = 100% width; Flex = keeps its width.")
-                    .metrics(m)
-                    .push(
-                        w::SliderRow::new("Stacked (default)", self.slider, 0.0..=100.0, Message::Slider)
-                            .subtitle("collapse = Stacked")
-                            .basis(260.0)
-                            .collapse(adw::CollapseBehavior::Stacked)
-                            .metrics(m),
-                    )
-                    .push(
-                        w::SliderRow::new("Flex", self.slider, 0.0..=100.0, Message::Slider)
-                            .subtitle("collapse = Flex")
-                            .basis(260.0)
-                            .collapse(adw::CollapseBehavior::Flex)
-                            .metrics(m),
-                    ),
-                w::PreferencesGroup::<Message>::new().title("Live Preview").metrics(m).push(w::card(preview)),
-                w::PreferencesGroup::<Message>::new().title("Semantic Surfaces").metrics(m).push(w::card(surfaces)),
-            ]
-            .spacing(m.group_spacing),
-        )
     }
 }
 

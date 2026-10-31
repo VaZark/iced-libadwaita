@@ -118,16 +118,6 @@ pub fn toast_target() -> ToastTarget {
     crate::config::current().toast_target
 }
 
-/// How a toast marks its type of message ([`Toast::status`]), like a Mantine notification.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ToastIndicator {
-    /// A small colored circle before the title.
-    #[default]
-    Dot,
-    /// A colored vertical line at the start edge.
-    Line,
-}
-
 /// `AdwToast`.
 ///
 /// The toast is a solid, always-dark surface (no opacity): the theme's elevated surface in the
@@ -146,8 +136,8 @@ pub struct Toast<M> {
     text_color: Option<iced::Color>,
     role: Option<Role>,
     status: Option<Role>,
-    indicator: ToastIndicator,
     position: Option<ToastPosition>,
+    radius: Option<f32>,
 }
 
 impl<M> Toast<M> {
@@ -160,9 +150,15 @@ impl<M> Toast<M> {
             text_color: None,
             role: None,
             status: None,
-            indicator: ToastIndicator::default(),
             position: None,
+            radius: None,
         }
+    }
+    /// The corner radius of this toast. Without it the theme's `radius_toast` applies
+    /// (a full pill by default).
+    pub fn radius(mut self, radius: f32) -> Self {
+        self.radius = Some(radius.max(0.0));
+        self
     }
     /// Where the toast sits in its target. Without this it follows the desktop config
     /// (`[toasts] position`, default bottom center).
@@ -171,15 +167,10 @@ impl<M> Toast<M> {
         self
     }
     /// The type of message (`Success`, `Warning`, `Error`, `Accent`, `Destructive`): shown as a
-    /// colored [`indicator`](Toast::indicator) next to the title. The surface stays neutral;
-    /// see [`role`](Toast::role) to fill it instead. `Role::Neutral` shows nothing.
+    /// colored dot before the title. The surface stays neutral; see [`role`](Toast::role) to fill
+    /// it instead. `Role::Neutral` shows nothing.
     pub fn status(mut self, status: Role) -> Self {
         self.status = Some(status);
-        self
-    }
-    /// A [`ToastIndicator::Dot`] (default) or [`ToastIndicator::Line`] for the status.
-    pub fn indicator(mut self, indicator: ToastIndicator) -> Self {
-        self.indicator = indicator;
         self
     }
     /// Use a status fill ([`Role::Accent`], `Error`, …) instead of the inverse surface. The
@@ -233,18 +224,11 @@ fn colors(
     (bg, text_color.unwrap_or_else(|| crate::color::readable_on(bg)))
 }
 
-/// `AdwToastOverlay`: shows `toast` floating at the bottom of `content`.
-/// The app is responsible for clearing it (e.g. after a timeout).
-pub fn toast_overlay<'a, M: Clone + 'a>(
-    content: impl Into<Element<'a, M>>,
-    toast: Option<Toast<M>>,
-) -> Element<'a, M> {
-    let Some(t) = toast else {
-        return super::layered(content, None);
-    };
+/// One toast as an element: the surface, its content and its entrance.
+fn toast_element<'a, M: Clone + 'a>(t: Toast<M>, position: ToastPosition) -> Element<'a, M> {
     let m = Metrics::desktop();
     let (background, text_color, role) = (t.background, t.text_color, t.role);
-    let position = t.position.unwrap_or_else(|| crate::config::current().toast_position);
+    let radius = t.radius;
     // Buttons on the toast: the text color, with a state layer of it over the surface.
     let on_surface = move |th: &Theme, status: button::Status| {
         let (bg, fg) = colors(th, background, text_color, role);
@@ -283,20 +267,13 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
     if let Some(status) = t.status.filter(|s| *s != Role::Neutral) {
         // The vivid fill of the status color reads on both the dark surfaces.
         let color = move |th: &Theme| th.semantic.swatch(status).bg;
-        r = r.push(match t.indicator {
-            ToastIndicator::Dot => container(iced::widget::space().width(10).height(10))
-                .style(move |th: &Theme| iced::widget::container::Style {
-                    background: Some(iced::Background::Color(color(th))),
-                    border: iced::Border::default().rounded(5.0),
-                    ..Default::default()
-                }),
-            ToastIndicator::Line => container(iced::widget::space().width(4).height(m.icon_size + 6.0))
-                .style(move |th: &Theme| iced::widget::container::Style {
-                    background: Some(iced::Background::Color(color(th))),
-                    border: iced::Border::default().rounded(2.0),
-                    ..Default::default()
-                }),
-        });
+        r = r.push(container(iced::widget::space().width(10).height(10)).style(move |th: &Theme| {
+            iced::widget::container::Style {
+                background: Some(iced::Background::Color(color(th))),
+                border: iced::Border::default().rounded(5.0),
+                ..Default::default()
+            }
+        }));
     }
     r = r.push(text(t.title));
     if let Some((label, msg)) = t.action {
@@ -321,7 +298,7 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
         iced::widget::container::Style {
             text_color: Some(fg),
             background: Some(iced::Background::Color(bg)),
-            border: iced::Border::default().rounded(th.metrics.radius_pill),
+            border: iced::Border::default().rounded(radius.unwrap_or(th.metrics.radius_toast)),
             shadow: th.shadows.popover().shadow,
             snap: false,
         }
@@ -336,10 +313,41 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
             crate::animation::presets::TOAST_SHOW.0,
             crate::animation::presets::TOAST_SHOW.1,
         ));
+    toast.into()
+}
+
+/// `AdwToastOverlay`: shows `toast` floating over `content`, at its position (default: the
+/// desktop config's, bottom center). The app is responsible for clearing it (e.g. after a
+/// timeout).
+pub fn toast_overlay<'a, M: Clone + 'a>(
+    content: impl Into<Element<'a, M>>,
+    toast: Option<Toast<M>>,
+) -> Element<'a, M> {
+    toast_stack(content, toast)
+}
+
+/// **Stacked notifications**: any number of toasts shown at once, in one column at the position
+/// of the first (`[toasts] position` by default), `toasts` ordered oldest to newest with a small
+/// gap between them. At a bottom position the newest sits nearest the edge, and each toast has
+/// its own entrance, call to action and dismiss. The app owns the list (add, dismiss, cap its
+/// length); an empty iterator shows nothing and keeps `content`'s place in the tree.
+pub fn toast_stack<'a, M: Clone + 'a>(
+    content: impl Into<Element<'a, M>>,
+    toasts: impl IntoIterator<Item = Toast<M>>,
+) -> Element<'a, M> {
+    let toasts: Vec<Toast<M>> = toasts.into_iter().collect();
+    let Some(first) = toasts.first() else {
+        return super::layered(content, None);
+    };
+    let m = Metrics::desktop();
+    let position = first.position.unwrap_or_else(|| crate::config::current().toast_position);
+    let stack = iced::widget::column(toasts.into_iter().map(|t| toast_element(t, position)))
+        .spacing(m.space_s)
+        .align_x(position.horizontal());
     super::layered(
         content,
         Some(
-            container(toast)
+            container(stack)
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .align_x(position.horizontal())

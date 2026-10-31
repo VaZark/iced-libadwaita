@@ -40,9 +40,14 @@ Overrides: `Toast::role(Role::…)` uses a status fill instead (text still by co
 ## Type of message and the action button
 
 `Toast::status(Role::Success | Warning | Error | Accent | Destructive)` marks the type of message,
-like a Mantine notification, with a colored `Toast::indicator(ToastIndicator::Dot | Line)`: a
-10px circle before the title (default) or a 4px vertical line at the start edge. The surface stays
-neutral; `role` is the separate option that fills it.
+like a Mantine notification, with a colored 10px dot before the title. The surface stays neutral;
+`role` is the separate option that fills it.
+
+## Radius
+
+`Toast::radius(px)` sets this toast's corner radius; otherwise the theme's `Metrics::radius_toast`
+applies (default 24, a full pill, since iced caps a radius at half the height; the Theming gallery
+page has a slider). It is clamped to `Metrics::MAX_RADIUS_TOAST`.
 
 The call-to-action button (`Toast::action`) is filled with the **accent color** (text chosen by
 contrast) so it reads as a button on the dark surface, with the usual hover and pressed fills. On a
@@ -59,3 +64,11 @@ or only the **content area** beside the sidebar. `toast_overlay` fills whatever 
 app chooses by wrapping the window or the content pane, and reads the shared setting with
 `widget::toast_target()` (`[toasts] target`). Keep both layers mounted
 (`toast_overlay(x, None)` for the inactive one) so switching the target does not rebuild the tree.
+
+## Stacked notifications
+
+`toast_stack(content, toasts)` shows any number of toasts at once, in one column at the position of
+the first (`[toasts] position` by default), ordered oldest to newest with a small gap. At a bottom
+position the newest sits nearest the edge. Each toast has its own entrance, call to action and
+dismiss button; the app owns the list (add, dismiss, cap its length). `toast_overlay` is the
+single-toast case.
