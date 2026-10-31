@@ -76,6 +76,17 @@ pub fn card(theme: &Theme) -> Style {
     }
 }
 
+/// `.card` surface without its shadow: the ring and radius only. Pair it with
+/// [`card_shadow`](crate::widget::card_shadow), which draws each shadow layer as its own
+/// rounded shape (iced has one shadow per quad and no spread).
+pub fn card_surface(theme: &Theme) -> Style {
+    let r = theme.shadows.card();
+    Style {
+        border: r.border(theme.metrics.radius_l),
+        ..surface(theme.semantic.card, theme.metrics.radius_l)
+    }
+}
+
 /// `.boxed-list`: like a card, rows are separated by the caller.
 pub fn boxed_list(theme: &Theme) -> Style {
     card(theme)

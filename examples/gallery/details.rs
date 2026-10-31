@@ -578,7 +578,7 @@ impl Gallery {
                     .revealed(self.banner)
                     .into();
                 column![
-                    g("Banner").push(w::Card::new(banner).padding(0)),
+                    g("Banner").push(banner),
                     g("State").push(w::SwitchRow::new("Revealed", self.banner, Message::Banner).metrics(m)),
                 ]
                 .spacing(m.group_spacing)

@@ -12,6 +12,7 @@ mod button;
 mod carousel;
 mod dialog;
 mod dropdown;
+mod elevated;
 mod extra;
 mod forms;
 mod flex;
@@ -45,6 +46,7 @@ pub use extra::{
     sidebar, tab_bar, tab_button, view_switcher, view_switcher_bar, window, wrap_box,
 };
 pub use dropdown::{dropdown, dropdown_disabled, menu_item, menu_item_disabled, popover, Align as PopoverAlign, Appearance as DropdownAppearance, Dropdown, Presentation as DropdownPresentation};
+pub use elevated::{card_shadow, Elevated};
 pub use switch::{switch, Switch};
 pub use dialog::{dialog, dialog_in_window, present_dialog, AboutDialog, AlertDialog, ResponseAppearance};
 pub use flex::FlexRow;

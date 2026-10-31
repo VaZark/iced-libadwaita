@@ -65,3 +65,13 @@ into one iced `Shadow` (alpha-weighted offset, largest blur+spread, summed alpha
 capped at 0.5). It is an approximation of stacked shadows.
 Raised bars are drawn as a 6px gradient strip because later siblings would paint
 over a real shadow. No `inset` layers, no window shadow, no transitions.
+
+## Drawing a shadow that follows the border
+
+iced draws one shadow per quad and has no *spread*, so merging Adwaita's stacked layers into a
+single blurred shadow gives a rectangular halo that ignores the card radius. Cards use the CSS
+trick instead: each soft layer is its own shape behind the surface, **inflated by the layer's
+spread, with its corner radius grown by the same amount**, offset by the layer's `x y` and blurred
+by its blur. The 1px ring stays the border. `widget::card_shadow` does this for `Card` (and so for
+`boxed_list` and preference groups); a plain `container(..).style(style::container::card)` still
+gets the single merged shadow.

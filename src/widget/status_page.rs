@@ -86,7 +86,7 @@ impl<'a, M: 'a> From<Card<'a, M>> for Element<'a, M> {
             }
             col = col.push(container(child).padding(c.padding).width(Length::Fill));
         }
-        container(col).width(c.width).height(c.height).clip(true).style(sc::card).into()
+        super::card_shadow(container(col).width(c.width).height(c.height).clip(true).style(sc::card_surface)).into()
     }
 }
 
