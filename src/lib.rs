@@ -14,6 +14,7 @@ pub mod breakpoints;
 pub mod catalog;
 pub mod color;
 pub mod config;
+pub mod config_history;
 pub mod icon;
 pub mod metrics;
 pub mod palette;
