@@ -6,3 +6,5 @@ description = "Build-time XML to Rust UI generation for iced-libadwaita"
 
 [dependencies]
 roxmltree = "0.20"
+
+[dev-dependencies]
