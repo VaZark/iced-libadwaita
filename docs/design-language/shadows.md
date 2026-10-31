@@ -75,3 +75,9 @@ spread, with its corner radius grown by the same amount**, offset by the layer's
 by its blur. The 1px ring stays the border. `widget::card_shadow` does this for `Card` (and so for
 `boxed_list` and preference groups); a plain `container(..).style(style::container::card)` still
 gets the single merged shadow.
+
+Two corrections make it read as a shadow rather than an outline. iced's `blur_radius` falls off
+over a much shorter distance than a CSS blur (a gaussian with sigma = blur / 2), so the blur is
+multiplied by 3; and the shape is pulled in by 2px (negative spread) and lowered by 2px, so the
+shadow sits mostly below the card instead of forming a halo on every side. The card's own 1px
+ring is not drawn as a border (a hard line over the shadow beneath it looks like an outline).

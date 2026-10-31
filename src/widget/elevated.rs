@@ -14,6 +14,17 @@ use iced::advanced::widget::{tree, Operation, Tree, Widget};
 use iced::advanced::{overlay, Clipboard, Renderer as _, Shell};
 use iced::{mouse, Background, Border, Color, Element, Event, Length, Rectangle, Shadow, Size, Vector};
 
+/// iced's `blur_radius` falls off over a much shorter distance than a CSS `blur` (which is a
+/// gaussian with `sigma = blur / 2`), so with the CSS values the shadow collapses into a thin
+/// dark band that reads as an outline. This gain restores the CSS softness.
+const BLUR_GAIN: f32 = 3.0;
+
+/// A shadow wider than the surface on every side reads as an outline. Pulling the shape in by
+/// `INSET` (a negative spread) and pushing it down by `LIFT` (a larger y offset) keeps the
+/// shadow mostly below the card, like light from above: elevation, not a halo.
+const INSET: f32 = 2.0;
+const LIFT: f32 = 2.0;
+
 /// Which elevation of the theme to draw.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -105,7 +116,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Elevated<'a, M> {
         let s = &theme.shadows;
         if s.enabled {
             for l in elevation.layers.iter().filter(|l| !l.is_ring()) {
-                let spread = l.spread * s.scale;
+                let spread = (l.spread - INSET) * s.scale;
                 renderer.fill_quad(
                     Quad {
                         // Inflate by the spread and grow the radius with it, so the shadow's
@@ -119,8 +130,8 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Elevated<'a, M> {
                         border: Border::default().rounded(radius + spread),
                         shadow: Shadow {
                             color: Color { a: (l.color.a * s.intensity).min(1.0), ..l.color },
-                            offset: Vector::new(l.x * s.scale, l.y * s.scale),
-                            blur_radius: l.blur * s.scale,
+                            offset: Vector::new(l.x * s.scale, (l.y + LIFT) * s.scale),
+                            blur_radius: l.blur * s.scale * BLUR_GAIN,
                         },
                         snap: false,
                     },

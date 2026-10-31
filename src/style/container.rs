@@ -80,9 +80,10 @@ pub fn card(theme: &Theme) -> Style {
 /// [`card_shadow`](crate::widget::card_shadow), which draws each shadow layer as its own
 /// rounded shape (iced has one shadow per quad and no spread).
 pub fn card_surface(theme: &Theme) -> Style {
-    let r = theme.shadows.card();
     Style {
-        border: r.border(theme.metrics.radius_l),
+        // No ring: `card_shadow` draws the ring as part of the shadow (a hard 1px line over
+        // the shadow beneath it reads as an outline).
+        border: iced::Border::default().rounded(theme.metrics.radius_l),
         ..surface(theme.semantic.card, theme.metrics.radius_l)
     }
 }
