@@ -34,15 +34,19 @@ spacing between groups; maximum 600.
 
 ## iced mapping
 * `Breakpoint::max_width(px)` / `breakpoint_bin` (iced `responsive`).
-* Gallery root uses `max-width: 400` to collapse the navigation split view and
-  shows the content page with a back button.
+* **Deviation: we collapse much earlier than libadwaita.** libadwaita collapses at `400sp`, which
+  leaves a sidebar beside a phone-width content area. Content must never feel squeezed, so a
+  split view collapses below 768px (`md` of the Bootstrap/Mantine scale, see `breakpoints`) **or**
+  whenever the content beside the sidebar would be narrower than 520px
+  (`NavigationSplitView::min_content_width`, `[navigation] min-content-width`). Apps branch on
+  `split_collapsed(width)` to agree with it. Mobile mode starts below 576px (`sm`) instead of 450.
 * Row titles/subtitles wrap by word, falling back to glyphs for unbreakable
   text such as e-mail addresses (`Wrapping::WordOrGlyph`), so nothing is clipped.
 * Button, tab, sidebar, header and menu labels never wrap (`typography::label`,
   `Wrapping::None`); buttons keep their natural width (`can-shrink` false).
   iced cannot ellipsize, so overflowing text is clipped at its container edge.
-* `NavigationSplitView::adapt(width)` applies the docs rules: collapse at
-  `max-width: 400`, sidebar = 25% clamped to 180..280.
+* `NavigationSplitView::adapt(width)`: sidebar = 25% clamped to 180..280 (the docs rule);
+  collapse thresholds are our own, above.
 * The header bar never squeezes start/end slots (see header-bar.md).
 * **Rows flex-wrap their suffix**: when the control and title can't share a line
   (title would drop below `row_wrap_basis`, 128px), the control wraps below the

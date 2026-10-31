@@ -22,7 +22,7 @@ Sidebar bg = sidebar color with a sidebar-border hairline.
 
 ## iced mapping
 
-`NavigationSplitView::new(sidebar, content).adapt(width).collapsed_sidebar(CollapsedSidebar::Drawer | FirstPage).show_sidebar(open).on_close_drawer(msg).window_radius(r)`. Collapsed (`max-width: 400`), the sidebar is a **drawer** by default: it slides over the content from the start edge with a scrim, uses the max sidebar width (280) but at most 85% of the window so it never takes the whole screen, and is opened by an app-owned toggle (`show_sidebar`). `FirstPage` is libadwaita's own collapsed behavior (the sidebar is the first page of a navigation stack, in the content color; `show_content` picks the pane).
+`NavigationSplitView::new(sidebar, content).adapt(width).collapsed_sidebar(CollapsedSidebar::Drawer | FirstPage).show_sidebar(open).on_close_drawer(msg).window_radius(r)`. Collapsed (below 768px or when the content would be under 520px; libadwaita uses `max-width: 400`), the sidebar is a **drawer** by default: it slides over the content from the start edge with a scrim, uses the max sidebar width (280) but at most 85% of the window so it never takes the whole screen, and is opened by an app-owned toggle (`show_sidebar`). `FirstPage` is libadwaita's own collapsed behavior (the sidebar is the first page of a navigation stack, in the content color; `show_content` picks the pane).
 
 ## Deviations / gaps
 

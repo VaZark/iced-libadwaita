@@ -41,7 +41,7 @@ Sources: [GNOME HIG: Menus](https://developer.gnome.org/hig/patterns/controls/me
 | `Dropdown` | anchored popover (260px, 9px item radius, hairline between sections, accelerators dimmed at the end) | desktop |
 | `FullPage` | the menu replaces the view: header (back button, centered title) and large 50px rows in boxed lists per section, clamped to 600 | narrow/mobile |
 
-`MenuPresentation::for_width(w)` returns `FullPage` for `w <= 450`
+`MenuPresentation::for_width(w)` returns `FullPage` in mobile mode (`w` below 576; libadwaita's dialog threshold is 450, we switch earlier)
 (`window::MOBILE_MAX_WIDTH`), else `Dropdown`. The app can also force either.
 
 ## iced mapping

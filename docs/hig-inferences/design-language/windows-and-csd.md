@@ -34,11 +34,12 @@ Source: [`AdwWindow`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/c
   side the system puts it (end by default). The header is **flat** (no color of its
   own), so it flows into the dialog body like Nautilus's dialogs; the dialog's
   rounded background provides the corners.
-* **Mobile mode** (`window::is_mobile`, width ≤ 450): decorations are hidden
+* **Mobile mode** (`window::is_mobile`, width below 576; libadwaita's dialog threshold is 450): decorations are hidden
   completely and menus become full pages. Corners are **not** forced: they follow
   the real window state, so a narrow *floating* window keeps its rounded corners
-  and resize grips, and only a maximized/fullscreen one goes edge to edge. 450
-  matches the `AdwDialog` bottom-sheet threshold.
+  and resize grips, and only a maximized/fullscreen one goes edge to edge. We use 576 (Bootstrap's `sm`) rather than
+  the `AdwDialog` bottom-sheet threshold of 450, so phone-width content never shares the window
+  with decorations.
 * Not covered: non-GNOME desktops (KDE, etc.) are not read; they get GNOME's
   defaults and the Adwaita/hicolor icon fallback.
 

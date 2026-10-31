@@ -62,7 +62,7 @@ pub use motion::{drawer_layer, entrance, highlight, layered, page_transition, pu
 pub use menu::{menu_button, primary_menu, Menu, MenuButton, MenuItem, MenuPresentation};
 pub use navigation::{
     navigation_sidebar, navigation_sidebar_rounded, CollapsedSidebar, navigation_view, sidebar_row, Breakpoint, NavigationPage,
-    collapse_width, sidebar_width_for, SidebarItem, SidebarList, SidebarStyle, NavigationSplitView, OverlaySplitView, COLLAPSE_WIDTH,
+    collapse_width, min_content_width, sidebar_width_for, split_collapsed, DRAWER_MAX_FRACTION, MIN_CONTENT_WIDTH, SIDEBAR_FRACTION, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, SidebarItem, SidebarList, SidebarStyle, NavigationSplitView, OverlaySplitView, COLLAPSE_WIDTH,
 };
 pub use preferences::{preferences_group, preferences_page, PreferencesGroup, PreferencesPage};
 pub use rows::{

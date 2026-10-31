@@ -11,8 +11,8 @@
 //!   "Main Menu", and ends with Preferences, Keyboard Shortcuts, Help, About.
 //!   3–12 items, groups separated by hairlines, no nested submenus, no Quit.
 //! * Narrow screens: Material swaps menus for bottom sheets on compact screens;
-//!   libadwaita's `AdwDialog` switches to a sheet at `max-width: 450`. We follow
-//!   that with [`MenuPresentation::for_width`] (≤ 450 → full page).
+//!   libadwaita's `AdwDialog` switches to a sheet on narrow windows. We follow that with
+//!   [`MenuPresentation::for_width`] (mobile mode, below 576px → full page).
 
 use super::dropdown::{Align, Appearance, Dropdown, Presentation, PAGE_BACK_WIDTH, PAGE_HEADER_HEIGHT};
 use super::{boxed_list, clamp, scrolled_window, Element};
@@ -353,8 +353,8 @@ mod tests {
     #[test]
     fn presentation_follows_width() {
         assert_eq!(MenuPresentation::for_width(360.0), MenuPresentation::FullPage);
-        assert_eq!(MenuPresentation::for_width(450.0), MenuPresentation::FullPage);
-        assert_eq!(MenuPresentation::for_width(451.0), MenuPresentation::Dropdown);
+        assert_eq!(MenuPresentation::for_width(575.0), MenuPresentation::FullPage);
+        assert_eq!(MenuPresentation::for_width(576.0), MenuPresentation::Dropdown);
         assert_eq!(MenuPresentation::default(), MenuPresentation::Dropdown);
     }
 

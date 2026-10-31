@@ -71,8 +71,13 @@ surfaces touching a corner take the window radius.
 
 #### Adaptive layout
 
-Split views collapse at 400px; the collapsed sidebar is a drawer or the first page of a stack;
-rows wrap their control when they cannot share a line; mobile mode is 450px.
+Breakpoints follow the scale of popular UI kits (Bootstrap, Mantine): 576, 768, 992, 1200, 1400
+(`breakpoints`). Content must never feel squeezed, so a split view collapses below 768px *or*
+whenever the content beside the sidebar would be under 520px; the collapsed sidebar is a drawer
+or the first page of a stack. Mobile mode (no window buttons, full-page menus) is below 576px.
+Crossing a breakpoint fades the new layout in rather than jumping. Every layout number is a named
+fallback constant that the desktop config can override. Rows wrap their control when they cannot
+share a line.
 
 #### Motion
 

@@ -588,10 +588,26 @@ impl<'a, M: 'a> From<Entrance<'a, M>> for Element<'a, M, Theme> {
 pub struct PageTransition<'a, M> {
     content: Element<'a, M, Theme>,
     key: u64,
+    trigger: Trigger,
+    radius: f32,
 }
 
 pub fn page_transition<'a, M>(content: impl Into<Element<'a, M, Theme>>, key: impl Into<u64>) -> PageTransition<'a, M> {
-    PageTransition { content: content.into(), key: key.into() }
+    PageTransition { content: content.into(), key: key.into(), trigger: Trigger::PageChange, radius: 0.0 }
+}
+
+impl<'a, M> PageTransition<'a, M> {
+    /// Which trigger this fade is (default [`Trigger::PageChange`]); its `[motion]` setting, or
+    /// reduced motion, can turn it off.
+    pub fn trigger(mut self, t: Trigger) -> Self {
+        self.trigger = t;
+        self
+    }
+    /// Rounds the fading cover to a window's corners, so it never paints outside them.
+    pub fn corner_radius(mut self, r: f32) -> Self {
+        self.radius = r;
+        self
+    }
 }
 
 struct PageState {
@@ -614,7 +630,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         if state.key != self.key {
             // A different page: restart hidden, so the very next frame is already faded.
             state.key = self.key;
-            state.progress = Progress::new(if Trigger::PageChange.animated() { 0.0 } else { 1.0 });
+            state.progress = Progress::new(if self.trigger.animated() { 0.0 } else { 1.0 });
         }
         tree.diff_children(&[self.content.as_widget()]);
     }
@@ -637,7 +653,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         viewport: &Rectangle,
     ) {
         if let Some(now) = redraw_time(event)
-            && tree.state.downcast_mut::<PageState>().progress.drive(1.0, now, Trigger::PageChange.spec(Spec::STYLE))
+            && tree.state.downcast_mut::<PageState>().progress.drive(1.0, now, self.trigger.spec(Spec::STYLE))
         {
             shell.request_redraw();
         }
@@ -696,7 +712,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         let bg = theme.semantic.window.bg;
         renderer.with_layer(bounds, |r| {
             r.fill_quad(
-                Quad { bounds, border: Border::default(), shadow: Default::default(), snap: false },
+                Quad { bounds, border: Border::default().rounded(self.radius), shadow: Default::default(), snap: false },
                 Background::Color(Color { a: 1.0 - p.clamp(0.0, 1.0), ..bg }),
             );
         });

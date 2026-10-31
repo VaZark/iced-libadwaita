@@ -520,6 +520,8 @@ pub enum Trigger {
     Switch,
     /// A carousel moving between pages.
     Carousel,
+    /// The layout changing at a breakpoint (a sidebar appearing or disappearing, mobile mode).
+    Layout,
 }
 
 /// Whether a [`Trigger`] plays its animation.
@@ -533,9 +535,10 @@ pub enum Motion {
 }
 
 impl Trigger {
-    pub const ALL: [Trigger; 11] = [
+    pub const ALL: [Trigger; 12] = [
         Trigger::PageChange, Trigger::PagePush, Trigger::Popover, Trigger::Selection, Trigger::Drawer,
         Trigger::Dialog, Trigger::Sheet, Trigger::Toast, Trigger::Reveal, Trigger::Switch, Trigger::Carousel,
+        Trigger::Layout,
     ];
 
     /// The `[motion]` config key.
@@ -552,6 +555,7 @@ impl Trigger {
             Self::Reveal => "reveal",
             Self::Switch => "switch",
             Self::Carousel => "carousel",
+            Self::Layout => "layout",
         }
     }
 
@@ -573,6 +577,7 @@ impl Trigger {
             Self::Reveal => "slides open/closed, 250ms ease",
             Self::Switch => "knob slides and track cross-fades, 200ms ease-out-quad",
             Self::Carousel => "scroll spring (1, 0.5, 500) with drag velocity hand-off",
+            Self::Layout => "the new layout fades in from the window background, 200ms ease-out-quad (a sidebar appearing or disappearing at a breakpoint)",
         }
     }
 

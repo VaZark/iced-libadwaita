@@ -8,11 +8,13 @@ is clamped to a readable width, has the standard padding) or `PreferencesPage` f
 
 #### Adapting to width
 
-* Build the window with `responsive` and pass the width to `NavigationSplitView::adapt(width)`:
-  it collapses at 400px, and the sidebar is 25% of the width clamped to 180-280.
+* Build the window with `responsive` and pass the width to `NavigationSplitView::adapt(width)`.
+  The sidebar is 25% of the width clamped to 180-280 and **collapses below 768px (Bootstrap's
+  `md`), or whenever the content beside it would be narrower than 520px**: content must never
+  feel squeezed. Branch on `split_collapsed(width)` in your own layout so you agree with it.
 ```mermaid
 flowchart TD
-    W{"Width at most 400px?"} -- no --> Split["Sidebar beside the content"]
+    W{"Width under 768px, or content<br/>narrower than 520px?"} -- no --> Split["Sidebar beside the content"]
     W -- yes --> M{"collapsed_sidebar"}
     M -- Drawer --> D["Drawer over the content"]
     M -- FirstPage --> F["Sidebar is the first page;<br/>content is pushed on top"]
@@ -21,9 +23,13 @@ flowchart TD
 * Collapsed, choose what the sidebar becomes: `Drawer` (default, over the content, never the whole
   screen) or `FirstPage` (the landing page of a stack, in the content color, content pushed on
   top with a back button). Use `FirstPage` for settings-like apps.
+* Crossing a breakpoint is not a jump: the new layout fades in (`Trigger::Layout`, `[motion] layout`).
+  Every threshold is configurable (`[breakpoints]`, `[navigation]`); the constants are fallbacks.
 * In `FirstPage` show the sidebar as `SidebarStyle::Cards` (rows with icon, title, description and
   chevron); beside the content or in a drawer use `SidebarStyle::List`.
-* Mobile mode is `window::is_mobile(width)` (450px): hide window controls, use full-page menus.
+* Mobile mode is `window::is_mobile(width)` (below 576px, Bootstrap's `sm`): hide window controls,
+  use full-page menus. Width classes (`breakpoints::WidthClass`) follow Bootstrap/Mantine
+  (576, 768, 992, 1200, 1400).
 
 #### Rows and content
 

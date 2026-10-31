@@ -59,6 +59,8 @@ pub enum Setting {
     ButtonLayout,
     MobileMaxWidth,
     CollapseWidth,
+    MinContentWidth,
+    Layout,
     MobileSidebar,
     MenuPresentation,
     RowCollapse,
@@ -125,6 +127,24 @@ pub struct Config {
     pub button_layout: Pick<String>,
     pub mobile_max_width: f32,
     pub collapse_width: f32,
+    /// The narrowest the content area of a split view may get before the sidebar collapses.
+    pub min_content_width: f32,
+    /// `[breakpoints]`: the width scale. `mobile-max-width` and `collapse-width` follow it
+    /// (`sm - 1`, `md - 1`) unless set explicitly.
+    pub breakpoints: crate::breakpoints::Breakpoints,
+    /// `[navigation]` sidebar rules: width as a fraction of the window, clamped, and the
+    /// largest share of the window a drawer may take.
+    pub sidebar_fraction: f32,
+    pub sidebar_min_width: f32,
+    pub sidebar_max_width: f32,
+    pub drawer_max_fraction: f32,
+    /// `[windows] min-width` / `min-height`: the smallest window.
+    pub min_window_width: f32,
+    pub min_window_height: f32,
+    /// `[layout] page-max-width`: the readable width pages and preference lists are clamped to.
+    pub page_max_width: f32,
+    mobile_explicit: bool,
+    collapse_explicit: bool,
     pub mobile_sidebar: CollapsedSidebar,
     pub menu_presentation: MenuPresentationSetting,
     pub row_collapse: CollapseBehavior,
@@ -146,7 +166,7 @@ pub struct Config {
 
 impl Default for Config {
     /// libadwaita's own behavior: follow the system, client-side decorations, drawer,
-    /// stacked rows, 450px mobile breakpoint.
+    /// stacked rows, mobile below 576px, sidebar collapsed below 768px or 520px of content.
     fn default() -> Self {
         let mut c = Self {
             color_scheme: Pick::System,
@@ -163,8 +183,19 @@ impl Default for Config {
             motion: Default::default(),
             decorations: DecorationMode::Csd,
             button_layout: Pick::System,
-            mobile_max_width: 450.0,
-            collapse_width: 400.0,
+            mobile_max_width: crate::window::MOBILE_MAX_WIDTH,
+            collapse_width: crate::widget::COLLAPSE_WIDTH,
+            min_content_width: crate::widget::MIN_CONTENT_WIDTH,
+            breakpoints: crate::breakpoints::Breakpoints::default(),
+            sidebar_fraction: crate::widget::SIDEBAR_FRACTION,
+            sidebar_min_width: crate::widget::SIDEBAR_MIN_WIDTH,
+            sidebar_max_width: crate::widget::SIDEBAR_MAX_WIDTH,
+            drawer_max_fraction: crate::widget::DRAWER_MAX_FRACTION,
+            min_window_width: crate::window::MIN_SIZE.width,
+            min_window_height: crate::window::MIN_SIZE.height,
+            page_max_width: Metrics::default().clamp_maximum,
+            mobile_explicit: false,
+            collapse_explicit: false,
             mobile_sidebar: CollapsedSidebar::Drawer,
             menu_presentation: MenuPresentationSetting::Auto,
             row_collapse: CollapseBehavior::Stacked,
@@ -231,6 +262,17 @@ impl Config {
         macro_rules! bad {
             ($s:expr, $k:expr, $v:expr) => {
                 warn.push(format!("[{}] {}: invalid value {:?}", $s, $k, $v))
+            };
+        }
+        // A number in `lo..=hi`; anything else is reported and ignored.
+        macro_rules! num {
+            ($s:expr, $k:expr, $field:expr, $lo:expr, $hi:expr) => {
+                if let Some(v) = get($s, $k) {
+                    match v.parse::<f32>() {
+                        Ok(f) if ($lo..=$hi).contains(&f) => $field = f,
+                        _ => bad!($s, $k, v),
+                    }
+                }
             };
         }
 
@@ -305,12 +347,42 @@ impl Config {
         if let Some(v) = get("windows", "button-layout") {
             self.button_layout = if v == "system" { Pick::System } else { Pick::Fixed(v.to_string()) };
         }
+        // The width scale; the mobile and collapse widths follow it unless set explicitly.
+        let before = self.breakpoints;
+        num!("breakpoints", "sm", self.breakpoints.sm, 200.0, 10000.0);
+        num!("breakpoints", "md", self.breakpoints.md, 200.0, 10000.0);
+        num!("breakpoints", "lg", self.breakpoints.lg, 200.0, 10000.0);
+        num!("breakpoints", "xl", self.breakpoints.xl, 200.0, 10000.0);
+        num!("breakpoints", "xxl", self.breakpoints.xxl, 200.0, 10000.0);
+        if !self.breakpoints.is_ordered() {
+            warn.push("[breakpoints]: sm < md < lg < xl < xxl is required; the scale is ignored".into());
+            self.breakpoints = before;
+        }
         if let Some(v) = get("windows", "mobile-max-width") {
-            v.parse::<f32>().ok().filter(|f| *f >= 200.0).map(|f| self.mobile_max_width = f).unwrap_or_else(|| bad!("windows", "mobile-max-width", v));
+            v.parse::<f32>().ok().filter(|f| *f >= 200.0).map(|f| { self.mobile_max_width = f; self.mobile_explicit = true; }).unwrap_or_else(|| bad!("windows", "mobile-max-width", v));
         }
         if let Some(v) = get("navigation", "collapse-width") {
-            v.parse::<f32>().ok().filter(|f| *f >= 200.0).map(|f| self.collapse_width = f).unwrap_or_else(|| bad!("navigation", "collapse-width", v));
+            v.parse::<f32>().ok().filter(|f| *f >= 200.0).map(|f| { self.collapse_width = f; self.collapse_explicit = true; }).unwrap_or_else(|| bad!("navigation", "collapse-width", v));
         }
+        if !self.mobile_explicit {
+            self.mobile_max_width = self.breakpoints.sm - 1.0;
+        }
+        if !self.collapse_explicit {
+            self.collapse_width = self.breakpoints.md - 1.0;
+        }
+        num!("navigation", "min-content-width", self.min_content_width, 200.0, 10000.0);
+        num!("navigation", "sidebar-fraction", self.sidebar_fraction, 0.1, 0.5);
+        num!("navigation", "sidebar-min-width", self.sidebar_min_width, 100.0, 600.0);
+        num!("navigation", "sidebar-max-width", self.sidebar_max_width, 100.0, 800.0);
+        num!("navigation", "drawer-max-fraction", self.drawer_max_fraction, 0.3, 0.95);
+        if self.sidebar_min_width > self.sidebar_max_width {
+            warn.push("[navigation]: sidebar-min-width exceeds sidebar-max-width; both reset".into());
+            self.sidebar_min_width = crate::widget::SIDEBAR_MIN_WIDTH;
+            self.sidebar_max_width = crate::widget::SIDEBAR_MAX_WIDTH;
+        }
+        num!("windows", "min-width", self.min_window_width, 200.0, 2000.0);
+        num!("windows", "min-height", self.min_window_height, 100.0, 2000.0);
+        num!("layout", "page-max-width", self.page_max_width, 300.0, 4000.0);
         if let Some(v) = get("navigation", "mobile-sidebar") {
             match v {
                 "drawer" => self.mobile_sidebar = CollapsedSidebar::Drawer,
@@ -358,7 +430,10 @@ impl Config {
             ("appearance", "density"), ("appearance", "text-scale"), ("appearance", "shadows"),
             ("appearance", "shadow-scale"), ("appearance", "shadow-intensity"), ("motion", "animations"),
             ("motion", "reduced-motion"), ("windows", "decorations"), ("windows", "button-layout"),
-            ("windows", "mobile-max-width"), ("navigation", "collapse-width"), ("navigation", "mobile-sidebar"),
+            ("windows", "mobile-max-width"), ("navigation", "collapse-width"), ("navigation", "min-content-width"),
+            ("breakpoints", "sm"), ("breakpoints", "md"), ("breakpoints", "lg"), ("breakpoints", "xl"), ("breakpoints", "xxl"),
+            ("navigation", "sidebar-fraction"), ("navigation", "sidebar-min-width"), ("navigation", "sidebar-max-width"),
+            ("navigation", "drawer-max-fraction"), ("windows", "min-width"), ("windows", "min-height"), ("layout", "page-max-width"), ("navigation", "mobile-sidebar"),
             ("menus", "presentation"), ("rows", "collapse"), ("toasts", "position"), ("toasts", "target"), ("rows", "wrap-basis"), ("icons", "theme"),
             ("policy", "allow-app-overrides"),
         ];
@@ -377,7 +452,12 @@ impl Config {
             Density::Default => Metrics::default(),
             Density::Compact => Metrics::compact(),
         };
-        Metrics { row_collapse: self.row_collapse, row_wrap_basis: self.row_wrap_basis, ..base }
+        Metrics {
+            row_collapse: self.row_collapse,
+            row_wrap_basis: self.row_wrap_basis,
+            clamp_maximum: self.page_max_width,
+            ..base
+        }
     }
 
     /// The config directories searched, lowest priority first (system, then user).
@@ -479,6 +559,10 @@ pub struct Overrides {
     button_layout: Option<String>,
     mobile_max_width: Option<f32>,
     collapse_width: Option<f32>,
+    min_content_width: Option<f32>,
+    breakpoints: Option<crate::breakpoints::Breakpoints>,
+    sidebar: Option<(f32, f32, f32)>,
+    min_window: Option<(f32, f32)>,
     mobile_sidebar: Option<CollapsedSidebar>,
     menu_presentation: Option<MenuPresentationSetting>,
     row_collapse: Option<CollapseBehavior>,
@@ -514,6 +598,7 @@ impl Overrides {
     override_fn!(button_layout, button_layout, String, Setting::ButtonLayout);
     override_fn!(mobile_max_width, mobile_max_width, f32, Setting::MobileMaxWidth);
     override_fn!(collapse_width, collapse_width, f32, Setting::CollapseWidth);
+    override_fn!(min_content_width, min_content_width, f32, Setting::MinContentWidth);
     override_fn!(mobile_sidebar, mobile_sidebar, CollapsedSidebar, Setting::MobileSidebar);
     override_fn!(menu_presentation, menu_presentation, MenuPresentationSetting, Setting::MenuPresentation);
     override_fn!(row_collapse, row_collapse, CollapseBehavior, Setting::RowCollapse);
@@ -529,7 +614,43 @@ impl Overrides {
         self
     }
 
+    /// Replaces the width scale for this app (discouraged). The mobile and collapse widths
+    /// follow it unless set explicitly.
+    pub fn breakpoints(&mut self, b: crate::breakpoints::Breakpoints) -> &mut Self {
+        self.breakpoints = Some(b);
+        self.touched.push(Setting::Layout);
+        self
+    }
+    /// Replaces the sidebar rules for this app (discouraged): fraction of the window, clamped
+    /// to `min..=max`.
+    pub fn sidebar_widths(&mut self, fraction: f32, min: f32, max: f32) -> &mut Self {
+        self.sidebar = Some((fraction, min, max));
+        self.touched.push(Setting::Layout);
+        self
+    }
+    /// Replaces the smallest window size for this app (discouraged).
+    pub fn min_window_size(&mut self, width: f32, height: f32) -> &mut Self {
+        self.min_window = Some((width, height));
+        self.touched.push(Setting::Layout);
+        self
+    }
+
     fn apply_to(self, c: &mut Config) {
+        if let Some(b) = self.breakpoints {
+            c.breakpoints = b;
+            if !c.mobile_explicit {
+                c.mobile_max_width = b.sm - 1.0;
+            }
+            if !c.collapse_explicit {
+                c.collapse_width = b.md - 1.0;
+            }
+        }
+        if let Some((f, min, max)) = self.sidebar {
+            (c.sidebar_fraction, c.sidebar_min_width, c.sidebar_max_width) = (f, min, max);
+        }
+        if let Some((w, h)) = self.min_window {
+            (c.min_window_width, c.min_window_height) = (w, h);
+        }
         for (t, m) in self.motion {
             c.motion.insert(t, m);
         }
@@ -546,6 +667,7 @@ impl Overrides {
         if let Some(v) = self.button_layout { c.button_layout = Pick::Fixed(v) }
         if let Some(v) = self.mobile_max_width { c.mobile_max_width = v }
         if let Some(v) = self.collapse_width { c.collapse_width = v }
+        if let Some(v) = self.min_content_width { c.min_content_width = v }
         if let Some(v) = self.mobile_sidebar { c.mobile_sidebar = v }
         if let Some(v) = self.menu_presentation { c.menu_presentation = v }
         if let Some(v) = self.row_collapse { c.row_collapse = v }
@@ -633,7 +755,7 @@ thing=1
         assert_eq!(c.color_scheme, Pick::System);
         assert_eq!(c.decorations, DecorationMode::Csd);
         assert_eq!(c.mobile_sidebar, CollapsedSidebar::Drawer);
-        assert_eq!(c.mobile_max_width, 450.0);
+        assert_eq!(c.mobile_max_width, 575.0);
         assert!(c.allow_app_overrides && c.overridden().is_empty());
     }
 
@@ -740,5 +862,39 @@ thing=1
         let bad = Config::from_keyfile("[toasts]\nposition=middle\n");
         assert_eq!(bad.toast_position, ToastPosition::BottomCenter);
         assert_eq!(bad.warnings().len(), 1);
+    }
+
+    #[test]
+    fn every_layout_constant_is_a_fallback() {
+        let d = Config::default();
+        assert_eq!((d.breakpoints.sm, d.breakpoints.md), (576.0, 768.0));
+        assert_eq!((d.mobile_max_width, d.collapse_width, d.min_content_width), (575.0, 767.0, 520.0));
+        assert_eq!((d.sidebar_fraction, d.sidebar_min_width, d.sidebar_max_width), (0.25, 180.0, 280.0));
+        assert_eq!((d.min_window_width, d.min_window_height, d.page_max_width), (360.0, 200.0, 600.0));
+
+        let c = Config::from_keyfile(
+            "[breakpoints]\nsm=500\nmd=640\nlg=900\nxl=1100\nxxl=1300\n\
+             [navigation]\nsidebar-fraction=0.3\nsidebar-min-width=200\nsidebar-max-width=320\ndrawer-max-fraction=0.7\nmin-content-width=480\n\
+             [windows]\nmin-width=400\nmin-height=240\n[layout]\npage-max-width=720\n",
+        );
+        assert!(c.warnings().is_empty(), "{:?}", c.warnings());
+        // The mobile and collapse widths follow the scale (`sm - 1`, `md - 1`) unless set explicitly.
+        assert_eq!((c.mobile_max_width, c.collapse_width), (499.0, 639.0));
+        assert_eq!((c.sidebar_fraction, c.sidebar_min_width, c.sidebar_max_width, c.drawer_max_fraction), (0.3, 200.0, 320.0, 0.7));
+        assert_eq!((c.min_content_width, c.min_window_width, c.min_window_height, c.page_max_width), (480.0, 400.0, 240.0, 720.0));
+        assert_eq!(c.metrics().clamp_maximum, 720.0);
+
+        let explicit = Config::from_keyfile("[breakpoints]\nsm=500\n[windows]\nmobile-max-width=450\n");
+        assert_eq!(explicit.mobile_max_width, 450.0, "an explicit width wins over the scale");
+    }
+
+    #[test]
+    fn a_shuffled_scale_or_bad_sidebar_is_ignored_with_a_warning() {
+        let c = Config::from_keyfile("[breakpoints]\nsm=900\nmd=700\n");
+        assert_eq!(c.breakpoints, crate::breakpoints::Breakpoints::default());
+        assert!(c.warnings().iter().any(|w| w.contains("breakpoints")));
+        let c = Config::from_keyfile("[navigation]\nsidebar-min-width=500\nsidebar-max-width=300\n");
+        assert_eq!((c.sidebar_min_width, c.sidebar_max_width), (180.0, 280.0));
+        assert_eq!(c.warnings().len(), 1);
     }
 }

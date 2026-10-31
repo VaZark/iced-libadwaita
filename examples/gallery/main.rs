@@ -668,7 +668,7 @@ impl Gallery {
     fn root(&self, size: iced::Size) -> IcedElement<'_, Message, Theme> {
         let m = self.metrics();
         let csd = Self::csd();
-        let collapsed = size.width <= w::collapse_width();
+        let collapsed = w::split_collapsed(size.width);
 
         // Floating windows have rounded corners; maximized/fullscreen go edge to edge.
         // Mobile mode (narrow): no window decorations at all. Corners still follow the

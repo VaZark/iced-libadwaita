@@ -10,6 +10,7 @@
 //!   `StatusPage`, `AlertDialog`, …).
 
 pub mod animation;
+pub mod breakpoints;
 pub mod catalog;
 pub mod color;
 pub mod config;

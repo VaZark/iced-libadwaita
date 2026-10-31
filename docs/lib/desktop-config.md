@@ -37,11 +37,17 @@ Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 wi
 | | `shadows`, `shadow-scale`, `shadow-intensity` | true, 1.0, 1.0 | `Shadows` |
 | motion | `animations` | system / on / off (system) | `animation::enabled()` |
 | | `reduced-motion` | bool (false) | every trigger resolves to `none` (prefers-reduced-motion) |
-| | `page-change`, `page-push`, `popover`, `selection`, `drawer`, `dialog`, `sheet`, `toast`, `reveal`, `switch`, `carousel` | default / none (default) | that trigger's animation, per [motion triggers](../hig-inferences/design-language/animations.md#triggers) |
+| | `page-change`, `page-push`, `popover`, `selection`, `drawer`, `dialog`, `sheet`, `toast`, `reveal`, `switch`, `carousel`, `layout` | default / none (default) | that trigger's animation, per [motion triggers](../hig-inferences/design-language/animations.md#triggers) |
 | windows | `decorations` | csd / ssd (csd) | `window::settings()`, transparent base |
 | | `button-layout` | system / GTK string (system) | `DecorationLayout::detect()` |
-| | `mobile-max-width` | px (450) | `window::is_mobile`, menu `Auto` |
-| navigation | `collapse-width` | px (400) | `NavigationSplitView::adapt` |
+| breakpoints | `sm`, `md`, `lg`, `xl`, `xxl` | px (576, 768, 992, 1200, 1400; must increase) | `breakpoints::WidthClass`; mobile and collapse widths follow `sm - 1`, `md - 1` |
+| windows | `mobile-max-width` | px (575, just under the `sm` breakpoint) | `window::is_mobile`, menu `Auto` |
+| navigation | `collapse-width` | px (767, just under `md`) | `NavigationSplitView::adapt`: collapse at or below |
+| | `min-content-width` | px (520) | the sidebar also collapses when the content would be narrower |
+| | `sidebar-fraction`, `sidebar-min-width`, `sidebar-max-width` | 0.25, 180, 280 | sidebar width: fraction of the window, clamped |
+| | `drawer-max-fraction` | 0.85 | the most of the window a drawer may take |
+| windows | `min-width`, `min-height` | px (360, 200) | `window::settings()` minimum size |
+| layout | `page-max-width` | px (600) | the readable width pages and preference lists are clamped to |
 | | `mobile-sidebar` | drawer / first-page (drawer) | `NavigationSplitView` default |
 | menus | `presentation` | auto / dropdown / full-page (auto) | `MenuPresentation::resolve` |
 | toasts | `position` | top-left / top-center / top-right / bottom-left / bottom-center / bottom-right (bottom-center) | `Toast::position` default |
@@ -50,6 +56,10 @@ Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 wi
 | | `wrap-basis` | px (128) | when a suffix wraps |
 | icons | `theme` | system / name (system) | window-control icon lookup |
 | policy | `allow-app-overrides` | bool (true) | may apps opt out? |
+
+Every number the library uses for adaptive layout is a **fallback constant** in code (named, e.g.
+`breakpoints::MD`, `widget::MIN_CONTENT_WIDTH`, `widget::SIDEBAR_MAX_WIDTH`) that the config overrides.
+Widgets read the installed config, never the constant directly.
 
 ## Using it
 

@@ -33,14 +33,34 @@ toast=default            # toast slides up
 reveal=default           # expanders and banners slide open
 switch=default           # switch knob slides
 carousel=default         # carousel spring
+layout=default           # the new layout fades in when a breakpoint is crossed
 
 [windows]
 decorations=csd          # csd (Adwaita) | ssd (discouraged)
 button-layout=system     # system | a GTK button-layout string, e.g. appmenu:close
-mobile-max-width=450     # at or below this width: mobile mode (no window buttons, full-page menus)
+min-width=360            # smallest window
+min-height=200
+mobile-max-width=575     # at or below this width: mobile mode (no window buttons, full-page menus)
+
+[breakpoints]
+# The width scale (Bootstrap/Mantine style). Must increase. mobile-max-width and collapse-width
+# follow it (sm - 1, md - 1) unless set explicitly below.
+sm=576
+md=768
+lg=992
+xl=1200
+xxl=1400
+
+[layout]
+page-max-width=600       # readable width of pages and preference lists
 
 [navigation]
-collapse-width=400       # split views collapse at or below this width
+collapse-width=767       # split views collapse at or below this width (just under md = 768)
+min-content-width=520    # ...and whenever the content area would be narrower than this
+sidebar-fraction=0.25    # sidebar width: this share of the window...
+sidebar-min-width=180    # ...clamped to min..max
+sidebar-max-width=280
+drawer-max-fraction=0.85 # a drawer takes at most this share of the window
 mobile-sidebar=drawer    # drawer | first-page
 
 [menus]

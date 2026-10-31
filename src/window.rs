@@ -17,6 +17,13 @@ use iced::{mouse, Length, Size, Subscription, Task};
 /// `AdwWindow`'s default minimum size.
 pub const MIN_SIZE: Size = Size::new(360.0, 200.0);
 
+/// The smallest window in effect: the desktop config's `[windows] min-width` / `min-height`
+/// ([`MIN_SIZE`] is the fallback).
+pub fn min_size() -> Size {
+    let c = crate::config::current();
+    Size::new(c.min_window_width, c.min_window_height)
+}
+
 /// Window settings following the desktop config: client-side decorations unless the config
 /// says `[windows] decorations=ssd`.
 pub fn settings() -> Settings {
@@ -26,7 +33,7 @@ pub fn settings() -> Settings {
     Settings {
         decorations: false,
         transparent: true,
-        min_size: Some(MIN_SIZE),
+        min_size: Some(min_size()),
         ..Settings::default()
     }
 }
@@ -36,7 +43,7 @@ pub fn settings() -> Settings {
 pub fn settings_with_ssd(ssd: bool) -> Settings {
     if ssd {
         Settings {
-            min_size: Some(MIN_SIZE),
+            min_size: Some(min_size()),
             ..Settings::default()
         }
     } else {
@@ -44,10 +51,10 @@ pub fn settings_with_ssd(ssd: bool) -> Settings {
     }
 }
 
-/// At or below this width the window is in *mobile mode*: window decorations are
-/// hidden completely and menus become full pages. Corners are unaffected: use
-/// [`State`] (rounded unless actually maximized/fullscreen). Same threshold as `AdwDialog`'s bottom-sheet switch (`max-width: 450`).
-pub const MOBILE_MAX_WIDTH: f32 = 450.0;
+/// At or below this width (just under [`breakpoints::SM`](crate::breakpoints::SM)) the window is
+/// in *mobile mode*: window decorations are hidden completely and menus become full pages.
+/// Corners are unaffected: use [`State`] (rounded unless actually maximized/fullscreen).
+pub const MOBILE_MAX_WIDTH: f32 = crate::breakpoints::SM - 1.0;
 
 /// The mobile breakpoint in effect: the desktop config's `[windows] mobile-max-width`
 /// (default [`MOBILE_MAX_WIDTH`]).
@@ -187,7 +194,7 @@ mod tests {
 
     #[test]
     fn mobile_threshold() {
-        assert!(is_mobile(360.0) && is_mobile(450.0) && !is_mobile(451.0));
+        assert!(is_mobile(360.0) && is_mobile(575.0) && !is_mobile(576.0));
     }
 
     #[test]
