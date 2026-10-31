@@ -2,10 +2,9 @@
 
 use super::Element;
 use crate::style::button as sb;
-use crate::style::button::Position;
 use crate::{Icon, Metrics, Theme};
 use iced::alignment::Vertical;
-use iced::widget::{button, container, row, space, Button};
+use iced::widget::{button, container, row, Button};
 use iced::{Length, Padding};
 
 /// `AdwButtonContent`: an optional icon next to a label.
@@ -45,7 +44,7 @@ impl<'a, M: 'a> From<ButtonContent<'a, M>> for Element<'a, M> {
     }
 }
 
-fn sized<'a, M: 'a>(content: impl Into<Element<'a, M>>, m: &Metrics) -> Button<'a, M, Theme> {
+pub(super) fn sized<'a, M: 'a>(content: impl Into<Element<'a, M>>, m: &Metrics) -> Button<'a, M, Theme> {
     button(
         container(content)
             .center_y(Length::Fixed(m.button_min_height - m.button_padding.y()))
@@ -113,25 +112,6 @@ pub fn icon_button<'a, M: 'a>(icon: Icon) -> Button<'a, M, Theme> {
     button(container(icon.view(m.icon_size)).center(Length::Fixed(m.button_min_height)))
         .padding(Padding::from(0.0))
         .style(sb::flat)
-}
-
-/// `AdwSplitButton`: a main action plus a dropdown arrow, visually linked.
-pub fn split_button<'a, M: Clone + 'a>(
-    content: impl Into<Element<'a, M>>,
-    on_press: M,
-    on_menu: M,
-) -> Element<'a, M> {
-    let m = Metrics::desktop();
-    row![
-        sized(content, &m).style(sb::linked(Position::Start)).on_press(on_press),
-        container(space().width(1).height(Length::Fill)).style(crate::style::container::bar_separator),
-        button(container(Icon::GoDown.view(m.icon_size)).center_y(Length::Fixed(m.button_min_height - m.button_padding.y())))
-            .padding(m.button_padding)
-            .style(sb::linked(Position::End))
-            .on_press(on_menu),
-    ]
-    .height(Length::Shrink)
-    .into()
 }
 
 /// One entry of a [`ToggleGroup`]: a label, an icon, both, or any element.

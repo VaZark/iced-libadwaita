@@ -27,6 +27,8 @@ pub enum Appearance {
     Flat,
     /// Fills a list row (used by `ComboRow`).
     Row,
+    /// A regular button joined to its neighbours (`.linked`), for the arrow of a split button.
+    Linked(crate::style::button::Position),
 }
 
 /// How the opened content is presented.
@@ -345,6 +347,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Dropdown<'a, M> {
             Appearance::Button => sb::default(theme, status),
             Appearance::Flat => sb::flat(theme, status),
             Appearance::Row => sb::list_row(theme, status),
+            Appearance::Linked(pos) => sb::linked(pos)(theme, status),
         };
         if let Some(bg) = st.background {
             renderer.fill_quad(

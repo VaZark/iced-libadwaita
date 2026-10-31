@@ -220,6 +220,11 @@ fn message<M: Clone>(item: &MenuItem<M>) -> M {
     }
 }
 
+/// The popover for `menu`, as a dropdown shows it.
+pub(super) fn popover_content<'a, M: Clone + 'a>(menu: &Menu<M>, max_height: f32) -> Element<'a, M> {
+    super::popover(dropdown_items(menu), max_height)
+}
+
 fn dropdown_items<'a, M: Clone + 'a>(menu: &Menu<M>) -> Vec<Element<'a, M>> {
     let m = Metrics::desktop();
     let any_check = menu.sections.iter().flatten().any(|i| matches!(i.kind, Kind::Check { .. }));

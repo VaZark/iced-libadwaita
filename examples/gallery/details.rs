@@ -167,11 +167,49 @@ impl Gallery {
                 .spacing(sp)
                 .align_y(iced::Alignment::Center)
                 .wrap();
-                let split = row![w::split_button(text("Split"), Message::Noop, Message::ShowToast("Split menu"))]
-                    .spacing(sp);
-                column![g("Icon and label").push(w::card(content)), g("Split button").push(w::card(split))]
-                    .spacing(m.group_spacing)
-                    .into()
+                // SplitButton: a main action plus a menu of other actions.
+                let save_menu = || {
+                    w::Menu::new("Save")
+                        .section([
+                            w::MenuItem::action("Save as…", Message::ShowToast("Save as…")),
+                            w::MenuItem::action("Save a copy", Message::ShowToast("Saved a copy")),
+                        ])
+                        .section([w::MenuItem::action("Export…", Message::ShowToast("Export")).disabled()])
+                };
+                let split = row![
+                    w::split_button(text("Save"), Message::ShowToast("Saved"), save_menu()),
+                    w::SplitButton::new(text("Save"), Message::Noop, save_menu()).disabled(true),
+                ]
+                .spacing(sp)
+                .wrap();
+                // SplitButtonAction: the menu chooses what the button does.
+                let merge = || {
+                    [
+                        w::SplitAction::new("merge", "Create merge commit").icon(Icon::ListAdd),
+                        w::SplitAction::new("squash", "Squash and merge"),
+                        w::SplitAction::new("rebase", "Rebase and merge"),
+                        w::SplitAction::new("admin", "Merge without checks").disabled(),
+                    ]
+                };
+                let action = row![
+                    w::SplitButtonAction::new(merge(), self.split_choice, Message::SplitChoice, Message::SplitRun)
+                        .open_initially(self.shots.is_some() && self.detail == Some(Detail::ButtonContent)),
+                    w::SplitButtonAction::new(merge(), self.split_choice, Message::SplitChoice, Message::SplitRun)
+                        .disabled(true),
+                ]
+                .spacing(sp)
+                .wrap();
+                column![
+                    g("Icon and label").push(w::card(content)),
+                    g("Split button")
+                        .description("A button joined to a menu of other actions: the arrow opens the menu and choosing an item runs it.")
+                        .push(w::card(split)),
+                    g("Split button action")
+                        .description("The menu chooses what the button does: pick an item to change its label and action, then press the button.")
+                        .push(w::card(action)),
+                ]
+                .spacing(m.group_spacing)
+                .into()
             }
             Detail::ToggleGroup => {
                 let items = || {

@@ -143,6 +143,8 @@ struct Gallery {
     sw: bool,
     row_sw: bool,
     combo2: Option<&'static str>,
+    /// The selected action of the split-button-action demo.
+    split_choice: &'static str,
     picked: Option<&'static str>,
 
     dialog: Option<Dialog>,
@@ -194,6 +196,8 @@ enum Message {
     Sw(bool),
     RowSw(bool),
     Combo2(&'static str),
+    SplitChoice(&'static str),
+    SplitRun(&'static str),
     Scheme(bool),
     Accent(AccentColor),
     Compact(bool),
@@ -328,6 +332,7 @@ impl Gallery {
                 sw: true,
                 row_sw: false,
                 combo2: None,
+                split_choice: "merge",
                 picked: None,
                 dialog: None,
                 show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
@@ -413,6 +418,15 @@ impl Gallery {
             Message::Sw(v) => self.sw = v,
             Message::RowSw(v) => self.row_sw = v,
             Message::Combo2(s) => self.combo2 = Some(s),
+            Message::SplitChoice(c) => self.split_choice = c,
+            Message::SplitRun(c) => {
+                let title = match c {
+                    "squash" => "Squashed and merged",
+                    "rebase" => "Rebased and merged",
+                    _ => "Merged",
+                };
+                self.push_toast(ToastSpec { title, action: None, status: Some(Role::Success) });
+            }
             Message::SidebarMode(m) => {
                 self.sidebar_mode = m;
                 self.drawer_open = false;

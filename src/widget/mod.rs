@@ -25,6 +25,7 @@ mod rows;
 mod segmented;
 mod scrolled;
 mod slots;
+mod split;
 mod spinner;
 mod switch;
 mod status_page;
@@ -37,7 +38,7 @@ pub use banner::{banner, Banner};
 pub use carousel::{carousel, Carousel, CarouselIndicator};
 pub use button::{
     circular_button, destructive_button, progress_bar, flat_button, icon_button, pill_button, raised_button,
-    split_button, suggested_button, suggested_pill_button, toggle_group, ButtonContent, ToggleGroup,
+    suggested_button, suggested_pill_button, toggle_group, ButtonContent, ToggleGroup,
     ToggleItem,
 };
 pub use extra::{
@@ -47,6 +48,7 @@ pub use extra::{
 };
 pub use dropdown::{dropdown, dropdown_disabled, menu_item, menu_item_disabled, popover, Align as PopoverAlign, Appearance as DropdownAppearance, Dropdown, Presentation as DropdownPresentation};
 pub use elevated::{card_shadow, Elevated};
+pub use split::{split_button, SplitAction, SplitButton, SplitButtonAction};
 pub use switch::{switch, Switch};
 pub use dialog::{dialog, dialog_in_window, present_dialog, AboutDialog, AlertDialog, ResponseAppearance};
 pub use flex::FlexRow;
