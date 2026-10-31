@@ -1,8 +1,9 @@
 # Design reference
 
-Notes distilled from the official libadwaita documentation (v1.11 alpha) that
-drive this crate's widgets. Read these before changing a widget; each widget
-file ends with an **iced mapping** section recording how we implement it and
+Notes distilled from the GNOME HIG and, as the reference implementation, the official
+libadwaita documentation (v1.11 alpha). We follow the HIG; libadwaita is a source of values and
+behavior to learn from, not something to stay compatible with. Read these before changing a
+widget; each widget file ends with an **iced mapping** section recording how we implement it and
 where we deliberately deviate.
 
 * Primary sources: the [libadwaita docs](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/index.html), especially

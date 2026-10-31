@@ -1,16 +1,35 @@
 # iced-libadwaita
 
-libadwaita-style theming and widgets for [iced](https://iced.rs) 0.14, aiming to
-expose the same elements as [libadwaita's widget gallery](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/widget-gallery.html)
-so that porting a GTK/libadwaita UI is mostly a rename.
+A theme and component library for [iced](https://iced.rs) 0.14 that follows the
+[GNOME Human Interface Guidelines](https://developer.gnome.org/hig/). The look and
+behavior goal is *a good GNOME app*, not *libadwaita in Rust*.
+
+**libadwaita is a reference, not a target.** Its documentation, stylesheet and widget
+gallery are where we look first for sizes, colors, motion and behavior, because they are the
+most complete statement of the HIG in code. We do not try to be compatible with it: no
+drop-in replacement, no matching API, no promise that a GTK/libadwaita UI ports by renaming.
+Where the HIG, iced's constraints or our own judgment call for something different, we do the
+different thing and record it (each doc's *iced mapping* section lists the deviations).
+Components are named after the libadwaita equivalents only so they are easy to recognize.
 
 > **Disclosure.** This is primarily for the author's personal project and is
-> **managed primarily by AI** (Claude). Treat it as a logical fork of the
-> libadwaita *design*, not an official or GNOME-endorsed project. It reimplements
-> the look and widget vocabulary in Rust/iced; it contains no libadwaita code
-> and is not affiliated with the GNOME project. Expect rough edges, API churn,
-> and values that are *approximated* from libadwaita's stylesheet rather than
-> copied. Review before depending on it.
+> **managed primarily by AI** (Claude). It is an independent project, not an official or
+> GNOME-endorsed one, and not affiliated with the GNOME project. It contains no libadwaita
+> code; values are *approximated* from the HIG and from libadwaita's published documentation
+> and stylesheet rather than copied. Expect rough edges and API churn. Review before depending
+> on it.
+
+## Goals and non-goals
+
+* **Goal:** follow the GNOME HIG: Adwaita-style appearance, adaptive layouts, client-side
+  decorations that follow the desktop, accessible contrast, calm motion that respects reduced
+  motion.
+* **Goal:** a small set of consistent components with one shape (constructor, properties,
+  slots, `on_*` events), usable from code or from a declarative layer.
+* **Goal:** shared desktop behavior through one config file, so apps behave like each other.
+* **Non-goal:** API, behavior or pixel compatibility with libadwaita or GTK.
+* **Non-goal:** a port of every libadwaita widget. We add what the HIG and our apps need and
+  skip or redesign the rest.
 
 ## Quick start
 
@@ -49,7 +68,7 @@ dark; `GALLERY_DETAIL=textinput` opens a component page directly.
 Every element is a reusable component with one shape (constructor, property setters, slots, `on_*`
 events, controlled state, `Into<Element>`), so layouts can be code or generated from a declarative
 description. `iced_libadwaita::prelude::*` imports everything; `iced_libadwaita::catalog` lists
-each tag with its libadwaita class, constructor, properties, slots and events (rendered in
+each tag with its libadwaita reference class, constructor, properties, slots and events (rendered in
 `docs/components-catalog.md`). Conventions: `docs/components.md`.
 
 ## Desktop config
@@ -64,14 +83,13 @@ reported at startup, and a desktop can forbid it with `[policy] allow-app-overri
 
 ## Design reference
 
-`docs/` holds the design language and one file per libadwaita element,
-distilled from the official docs (colors, style classes, adaptive rules, CSS
-nodes) with an *iced mapping* section recording how each is built and where we
-deviate. Start at [docs/README.md](docs/README.md). Sizes the docs don't give
+`docs/` holds the design language and one file per element, distilled from the HIG and from
+libadwaita's official docs as the reference (colors, style classes, adaptive rules, CSS nodes)
+with an *iced mapping* section recording how each is built and where we deviate. Start at [docs/README.md](docs/README.md). Sizes the docs don't give
 are marked ‡ (from memory of the stylesheet, unverified).
 
 `docs/gtk4/` covers the underlying GTK4 widgets (scrollbars, entries, popovers…);
-where GTK4 and libadwaita disagree, libadwaita wins.
+where GTK4 and libadwaita differ, the HIG decides and libadwaita is the tie-breaker.
 
 ## Windows: no server-side decorations
 
@@ -195,16 +213,17 @@ let theme = adw::Theme::dark()
 iced resolves styles at draw time but layout (padding, spacing, min heights) at
 view-build time, and widget builders do not see the theme. Colors, radii,
 opacities and borders therefore follow the active `Theme` automatically, while
-padding/size tokens use `Metrics::default()` unless you pass `.metrics(m)` to the
+padding/size tokens use `Metrics::desktop()` (the desktop config's density) unless you pass `.metrics(m)` to the
 widget (the gallery does this). Typography is the same: use
 `Typography::title_1(..)` etc. for non-default sizes.
 
 ## Widget coverage
 
-Mirrors the libadwaita gallery. Widgets are stateless builders; the app owns
+Components are named after their libadwaita counterparts for recognition only; they are our
+own, and differ where noted. Widgets are stateless builders; the app owns
 state (expanded, current page, open sheet…) and handles the messages.
 
-| libadwaita | here | Notes |
+| libadwaita (reference) | here | Notes |
 |---|---|---|
 | AdwStatusPage, AdwBanner, AdwAvatar, AdwSpinner, AdwToastOverlay | `status_page`, `banner`, `avatar`, `spinner`, `toast_overlay` + `Toast` | Spinner needs a frame-driven `rotation`; toasts are cleared by the app |
 | AdwShortcutLabel | `shortcut_label` | |
@@ -215,17 +234,17 @@ state (expanded, current page, open sheet…) and handles the messages.
 | AdwNavigationView, NavigationSplitView, OverlaySplitView | `navigation_view`, `NavigationSplitView`, `OverlaySplitView` | Push/pop is an app-owned stack |
 | AdwSidebar, ViewSwitcherSidebar | `sidebar` / `navigation_sidebar` + `sidebar_row` | |
 | AdwViewSwitcher, ViewSwitcherBar, InlineViewSwitcher | `view_switcher`, `view_switcher_bar`, `inline_view_switcher` | |
-| AdwCarousel, indicators | `carousel`, `carousel_indicator_dots/lines` | Indicator-driven; no swipe gesture |
+| AdwCarousel, indicators | `carousel` | Spring-animated, mouse drag with rubber-band, dot/line indicators; no touch or keyboard yet |
 | AdwTabBar, TabButton | `tab_bar`, `tab_button` | No drag-reorder |
-| AdwBottomSheet | `bottom_sheet` | No drag gesture |
+| AdwBottomSheet | `bottom_sheet_in_window` | Animated; no drag gesture |
 | AdwBreakpointBin, Breakpoint | `breakpoint_bin`, `Breakpoint` | Width conditions only |
 | AdwClamp, WrapBox, Bin | `clamp`, `wrap_box`, `bin` | |
-| AdwToolbarView, WindowTitle, HeaderBar, Window, SplitButton, ButtonContent | `toolbar_view`, `window_title`, `HeaderBar`, `window`, `split_button`, `ButtonContent` | `HeaderBar` has `on_drag`/`on_double_click`/`WindowControls` for client-side decorations |
+| AdwToolbarView, WindowTitle, HeaderBar, Window, SplitButton, ButtonContent | `toolbar_view`, `window_title`, `HeaderBar`, `window`, `split_button` / `SplitButtonAction`, `ButtonContent` | `HeaderBar` has `on_drag`/`on_double_click`/`WindowControls` for client-side decorations |
 | AdwTabOverview | — | not implemented |
 
-Not covered: dynamic breakpoint *setters*, animations (`AdwAnimation`),
-`AdwStyleManager` system color-scheme/accent tracking, symbolic icon theme
-lookup (a small built-in SVG set, `Icon`, is provided), markdown/table catalogs.
+Not covered: dynamic breakpoint *setters*, a full symbolic icon theme (a small built-in SVG set,
+`Icon`, is provided, and window-control icons follow the desktop's theme), markdown/table catalogs.
+Animations, color-scheme and accent tracking, and desktop settings are covered (see above).
 
 ## Status
 
