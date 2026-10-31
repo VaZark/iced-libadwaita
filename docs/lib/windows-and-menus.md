@@ -43,6 +43,32 @@ menu at the end of the sidebar header.
 * Present it as a popover on desktop and a full page when narrow (`MenuPresentation::resolve`).
 * Disable unavailable items with `MenuItem::disabled()`.
 
+#### Shortcuts
+
+The toolkit handles keyboard shortcuts itself; the app needs no subscription and no `update` arm
+for them.
+
+* A menu (`MenuButton`, `primary_menu`, `split_button`) **registers the accelerators it shows**:
+  `MenuItem::action("Preferences", Msg::Prefs).accel("Ctrl+,")` works while the menu button is in
+  the view, even with its popover closed or its sidebar hidden.
+* A widget only **exposes** a shortcut it can honor: the accelerator text is shown only when the
+  item is enabled, the accelerator is valid, shortcuts are on, and a keyboard is likely (hidden in
+  the touch full-page menu under `[shortcuts] hints=auto`).
+* `shortcut::Standard` lists GNOME's usual ones; set the messages the app supports:
+  `Standard::new().quit(Msg::Quit).fullscreen(Msg::Fullscreen).into_shortcuts().bind("Esc", Msg::Escape).scope(window)`.
+  Wrap the window once; the messages arrive in `update` like any other.
+* A focused widget has precedence: a text input or an open popover that handles the key stops the
+  shortcut. Plain-character shortcuts never fire while typing.
+
+| Action | Accelerator |
+|---|---|
+| Quit | `Ctrl+Q` |
+| Close window | `Ctrl+W` |
+| Fullscreen | `F11` |
+| Preferences | `Ctrl+,` |
+| Help | `F1` |
+| Keyboard shortcuts | `Ctrl+?` |
+
 #### Toasts
 
 Place them with `Toast::position` (default from `[toasts] position`) in the whole window or the

@@ -95,7 +95,9 @@ impl<'a, M: Clone + 'a> From<SplitButton<'a, M>> for Element<'a, M> {
         let m = s.metrics;
         let main = sized(s.content, &m).style(sb::linked(Position::Start));
         let main = if s.disabled { main } else { main.on_press(s.on_press) };
-        joined(main.into(), super::menu::popover_content(&s.menu, 360.0), s.disabled, s.open, &m)
+        let button = joined(main.into(), super::menu::popover_content(&s.menu, 360.0), s.disabled, s.open, &m);
+        // Like a menu button, it registers the accelerators its menu shows.
+        crate::shortcut::Shortcuts::new().from_menu(&s.menu).scope(button)
     }
 }
 

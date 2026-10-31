@@ -61,6 +61,7 @@ pub enum Setting {
     CollapseWidth,
     MinContentWidth,
     Layout,
+    Shortcuts,
     MobileSidebar,
     MenuPresentation,
     RowCollapse,
@@ -152,6 +153,10 @@ pub struct Config {
     pub toast_position: crate::widget::ToastPosition,
     /// `[toasts] target`: the whole window or only the content area.
     pub toast_target: crate::widget::ToastTarget,
+    /// `[shortcuts] enabled`: keyboard shortcuts work (and are shown) at all.
+    pub shortcuts_enabled: bool,
+    /// `[shortcuts] hints`: whether menus show accelerator hints.
+    pub shortcut_hints: crate::shortcut::Hints,
     pub row_wrap_basis: f32,
     /// `system` follows `icon-theme`.
     pub icon_theme: Pick<String>,
@@ -201,6 +206,8 @@ impl Default for Config {
             row_collapse: CollapseBehavior::Stacked,
             toast_position: Default::default(),
             toast_target: Default::default(),
+            shortcuts_enabled: true,
+            shortcut_hints: Default::default(),
             row_wrap_basis: 128.0,
             icon_theme: Pick::System,
             allow_app_overrides: true,
@@ -408,6 +415,17 @@ impl Config {
                 .map(|t| self.toast_target = t)
                 .unwrap_or_else(|| bad!("toasts", "target", v));
         }
+        if let Some(v) = get("shortcuts", "enabled") {
+            parse_bool(v).map(|b| self.shortcuts_enabled = b).unwrap_or_else(|| bad!("shortcuts", "enabled", v));
+        }
+        if let Some(v) = get("shortcuts", "hints") {
+            match v {
+                "auto" => self.shortcut_hints = crate::shortcut::Hints::Auto,
+                "always" => self.shortcut_hints = crate::shortcut::Hints::Always,
+                "never" => self.shortcut_hints = crate::shortcut::Hints::Never,
+                _ => bad!("shortcuts", "hints", v),
+            }
+        }
         if let Some(v) = get("rows", "collapse") {
             match v {
                 "stacked" => self.row_collapse = CollapseBehavior::Stacked,
@@ -434,7 +452,7 @@ impl Config {
             ("breakpoints", "sm"), ("breakpoints", "md"), ("breakpoints", "lg"), ("breakpoints", "xl"), ("breakpoints", "xxl"),
             ("navigation", "sidebar-fraction"), ("navigation", "sidebar-min-width"), ("navigation", "sidebar-max-width"),
             ("navigation", "drawer-max-fraction"), ("windows", "min-width"), ("windows", "min-height"), ("layout", "page-max-width"), ("navigation", "mobile-sidebar"),
-            ("menus", "presentation"), ("rows", "collapse"), ("toasts", "position"), ("toasts", "target"), ("rows", "wrap-basis"), ("icons", "theme"),
+            ("menus", "presentation"), ("rows", "collapse"), ("toasts", "position"), ("toasts", "target"), ("shortcuts", "enabled"), ("shortcuts", "hints"), ("rows", "wrap-basis"), ("icons", "theme"),
             ("policy", "allow-app-overrides"),
         ];
         for (s, k) in m.keys() {
@@ -568,6 +586,8 @@ pub struct Overrides {
     row_collapse: Option<CollapseBehavior>,
     toast_position: Option<crate::widget::ToastPosition>,
     toast_target: Option<crate::widget::ToastTarget>,
+    shortcuts_enabled: Option<bool>,
+    shortcut_hints: Option<crate::shortcut::Hints>,
     row_wrap_basis: Option<f32>,
     icon_theme: Option<String>,
     motion: Vec<(crate::animation::Trigger, crate::animation::Motion)>,
@@ -604,6 +624,8 @@ impl Overrides {
     override_fn!(row_collapse, row_collapse, CollapseBehavior, Setting::RowCollapse);
     override_fn!(toast_position, toast_position, crate::widget::ToastPosition, Setting::ToastPosition);
     override_fn!(toast_target, toast_target, crate::widget::ToastTarget, Setting::ToastTarget);
+    override_fn!(shortcuts_enabled, shortcuts_enabled, bool, Setting::Shortcuts);
+    override_fn!(shortcut_hints, shortcut_hints, crate::shortcut::Hints, Setting::Shortcuts);
     override_fn!(row_wrap_basis, row_wrap_basis, f32, Setting::RowWrapBasis);
     override_fn!(icon_theme, icon_theme, String, Setting::IconTheme);
 
@@ -673,6 +695,8 @@ impl Overrides {
         if let Some(v) = self.row_collapse { c.row_collapse = v }
         if let Some(v) = self.toast_position { c.toast_position = v }
         if let Some(v) = self.toast_target { c.toast_target = v }
+        if let Some(v) = self.shortcuts_enabled { c.shortcuts_enabled = v }
+        if let Some(v) = self.shortcut_hints { c.shortcut_hints = v }
         if let Some(v) = self.row_wrap_basis { c.row_wrap_basis = v }
         if let Some(v) = self.icon_theme { c.icon_theme = Pick::Fixed(v) }
     }
@@ -896,5 +920,16 @@ thing=1
         let c = Config::from_keyfile("[navigation]\nsidebar-min-width=500\nsidebar-max-width=300\n");
         assert_eq!((c.sidebar_min_width, c.sidebar_max_width), (180.0, 280.0));
         assert_eq!(c.warnings().len(), 1);
+    }
+
+    #[test]
+    fn shortcut_settings() {
+        use crate::shortcut::Hints;
+        let d = Config::default();
+        assert!(d.shortcuts_enabled && d.shortcut_hints == Hints::Auto);
+        let c = Config::from_keyfile("[shortcuts]\nenabled=false\nhints=never\n");
+        assert!(!c.shortcuts_enabled && c.shortcut_hints == Hints::Never);
+        assert!(c.warnings().is_empty());
+        assert_eq!(Config::from_keyfile("[shortcuts]\nhints=sometimes\n").warnings().len(), 1);
     }
 }

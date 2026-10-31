@@ -24,6 +24,7 @@ mod preferences;
 mod rows;
 mod segmented;
 mod scrolled;
+mod shortcut_scope;
 mod slots;
 mod split_view;
 mod split;
@@ -49,6 +50,7 @@ pub use extra::{
 };
 pub use dropdown::{dropdown, dropdown_disabled, menu_item, menu_item_disabled, popover, Align as PopoverAlign, Appearance as DropdownAppearance, Dropdown, Presentation as DropdownPresentation};
 pub use elevated::{card_shadow, Elevated};
+pub use shortcut_scope::shortcuts;
 pub use split_view::{adaptive_split, AdaptiveSplit};
 pub use split::{split_button, SplitAction, SplitButton, SplitButtonAction};
 pub use switch::{switch, Switch};

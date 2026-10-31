@@ -50,6 +50,8 @@ Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 wi
 | layout | `page-max-width` | px (600) | the readable width pages and preference lists are clamped to |
 | | `mobile-sidebar` | drawer / first-page (drawer) | `NavigationSplitView` default |
 | menus | `presentation` | auto / dropdown / full-page (auto) | `MenuPresentation::resolve` |
+| shortcuts | `enabled` | bool (true) | keyboard shortcuts work and are shown at all |
+| | `hints` | auto / always / never (auto) | accelerator hints in menus; auto hides them in the touch full-page menu |
 | toasts | `position` | top-left / top-center / top-right / bottom-left / bottom-center / bottom-right (bottom-center) | `Toast::position` default |
 | | `target` | window / content (window) | `widget::toast_target()`: where the app places `toast_overlay` |
 | rows | `collapse` | stacked / flex (stacked) | rows' wrapped suffix |

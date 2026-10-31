@@ -797,7 +797,11 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
         let p = state.progress.shown;
         let mut kids = layout.children();
         let (root_l, top_l) = (kids.next().unwrap(), kids.next().unwrap());
-        if p <= 0.001 {
+        if matches!(event, Event::Keyboard(_)) {
+            // Keys reach both pages, so shortcuts registered by a hidden page still work.
+            self.root.as_widget_mut().update(&mut tree.children[0], event, root_l, cursor, renderer, clipboard, shell, viewport);
+            self.top.as_widget_mut().update(&mut tree.children[1], event, top_l, cursor, renderer, clipboard, shell, viewport);
+        } else if p <= 0.001 {
             self.root.as_widget_mut().update(&mut tree.children[0], event, root_l, cursor, renderer, clipboard, shell, viewport);
         } else if p >= 0.999 {
             self.top.as_widget_mut().update(&mut tree.children[1], event, top_l, cursor, renderer, clipboard, shell, viewport);

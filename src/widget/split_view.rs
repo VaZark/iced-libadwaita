@@ -154,10 +154,13 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
         let (side_l, content_l) = (kids.next().unwrap(), kids.next().unwrap());
         let (a, b) = tree.children.split_at_mut(1);
         let drawer_visible = drawer > 0.001 && slot <= 0.001;
+        // Keys reach the sidebar even when it is hidden: a menu button in its header registers
+        // its shortcuts, which must work with the drawer closed.
+        let keyboard = matches!(event, Event::Keyboard(_));
 
         if drawer_visible {
             // Settled: the drawer's own widgets work. Anything else is the scrim.
-            if (drawer - 1.0).abs() < 0.001 {
+            if (drawer - 1.0).abs() < 0.001 || keyboard {
                 self.children[0].as_widget_mut().update(&mut a[0], event, side_l, cursor, renderer, clipboard, shell, viewport);
             }
             if matches!(event, Event::Mouse(_) | Event::Touch(_)) && !shell.is_event_captured() {
@@ -176,7 +179,7 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
             }
             return;
         }
-        if slot > 0.001 {
+        if slot > 0.001 || keyboard {
             self.children[0].as_widget_mut().update(&mut a[0], event, side_l, cursor, renderer, clipboard, shell, viewport);
         }
         self.children[1].as_widget_mut().update(&mut b[0], event, content_l, cursor, renderer, clipboard, shell, viewport);

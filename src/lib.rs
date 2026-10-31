@@ -20,6 +20,7 @@ pub mod palette;
 pub mod prelude;
 pub mod semantic;
 pub mod shadow;
+pub mod shortcut;
 pub mod style;
 pub mod system;
 pub mod theme;

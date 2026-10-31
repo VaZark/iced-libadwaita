@@ -68,6 +68,13 @@ density, shadows, motion per trigger, decorations, breakpoints, menus, sidebar, 
 Apps opt out per setting with `Config::opt_out` (discouraged, reported at startup, can be
 forbidden by `[policy]`). See [desktop-config](docs/lib/desktop-config.md).
 
+#### Shortcuts
+
+The toolkit listens for them: a wrapper widget publishes the bound message, menus register the
+accelerators they show, and a standard set covers GNOME's usual ones. A widget exposes a shortcut
+only when it is available (item enabled, shortcuts on, keyboard likely). See
+[windows and menus](docs/lib/windows-and-menus.md).
+
 #### Windows
 
 No server-side decorations by default. Header bars are continuous, window buttons follow the

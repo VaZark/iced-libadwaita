@@ -243,6 +243,8 @@ enum Message {
     DemoPlay,
     Noop,
     Drag,
+    /// Escape: dismisses the topmost overlay.
+    Escape,
     Narrow(bool),
     Close,
     Minimize,
@@ -496,6 +498,15 @@ impl Gallery {
             }
             Message::Noop => {}
             Message::Drag => return window::oldest().and_then(window::drag),
+            Message::Escape => {
+                if self.dialog.is_some() {
+                    self.dialog = None;
+                } else if self.sheet {
+                    self.sheet = false;
+                } else if self.drawer_open {
+                    self.drawer_open = false;
+                }
+            }
             Message::Narrow(n) => self.narrow = n,
             Message::Close => return iced::exit(),
             Message::ToggleFullscreen => {
@@ -651,13 +662,6 @@ impl Gallery {
         Subscription::batch([
             frames,
             adw::window::changes().map(|_| Message::WindowChanged),
-            iced::event::listen_with(|event, _, _| match event {
-                iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
-                    key: iced::keyboard::Key::Named(iced::keyboard::key::Named::F11),
-                    ..
-                }) => Some(Message::ToggleFullscreen),
-                _ => None,
-            }),
         ])
     }
 
@@ -840,14 +844,21 @@ impl Gallery {
                     .response("Save", w::ResponseAppearance::Suggested, Message::CloseDialog)
                     .response("Discard", w::ResponseAppearance::Destructive, Message::CloseDialog)),
             ),
-            Some(Dialog::Shortcuts) => Some(                w::shortcuts_dialog(
-                    vec![
-                        ("General".into(), vec![("Open Menu".into(), "F10".into()), ("Quit".into(), "Ctrl+Q".into())]),
-                        ("Editing".into(), vec![("Undo".into(), "Ctrl+Z".into()), ("Redo".into(), "Ctrl+Shift+Z".into())]),
-                    ],
-                    Message::CloseDialog,
-                ),
-            ),
+            Some(Dialog::Shortcuts) => Some(w::shortcuts_dialog(
+                vec![
+                    (
+                        "General".into(),
+                        vec![
+                            ("Preferences".into(), "Ctrl+,".into()),
+                            ("Keyboard Shortcuts".into(), "Ctrl+?".into()),
+                            ("Help".into(), "F1".into()),
+                            ("Quit".into(), "Ctrl+Q".into()),
+                        ],
+                    ),
+                    ("Window".into(), vec![("Fullscreen".into(), "F11".into()), ("Close dialog".into(), "Esc".into())]),
+                ],
+                Message::CloseDialog,
+            )),
             Some(Dialog::Preferences) => Some(                w::preferences_dialog("Preferences", self.preferences_demo(), Message::CloseDialog),
             ),
             Some(Dialog::About) => Some(Element::from(w::AboutDialog::new("Gallery")
@@ -861,6 +872,14 @@ impl Gallery {
             ),
         };
         let result = w::present_dialog(base, dialog, Some(Message::CloseDialog), corner);
+        // The toolkit listens: no subscription or update arm. The primary menu registers its own
+        // accelerators (Ctrl+, Ctrl+? F1); these are the standard ones the app supports.
+        let result = adw::shortcut::Standard::new()
+            .quit(Message::Close)
+            .fullscreen(Message::ToggleFullscreen)
+            .into_shortcuts()
+            .bind("Esc", Message::Escape)
+            .scope(result);
         if csd { adw::window::frame(result, win_state, Message::Resize) } else { result }
     }
 

@@ -121,6 +121,19 @@ impl<M> Menu<M> {
         self.sections.push(items.into_iter().collect());
         self
     }
+    /// The accelerator and message of every enabled item that has an accelerator, so a
+    /// [`Shortcuts`](crate::shortcut::Shortcuts) can make the shown shortcuts work.
+    pub fn accelerators(&self) -> Vec<(String, M)>
+    where
+        M: Clone,
+    {
+        self.sections
+            .iter()
+            .flatten()
+            .filter(|i| !i.disabled)
+            .filter_map(|i| i.accel.clone().map(|a| (a, message(i))))
+            .collect()
+    }
     /// Total number of items (the HIG recommends 3–12).
     pub fn len(&self) -> usize {
         self.sections.iter().map(Vec::len).sum()
@@ -180,11 +193,12 @@ impl<M> MenuButton<M> {
 }
 
 /// Builds one row's content: `[leading] label … [accel]`.
-fn row_content<'a, M: 'a>(item: &MenuItem<M>, any_check: bool) -> Element<'a, M> {
+fn row_content<'a, M: 'a>(item: &MenuItem<M>, any_check: bool, touch: bool) -> Element<'a, M> {
     let m = Metrics::desktop();
     let t = Typography::default();
-    let (text_label, destructive, accel, icon) =
-        (item.label.clone(), item.destructive, item.accel.clone(), item.icon);
+    // The accelerator is shown only when it is available (see `shortcut::hint`).
+    let accel = crate::shortcut::hint(item.accel.as_deref(), !item.disabled, touch);
+    let (text_label, destructive, icon) = (item.label.clone(), item.destructive, item.icon);
     let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
     if any_check {
         let checked = matches!(item.kind, Kind::Check { checked: true, .. });
@@ -242,7 +256,7 @@ fn dropdown_items<'a, M: Clone + 'a>(menu: &Menu<M>) -> Vec<Element<'a, M>> {
         for item in section {
             out.push(
                 button(
-                    container(row_content(item, any_check))
+                    container(row_content(item, any_check, false))
                         .padding([0.0, m.space_m])
                         .center_y(Length::Fixed(32.0)),
                 )
@@ -287,7 +301,7 @@ fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M>
     for section in &menu.sections {
         let rows = section.iter().map(|item| -> Element<'a, M> {
             button(
-                container(row_content(item, any_check))
+                container(row_content(item, any_check, true))
                     .padding(m.row_padding)
                     .center_y(Length::Fixed(m.row_min_height)),
             )
@@ -336,13 +350,15 @@ impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
             .align(Align::End)
             .popover_width(260.0)
             .open_initially(b.open_initially);
-        match b.tooltip {
+        let button: Element<'a, M> = match b.tooltip {
             Some(t) => tooltip(Element::from(dd), text(t).size(12), tooltip::Position::Bottom)
                 .style(sc::osd)
                 .padding(m.space_xs)
                 .into(),
             None => dd.into(),
-        }
+        };
+        // The menu registers the accelerators it shows, so they work while it is in the view.
+        crate::shortcut::Shortcuts::new().from_menu(&b.menu).scope(button)
     }
 }
 
