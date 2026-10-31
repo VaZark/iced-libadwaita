@@ -9,6 +9,17 @@ fn stack<'a>(spacing: f32, children: Vec<Element<'a>>) -> iced::widget::Column<'
     column(children).spacing(spacing)
 }
 
+/// Moves a pending list of rows into the page.
+fn flush<'a>(
+    col: iced::widget::Column<'a, Message, Theme>,
+    list: &mut Option<w::PreferencesGroup<'a, Message>>,
+) -> iced::widget::Column<'a, Message, Theme> {
+    match list.take() {
+        Some(g) => col.push(g),
+        None => col,
+    }
+}
+
 /// A label on the start edge and a control on the end edge.
 fn labeled<'a>(label: &'static str, control: impl Into<Element<'a>>) -> Element<'a> {
     row![container(ty::body(label)).width(Length::Fill), control.into()]
@@ -35,27 +46,64 @@ impl Gallery {
         w::PreferencesGroup::<Message>::new().title(title).metrics(self.metrics())
     }
 
-    /// Level 1: the group's components, each opening its own page.
+    /// Level 1: the group's components. Components with two or more significantly different
+    /// properties open a nested page; single-trigger ones get a button on their row; the rest
+    /// show their one demo right here (see `README.md`).
     fn group_page(&self, page: Page) -> Element<'_> {
         let m = self.metrics();
         let mut col = column![].spacing(m.group_spacing);
-        for (i, (title, details)) in page.sections().into_iter().enumerate() {
-            let mut g = self.group(title);
-            if i == 0 {
-                g = g.description(page.description());
+        let mut first = true;
+        for (title, entries) in page.sections() {
+            // Consecutive rows (nested / action) share one list; inline demos are their own groups.
+            let mut list: Option<w::PreferencesGroup<'_, Message>> = None;
+            for entry in entries {
+                match entry {
+                    Entry::Nested(d) => {
+                        let row = w::ActionRow::new(d.title())
+                            .subtitle(d.description())
+                            .chevron(true)
+                            .on_activate(Message::OpenDetail(d))
+                            .metrics(m);
+                        let mut g = list.take().unwrap_or_else(|| {
+                            let g = self.group(title);
+                            if std::mem::take(&mut first) { g.description(page.description()) } else { g }
+                        });
+                        g = g.push(row);
+                        list = Some(g);
+                    }
+                    Entry::Action(a) => {
+                        let row = w::ActionRow::new(a.title())
+                            .subtitle(a.description())
+                            .suffix(w::raised_button(text(a.button())).on_press(self.action_message(a)))
+                            .metrics(m);
+                        let mut g = list.take().unwrap_or_else(|| {
+                            let g = self.group(title);
+                            if std::mem::take(&mut first) { g.description(page.description()) } else { g }
+                        });
+                        g = g.push(row);
+                        list = Some(g);
+                    }
+                    Entry::Inline(inl) => {
+                        col = flush(col, &mut list);
+                        first = false;
+                        col = col.push(self.inline(inl));
+                    }
+                }
             }
-            for d in details {
-                g = g.push(
-                    w::ActionRow::new(d.title())
-                        .subtitle(d.description())
-                        .chevron(true)
-                        .on_activate(Message::OpenDetail(d))
-                        .metrics(m),
-                );
-            }
-            col = col.push(g);
+            col = flush(col, &mut list);
         }
         self.page_frame(col)
+    }
+
+    fn action_message(&self, a: Action) -> Message {
+        match a {
+            Action::AlertDialog => Message::OpenDialog(Dialog::Alert),
+            Action::AboutDialog => Message::OpenDialog(Dialog::About),
+            Action::ShortcutsDialog => Message::OpenDialog(Dialog::Shortcuts),
+            Action::PreferencesDialog => Message::OpenDialog(Dialog::Preferences),
+            Action::BottomSheet => Message::Sheet(true),
+            Action::ShowToast => Message::ShowToast("Settings saved"),
+        }
     }
 
     /// Level 2: one component, grouped by property.
@@ -67,7 +115,6 @@ impl Gallery {
         let g = |t| self.group(t);
 
         let body: Element<'_> = match d {
-            // ------------------------------------------------------------ buttons
             Detail::Button => {
                 let enabled = row![
                     w::raised_button(lbl("Default")).on_press(Message::Noop),
@@ -128,20 +175,6 @@ impl Gallery {
                     .spacing(m.group_spacing)
                     .into()
             }
-            Detail::LinkAndCard => {
-                let links = row![w::link_button("Link").on_press(Message::Noop), w::link_button("Disabled link")]
-                    .spacing(sp)
-                    .wrap();
-                let cards = row![
-                    w::card_button(text("Card button").width(Length::Fixed(110.0))).on_press(Message::Noop),
-                    w::card_button(text("Disabled").width(Length::Fixed(110.0))),
-                ]
-                .spacing(sp)
-                .wrap();
-                column![g("Link button").push(w::card(links)), g("Card button").push(w::card(cards))]
-                    .spacing(m.group_spacing)
-                    .into()
-            }
             Detail::ToggleGroup => {
                 let items = || {
                     vec![
@@ -178,7 +211,6 @@ impl Gallery {
                 .into()
             }
 
-            // ------------------------------------------------------------- inputs
             Detail::TextInput => {
                 let states = stack(sp, vec![
                     w::entry("Normal", &self.name).on_input(Message::Name).metrics(m).into(),
@@ -225,69 +257,6 @@ impl Gallery {
                 .spacing(m.group_spacing)
                 .into()
             }
-            Detail::Switch => {
-                let bare = stack(sp, vec![
-                    labeled("Enabled", w::switch(self.sw).on_toggle(Message::Sw)),
-                    labeled("Off", w::switch(false).on_toggle(|_| Message::Noop)),
-                    labeled("Disabled, on", w::switch(true)),
-                    labeled("Disabled, off", w::switch(false)),
-                ]);
-                column![
-                    g("Switch").push(w::card(bare)),
-                    g("Switch row")
-                        .push(w::SwitchRow::new("Enabled", self.row_sw, Message::RowSw).subtitle("Click the row or the switch").metrics(m))
-                        .push(w::SwitchRow::new("Disabled", true, |_| Message::Noop).subtitle("Insensitive").disabled(true).metrics(m)),
-                ]
-                .spacing(m.group_spacing)
-                .into()
-            }
-            Detail::CheckButton => {
-                let checks = stack(sp, vec![
-                    w::check_button("Enabled", self.check).on_toggle(Message::Check).into(),
-                    w::check_button("Unchecked", false).on_toggle(|_| Message::Noop).into(),
-                    w::check_button("Disabled, checked", true).into(),
-                    w::check_button("Disabled, unchecked", false).into(),
-                ]);
-                column![g("Check button").push(w::card(checks))].into()
-            }
-            Detail::RadioButton => {
-                let vertical = stack(sp, vec![
-                    w::radio_button("Radio A", 0u8, self.radio, Message::Radio).into(),
-                    w::radio_button("Radio B", 1u8, self.radio, Message::Radio).into(),
-                    w::radio_button("Radio C", 2u8, self.radio, Message::Radio).into(),
-                ]);
-                let horizontal = row![
-                    w::radio_button("One", 0u8, self.radio, Message::Radio),
-                    w::radio_button("Two", 1u8, self.radio, Message::Radio),
-                    w::radio_button("Three", 2u8, self.radio, Message::Radio),
-                ]
-                .spacing(m.space_l)
-                .wrap();
-                column![g("Vertical").push(w::card(vertical)), g("Horizontal").push(w::card(horizontal))]
-                    .spacing(m.group_spacing)
-                    .into()
-            }
-            Detail::Scale => {
-                let scale = stack(sp, vec![
-                    w::scale(0.0..=100.0, self.slider, Message::Slider).into(),
-                    ty::dim_label(format!("value {:.0}", self.slider)).into(),
-                ]);
-                column![
-                    g("Scale").push(w::card(scale)),
-                    g("Rows")
-                        .push(
-                            w::SliderRow::new("Slider row", self.slider, 0.0..=100.0, Message::Slider)
-                                .subtitle("Stacked below the title when narrow")
-                                .basis(260.0)
-                                .metrics(m),
-                        )
-                        .push(
-                            w::SpinRow::new("Spin row", self.spin, 1.0..=10.0, 1.0, Message::Spin),
-                        ),
-                ]
-                .spacing(m.group_spacing)
-                .into()
-            }
             Detail::Dropdown => {
                 let plain = stack(sp, vec![
                     labeled("Choose a fruit", Element::from(w::dropdown(&FRUITS, self.picked, Message::Picked))),
@@ -314,7 +283,6 @@ impl Gallery {
                 .into()
             }
 
-            // -------------------------------------------------------------- lists
             Detail::ActionRow => column![
                 g("Action row")
                     .push(w::ActionRow::new("Title only").metrics(m))
@@ -359,28 +327,11 @@ impl Gallery {
                     .push(w::EntryRow::new("Read-only", "disabled row").metrics(m)),
             ]
             .into(),
-            Detail::ExpanderRow => column![
-                g("Expander row").push(
-                    w::ExpanderRow::new("Notifications", self.expanded, Message::Expanded)
-                        .subtitle("Expand for details")
-                        .push(w::SwitchRow::new("Sounds", self.notifications, Message::Notifications).metrics(m))
-                        .push(w::ActionRow::new("Do Not Disturb").subtitle("Until tomorrow").metrics(m)),
-                ),
-            ]
-            .into(),
-            Detail::ButtonRow => column![
-                g("Button rows")
-                    .push(w::ButtonRow::new("Neutral").on_activate(Message::Noop))
-                    .push(w::ButtonRow::new("Suggested").role(Role::Accent).on_activate(Message::Noop))
-                    .push(w::ButtonRow::new("Destructive").role(Role::Destructive).on_activate(Message::OpenDialog(Dialog::Alert))),
-            ]
-            .into(),
             Detail::PreferencesGroup => column![
                 self.preferences_demo(),
             ]
             .into(),
 
-            // ------------------------------------------------------------- layout
             Detail::Card => {
                 let plain = w::Card::new(ty::body("A card with the default padding."));
                 let chained = w::Card::new(w::ActionRow::new("First child").subtitle("padding(0): rows pad themselves").metrics(m))
@@ -401,14 +352,74 @@ impl Gallery {
                 .spacing(m.group_spacing)
                 .into()
             }
-            Detail::Clamp => column![
+        };
+        self.page_frame(body)
+    }
+
+    /// A component with one demo, shown directly on its group page.
+    fn inline(&self, i: Inline) -> Element<'_> {
+        let m = self.metrics();
+        let noop = |_: String| Message::Noop;
+        let sp = m.space_m;
+        let g = |t| self.group(t);
+        match i {
+            Inline::Switch => {
+                let bare = stack(sp, vec![
+                    labeled("Enabled", w::switch(self.sw).on_toggle(Message::Sw)),
+                    labeled("Off", w::switch(false).on_toggle(|_| Message::Noop)),
+                    labeled("Disabled, on", w::switch(true)),
+                    labeled("Disabled, off", w::switch(false)),
+                ]);
+                column![g("Switch").push(w::card(bare))].into()
+            }
+            Inline::CheckButton => {
+                let checks = stack(sp, vec![
+                    w::check_button("Enabled", self.check).on_toggle(Message::Check).into(),
+                    w::check_button("Unchecked", false).on_toggle(|_| Message::Noop).into(),
+                    w::check_button("Disabled, checked", true).into(),
+                    w::check_button("Disabled, unchecked", false).into(),
+                ]);
+                column![g("Check button").push(w::card(checks))].into()
+            }
+            Inline::RadioButton => {
+                let vertical = stack(sp, vec![
+                    w::radio_button("Radio A", 0u8, self.radio, Message::Radio).into(),
+                    w::radio_button("Radio B", 1u8, self.radio, Message::Radio).into(),
+                    w::radio_button("Radio C", 2u8, self.radio, Message::Radio).into(),
+                ]);
+                column![g("Radio button").push(w::card(vertical))].into()
+            }
+            Inline::Scale => {
+                let scale = stack(sp, vec![
+                    w::scale(0.0..=100.0, self.slider, Message::Slider).into(),
+                    ty::dim_label(format!("value {:.0}", self.slider)).into(),
+                ]);
+                column![g("Scale").push(w::card(scale))].into()
+            }
+            Inline::ExpanderRow => column![
+                g("Expander row").push(
+                    w::ExpanderRow::new("Notifications", self.expanded, Message::Expanded)
+                        .subtitle("Expand for details")
+                        .push(w::SwitchRow::new("Sounds", self.notifications, Message::Notifications).metrics(m))
+                        .push(w::ActionRow::new("Do Not Disturb").subtitle("Until tomorrow").metrics(m)),
+                ),
+            ]
+            .into(),
+            Inline::ButtonRow => column![
+                g("Button rows")
+                    .push(w::ButtonRow::new("Neutral").on_activate(Message::Noop))
+                    .push(w::ButtonRow::new("Suggested").role(Role::Accent).on_activate(Message::Noop))
+                    .push(w::ButtonRow::new("Destructive").role(Role::Destructive).on_activate(Message::OpenDialog(Dialog::Alert))),
+            ]
+            .into(),
+            Inline::Clamp => column![
                 g("Clamp at 280px").push(w::card(w::clamp(
                     w::entry("Never wider than 280px", "centered").on_input(noop).metrics(m),
                     280.0,
                 ))),
             ]
             .into(),
-            Detail::StatusPage => {
+            Inline::StatusPage => {
                 let page = |icon: Icon, title: &'static str, desc: &'static str| {
                     w::Card::new(
                         w::status_page::<Message>()
@@ -422,35 +433,17 @@ impl Gallery {
                     .padding(0)
                     .height(Length::Fixed(280.0))
                 };
-                column![
-                    g("Empty").push(page(Icon::Search, "No Results", "Try a different search term.")),
-                    g("Error").push(page(Icon::DialogError, "Something Went Wrong", "The request could not be completed.")),
-                ]
-                .spacing(m.group_spacing)
-                .into()
+                column![g("Status page").push(page(Icon::Search, "No Results", "Try a different search term."))].into()
             }
-            Detail::WrapBox => {
+            Inline::WrapBox => {
                 let tags: Vec<Element> = ["rust", "iced", "gnome", "adwaita", "libadwaita", "theming", "widgets"]
                     .into_iter()
                     .map(|t| w::tag(t, Role::Accent))
                     .collect();
-                let buttons = row![
-                    w::raised_button(lbl("One")).on_press(Message::Noop),
-                    w::raised_button(lbl("Two")).on_press(Message::Noop),
-                    w::raised_button(lbl("Three")).on_press(Message::Noop),
-                    w::raised_button(lbl("Four")).on_press(Message::Noop),
-                    w::raised_button(lbl("Five")).on_press(Message::Noop),
-                ]
-                .spacing(sp)
-                .wrap();
-                column![
-                    g("Wrap box").description("Narrow the window: children wrap.").push(w::card(w::wrap_box(tags, m.space_s))),
-                    g("Wrapping row").push(w::card(buttons)),
-                ]
-                .spacing(m.group_spacing)
-                .into()
+                column![g("Wrap box").description("Narrow the window: children wrap.").push(w::card(w::wrap_box(tags, m.space_s)))]
+                    .into()
             }
-            Detail::Collapse => column![
+            Inline::Collapse => column![
                 g("Collapse behavior")
                     .description("Narrow the window: the control wraps. Stacked = 100% width; Flex = keeps its width.")
                     .push(
@@ -470,8 +463,7 @@ impl Gallery {
             ]
             .into(),
 
-            // --------------------------------------------------------- navigation
-            Detail::ViewSwitcher => {
+            Inline::ViewSwitcher => {
                 let items = || {
                     vec![
                         w::ToggleItem::new(Tab::One, "Files").icon(Icon::Home),
@@ -484,7 +476,7 @@ impl Gallery {
                 ]
                 .into()
             }
-            Detail::TabBar => {
+            Inline::TabBar => {
                 let tabs = w::tab_bar(
                     vec!["Home".into(), "Docs".into(), "Settings".into()],
                     self.tab as usize,
@@ -493,7 +485,7 @@ impl Gallery {
                 );
                 column![g("Tab bar").push(w::Card::new(tabs).padding(0))].into()
             }
-            Detail::PathBar => column![
+            Inline::PathBar => column![
                 g("Path bar").push(w::card(w::path_bar(
                     vec!["Home".into(), "Projects".into(), "iced-libadwaita".into()],
                     2,
@@ -507,7 +499,7 @@ impl Gallery {
             ]
             .spacing(m.group_spacing)
             .into(),
-            Detail::Carousel => {
+            Inline::Carousel => {
                 // Each page has its own tint so the slide is easy to follow.
                 let pages = || -> Vec<Element<'_>> {
                     [("First page", Role::Accent), ("Second page", Role::Success), ("Third page", Role::Warning)]
@@ -535,7 +527,7 @@ impl Gallery {
                 );
                 column![g("Carousel").push(car)].into()
             }
-            Detail::MenuButton => {
+            Inline::MenuButton => {
                 let presentation = match self.menu_mode {
                     MenuMode::Auto => w::MenuPresentation::resolve(900.0),
                     MenuMode::Dropdown => w::MenuPresentation::Dropdown,
@@ -571,7 +563,7 @@ impl Gallery {
                 .spacing(m.group_spacing)
                 .into()
             }
-            Detail::ShortcutLabel => {
+            Inline::ShortcutLabel => {
                 let shortcuts = column![
                     row![ty::body("Copy"), w::shortcut_label("Ctrl+C")].spacing(m.space_m),
                     row![ty::body("Palette"), w::shortcut_label("Ctrl+Shift+P")].spacing(m.space_m),
@@ -580,8 +572,7 @@ impl Gallery {
                 column![g("Shortcut labels").push(w::card(shortcuts))].into()
             }
 
-            // ----------------------------------------------------------- feedback
-            Detail::Banner => {
+            Inline::Banner => {
                 let banner: Element = w::banner("Network connection lost")
                     .button("Retry", Message::Banner(false))
                     .revealed(self.banner)
@@ -593,18 +584,7 @@ impl Gallery {
                 .spacing(m.group_spacing)
                 .into()
             }
-            Detail::Toast => column![
-                g("Toast").push(w::card(
-                    row![
-                        w::raised_button(lbl("Show toast")).on_press(Message::ShowToast("Settings saved")),
-                        w::flat_button(lbl("Dismiss")).on_press(Message::DismissToast),
-                    ]
-                    .spacing(sp)
-                    .wrap(),
-                )),
-            ]
-            .into(),
-            Detail::Progress => {
+            Inline::Progress => {
                 let bars = stack(sp, vec![
                     w::scale(0.0..=100.0, self.slider, Message::Slider).into(),
                     w::progress_bar(0.0..=100.0, self.slider).into(),
@@ -619,7 +599,7 @@ impl Gallery {
                 .spacing(m.group_spacing)
                 .into()
             }
-            Detail::Avatar => {
+            Inline::Avatar => {
                 let avatars = row![
                     w::avatar(32.0, "Ada Lovelace"),
                     w::avatar(48.0, "Grace Hopper"),
@@ -630,7 +610,7 @@ impl Gallery {
                 .align_y(iced::Alignment::Center);
                 column![g("Avatar").push(w::card(avatars))].into()
             }
-            Detail::Tag => {
+            Inline::Tag => {
                 let tags = row![
                     w::tag("Accent", Role::Accent),
                     w::tag("Success", Role::Success),
@@ -643,21 +623,20 @@ impl Gallery {
                 column![g("Tag").push(w::card(tags))].into()
             }
 
-            // ------------------------------------------------------------ dialogs
-            Detail::AlertDialog => self.open_button("Alert dialog", "A question with Cancel, Save and Discard responses.", Message::OpenDialog(Dialog::Alert)),
-            Detail::AboutDialog => self.open_button("About dialog", "Application name, version, links and license.", Message::OpenDialog(Dialog::About)),
-            Detail::ShortcutsDialog => self.open_button("Shortcuts dialog", "Keyboard shortcuts in sections.", Message::OpenDialog(Dialog::Shortcuts)),
-            Detail::PreferencesDialog => self.open_button("Preferences dialog", "A page of preference rows.", Message::OpenDialog(Dialog::Preferences)),
-            Detail::BottomSheet => self.open_button("Bottom sheet", "A panel that slides up from the bottom.", Message::Sheet(true)),
-        };
-        self.page_frame(body)
-    }
-
-    fn open_button(&self, title: &'static str, desc: &'static str, open: Message) -> Element<'_> {
-        let m = self.metrics();
-        column![self.group(title).description(desc).push(w::card(w::raised_button(text("Open")).on_press(open)))]
-            .spacing(m.group_spacing)
-            .into()
+            Inline::LinkButton => column![g("Link button").push(w::card(
+                row![w::link_button("Link").on_press(Message::Noop), w::link_button("Disabled link")].spacing(sp).wrap(),
+            ))]
+            .into(),
+            Inline::CardButton => column![g("Card button").push(w::card(
+                row![
+                    w::card_button(text("Card button").width(Length::Fixed(110.0))).on_press(Message::Noop),
+                    w::card_button(text("Disabled").width(Length::Fixed(110.0))),
+                ]
+                .spacing(sp)
+                .wrap(),
+            ))]
+            .into(),
+        }
     }
 
     fn typography_page(&self) -> Element<'_> {

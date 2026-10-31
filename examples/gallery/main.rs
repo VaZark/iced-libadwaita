@@ -21,7 +21,7 @@ type Element<'a> = adw::Element<'a, Message>;
 mod details;
 mod nav;
 
-use nav::{Detail, Page};
+use nav::{Action, Detail, Entry, Inline, Page};
 
 /// The motions the Theming page can play: libadwaita easings and the sheet spring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -559,7 +559,7 @@ impl Gallery {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        let frames = if self.detail == Some(Detail::Progress) || self.shots.is_some() || self.demo_tween.is_animating() {
+        let frames = if self.page == Page::Feedback || self.shots.is_some() || self.demo_tween.is_animating() {
             window::frames().map(Message::Frame)
         } else {
             Subscription::none()

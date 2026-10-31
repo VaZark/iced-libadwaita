@@ -75,100 +75,166 @@ impl Page {
     }
 
     /// The components of this group, in labeled sections. Empty: the page is the content.
-    pub fn sections(self) -> Vec<(&'static str, Vec<Detail>)> {
+    /// How each entry is presented follows the rule in `README.md`.
+    pub fn sections(self) -> Vec<(&'static str, Vec<Entry>)> {
+        use Action::*;
         use Detail::*;
+        use Inline as I;
+        let n = Entry::Nested;
+        let a = Entry::Action;
+        let i = Entry::Inline;
         match self {
             Page::Buttons => vec![
-                ("Buttons", vec![Button, ButtonContent, LinkAndCard]),
-                ("Groups", vec![ToggleGroup]),
+                ("Buttons", vec![n(Button), n(ButtonContent), i(I::LinkButton), i(I::CardButton)]),
+                ("Groups", vec![n(ToggleGroup)]),
             ],
             Page::Inputs => vec![
-                ("Text", vec![TextInput, TextView]),
-                ("Toggles", vec![Switch, CheckButton, RadioButton]),
-                ("Ranges & choosers", vec![Scale, Dropdown]),
+                ("Text", vec![n(TextInput), n(TextView)]),
+                ("Toggles", vec![i(I::Switch), i(I::CheckButton), i(I::RadioButton)]),
+                ("Ranges & choosers", vec![i(I::Scale), n(Dropdown)]),
             ],
             Page::Lists => vec![
-                ("Rows", vec![ActionRow, SwitchAndComboRows, EntryRow, ExpanderRow, ButtonRow]),
-                ("Groups", vec![PreferencesGroup]),
+                ("Rows", vec![n(ActionRow), n(SwitchAndComboRows), n(EntryRow), i(I::ExpanderRow), i(I::ButtonRow)]),
+                ("Groups", vec![n(PreferencesGroup)]),
             ],
             Page::Layout => vec![
-                ("Containers", vec![Card, Clamp, StatusPage]),
-                ("Flow", vec![WrapBox, Collapse]),
+                ("Containers", vec![n(Card), i(I::Clamp), i(I::StatusPage)]),
+                ("Flow", vec![i(I::WrapBox), i(I::Collapse)]),
             ],
             Page::Navigation => vec![
-                ("Switchers", vec![ViewSwitcher, TabBar, PathBar]),
-                ("Paging", vec![Carousel]),
-                ("Menus & shortcuts", vec![MenuButton, ShortcutLabel]),
+                ("Switchers", vec![i(I::ViewSwitcher), i(I::TabBar), i(I::PathBar)]),
+                ("Paging", vec![i(I::Carousel)]),
+                ("Menus & shortcuts", vec![i(I::MenuButton), i(I::ShortcutLabel)]),
             ],
             Page::Feedback => vec![
-                ("Messages", vec![Banner, Toast]),
-                ("Status", vec![Progress, Avatar, Tag]),
+                ("Messages", vec![i(I::Banner), a(ShowToast)]),
+                ("Status", vec![i(I::Progress), i(I::Avatar), i(I::Tag)]),
             ],
-            Page::Dialogs => vec![("Overlays", vec![AlertDialog, AboutDialog, ShortcutsDialog, PreferencesDialog, BottomSheet])],
+            Page::Dialogs => vec![(
+                "Overlays",
+                vec![a(AlertDialog), a(AboutDialog), a(ShortcutsDialog), a(PreferencesDialog), a(BottomSheet)],
+            )],
             Page::Typography | Page::Theming => vec![],
         }
     }
 }
 
-/// A level-2 page: one component with all its properties and states.
+/// One entry of a group page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Entry {
+    /// Opens a nested page: the component has two or more significantly different properties.
+    Nested(Detail),
+    /// A single trigger: a button on the row instead of a chevron.
+    Action(Action),
+    /// A single demo, shown directly on the group page.
+    Inline(Inline),
+}
+
+/// A level-2 page: a component with two or more significantly different properties.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Detail {
     // Buttons
     Button,
     ButtonContent,
-    LinkAndCard,
     ToggleGroup,
     // Inputs
     TextInput,
     TextView,
-    Switch,
-    CheckButton,
-    RadioButton,
-    Scale,
     Dropdown,
     // Lists
     ActionRow,
     SwitchAndComboRows,
     EntryRow,
-    ExpanderRow,
-    ButtonRow,
     PreferencesGroup,
     // Layout
     Card,
+}
+
+/// A component with one demo, rendered inline on its group page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Inline {
+    LinkButton,
+    CardButton,
+    Switch,
+    CheckButton,
+    RadioButton,
+    Scale,
+    ExpanderRow,
+    ButtonRow,
     Clamp,
     StatusPage,
     WrapBox,
     Collapse,
-    // Navigation
     ViewSwitcher,
     TabBar,
     PathBar,
     Carousel,
     MenuButton,
     ShortcutLabel,
-    // Feedback
     Banner,
-    Toast,
     Progress,
     Avatar,
     Tag,
-    // Dialogs
+}
+
+/// A component whose whole demo is one trigger.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Action {
     AlertDialog,
     AboutDialog,
     ShortcutsDialog,
     PreferencesDialog,
     BottomSheet,
+    ShowToast,
+}
+
+impl Action {
+    pub fn title(self) -> &'static str {
+        match self {
+            Action::AlertDialog => "Alert dialog",
+            Action::AboutDialog => "About dialog",
+            Action::ShortcutsDialog => "Shortcuts dialog",
+            Action::PreferencesDialog => "Preferences dialog",
+            Action::BottomSheet => "Bottom sheet",
+            Action::ShowToast => "Toast",
+        }
+    }
+    pub fn description(self) -> &'static str {
+        match self {
+            Action::AlertDialog => "A question with Cancel, Save and Discard responses",
+            Action::AboutDialog => "Application name, version, links and license",
+            Action::ShortcutsDialog => "Keyboard shortcuts in sections",
+            Action::PreferencesDialog => "A page of preference rows in a dialog",
+            Action::BottomSheet => "A panel sliding up from the bottom",
+            Action::ShowToast => "A brief message at the bottom",
+        }
+    }
+    /// The label of the button on the row.
+    pub fn button(self) -> &'static str {
+        match self {
+            Action::ShowToast => "Show",
+            _ => "Open",
+        }
+    }
 }
 
 impl Detail {
     pub fn all() -> Vec<Detail> {
-        Page::ALL.iter().flat_map(|p| p.sections()).flat_map(|(_, d)| d).collect()
+        Page::ALL
+            .iter()
+            .flat_map(|p| p.sections())
+            .flat_map(|(_, e)| e)
+            .filter_map(|e| match e {
+                Entry::Nested(d) => Some(d),
+                _ => None,
+            })
+            .collect()
     }
 
     pub fn page(self) -> Page {
         Page::ALL
             .into_iter()
-            .find(|p| p.sections().iter().any(|(_, d)| d.contains(&self)))
+            .find(|p| p.sections().iter().any(|(_, e)| e.contains(&Entry::Nested(self))))
             .expect("every detail belongs to a page")
     }
 
@@ -176,85 +242,31 @@ impl Detail {
         match self {
             Detail::Button => "Button",
             Detail::ButtonContent => "Button content",
-            Detail::LinkAndCard => "Link & card button",
             Detail::ToggleGroup => "Toggle group",
             Detail::TextInput => "Text input",
             Detail::TextView => "Multi-line text",
-            Detail::Switch => "Switch",
-            Detail::CheckButton => "Check button",
-            Detail::RadioButton => "Radio button",
-            Detail::Scale => "Scale",
             Detail::Dropdown => "Dropdown",
             Detail::ActionRow => "Action row",
             Detail::SwitchAndComboRows => "Switch & combo rows",
             Detail::EntryRow => "Entry row",
-            Detail::ExpanderRow => "Expander row",
-            Detail::ButtonRow => "Button row",
             Detail::PreferencesGroup => "Preferences group",
             Detail::Card => "Card",
-            Detail::Clamp => "Clamp",
-            Detail::StatusPage => "Status page",
-            Detail::WrapBox => "Wrap box",
-            Detail::Collapse => "Collapse behavior",
-            Detail::ViewSwitcher => "View switcher",
-            Detail::TabBar => "Tab bar",
-            Detail::PathBar => "Path bar",
-            Detail::Carousel => "Carousel",
-            Detail::MenuButton => "Menu button",
-            Detail::ShortcutLabel => "Shortcut label",
-            Detail::Banner => "Banner",
-            Detail::Toast => "Toast",
-            Detail::Progress => "Progress & spinner",
-            Detail::Avatar => "Avatar",
-            Detail::Tag => "Tag",
-            Detail::AlertDialog => "Alert dialog",
-            Detail::AboutDialog => "About dialog",
-            Detail::ShortcutsDialog => "Shortcuts dialog",
-            Detail::PreferencesDialog => "Preferences dialog",
-            Detail::BottomSheet => "Bottom sheet",
         }
     }
 
     pub fn description(self) -> &'static str {
         match self {
-            Detail::Button => "Default, flat, suggested, destructive, pill and circular",
+            Detail::Button => "Styles, shapes and their disabled states",
             Detail::ButtonContent => "Icon and label, split button",
-            Detail::LinkAndCard => "Link button and card button, enabled and disabled",
-            Detail::ToggleGroup => "Exclusive choices: text, icons, crowded and disabled",
-            Detail::TextInput => "States, password, color override and width",
+            Detail::ToggleGroup => "Text, icons, crowded and as a row",
+            Detail::TextInput => "Validation, password, color override and width",
             Detail::TextView => "Editable, placeholder and read-only",
-            Detail::Switch => "On, off and disabled",
-            Detail::CheckButton => "Checked, unchecked and disabled",
-            Detail::RadioButton => "A group of exclusive options",
-            Detail::Scale => "Slider, progress and row variants",
-            Detail::Dropdown => "Selected, empty, disabled options and disabled",
-            Detail::ActionRow => "Title, subtitle, prefix, suffix and chevron",
+            Detail::Dropdown => "Selected, empty and disabled; combo rows with disabled options",
+            Detail::ActionRow => "Subtitle, prefix, suffix and chevron",
             Detail::SwitchAndComboRows => "Switch, combo, spin and slider rows, with disabled",
             Detail::EntryRow => "Entry and password rows",
-            Detail::ExpanderRow => "Rows that reveal more rows",
-            Detail::ButtonRow => "Neutral, suggested and destructive",
             Detail::PreferencesGroup => "Title, description and a header suffix",
-            Detail::Card => "One chainable box: padding, children and separators",
-            Detail::Clamp => "Limit the width of content",
-            Detail::StatusPage => "Empty and error states",
-            Detail::WrapBox => "Children that wrap onto new lines",
-            Detail::Collapse => "Stacked or flex when a row is too narrow",
-            Detail::ViewSwitcher => "Switch between views",
-            Detail::TabBar => "Closable tabs",
-            Detail::PathBar => "A location in the header",
-            Detail::Carousel => "Swipe or click through pages",
-            Detail::MenuButton => "Dropdown or full-page menu",
-            Detail::ShortcutLabel => "Keyboard accelerators",
-            Detail::Banner => "A message with an action",
-            Detail::Toast => "A brief message at the bottom",
-            Detail::Progress => "Progress bars, colors and a spinner",
-            Detail::Avatar => "Sizes and initials",
-            Detail::Tag => "Colored labels",
-            Detail::AlertDialog => "A question with responses",
-            Detail::AboutDialog => "Application information",
-            Detail::ShortcutsDialog => "Grouped shortcuts",
-            Detail::PreferencesDialog => "A page of preferences in a dialog",
-            Detail::BottomSheet => "A panel sliding up from the bottom",
+            Detail::Card => "Padding, chained children, separators and size",
         }
     }
 }

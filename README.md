@@ -39,8 +39,9 @@ and every widget `Catalog`, so stock iced widgets (`button`, `text_input`,
 `toggler`, `pick_list`, `scrollable`, …) are restyled too. Run
 `cargo run --example gallery` for a tour: the sidebar lists functional groups (Buttons, Inputs,
 Rows & Lists, Layout, Navigation, Feedback, Dialogs & Sheets, Typography, Theming); a group lists
-its components, and each component opens a nested page showing all of its properties and states
-(disabled, validation, color override, …). `-- --screenshot DIR` renders every page in light and
+its components: ones with several distinct properties open a nested page (disabled, validation,
+color override, …), single-trigger ones such as dialogs have a button on the row, and the rest
+show their demo inline (rule in `examples/gallery/README.md`). `-- --screenshot DIR` renders every page in light and
 dark; `GALLERY_DETAIL=textinput` opens a component page directly.
 
 ## A component library
