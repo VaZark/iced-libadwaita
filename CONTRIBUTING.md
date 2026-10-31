@@ -24,6 +24,8 @@ GALLERY_SIZE=WxH        GALLERY_DETAIL=textinput     GALLERY_PAGE=inputs
 GALLERY_SIDEBAR_MODE=first-page   GALLERY_MENU=page|dropdown
 GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push|breakpoint
 GALLERY_DARK=1          # dark scheme for GALLERY_ANIM captures
+GALLERY_ANIM=keys       # waits 6s, then captures: send keys meanwhile (`ydotool key 29:1 50:1 50:0 29:0`)
+GALLERY_ANIM=prefs      # opens the preferences window; captures the parent, then the window
 ICED_LIBADWAITA_CONFIG=path.conf     # try a desktop config
 ```
 

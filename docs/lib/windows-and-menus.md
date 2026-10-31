@@ -78,10 +78,15 @@ for them.
   Wrap the window once; the messages arrive in `update` like any other.
 * A focused widget has precedence: a text input or an open popover that handles the key stops the
   shortcut. Plain-character shortcuts never fire while typing.
-* Accelerators are written as the character the user types and are **layout independent**:
-  `Ctrl+?` fires for Ctrl+Shift+`/` on a US keyboard and Ctrl+Shift+`,` on AZERTY, and then
-  `Ctrl+,` does not also fire. A literal `Shift+` (`Ctrl+Shift+,`) means the unmodified key with
-  Shift held.
+* Accelerators are written as the character the user types and are **layout independent**. A key
+  press is read several ways, best first, and the best-ranked binding wins (then the earliest):
+  1. the key as typed, with Shift counted (letters, named keys, an explicit `Ctrl+Shift+,`);
+  2. the character it produces, with Shift consumed: `Ctrl+?` fires for Ctrl+Shift+`/` on US and
+     Ctrl+Shift+`,` on AZERTY, and `Ctrl+,` then does not also fire; `Ctrl+1` fires for AZERTY's
+     Shift+`&`;
+  3. the Latin letter or digit at the physical key position: `Ctrl+Q` works on a Cyrillic layout,
+     and `Ctrl+1` on AZERTY's unshifted number row.
+  So a binding for exactly what was typed beats a position fallback, whatever the order.
 
 | Action | Accelerator |
 |---|---|

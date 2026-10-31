@@ -665,6 +665,8 @@ impl Gallery {
                     self.scheme = if std::env::var_os("GALLERY_DARK").is_some() { Scheme::Dark } else { Scheme::Light };
                     wait(700, "a0-start", self)
                 }
+                // GALLERY_ANIM=keys: no trigger; send keys from outside during the wait.
+                1 if kind == "keys" => wait(6000, "keys", self),
                 1 => {
                     let trigger = match kind.as_str() {
                         "switch" => Message::Wifi(!self.wifi),

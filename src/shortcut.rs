@@ -114,29 +114,24 @@ impl Accel {
         Some(a)
     }
 
-    /// Whether this accelerator is the given key press.
+    /// How well this accelerator matches a key press: `Some(rank)` with a lower rank meaning a
+    /// better match, `None` for no match. See [`candidates`] for the interpretations tried.
     ///
-    /// `key` is the key **without** modifiers and `modified_key` the character the press
-    /// produces (iced's `key` and `modified_key`). Ctrl, Alt and Super must match exactly.
-    ///
-    /// * Named keys and letters: the key matches and Shift must match.
-    /// * Other characters (`,`, `?`, `1`): they are written as the character they type. With
-    ///   Shift held, that is the *produced* character, so `Ctrl+?` matches `Ctrl+Shift+/` on a
-    ///   US layout and `Ctrl+Shift+,` on AZERTY, wherever `?` is typed with Shift; and `Ctrl+,`
-    ///   then does not also fire. Without Shift it is the key itself. A `Shift+` written
-    ///   explicitly means the unmodified key with Shift held.
-    pub fn matches(&self, key: &Key, modified_key: &Key, modifiers: Modifiers) -> bool {
-        if self.ctrl != modifiers.control() || self.alt != modifiers.alt() || self.logo != modifiers.logo() {
-            return false;
+    /// Ctrl, Alt and Super must match exactly; Shift is part of each interpretation.
+    pub fn match_rank(&self, press: &KeyPress) -> Option<u8> {
+        if self.ctrl != press.modifiers.control() || self.alt != press.modifiers.alt() || self.logo != press.modifiers.logo() {
+            return None;
         }
-        let same = |key: &Key, a: &str| matches!(key, Key::Character(b) if a.eq_ignore_ascii_case(b.as_str()));
-        match &self.key {
-            AccelKey::Named(a) => matches!(key, Key::Named(b) if a == b) && self.shift == modifiers.shift(),
-            AccelKey::Char(a) if a.chars().all(char::is_alphabetic) => same(key, a) && self.shift == modifiers.shift(),
-            AccelKey::Char(a) if self.shift => modifiers.shift() && same(key, a),
-            AccelKey::Char(a) if modifiers.shift() => same(modified_key, a),
-            AccelKey::Char(a) => same(key, a),
-        }
+        candidates(press)
+            .into_iter()
+            .filter(|c| c.key == self.key && c.shift == self.shift)
+            .map(|c| c.rank)
+            .min()
+    }
+
+    /// Whether this accelerator is the given key press, under any interpretation.
+    pub fn matches(&self, press: &KeyPress) -> bool {
+        self.match_rank(press).is_some()
     }
 
     /// A shortcut that types a character (no Ctrl, Alt or Super): it must not fire while the user
@@ -183,17 +178,86 @@ pub struct KeyPress {
     pub key: Key,
     /// The character the press produces with Shift applied (`?` for Shift+`,` on AZERTY).
     pub modified_key: Key,
+    /// The physical key, independent of the layout.
+    pub physical_key: keyboard::key::Physical,
     pub modifiers: Modifiers,
     /// A focused widget (a text input) already handled the key.
     pub captured: bool,
 }
 
+/// One interpretation of a key press, to compare with an accelerator.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Candidate {
+    pub key: AccelKey,
+    /// Whether Shift counts as part of the accelerator for this interpretation.
+    pub shift: bool,
+    /// Lower is better: 0 is what the user typed, 1 is a layout-independent fallback.
+    pub rank: u8,
+}
+
+fn lower(key: &Key) -> Option<AccelKey> {
+    match key {
+        Key::Named(n) => Some(AccelKey::Named(*n)),
+        Key::Character(c) => Some(AccelKey::Char(c.to_lowercase())),
+        Key::Unidentified => None,
+    }
+}
+
+/// The Latin letter or digit at a physical key position, so shortcuts keep working on layouts
+/// where the key types something else (a Cyrillic or Greek layout, or AZERTY's number row).
+fn latin(code: keyboard::key::Code) -> Option<char> {
+    use keyboard::key::Code::*;
+    Some(match code {
+        KeyA => 'a', KeyB => 'b', KeyC => 'c', KeyD => 'd', KeyE => 'e', KeyF => 'f', KeyG => 'g',
+        KeyH => 'h', KeyI => 'i', KeyJ => 'j', KeyK => 'k', KeyL => 'l', KeyM => 'm', KeyN => 'n',
+        KeyO => 'o', KeyP => 'p', KeyQ => 'q', KeyR => 'r', KeyS => 's', KeyT => 't', KeyU => 'u',
+        KeyV => 'v', KeyW => 'w', KeyX => 'x', KeyY => 'y', KeyZ => 'z',
+        Digit0 => '0', Digit1 => '1', Digit2 => '2', Digit3 => '3', Digit4 => '4',
+        Digit5 => '5', Digit6 => '6', Digit7 => '7', Digit8 => '8', Digit9 => '9',
+        _ => return None,
+    })
+}
+
+/// Every way a key press can be read, best first.
+///
+/// 1. **The key as typed** (rank 0): the unmodified key, with Shift counted as held. This is how
+///    letters, named keys and an explicit `Shift+,` match.
+/// 2. **The character produced** (rank 0): when the press types something other than its key
+///    (Shift+`,` types `?` on AZERTY, Shift+`/` on US; Shift+`&` types `1` on AZERTY), that
+///    character with Shift *consumed*, so `Ctrl+?` and `Ctrl+1` match on any layout.
+/// 3. **The physical key** (rank 1): the Latin letter or digit at that position, with Shift as
+///    held, so `Ctrl+Q` works on a Cyrillic layout and `Ctrl+1` on AZERTY's unshifted number row.
+///
+/// A binding is chosen by the best rank any of its interpretations reaches, then by registration
+/// order. So an exact typed match beats a layout-independent fallback registered earlier.
+pub fn candidates(press: &KeyPress) -> Vec<Candidate> {
+    let shift = press.modifiers.shift();
+    let mut out = Vec::new();
+    if let Some(key) = lower(&press.key) {
+        out.push(Candidate { key, shift, rank: 0 });
+    }
+    // Skipped when the press only changed the letter's case (Shift+q types 'Q'): that is still
+    // the key with Shift held, and must not match a plain `Ctrl+Q`.
+    if lower(&press.modified_key) != lower(&press.key)
+        && let Some(produced @ AccelKey::Char(_)) = lower(&press.modified_key)
+    {
+        out.push(Candidate { key: produced, shift: false, rank: 0 });
+    }
+    if let keyboard::key::Physical::Code(code) = press.physical_key
+        && let Some(c) = latin(code)
+    {
+        out.push(Candidate { key: AccelKey::Char(c.to_string()), shift, rank: 1 });
+    }
+    out
+}
+
 /// A subscription of every key press, to feed [`Shortcuts::handle`].
 pub fn key_presses() -> Subscription<KeyPress> {
     iced::event::listen_with(|event, status, _| match event {
-        iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modified_key, modifiers, .. }) => Some(KeyPress {
+        iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modified_key, physical_key, modifiers, .. }) => Some(KeyPress {
             key,
             modified_key,
+            physical_key,
             modifiers,
             captured: status == iced::event::Status::Captured,
         }),
@@ -251,9 +315,12 @@ impl<M: Clone> Shortcuts<M> {
         if !enabled() {
             return None;
         }
+        // The best-ranked match wins; among equal ranks, the earliest binding.
         self.bindings
             .iter()
-            .find(|(a, _)| a.matches(&press.key, &press.modified_key, press.modifiers) && !(press.captured && a.is_plain_character()))
+            .filter(|(a, _)| !(press.captured && a.is_plain_character()))
+            .filter_map(|(a, m)| a.match_rank(press).map(|rank| (rank, m)))
+            .min_by_key(|(rank, _)| *rank)
             .map(|(_, m)| m.clone())
     }
 }
@@ -357,11 +424,27 @@ impl<M: Clone> From<Standard<M>> for Shortcuts<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use iced::keyboard::Key;
+    use keyboard::key::{Code, Physical};
 
     fn ch(c: &str) -> Key {
         Key::Character(c.into())
     }
+
+    /// A press as iced reports it: the unmodified key, the produced character, the physical key
+    /// and the modifiers.
+    fn press(key: &str, produced: &str, code: Code, modifiers: Modifiers) -> KeyPress {
+        KeyPress { key: ch(key), modified_key: ch(produced), physical_key: Physical::Code(code), modifiers, captured: false }
+    }
+
+    fn named_press(key: Named, modifiers: Modifiers) -> KeyPress {
+        KeyPress { key: Key::Named(key), modified_key: Key::Named(key), physical_key: Physical::Code(Code::F1), modifiers, captured: false }
+    }
+
+    fn hit(accel: &str, p: &KeyPress) -> bool {
+        Accel::parse(accel).unwrap().matches(p)
+    }
+
+    const CTRL_SHIFT: Modifiers = Modifiers::CTRL.union(Modifiers::SHIFT);
 
     #[test]
     fn parses_what_menus_show() {
@@ -377,41 +460,68 @@ mod tests {
         assert!(Accel::parse("Ctrl+Nope").is_none());
     }
 
-    /// A press as iced reports it: the unmodified key, the produced character, the modifiers.
-    fn m(key: &str, modified: &str, modifiers: Modifiers) -> (Key, Key, Modifiers) {
-        (ch(key), ch(modified), modifiers)
-    }
-
-    fn hit(accel: &str, (key, modified, modifiers): (Key, Key, Modifiers)) -> bool {
-        Accel::parse(accel).unwrap().matches(&key, &modified, modifiers)
-    }
-
     #[test]
-    fn matches_modifiers_exactly() {
-        assert!(hit("Ctrl+Q", m("q", "q", Modifiers::CTRL)));
-        assert!(hit("Ctrl+Q", m("Q", "Q", Modifiers::CTRL)), "case-insensitive for the character");
-        assert!(!hit("Ctrl+Q", m("q", "q", Modifiers::empty())));
-        assert!(!hit("Ctrl+Q", m("q", "q", Modifiers::CTRL | Modifiers::ALT)));
-        assert!(!hit("Ctrl+Q", m("q", "Q", Modifiers::CTRL | Modifiers::SHIFT)), "Shift is part of the accelerator for letters");
-        assert!(hit("Ctrl+Shift+Z", m("z", "Z", Modifiers::CTRL | Modifiers::SHIFT)));
+    fn modifiers_must_match_exactly() {
+        assert!(hit("Ctrl+Q", &press("q", "q", Code::KeyQ, Modifiers::CTRL)));
+        assert!(hit("Ctrl+Q", &press("Q", "Q", Code::KeyQ, Modifiers::CTRL)), "case-insensitive");
+        assert!(!hit("Ctrl+Q", &press("q", "q", Code::KeyQ, Modifiers::empty())));
+        assert!(!hit("Ctrl+Q", &press("q", "q", Code::KeyQ, Modifiers::CTRL | Modifiers::ALT)));
+        assert!(!hit("Ctrl+Q", &press("q", "Q", Code::KeyQ, CTRL_SHIFT)), "Shift is part of a letter accelerator");
+        assert!(hit("Ctrl+Shift+Z", &press("z", "Z", Code::KeyZ, CTRL_SHIFT)));
+        assert!(hit("F1", &named_press(Named::F1, Modifiers::empty())));
+        assert!(!hit("F1", &named_press(Named::F1, Modifiers::SHIFT)));
     }
 
     #[test]
     fn a_shifted_symbol_matches_the_character_it_types_on_any_layout() {
-        let ctrl_shift = Modifiers::CTRL | Modifiers::SHIFT;
-        // US: `?` is Shift+/ . The unmodified key is '/'.
-        assert!(hit("Ctrl+?", m("/", "?", ctrl_shift)));
-        // AZERTY: `?` is Shift+, . The unmodified key is ','; this is the reported bug.
-        assert!(hit("Ctrl+?", m(",", "?", ctrl_shift)));
-        // ...and Ctrl+, must not also fire for that press, nor `?` for a plain comma.
-        assert!(!hit("Ctrl+,", m(",", "?", ctrl_shift)));
-        assert!(hit("Ctrl+,", m(",", ",", Modifiers::CTRL)));
-        assert!(!hit("Ctrl+?", m(",", ",", Modifiers::CTRL)));
+        // US: `?` is Shift+/ (unmodified key '/').
+        assert!(hit("Ctrl+?", &press("/", "?", Code::Slash, CTRL_SHIFT)));
+        // AZERTY: `?` is Shift+, (unmodified key ','), on the physical M position.
+        let azerty = press(",", "?", Code::KeyM, CTRL_SHIFT);
+        assert!(hit("Ctrl+?", &azerty));
+        assert!(!hit("Ctrl+,", &azerty), "Ctrl+, must not also fire");
+        assert!(hit("Ctrl+,", &press(",", ",", Code::KeyM, Modifiers::CTRL)));
+        assert!(!hit("Ctrl+?", &press(",", ",", Code::KeyM, Modifiers::CTRL)));
         // An explicit Shift means the unmodified key with Shift held.
-        assert!(hit("Ctrl+Shift+,", m(",", "?", ctrl_shift)));
-        assert!(!hit("Ctrl+Shift+,", m(",", ",", Modifiers::CTRL)));
-        assert!(Accel::parse("F1").unwrap().matches(&Key::Named(Named::F1), &Key::Named(Named::F1), Modifiers::empty()));
-        assert!(!Accel::parse("F1").unwrap().matches(&Key::Named(Named::F1), &Key::Named(Named::F1), Modifiers::SHIFT));
+        assert!(hit("Ctrl+Shift+,", &azerty));
+        assert!(!hit("Ctrl+Shift+,", &press(",", ",", Code::KeyM, Modifiers::CTRL)));
+    }
+
+    #[test]
+    fn digits_work_on_azerty_shifted_or_not() {
+        // AZERTY's number row types symbols unshifted: Digit1 types '&', Shift+Digit1 types '1'.
+        assert!(hit("Ctrl+1", &press("&", "1", Code::Digit1, CTRL_SHIFT)), "the produced '1'");
+        assert!(hit("Ctrl+1", &press("&", "&", Code::Digit1, Modifiers::CTRL)), "the physical digit");
+        // A different row position must not fire it.
+        assert!(!hit("Ctrl+1", &press("é", "é", Code::Digit2, Modifiers::CTRL)));
+    }
+
+    #[test]
+    fn letters_work_on_a_non_latin_layout_through_the_physical_key() {
+        // Cyrillic: the Q position types 'й'.
+        let cyr = press("й", "й", Code::KeyQ, Modifiers::CTRL);
+        assert!(hit("Ctrl+Q", &cyr));
+        assert!(hit("Ctrl+Й", &cyr), "and the typed letter still matches");
+        assert!(hit("Ctrl+Shift+Q", &press("й", "Й", Code::KeyQ, CTRL_SHIFT)));
+        assert!(!hit("Ctrl+W", &cyr));
+    }
+
+    #[test]
+    fn what_was_typed_beats_a_layout_fallback_whatever_the_order() {
+        #[derive(Clone, PartialEq, Debug)]
+        enum M {
+            ByPosition,
+            ByTyping,
+        }
+        // On AZERTY the Digit1 key types '&'. A binding for the character beats one for the digit.
+        let s = Shortcuts::new().bind("Ctrl+1", M::ByPosition).bind("Ctrl+&", M::ByTyping);
+        assert_eq!(s.handle(&press("&", "&", Code::Digit1, Modifiers::CTRL)), Some(M::ByTyping));
+        // Without a binding for what was typed, the physical fallback applies.
+        let s = Shortcuts::new().bind("Ctrl+1", M::ByPosition);
+        assert_eq!(s.handle(&press("&", "&", Code::Digit1, Modifiers::CTRL)), Some(M::ByPosition));
+        // Equal rank: the earliest binding wins.
+        let s = Shortcuts::new().bind("Ctrl+Q", M::ByPosition).bind("Ctrl+Q", M::ByTyping);
+        assert_eq!(s.handle(&press("q", "q", Code::KeyQ, Modifiers::CTRL)), Some(M::ByPosition));
     }
 
     #[test]
@@ -423,12 +533,15 @@ mod tests {
             Slash,
         }
         let s = Shortcuts::new().bind("Ctrl+Q", M::Quit).bind("F1", M::Help).bind("/", M::Slash).bind("Bogus+Q", M::Quit);
-        let press = |key: Key, modifiers, captured| KeyPress { modified_key: key.clone(), key, modifiers, captured };
-        assert_eq!(s.handle(&press(ch("q"), Modifiers::CTRL, false)), Some(M::Quit));
-        assert_eq!(s.handle(&press(Key::Named(Named::F1), Modifiers::empty(), true)), Some(M::Help));
-        assert_eq!(s.handle(&press(ch("/"), Modifiers::empty(), false)), Some(M::Slash));
-        assert_eq!(s.handle(&press(ch("/"), Modifiers::empty(), true)), None, "typing into a field");
-        assert_eq!(s.handle(&press(ch("x"), Modifiers::CTRL, false)), None);
+        let captured = |mut p: KeyPress| {
+            p.captured = true;
+            p
+        };
+        assert_eq!(s.handle(&press("q", "q", Code::KeyQ, Modifiers::CTRL)), Some(M::Quit));
+        assert_eq!(s.handle(&captured(named_press(Named::F1, Modifiers::empty()))), Some(M::Help));
+        assert_eq!(s.handle(&press("/", "/", Code::Slash, Modifiers::empty())), Some(M::Slash));
+        assert_eq!(s.handle(&captured(press("/", "/", Code::Slash, Modifiers::empty()))), None, "typing into a field");
+        assert_eq!(s.handle(&press("x", "x", Code::KeyX, Modifiers::CTRL)), None);
     }
 
     #[test]
@@ -441,10 +554,9 @@ mod tests {
         let std = Standard::new().quit(M::Quit).fullscreen(M::Full);
         assert_eq!(std.labels(), vec![("Quit".into(), "Ctrl+Q".into()), ("Fullscreen".into(), "F11".into())]);
         let s = std.into_shortcuts();
-        let press = |key: Key, modifiers| KeyPress { modified_key: key.clone(), key, modifiers, captured: false };
-        assert_eq!(s.handle(&press(Key::Character("q".into()), Modifiers::CTRL)), Some(M::Quit));
-        assert_eq!(s.handle(&press(Key::Named(Named::F11), Modifiers::empty())), Some(M::Full));
-        assert_eq!(s.handle(&press(Key::Named(Named::F1), Modifiers::empty())), None, "help is not set");
+        assert_eq!(s.handle(&press("q", "q", Code::KeyQ, Modifiers::CTRL)), Some(M::Quit));
+        assert_eq!(s.handle(&named_press(Named::F11, Modifiers::empty())), Some(M::Full));
+        assert_eq!(s.handle(&named_press(Named::F1, Modifiers::empty())), None, "help is not set");
     }
 
     #[test]
