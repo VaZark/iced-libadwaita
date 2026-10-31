@@ -11,6 +11,7 @@ mod banner;
 mod button;
 mod carousel;
 mod dialog;
+mod divider;
 mod dropdown;
 mod elevated;
 mod extra;
@@ -54,6 +55,7 @@ pub use shortcut_scope::shortcuts;
 pub use split_view::{adaptive_split, AdaptiveSplit};
 pub use split::{split_button, SplitAction, SplitButton, SplitButtonAction};
 pub use switch::{switch, Switch};
+pub use divider::{divider, Divider, DividerTone};
 pub use dialog::{dialog, dialog_in_window, present_dialog, AboutDialog, AlertDialog, ResponseAppearance};
 pub use flex::FlexRow;
 pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent};
@@ -65,7 +67,7 @@ pub use header_bar::{header_bar, window_title, HeaderBar, WindowControls};
 pub use motion::{drawer_layer, entrance, highlight, layered, page_transition, push_stack, reveal, DrawerLayer, Entrance, Highlight, PageTransition, PushStack, Reveal};
 pub use menu::{menu_button, primary_menu, Menu, MenuButton, MenuItem, MenuPresentation};
 pub use navigation::{
-    navigation_sidebar, navigation_sidebar_rounded, CollapsedSidebar, navigation_view, sidebar_row, Breakpoint, NavigationPage,
+    navigation_sidebar, navigation_sidebar_rounded, navigation_sidebar_rounded_padded, CollapsedSidebar, navigation_view, sidebar_row, sidebar_row_padded, SidebarPadding, Breakpoint, NavigationPage,
     collapse_width, min_content_width, sidebar_width_for, split_collapsed, DRAWER_MAX_FRACTION, MIN_CONTENT_WIDTH, SIDEBAR_FRACTION, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, SidebarItem, SidebarList, SidebarStyle, NavigationSplitView, OverlaySplitView, COLLAPSE_WIDTH,
 };
 pub use preferences::{preferences_group, preferences_page, PreferencesGroup, PreferencesPage};

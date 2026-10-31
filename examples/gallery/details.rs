@@ -548,10 +548,25 @@ impl Gallery {
                         .subtitle("Auto follows the desktop config (full page at the mobile breakpoint)")
                         .metrics(m),
                     ),
-                g("Sidebar").push(
-                    w::ComboRow::new("Mobile sidebar", &SIDEBAR_MODES, Some(self.sidebar_mode), Message::SidebarMode)
-                        .subtitle("Drawer over the content, or the first page of a stack"),
-                ),
+                g("Sidebar")
+                    .push(
+                        w::ComboRow::new("Mobile sidebar", &SIDEBAR_MODES, Some(self.sidebar_mode), Message::SidebarMode)
+                            .subtitle("Drawer over the content, or the first page of a stack"),
+                    )
+                    .push(
+                        w::ToggleGroupRow::new(
+                            "Row padding",
+                            vec![
+                                w::ToggleItem::new(w::SidebarPadding::Sm, "Small"),
+                                w::ToggleItem::new(w::SidebarPadding::Md, "Medium"),
+                                w::ToggleItem::new(w::SidebarPadding::Lg, "Large"),
+                            ],
+                            Some(self.sidebar_padding),
+                            Message::SidebarPadding,
+                        )
+                        .subtitle("Small like Mantine, medium like Nautilus, large like GNOME Settings")
+                        .metrics(m),
+                    ),
                 g("Header").push(
                     w::SwitchRow::new("Path bar title", self.path_bar_title, Message::PathBarTitle)
                         .subtitle("A title_widget replaces the title; window buttons stay")

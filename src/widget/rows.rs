@@ -5,18 +5,19 @@ use super::Element;
 use crate::style::{button as sb, container as sc, text as st, text_input as si};
 use crate::widget::typography;
 use crate::{CollapseBehavior, Icon, Metrics, Role, Theme, Typography};
+use iced::Length;
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{button, column, container, row, space, text, text_input};
-use iced::Length;
 
 /// `.boxed-list`: rows in a rounded card separated by hairlines (a [`Card`](super::Card)
 /// of rows with no padding).
-pub fn boxed_list<'a, M: 'a>(
-    rows: impl IntoIterator<Item = Element<'a, M>>,
-) -> Element<'a, M> {
+pub fn boxed_list<'a, M: 'a>(rows: impl IntoIterator<Item = Element<'a, M>>) -> Element<'a, M> {
     let mut rows = rows.into_iter();
-    let Some(first) = rows.next() else { return space().into() };
-    rows.fold(super::Card::new(first).padding(0), |card, r| card.push(r)).into()
+    let Some(first) = rows.next() else {
+        return space().into();
+    };
+    rows.fold(super::Card::new(first).padding(0), |card, r| card.push(r))
+        .into()
 }
 
 fn row_frame<'a, M: 'a>(
@@ -133,7 +134,12 @@ impl<'a, M> ActionRow<'a, M> {
 impl<'a, M: Clone + 'a> From<ActionRow<'a, M>> for Element<'a, M> {
     fn from(r: ActionRow<'a, M>) -> Self {
         let m = r.metrics;
-        let mut titles = column![r.typography.body(r.title).wrapping(text::Wrapping::WordOrGlyph)].spacing(2);
+        let mut titles = column![
+            r.typography
+                .body(r.title)
+                .wrapping(text::Wrapping::WordOrGlyph)
+        ]
+        .spacing(2);
         if let Some(s) = r.subtitle {
             titles = titles.push(
                 r.typography
@@ -150,7 +156,9 @@ impl<'a, M: Clone + 'a> From<ActionRow<'a, M>> for Element<'a, M> {
         main = main.push(titles.width(Length::Fill));
         if r.chevron {
             main = main.push(Icon::GoNext.view(m.icon_size).style(|t: &Theme, _| {
-                iced::widget::svg::Style { color: Some(t.semantic.dim_solid()) }
+                iced::widget::svg::Style {
+                    color: Some(t.semantic.dim_solid()),
+                }
             }));
         }
         let line: Element<'a, M> = match r.suffix {
@@ -194,11 +202,7 @@ pub struct SwitchRow<'a, M> {
 }
 
 impl<'a, M> SwitchRow<'a, M> {
-    pub fn new(
-        title: impl Into<String>,
-        active: bool,
-        on_toggle: impl Fn(bool) -> M + 'a,
-    ) -> Self {
+    pub fn new(title: impl Into<String>, active: bool, on_toggle: impl Fn(bool) -> M + 'a) -> Self {
         Self {
             // Compact fixed-size suffix: pin it to the end, no flex wrapping.
             row: ActionRow::new(title).wrap_suffix(false),
@@ -279,7 +283,10 @@ impl<'a, M: Clone + 'a> From<ButtonRow<M>> for Element<'a, M> {
             .padding(m.row_padding)
             .width(Length::Fill)
             .align_x(Horizontal::Center);
-        let mut btn = button(inner).padding(0).width(Length::Fill).style(sb::list_row);
+        let mut btn = button(inner)
+            .padding(0)
+            .width(Length::Fill)
+            .style(sb::list_row);
         if let Some(msg) = b.on_press {
             btn = btn.on_press(msg);
         }
@@ -435,18 +442,28 @@ where
 {
     fn from(c: ComboRow<'a, T, M>) -> Self {
         let m = Metrics::desktop();
-        let current = c.selected.as_ref().map(ToString::to_string).unwrap_or_default();
+        let current = c
+            .selected
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default();
         let value = row![
             // The chosen value is live content, in the normal text color (like text in an
             // entry); dimmed is reserved for secondary text and the disabled state.
-            if c.insensitive { typography::label(current).style(st::dim) } else { typography::label(current) },
-            Icon::GoDown.view(m.icon_size).style(move |t: &Theme, _| iced::widget::svg::Style {
-                color: Some(if c.insensitive {
-                    crate::color::fade(t.semantic.window.fg, t.semantic.opacity.disabled)
-                } else {
-                    t.semantic.window.fg
+            if c.insensitive {
+                typography::label(current).style(st::dim)
+            } else {
+                typography::label(current)
+            },
+            Icon::GoDown
+                .view(m.icon_size)
+                .style(move |t: &Theme, _| iced::widget::svg::Style {
+                    color: Some(if c.insensitive {
+                        crate::color::fade(t.semantic.window.fg, t.semantic.opacity.disabled)
+                    } else {
+                        t.semantic.window.fg
+                    }),
                 }),
-            }),
         ]
         .spacing(m.space_s)
         .align_y(Vertical::Center);
@@ -585,7 +602,11 @@ impl<'a, M: Clone + 'a> From<ExpanderRow<'a, M>> for Element<'a, M> {
             let mut inner = column![];
             for c in x.children {
                 inner = inner
-                    .push(container(space().height(1)).width(Length::Fill).style(sc::card_separator))
+                    .push(
+                        container(space().height(1))
+                            .width(Length::Fill)
+                            .style(sc::card_separator),
+                    )
                     .push(c);
             }
             let list = container(inner).width(Length::Fill).style(|t: &Theme| {
@@ -706,7 +727,9 @@ impl<'a, T: Clone + PartialEq, M> ToggleGroupRow<'a, T, M> {
     }
 }
 
-impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> From<ToggleGroupRow<'a, T, M>> for Element<'a, M> {
+impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> From<ToggleGroupRow<'a, T, M>>
+    for Element<'a, M>
+{
     fn from(t: ToggleGroupRow<'a, T, M>) -> Self {
         t.row.suffix(Element::from(t.group)).into()
     }

@@ -151,6 +151,7 @@ struct Gallery {
     show_content: bool,
     menu_mode: MenuMode,
     sidebar_mode: w::CollapsedSidebar,
+    sidebar_padding: w::SidebarPadding,
     drawer_open: bool,
     win: adw::window::State,
     /// The main window, and the preferences window while it is open (a separate OS window).
@@ -266,6 +267,7 @@ enum Message {
     Back,
     MenuMode(MenuMode),
     SidebarMode(w::CollapsedSidebar),
+    SidebarPadding(w::SidebarPadding),
     Drawer(bool),
     ToggleFullscreen,
     WindowChanged,
@@ -365,6 +367,7 @@ impl Gallery {
                     _ => cfg.mobile_sidebar,
                 },
                 drawer_open: std::env::var_os("GALLERY_DRAWER").is_some(),
+                sidebar_padding: w::SidebarPadding::default(),
                 menu_mode: match std::env::var("GALLERY_MENU").as_deref() {
                     Ok("page") => MenuMode::FullPage,
                     Ok("dropdown") => MenuMode::Dropdown,
@@ -491,6 +494,7 @@ impl Gallery {
             Message::Drawer(open) => self.drawer_open = open,
             Message::Back => self.show_content = false,
             Message::MenuMode(m) => self.menu_mode = m,
+            Message::SidebarPadding(p) => self.sidebar_padding = p,
             Message::Scheme(dark) => self.scheme = if dark { Scheme::Dark } else { Scheme::Light },
             Message::Accent(a) => self.accent = a,
             Message::Compact(c) => self.compact = c,
@@ -879,6 +883,7 @@ impl Gallery {
                 .selected(*p == self.page)
         }))
         .style(sidebar_style)
+        .padding(self.sidebar_padding)
         .window_radius(corner);
         let sidebar_pane = w::toolbar_view(Element::from(sidebar_list)).top_bar(sidebar_bar);
 

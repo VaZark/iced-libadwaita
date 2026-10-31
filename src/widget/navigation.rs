@@ -32,12 +32,81 @@ impl Breakpoint {
     }
 }
 
-/// A sidebar entry (`.navigation-sidebar` row).
+/// How roomy a sidebar row is. The levels are named after the sidebars they resemble, and each
+/// is a step from the density's base metrics (so a compact density shrinks all three):
+///
+/// | Level | Resembles | Row height | Row side padding | Row gap | Horizontal inset |
+/// |---|---|---|---|---|---|
+/// | `Sm` | Mantine `NavLink` (dense) | -8 | -4 | -1 | -2 |
+/// | `Md` (default) | Nautilus | base (36 / 12 / 2 / 6) | | | |
+/// | `Lg` | GNOME Settings | content + 24 (≈44) | +2 (14) | base | base |
+///
+/// `Lg` is gnome-control-center's `cc-panel-list` row on libadwaita's `.navigation-sidebar`: a
+/// grid with 12 above and below, 6 at the sides and 12 between icon and label, inside a row with
+/// 8 of side padding and a 36 minimum. Rows sit 6px from the list edges and 2px apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum SidebarPadding {
+    Sm,
+    #[default]
+    Md,
+    Lg,
+}
+
+impl SidebarPadding {
+    pub const ALL: [SidebarPadding; 3] = [Self::Sm, Self::Md, Self::Lg];
+
+    /// Nominal row height. `Lg` uses the actual text height plus vertical padding when rendered.
+    pub fn row_height(self, m: &Metrics) -> f32 {
+        m.sidebar_row_height + self.step(-8.0, 8.0)
+    }
+    /// Padding at the row's sides.
+    pub fn row_padding(self, m: &Metrics) -> f32 {
+        m.sidebar_row_padding + self.step(-4.0, 2.0)
+    }
+    /// Gap between rows.
+    pub fn gap(self, m: &Metrics) -> f32 {
+        m.sidebar_spacing + self.step(-1.0, 0.0)
+    }
+    /// Horizontal inset between the list edges and its rows.
+    pub fn inset(self, m: &Metrics) -> f32 {
+        m.sidebar_padding + self.step(-2.0, 0.0)
+    }
+    fn step(self, sm: f32, lg: f32) -> f32 {
+        match self {
+            Self::Sm => sm,
+            Self::Md => 0.0,
+            Self::Lg => lg,
+        }
+    }
+}
+
+impl std::fmt::Display for SidebarPadding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Sm => "Small",
+            Self::Md => "Medium",
+            Self::Lg => "Large",
+        })
+    }
+}
+
+/// A sidebar entry (`.navigation-sidebar` row) at the default [`SidebarPadding::Md`].
 pub fn sidebar_row<'a, M: Clone + 'a>(
     icon: Option<Icon>,
     label: impl Into<String>,
     selected: bool,
     on_press: M,
+) -> Element<'a, M> {
+    sidebar_row_padded(icon, label, selected, on_press, SidebarPadding::Md)
+}
+
+/// A sidebar entry at the given [`SidebarPadding`].
+pub fn sidebar_row_padded<'a, M: Clone + 'a>(
+    icon: Option<Icon>,
+    label: impl Into<String>,
+    selected: bool,
+    on_press: M,
+    padding: SidebarPadding,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
     let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
@@ -47,13 +116,20 @@ pub fn sidebar_row<'a, M: Clone + 'a>(
     // libadwaita ellipsizes; we clip at the row edge so text never paints
     // outside the selection highlight.
     r = r.push(container(super::typography::label(label.into())).width(Length::Fill).clip(true));
-    // The selected background fades in and out (`Highlight`); the button keeps hover/press.
-    let btn = button(
+    // Settings sizes its grid from the font, not a fixed ~20px line. Keep the
+    // inherited font/size and allow larger interface fonts to grow the row.
+    let content = if padding == SidebarPadding::Lg {
+        let vertical = (padding.row_height(&m) - 20.0) / 2.0;
+        container(row![r, space().width(0).height((m.sidebar_row_height - 2.0 * vertical).max(0.0))].align_y(Vertical::Center))
+            .padding([vertical, padding.row_padding(&m)])
+            .align_y(Vertical::Center)
+    } else {
         container(r)
-            .padding([0.0, m.sidebar_row_padding])
-            .center_y(Length::Fixed(m.sidebar_row_height))
-            .width(Length::Fill),
-    )
+            .padding([0.0, padding.row_padding(&m)])
+            .center_y(Length::Fixed(padding.row_height(&m)))
+    };
+    // The selected background fades in and out (`Highlight`); the button keeps hover/press.
+    let btn = button(content.width(Length::Fill))
     .padding(0)
     .width(Length::Fill)
     .style(sb::sidebar_row(false))
@@ -67,8 +143,19 @@ pub fn navigation_sidebar_rounded<'a, M: 'a>(
     rows: impl IntoIterator<Item = Element<'a, M>>,
     window_radius: f32,
 ) -> Element<'a, M> {
+    navigation_sidebar_rounded_padded(rows, window_radius, SidebarPadding::Md)
+}
+
+/// [`navigation_sidebar_rounded`] with the list's gap and horizontal inset at the given [`SidebarPadding`].
+pub fn navigation_sidebar_rounded_padded<'a, M: 'a>(
+    rows: impl IntoIterator<Item = Element<'a, M>>,
+    window_radius: f32,
+    padding: SidebarPadding,
+) -> Element<'a, M> {
     let m = Metrics::desktop();
-    container(column(rows).spacing(m.sidebar_spacing).padding(m.sidebar_padding))
+    // CSS has top/bottom list padding as well as horizontal row margins. The
+    // last row's 2px bottom margin compensates the list's bottom padding - 2px.
+    container(column(rows).spacing(padding.gap(&m)).padding(padding.inset(&m)))
         .width(Length::Fill)
         .height(Length::Fill)
         .style(move |_: &crate::Theme| iced::widget::container::Style {
@@ -81,7 +168,7 @@ pub fn navigation_sidebar_rounded<'a, M: 'a>(
         .into()
 }
 
-/// Stacks sidebar rows with `.navigation-sidebar` spacing/padding.
+/// Stacks sidebar rows with `.navigation-sidebar` spacing and horizontal inset.
 pub fn navigation_sidebar<'a, M: 'a>(
     rows: impl IntoIterator<Item = Element<'a, M>>,
 ) -> Element<'a, M> {
@@ -100,11 +187,23 @@ pub struct SidebarItem<M> {
     subtitle: Option<String>,
     selected: bool,
     on_press: M,
+    padding: Option<SidebarPadding>,
+    divider_above: bool,
 }
 
 impl<M> SidebarItem<M> {
     pub fn new(title: impl Into<String>, on_press: M) -> Self {
-        Self { icon: None, title: title.into(), subtitle: None, selected: false, on_press }
+        Self { icon: None, title: title.into(), subtitle: None, selected: false, on_press, padding: None, divider_above: false }
+    }
+    /// Draws a [`divider`](super::divider) above this row, to start a new section.
+    pub fn divider_above(mut self) -> Self {
+        self.divider_above = true;
+        self
+    }
+    /// This row's [`SidebarPadding`], overriding the list's.
+    pub fn padding(mut self, padding: SidebarPadding) -> Self {
+        self.padding = Some(padding);
+        self
     }
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
@@ -140,15 +239,22 @@ pub struct SidebarList<'a, M> {
     items: Vec<SidebarItem<M>>,
     style: SidebarStyle,
     window_radius: f32,
+    padding: SidebarPadding,
     _p: std::marker::PhantomData<&'a ()>,
 }
 
 impl<'a, M: Clone + 'a> SidebarList<'a, M> {
     pub fn new(items: impl IntoIterator<Item = SidebarItem<M>>) -> Self {
-        Self { items: items.into_iter().collect(), style: SidebarStyle::List, window_radius: 0.0, _p: Default::default() }
+        Self { items: items.into_iter().collect(), style: SidebarStyle::List, window_radius: 0.0, padding: SidebarPadding::Md, _p: Default::default() }
     }
     pub fn style(mut self, style: SidebarStyle) -> Self {
         self.style = style;
+        self
+    }
+    /// How roomy the rows are ([`SidebarPadding`]): `Sm` dense like Mantine, `Md` like Nautilus
+    /// (default), `Lg` like GNOME Settings. An item's own [`SidebarItem::padding`] wins.
+    pub fn padding(mut self, padding: SidebarPadding) -> Self {
+        self.padding = padding;
         self
     }
     /// Window radius for the [`SidebarStyle::List`] bottom corners.
@@ -161,10 +267,21 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
 impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
     fn from(l: SidebarList<'a, M>) -> Self {
         match l.style {
-            SidebarStyle::List => navigation_sidebar_rounded(
-                l.items.into_iter().map(|i| sidebar_row(i.icon, i.title, i.selected, i.on_press)),
-                l.window_radius,
-            ),
+            SidebarStyle::List => {
+                let level = l.padding;
+                navigation_sidebar_rounded_padded(
+                    l.items.into_iter().flat_map(|i| {
+                        let m = Metrics::desktop();
+                        let line = i.divider_above.then(|| {
+                            Element::from(super::divider().spacing((level.inset(&m) - level.gap(&m)).max(0.0)))
+                        });
+                        let row = sidebar_row_padded(i.icon, i.title, i.selected, i.on_press, i.padding.unwrap_or(level));
+                        line.into_iter().chain(std::iter::once(row))
+                    }),
+                    l.window_radius,
+                    level,
+                )
+            }
             SidebarStyle::Cards => {
                 let m = Metrics::desktop();
                 let rows = l.items.into_iter().map(|i| {
@@ -560,6 +677,26 @@ mod tests {
     fn full_page_uses_the_regular_width_rule() {
         let f = split(CollapsedSidebar::FirstPage).adapt(300.0);
         assert!(f.collapsed && (f.sidebar_width - 180.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn sidebar_padding_levels_grow_in_every_measure() {
+        let m = Metrics::default();
+        let [sm, md, lg] = SidebarPadding::ALL;
+        for f in [SidebarPadding::row_height, SidebarPadding::row_padding] {
+            assert!(f(sm, &m) < f(md, &m) && f(md, &m) < f(lg, &m));
+        }
+        // Settings keeps Nautilus's row gap and horizontal inset.
+        assert!(sm.gap(&m) < md.gap(&m) && sm.inset(&m) < md.inset(&m));
+        assert_eq!((lg.gap(&m), lg.inset(&m)), (md.gap(&m), md.inset(&m)));
+        // GNOME Settings: 12 above and below one ~20px line of text.
+        assert_eq!(lg.row_height(&m), 2.0 * 12.0 + 20.0);
+        // Medium is the base metrics, so existing sidebars do not change.
+        assert_eq!(md.row_height(&m), m.sidebar_row_height);
+        assert_eq!(md.gap(&m), m.sidebar_spacing);
+        // A compact density keeps the ordering and the same steps.
+        let c = Metrics::compact();
+        assert_eq!(lg.row_height(&c) - md.row_height(&c), lg.row_height(&m) - md.row_height(&m));
     }
 
     #[test]
