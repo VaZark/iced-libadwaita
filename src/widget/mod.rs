@@ -70,7 +70,7 @@ pub use rows::{
 pub use scrolled::{scrollbar, scrolled_window, scrolled_window_both, scrolled_window_horizontal};
 pub use spinner::{spinner, Spinner};
 pub use status_page::{bin, card, clamp, page, status_page, Card, Page, StatusPage};
-pub use toast::{toast_overlay, Toast};
+pub use toast::{toast_overlay, Toast, ToastIndicator};
 pub use toolbar::{action_bar, toolbar_view, ActionBar, BarStyle, ToolbarView};
 
 /// Shorthand for an iced element using this crate's [`Theme`](crate::Theme).

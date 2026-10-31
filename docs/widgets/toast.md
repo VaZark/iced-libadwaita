@@ -36,3 +36,14 @@ whichever of light and dark text contrasts more with the surface (`color::readab
 Overrides: `Toast::role(Role::…)` uses a status fill instead (text still by contrast),
 `Toast::background(color)` hard-codes the surface, `Toast::text_color(color)` hard-codes the text.
 `Toast::action(label, msg)` adds the optional call-to-action button.
+
+## Type of message and the action button
+
+`Toast::status(Role::Success | Warning | Error | Accent | Destructive)` marks the type of message,
+like a Mantine notification, with a colored `Toast::indicator(ToastIndicator::Dot | Line)`: a
+10px circle before the title (default) or a 4px vertical line at the start edge. The surface stays
+neutral; `role` is the separate option that fills it.
+
+The call-to-action button (`Toast::action`) is filled with the **accent color** (text chosen by
+contrast) so it reads as a button on the dark surface, with the usual hover and pressed fills. On a
+toast filled with the accent (`role(Role::Accent)`) it falls back to a text-colored tint.

@@ -102,8 +102,6 @@ impl Gallery {
             Action::ShortcutsDialog => Message::OpenDialog(Dialog::Shortcuts),
             Action::PreferencesDialog => Message::OpenDialog(Dialog::Preferences),
             Action::BottomSheet => Message::Sheet(true),
-            Action::ShowToast => Message::ShowToast("Settings saved"),
-            Action::ShowUndoToast => Message::ShowUndoToast,
         }
     }
 
@@ -333,6 +331,35 @@ impl Gallery {
             ]
             .into(),
 
+            Detail::Toast => {
+                let spec = |title, action, status, indicator| Message::ShowToastSpec(ToastSpec { title, action, status, indicator });
+                let dot = w::ToastIndicator::Dot;
+                let line = w::ToastIndicator::Line;
+                let show = |label: &'static str, msg: Message| w::raised_button(text(label)).on_press(msg);
+                let action = row![
+                    show("Plain", Message::ShowToast("Settings saved")),
+                    show("With action", spec("File deleted", Some("Undo"), None, dot)),
+                ]
+                .spacing(sp)
+                .wrap();
+                let statuses = |ind| {
+                    row![
+                        show("Success", spec("Changes saved", None, Some(Role::Success), ind)),
+                        show("Warning", spec("Low disk space", None, Some(Role::Warning), ind)),
+                        show("Error", spec("Upload failed", Some("Retry"), Some(Role::Error), ind)),
+                        show("Info", spec("New version available", Some("Update"), Some(Role::Accent), ind)),
+                    ]
+                    .spacing(sp)
+                    .wrap()
+                };
+                column![
+                    g("Call to action").description("An optional button on the toast.").push(w::card(action)),
+                    g("Status dot").description("A colored dot marks the type of message.").push(w::card(statuses(dot))),
+                    g("Status line").description("Or a colored line at the start edge.").push(w::card(statuses(line))),
+                ]
+                .spacing(m.group_spacing)
+                .into()
+            }
             Detail::Card => {
                 let plain = w::Card::new(ty::body("A card with the default padding."));
                 let chained = w::Card::new(w::ActionRow::new("First child").subtitle("padding(0): rows pad themselves").metrics(m))

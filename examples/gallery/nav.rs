@@ -107,7 +107,7 @@ impl Page {
                 ("Menus & shortcuts", vec![i(I::MenuButton), i(I::ShortcutLabel)]),
             ],
             Page::Feedback => vec![
-                ("Messages", vec![i(I::Banner), a(ShowToast), a(ShowUndoToast)]),
+                ("Messages", vec![i(I::Banner), n(Toast)]),
                 ("Status", vec![i(I::Progress), i(I::Avatar), i(I::Tag)]),
             ],
             Page::Dialogs => vec![(
@@ -148,6 +148,8 @@ pub enum Detail {
     PreferencesGroup,
     // Layout
     Card,
+    // Feedback
+    Toast,
 }
 
 /// A component with one demo, rendered inline on its group page.
@@ -185,8 +187,6 @@ pub enum Action {
     ShortcutsDialog,
     PreferencesDialog,
     BottomSheet,
-    ShowToast,
-    ShowUndoToast,
 }
 
 impl Action {
@@ -197,8 +197,6 @@ impl Action {
             Action::ShortcutsDialog => "Shortcuts dialog",
             Action::PreferencesDialog => "Preferences dialog",
             Action::BottomSheet => "Bottom sheet",
-            Action::ShowToast => "Toast",
-            Action::ShowUndoToast => "Toast with action",
         }
     }
     pub fn description(self) -> &'static str {
@@ -208,16 +206,11 @@ impl Action {
             Action::ShortcutsDialog => "Keyboard shortcuts in sections",
             Action::PreferencesDialog => "A page of preference rows in a dialog",
             Action::BottomSheet => "A panel sliding up from the bottom",
-            Action::ShowToast => "A brief message at the bottom, with a close button",
-            Action::ShowUndoToast => "Adds a call-to-action button (Undo); optional",
         }
     }
     /// The label of the button on the row.
     pub fn button(self) -> &'static str {
-        match self {
-            Action::ShowToast | Action::ShowUndoToast => "Show",
-            _ => "Open",
-        }
+        "Open"
     }
 }
 
@@ -254,6 +247,7 @@ impl Detail {
             Detail::EntryRow => "Entry row",
             Detail::PreferencesGroup => "Preferences group",
             Detail::Card => "Card",
+            Detail::Toast => "Toast",
         }
     }
 
@@ -270,6 +264,7 @@ impl Detail {
             Detail::EntryRow => "Entry and password rows",
             Detail::PreferencesGroup => "Title, description and a header suffix",
             Detail::Card => "Padding, chained children, separators and size",
+            Detail::Toast => "Call to action, status dot or line, and colors",
         }
     }
 }

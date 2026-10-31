@@ -9,6 +9,16 @@ use iced::Length;
 /// The toast's dark surface in the light scheme; see [`Toast`].
 const DARK_SURFACE: iced::Color = iced::Color { r: 0.14, g: 0.14, b: 0.15, a: 1.0 };
 
+/// How a toast marks its type of message ([`Toast::status`]), like a Mantine notification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ToastIndicator {
+    /// A small colored circle before the title.
+    #[default]
+    Dot,
+    /// A colored vertical line at the start edge.
+    Line,
+}
+
 /// `AdwToast`.
 ///
 /// The toast is a solid, always-dark surface (no opacity): the theme's elevated surface in the
@@ -26,6 +36,8 @@ pub struct Toast<M> {
     background: Option<iced::Color>,
     text_color: Option<iced::Color>,
     role: Option<Role>,
+    status: Option<Role>,
+    indicator: ToastIndicator,
 }
 
 impl<M> Toast<M> {
@@ -37,7 +49,21 @@ impl<M> Toast<M> {
             background: None,
             text_color: None,
             role: None,
+            status: None,
+            indicator: ToastIndicator::default(),
         }
+    }
+    /// The type of message (`Success`, `Warning`, `Error`, `Accent`, `Destructive`): shown as a
+    /// colored [`indicator`](Toast::indicator) next to the title. The surface stays neutral;
+    /// see [`role`](Toast::role) to fill it instead. `Role::Neutral` shows nothing.
+    pub fn status(mut self, status: Role) -> Self {
+        self.status = Some(status);
+        self
+    }
+    /// A [`ToastIndicator::Dot`] (default) or [`ToastIndicator::Line`] for the status.
+    pub fn indicator(mut self, indicator: ToastIndicator) -> Self {
+        self.indicator = indicator;
+        self
     }
     /// Use a status fill ([`Role::Accent`], `Error`, …) instead of the inverse surface. The
     /// text color is still chosen by contrast with it.
@@ -116,9 +142,47 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
             ..Default::default()
         }
     };
-    let mut r = row![text(t.title)].spacing(m.space_m).align_y(Vertical::Center);
+    // The call to action is an accent-filled button so it reads as one (text by contrast). On a
+    // toast that is itself filled with the accent it falls back to the text-colored tint.
+    let action_style = move |th: &Theme, status: button::Status| {
+        if role == Some(Role::Accent) {
+            return on_surface(th, status);
+        }
+        let a = th.semantic.accent;
+        let bg = match status {
+            button::Status::Hovered => th.semantic.hover_fill(a.bg),
+            button::Status::Pressed => th.semantic.active_fill(a.bg),
+            _ => a.bg,
+        };
+        button::Style {
+            background: Some(iced::Background::Color(bg)),
+            text_color: a.fg,
+            border: iced::Border::default().rounded(th.metrics.radius_pill),
+            ..Default::default()
+        }
+    };
+    let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
+    if let Some(status) = t.status.filter(|s| *s != Role::Neutral) {
+        // The vivid fill of the status color reads on both the dark surfaces.
+        let color = move |th: &Theme| th.semantic.swatch(status).bg;
+        r = r.push(match t.indicator {
+            ToastIndicator::Dot => container(iced::widget::space().width(10).height(10))
+                .style(move |th: &Theme| iced::widget::container::Style {
+                    background: Some(iced::Background::Color(color(th))),
+                    border: iced::Border::default().rounded(5.0),
+                    ..Default::default()
+                }),
+            ToastIndicator::Line => container(iced::widget::space().width(4).height(m.icon_size + 6.0))
+                .style(move |th: &Theme| iced::widget::container::Style {
+                    background: Some(iced::Background::Color(color(th))),
+                    border: iced::Border::default().rounded(2.0),
+                    ..Default::default()
+                }),
+        });
+    }
+    r = r.push(text(t.title));
     if let Some((label, msg)) = t.action {
-        r = r.push(button(text(label)).padding(m.button_padding).style(on_surface).on_press(msg));
+        r = r.push(button(text(label)).padding(m.button_padding).style(action_style).on_press(msg));
     }
     if let Some(msg) = t.on_dismiss {
         r = r.push(

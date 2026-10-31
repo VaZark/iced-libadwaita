@@ -153,13 +153,27 @@ struct Gallery {
     sheet: bool,
     carousel: usize,
     carousel_indicator: w::CarouselIndicator,
-    /// The toast shown: its title and the label of its optional call-to-action button.
-    toast: Option<(String, Option<&'static str>)>,
+    toast: Option<ToastSpec>,
     banner: bool,
     angle: f32,
 
     shots: Option<Shots>,
     shot_tag: Option<&'static str>,
+}
+
+/// A toast to show: its title, optional call-to-action label, and status indicator.
+#[derive(Debug, Clone, Copy)]
+struct ToastSpec {
+    title: &'static str,
+    action: Option<&'static str>,
+    status: Option<Role>,
+    indicator: w::ToastIndicator,
+}
+
+impl ToastSpec {
+    const fn plain(title: &'static str) -> Self {
+        Self { title, action: None, status: None, indicator: w::ToastIndicator::Dot }
+    }
 }
 
 struct Shots {
@@ -206,7 +220,7 @@ enum Message {
     Carousel(usize),
     CarouselIndicator(w::CarouselIndicator),
     ShowToast(&'static str),
-    ShowUndoToast,
+    ShowToastSpec(ToastSpec),
     ToastAction,
     DismissToast,
     Frame(std::time::Instant),
@@ -413,10 +427,10 @@ impl Gallery {
             Message::Sheet(o) => self.sheet = o,
             Message::Carousel(i) => self.carousel = i,
             Message::CarouselIndicator(i) => self.carousel_indicator = i,
-            Message::ShowToast(s) => self.toast = Some((s.into(), None)),
-            Message::ShowUndoToast => self.toast = Some(("File deleted".into(), Some("Undo"))),
+            Message::ShowToast(s) => self.toast = Some(ToastSpec::plain(s)),
+            Message::ShowToastSpec(t) => self.toast = Some(t),
             // The action runs and the toast is replaced by a plain confirmation.
-            Message::ToastAction => self.toast = Some(("File restored".into(), None)),
+            Message::ToastAction => self.toast = Some(ToastSpec::plain("File restored")),
             Message::DismissToast => self.toast = None,
             Message::Frame(now) => {
                 self.angle += 0.12;
@@ -512,7 +526,12 @@ impl Gallery {
                         "page" => Message::Page(Page::Theming),
                         "push" => Message::Page(Page::Dialogs),
                         "dialog" => Message::OpenDialog(Dialog::Alert),
-                        "toast-action" => Message::ShowUndoToast,
+                        "toast-action" => Message::ShowToastSpec(ToastSpec {
+                            title: "File deleted",
+                            action: Some("Undo"),
+                            status: Some(Role::Error),
+                            indicator: w::ToastIndicator::Line,
+                        }),
                         _ => Message::ShowToast("Settings saved"),
                     };
                     Task::done(trigger).chain(wait(70, "a1-70ms", self))
@@ -559,7 +578,12 @@ impl Gallery {
             Ok("about") => Dialog::About,
             _ => Dialog::Alert,
         });
-        self.toast = overlays.then(|| ("File deleted".to_string(), Some("Undo")));
+        self.toast = overlays.then_some(ToastSpec {
+            title: "File deleted",
+            action: Some("Undo"),
+            status: Some(Role::Error),
+            indicator: w::ToastIndicator::Dot,
+        });
         if let Some(s) = &mut self.shots {
             s.index = i;
         }
@@ -721,12 +745,15 @@ impl Gallery {
         let base: Element = w::toast_overlay(
             // The window background comes from `adw::window::frame` (rounded when floating).
             container(body).width(Length::Fill).height(Length::Fill),
-            self.toast.clone().map(|(title, action)| {
-                let t = w::Toast::new(title).on_dismiss(Message::DismissToast);
-                match action {
-                    Some(label) => t.action(label, Message::ToastAction),
-                    None => t,
+            self.toast.map(|spec| {
+                let mut t = w::Toast::new(spec.title).on_dismiss(Message::DismissToast).indicator(spec.indicator);
+                if let Some(label) = spec.action {
+                    t = t.action(label, Message::ToastAction);
                 }
+                if let Some(status) = spec.status {
+                    t = t.status(status);
+                }
+                t
             }),
         );
 
