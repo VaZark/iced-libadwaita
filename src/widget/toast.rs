@@ -1,16 +1,32 @@
 //! `AdwToast` and `AdwToastOverlay`.
 
 use super::Element;
-use crate::style::{button as sb, container as sc};
-use crate::Metrics;
+use crate::{Metrics, Role, Theme};
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{button, container, row, text};
 use iced::Length;
 
+/// An opaque dark and light surface to choose from; see [`Toast`].
+const DARK_SURFACE: iced::Color = iced::Color { r: 0.14, g: 0.14, b: 0.15, a: 1.0 };
+const LIGHT_SURFACE: iced::Color = iced::Color { r: 0.98, g: 0.98, b: 0.98, a: 1.0 };
+
+/// `AdwToast`.
+///
+/// The toast is a solid surface (no opacity). Its colors are chosen by contrast, like CSS
+/// `color-contrast()`: the surface is whichever of a dark and a light tone contrasts more with
+/// the window behind it, and the text and icons are whichever of light and dark contrasts more
+/// with that surface. Three ways to change it, narrowest last:
+///
+/// * [`role`](Toast::role): a third option, a status fill (accent, error, …) with contrast text;
+/// * [`background`](Toast::background): a hard-coded surface (text still chosen by contrast);
+/// * [`text_color`](Toast::text_color): a hard-coded text color.
 pub struct Toast<M> {
     title: String,
     action: Option<(String, M)>,
     on_dismiss: Option<M>,
+    background: Option<iced::Color>,
+    text_color: Option<iced::Color>,
+    role: Option<Role>,
 }
 
 impl<M> Toast<M> {
@@ -19,7 +35,26 @@ impl<M> Toast<M> {
             title: title.into(),
             action: None,
             on_dismiss: None,
+            background: None,
+            text_color: None,
+            role: None,
         }
+    }
+    /// Use a status fill ([`Role::Accent`], `Error`, …) instead of the inverse surface. The
+    /// text color is still chosen by contrast with it.
+    pub fn role(mut self, role: Role) -> Self {
+        self.role = Some(role);
+        self
+    }
+    /// Hard override for the surface color (opaque; wins over [`role`](Toast::role)).
+    pub fn background(mut self, c: iced::Color) -> Self {
+        self.background = Some(iced::Color { a: 1.0, ..c });
+        self
+    }
+    /// Hard override for the text, action and close-icon color.
+    pub fn text_color(mut self, c: iced::Color) -> Self {
+        self.text_color = Some(c);
+        self
     }
     /// `button-label` + `action-name`.
     pub fn action(mut self, label: impl Into<String>, on_press: M) -> Self {
@@ -33,6 +68,20 @@ impl<M> Toast<M> {
     }
 }
 
+/// The surface and text colors of a toast: `(background, text)`.
+fn colors(
+    theme: &Theme,
+    background: Option<iced::Color>,
+    text_color: Option<iced::Color>,
+    role: Option<Role>,
+) -> (iced::Color, iced::Color) {
+    let bg = background
+        .or_else(|| role.map(|r| iced::Color { a: 1.0, ..theme.semantic.swatch(r).bg }))
+        // `color-contrast(window vs dark, light)`: the inverse of the window.
+        .unwrap_or_else(|| crate::color::color_contrast(theme.semantic.window.bg, &[DARK_SURFACE, LIGHT_SURFACE]));
+    (bg, text_color.unwrap_or_else(|| crate::color::readable_on(bg)))
+}
+
 /// `AdwToastOverlay`: shows `toast` floating at the bottom of `content`.
 /// The app is responsible for clearing it (e.g. after a timeout).
 pub fn toast_overlay<'a, M: Clone + 'a>(
@@ -43,24 +92,50 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
         return super::layered(content, None);
     };
     let m = Metrics::desktop();
+    let (background, text_color, role) = (t.background, t.text_color, t.role);
+    // Buttons on the toast: the text color, with a state layer of it over the surface.
+    let on_surface = move |th: &Theme, status: button::Status| {
+        let (bg, fg) = colors(th, background, text_color, role);
+        let layer = match status {
+            button::Status::Hovered => 0.15,
+            button::Status::Pressed => 0.25,
+            _ => 0.0,
+        };
+        button::Style {
+            background: Some(iced::Background::Color(crate::color::mix(bg, fg, layer))),
+            text_color: fg,
+            border: iced::Border::default().rounded(th.metrics.radius_pill),
+            ..Default::default()
+        }
+    };
     let mut r = row![text(t.title)].spacing(m.space_m).align_y(Vertical::Center);
     if let Some((label, msg)) = t.action {
-        r = r.push(
-            button(text(label))
-                .padding(m.button_padding)
-                .style(sb::osd)
-                .on_press(msg),
-        );
+        r = r.push(button(text(label)).padding(m.button_padding).style(on_surface).on_press(msg));
     }
     if let Some(msg) = t.on_dismiss {
         r = r.push(
-            button(crate::Icon::WindowClose.colored(m.icon_size, iced::Color::WHITE))
-                .padding(m.space_s)
-                .style(sb::osd)
-                .on_press(msg),
+            button(
+                crate::Icon::WindowClose
+                    .view(m.icon_size)
+                    .style(move |th: &Theme, _| iced::widget::svg::Style {
+                        color: Some(colors(th, background, text_color, role).1),
+                    }),
+            )
+            .padding(m.space_s)
+            .style(on_surface)
+            .on_press(msg),
         );
     }
-    let toast = container(r).padding([m.space_s, m.space_l]).style(sc::toast);
+    let toast = container(r).padding([m.space_s, m.space_l]).style(move |th: &Theme| {
+        let (bg, fg) = colors(th, background, text_color, role);
+        iced::widget::container::Style {
+            text_color: Some(fg),
+            background: Some(iced::Background::Color(bg)),
+            border: iced::Border::default().rounded(th.metrics.radius_pill),
+            shadow: th.shadows.popover().shadow,
+            snap: false,
+        }
+    });
     // Slides up on show: 300ms, ADW_EASE (`SHOW_DURATION`). No hide animation: the app
     // removes the toast.
     let toast = super::entrance(toast, iced::Vector::new(0.0, 60.0))
@@ -81,4 +156,35 @@ pub fn toast_overlay<'a, M: Clone + 'a>(
                 .into(),
         ),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::color::{contrast_ratio, DARK_TEXT, LIGHT_TEXT};
+
+    #[test]
+    fn surface_is_the_inverse_of_the_window_and_opaque() {
+        let (bg, fg) = colors(&Theme::light(), None, None, None);
+        assert_eq!(bg, DARK_SURFACE);
+        assert_eq!(fg, LIGHT_TEXT);
+        let (bg, fg) = colors(&Theme::dark(), None, None, None);
+        assert_eq!(bg, LIGHT_SURFACE);
+        assert_eq!(fg, DARK_TEXT);
+        assert!(contrast_ratio(bg, fg) > 7.0);
+        assert_eq!(bg.a, 1.0);
+    }
+
+    #[test]
+    fn role_and_hard_overrides() {
+        let t = Theme::light();
+        let (bg, fg) = colors(&t, None, None, Some(Role::Error));
+        assert_eq!(bg, iced::Color { a: 1.0, ..t.semantic.error.bg });
+        assert_eq!(fg, crate::color::readable_on(bg));
+        let custom = iced::Color::from_rgb(0.9, 0.9, 0.1);
+        let (bg, fg) = colors(&t, Some(custom), None, Some(Role::Error));
+        assert_eq!((bg, fg), (custom, DARK_TEXT), "background wins over role; text follows contrast");
+        let pink = iced::Color::from_rgb(1.0, 0.0, 0.5);
+        assert_eq!(colors(&t, Some(custom), Some(pink), None).1, pink, "text_color is a hard override");
+    }
 }

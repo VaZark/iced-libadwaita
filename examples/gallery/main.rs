@@ -500,7 +500,7 @@ impl Gallery {
             };
             return match i {
                 0 => {
-                    self.scheme = Scheme::Light;
+                    self.scheme = if std::env::var_os("GALLERY_DARK").is_some() { Scheme::Dark } else { Scheme::Light };
                     wait(700, "a0-start", self)
                 }
                 1 => {
