@@ -6,16 +6,15 @@ use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{button, container, row, text};
 use iced::Length;
 
-/// An opaque dark and light surface to choose from; see [`Toast`].
+/// The toast's dark surface in the light scheme; see [`Toast`].
 const DARK_SURFACE: iced::Color = iced::Color { r: 0.14, g: 0.14, b: 0.15, a: 1.0 };
-const LIGHT_SURFACE: iced::Color = iced::Color { r: 0.98, g: 0.98, b: 0.98, a: 1.0 };
 
 /// `AdwToast`.
 ///
-/// The toast is a solid surface (no opacity). Its colors are chosen by contrast, like CSS
-/// `color-contrast()`: the surface is whichever of a dark and a light tone contrasts more with
-/// the window behind it, and the text and icons are whichever of light and dark contrasts more
-/// with that surface. Three ways to change it, narrowest last:
+/// The toast is a solid, always-dark surface (no opacity): the theme's elevated surface in the
+/// dark scheme and a dark ink tone in the light scheme, never a light slab on a dark window.
+/// The text and icons are chosen by contrast with it, like CSS `color-contrast()`. Three ways
+/// to change it, narrowest last:
 ///
 /// * [`role`](Toast::role): a third option, a status fill (accent, error, …) with contrast text;
 /// * [`background`](Toast::background): a hard-coded surface (text still chosen by contrast);
@@ -68,6 +67,16 @@ impl<M> Toast<M> {
     }
 }
 
+/// The toast surface is always dark, never a light slab on a dark window: the theme's own
+/// elevated surface in the dark scheme (`popover`), the dark ink tone in the light scheme.
+fn default_surface(theme: &Theme) -> iced::Color {
+    if theme.semantic.is_dark() {
+        iced::Color { a: 1.0, ..theme.semantic.popover.bg }
+    } else {
+        DARK_SURFACE
+    }
+}
+
 /// The surface and text colors of a toast: `(background, text)`.
 fn colors(
     theme: &Theme,
@@ -77,8 +86,7 @@ fn colors(
 ) -> (iced::Color, iced::Color) {
     let bg = background
         .or_else(|| role.map(|r| iced::Color { a: 1.0, ..theme.semantic.swatch(r).bg }))
-        // `color-contrast(window vs dark, light)`: the inverse of the window.
-        .unwrap_or_else(|| crate::color::color_contrast(theme.semantic.window.bg, &[DARK_SURFACE, LIGHT_SURFACE]));
+        .unwrap_or_else(|| default_surface(theme));
     (bg, text_color.unwrap_or_else(|| crate::color::readable_on(bg)))
 }
 
@@ -164,13 +172,15 @@ mod tests {
     use crate::color::{contrast_ratio, DARK_TEXT, LIGHT_TEXT};
 
     #[test]
-    fn surface_is_the_inverse_of_the_window_and_opaque() {
+    fn surface_is_dark_and_opaque_in_both_schemes() {
         let (bg, fg) = colors(&Theme::light(), None, None, None);
         assert_eq!(bg, DARK_SURFACE);
         assert_eq!(fg, LIGHT_TEXT);
-        let (bg, fg) = colors(&Theme::dark(), None, None, None);
-        assert_eq!(bg, LIGHT_SURFACE);
-        assert_eq!(fg, DARK_TEXT);
+        let dark = Theme::dark();
+        let (bg, fg) = colors(&dark, None, None, None);
+        assert_eq!(bg, iced::Color { a: 1.0, ..dark.semantic.popover.bg }, "the theme's own elevated surface");
+        assert!(crate::color::relative_luminance(bg) < 0.1, "never a light slab on a dark window");
+        assert_eq!(fg, LIGHT_TEXT);
         assert!(contrast_ratio(bg, fg) > 7.0);
         assert_eq!(bg.a, 1.0);
     }

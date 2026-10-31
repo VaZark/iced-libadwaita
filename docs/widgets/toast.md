@@ -28,10 +28,10 @@ No timeout/priority queue; no hide animation (fade + 0.95 scale) because the app
 
 ## Colors
 
-The toast is a **solid surface**, not a translucent OSD. Its colors follow CSS `color-contrast()`:
-the surface is whichever of a dark and a light tone contrasts more with the window behind it (dark
-on a light window, light on a dark one), and the text, action button and close icon are whichever
-of light and dark text contrasts more with that surface (`color::readable_on`).
+The toast is a **solid, always-dark surface**, not a translucent OSD and never a light slab on a
+dark window: the theme's own elevated surface (`popover`) in the dark scheme, a dark ink tone in the
+light scheme. The text, action button and close icon are chosen with CSS `color-contrast()`:
+whichever of light and dark text contrasts more with the surface (`color::readable_on`).
 
 Overrides: `Toast::role(Role::…)` uses a status fill instead (text still by contrast),
 `Toast::background(color)` hard-codes the surface, `Toast::text_color(color)` hard-codes the text.
