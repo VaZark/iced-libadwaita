@@ -189,6 +189,7 @@ pub struct SwitchRow<'a, M> {
     row: ActionRow<'a, M>,
     active: bool,
     on_toggle: Box<dyn Fn(bool) -> M + 'a>,
+    disabled: bool,
     metrics: Metrics,
 }
 
@@ -203,8 +204,14 @@ impl<'a, M> SwitchRow<'a, M> {
             row: ActionRow::new(title).wrap_suffix(false),
             active,
             on_toggle: Box::new(on_toggle),
+            disabled: false,
             metrics: Metrics::desktop(),
         }
+    }
+    /// Insensitive: the switch is drawn disabled and the row cannot be activated.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
     }
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {
         self.row = self.row.subtitle(s);
@@ -223,6 +230,9 @@ impl<'a, M> SwitchRow<'a, M> {
 
 impl<'a, M: Clone + 'a> From<SwitchRow<'a, M>> for Element<'a, M> {
     fn from(s: SwitchRow<'a, M>) -> Self {
+        if s.disabled {
+            return s.row.suffix(super::switch::<M>(s.active)).into();
+        }
         let toggle_to = (s.on_toggle)(!s.active);
         let sw = super::switch(s.active).on_toggle(s.on_toggle);
         s.row.suffix(sw).on_activate(toggle_to).into()
@@ -375,6 +385,7 @@ where
     selected: Option<T>,
     on_select: Box<dyn Fn(T) -> M + 'a>,
     disabled: Option<OptionPredicate<'a, T>>,
+    insensitive: bool,
     open_initially: bool,
 }
 
@@ -392,8 +403,14 @@ impl<'a, T: ToString + PartialEq + Clone, M> ComboRow<'a, T, M> {
             selected,
             on_select: Box::new(on_select),
             disabled: None,
+            insensitive: false,
             open_initially: false,
         }
+    }
+    /// Insensitive: the value is dimmed and the popover cannot open.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.insensitive = disabled;
+        self
     }
     /// Options for which `f` is true are shown dimmed and cannot be chosen.
     pub fn disabled_when(mut self, f: impl Fn(&T) -> bool + 'a) -> Self {
@@ -422,9 +439,13 @@ where
         let value = row![
             // The chosen value is live content, in the normal text color (like text in an
             // entry); dimmed is reserved for secondary text and the disabled state.
-            typography::label(current),
-            Icon::GoDown.view(m.icon_size).style(|t: &Theme, _| iced::widget::svg::Style {
-                color: Some(t.semantic.window.fg),
+            if c.insensitive { typography::label(current).style(st::dim) } else { typography::label(current) },
+            Icon::GoDown.view(m.icon_size).style(move |t: &Theme, _| iced::widget::svg::Style {
+                color: Some(if c.insensitive {
+                    crate::color::fade(t.semantic.window.fg, t.semantic.opacity.disabled)
+                } else {
+                    t.semantic.window.fg
+                }),
             }),
         ]
         .spacing(m.space_s)
@@ -446,6 +467,7 @@ where
             .align(super::PopoverAlign::End)
             .popover_width(240.0)
             .open_initially(c.open_initially)
+            .disabled(c.insensitive)
             .into()
     }
 }

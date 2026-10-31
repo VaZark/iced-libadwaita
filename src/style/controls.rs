@@ -89,7 +89,11 @@ pub mod text_editor {
                 radius: theme.metrics.radius_m.into(),
             },
             placeholder: s.dim(),
-            value: s.window.fg,
+            value: if matches!(status, Status::Disabled) {
+                crate::color::fade(s.window.fg, s.opacity.disabled)
+            } else {
+                s.window.fg
+            },
             selection: s.selection,
         }
     }

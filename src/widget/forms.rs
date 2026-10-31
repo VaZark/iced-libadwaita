@@ -33,6 +33,7 @@ pub struct Entry<'a, M> {
     on_input: Option<Box<dyn Fn(String) -> M + 'a>>,
     on_submit: Option<M>,
     state: EntryState,
+    color: Option<iced::Color>,
     secure: bool,
     width: Length,
     metrics: Metrics,
@@ -56,6 +57,7 @@ impl<'a, M> Entry<'a, M> {
             on_input: None,
             on_submit: None,
             state: EntryState::Normal,
+            color: None,
             secure: false,
             width: Length::Fill,
             metrics: Metrics::desktop(),
@@ -73,6 +75,12 @@ impl<'a, M> Entry<'a, M> {
     /// `.error` / `.warning` / `.success`.
     pub fn state(mut self, s: EntryState) -> Self {
         self.state = s;
+        self
+    }
+    /// Overrides the entry's color: its text and its focus/validation ring use `c`. For an
+    /// app-specific tint; prefer [`state`](Entry::state) for validation.
+    pub fn color(mut self, c: iced::Color) -> Self {
+        self.color = Some(c);
         self
     }
     /// `visibility = false`.
@@ -102,6 +110,15 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
             EntryState::Warning => input.style(style::text_input::warning),
             EntryState::Success => input.style(style::text_input::success),
         };
+        if let Some(c) = e.color {
+            input = input.style(move |t: &Theme, status| {
+                let mut st = style::text_input::default(t, status);
+                st.border.color = c;
+                st.border.width = t.metrics.focus_ring_width;
+                st.value = c;
+                st
+            });
+        }
         if let Some(f) = e.on_input {
             input = input.on_input(f);
         }
@@ -114,7 +131,8 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
 
 // --------------------------------------------------------------- TextView
 
-/// `GtkTextView`: a multi-line editor over a [`text_editor::Content`].
+/// `GtkTextView`: a multi-line editor over a [`text_editor::Content`]. Without
+/// [`on_action`](TextView::on_action) it is read-only and drawn disabled.
 pub struct TextView<'a, M> {
     content: &'a text_editor::Content,
     on_action: Option<Box<dyn Fn(text_editor::Action) -> M + 'a>>,
@@ -144,7 +162,10 @@ impl<'a, M> TextView<'a, M> {
 
 impl<'a, M: Clone + 'a> From<TextView<'a, M>> for Element<'a, M> {
     fn from(t: TextView<'a, M>) -> Self {
-        let mut e = text_editor(t.content).height(t.height).padding(t.metrics.entry_padding);
+        let mut e = text_editor(t.content)
+            .height(t.height)
+            .padding(t.metrics.entry_padding)
+            .style(style::text_editor::default);
         if let Some(p) = t.placeholder {
             e = e.placeholder(p);
         }

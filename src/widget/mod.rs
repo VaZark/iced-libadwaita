@@ -44,7 +44,7 @@ pub use extra::{
     inline_view_switcher, password_entry_row, path_bar, preferences_dialog, shortcut_label, shortcuts_dialog,
     sidebar, tab_bar, tab_button, view_switcher, view_switcher_bar, window, wrap_box,
 };
-pub use dropdown::{dropdown, menu_item, menu_item_disabled, popover, Align as PopoverAlign, Appearance as DropdownAppearance, Dropdown, Presentation as DropdownPresentation};
+pub use dropdown::{dropdown, dropdown_disabled, menu_item, menu_item_disabled, popover, Align as PopoverAlign, Appearance as DropdownAppearance, Dropdown, Presentation as DropdownPresentation};
 pub use switch::{switch, Switch};
 pub use dialog::{dialog, dialog_in_window, present_dialog, AboutDialog, AlertDialog, ResponseAppearance};
 pub use flex::FlexRow;

@@ -64,6 +64,7 @@ pub struct Dropdown<'a, M> {
     popover_width: Option<f32>,
     open_initially: bool,
     presentation: Presentation,
+    disabled: bool,
 }
 
 struct State {
@@ -102,7 +103,14 @@ impl<'a, M: 'a> Dropdown<'a, M> {
             popover_width: None,
             open_initially: false,
             presentation: Presentation::Popover,
+            disabled: false,
         }
+    }
+    /// A disabled dropdown cannot be opened. Build its trigger dimmed (see
+    /// [`dropdown_disabled`]); this only blocks the interaction.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
     }
     /// [`Presentation::Popover`] (default) or [`Presentation::Page`].
     pub fn presentation(mut self, p: Presentation) -> Self {
@@ -198,6 +206,28 @@ pub fn popover<'a, M: 'a>(
         .into()
 }
 
+/// A `GtkDropDown` that is insensitive: its value and arrow are dimmed and it cannot open.
+pub fn dropdown_disabled<'a, T, M>(selected: Option<&T>) -> Dropdown<'a, M>
+where
+    T: ToString,
+    M: Clone + 'a,
+{
+    let m = Metrics::desktop();
+    let current = selected.map(ToString::to_string).unwrap_or_default();
+    let trigger = container(
+        row![
+            text(current).wrapping(text::Wrapping::None).style(crate::style::text::dim),
+            Icon::GoDown.view(m.icon_size).style(|t: &Theme, _| iced::widget::svg::Style {
+                color: Some(crate::color::fade(t.semantic.window.fg, t.semantic.opacity.disabled)),
+            })
+        ]
+        .spacing(m.space_s)
+        .align_y(Vertical::Center),
+    )
+    .center_y(Length::Fixed(m.button_min_height - m.button_padding.y()));
+    Dropdown::custom(trigger, popover(Vec::<Element<'a, M>>::new(), 0.0)).disabled(true)
+}
+
 /// `GtkDropDown` over a slice of options.
 pub fn dropdown<'a, T, M>(
     options: &'a [T],
@@ -264,6 +294,10 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Dropdown<'a, M> {
         _: &Rectangle,
     ) {
         let state = tree.state.downcast_mut::<State>();
+        if self.disabled {
+            state.open = false;
+            return;
+        }
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event
             && cursor.is_over(layout.bounds())
         {
@@ -282,7 +316,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Dropdown<'a, M> {
         _: &Rectangle,
         _: &iced::Renderer,
     ) -> mouse::Interaction {
-        if cursor.is_over(layout.bounds()) {
+        if !self.disabled && cursor.is_over(layout.bounds()) {
             mouse::Interaction::Pointer
         } else {
             mouse::Interaction::None
