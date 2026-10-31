@@ -146,7 +146,7 @@ pub const PROPERTIES: &[Property] = &[
     p("shortcuts", "enabled", Bool, "true"),
     p("shortcuts", "hints", Choice(&["auto", "always", "never"]), "auto"),
     p("toasts", "position", Choice(POSITIONS), "bottom-center"),
-    p("toasts", "target", Choice(&["window", "content"]), "window"),
+    p("toasts", "target", Choice(&["window", "content"]), "content"),
     p("rows", "collapse", Choice(&["stacked", "flex"]), "stacked"),
     p("rows", "wrap-basis", Number { min: 0.0, max: 2000.0 }, "128"),
     p("icons", "theme", Text, "system"),

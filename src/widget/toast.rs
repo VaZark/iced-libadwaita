@@ -83,8 +83,8 @@ impl std::fmt::Display for ToastPosition {
 /// to read ([`toast_target`], `[toasts] target` in the desktop config) so every app agrees.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ToastTarget {
-    #[default]
     Window,
+    #[default]
     Content,
 }
 

@@ -154,6 +154,7 @@ pub struct ToggleGroup<'a, T, M> {
     on_select: Box<dyn Fn(T) -> M + 'a>,
     width: Length,
     homogeneous: bool,
+    compact: Option<bool>,
     metrics: Metrics,
 }
 
@@ -169,6 +170,7 @@ pub fn toggle_group<'a, T: Clone + PartialEq, M>(
         on_select: Box::new(on_select),
         width: Length::Shrink,
         homogeneous: false,
+        compact: None,
         metrics: Metrics::desktop(),
     }
 }
@@ -181,6 +183,20 @@ impl<'a, T, M> ToggleGroup<'a, T, M> {
     /// All segments the same width (`AdwToggleGroup:homogeneous`).
     pub fn homogeneous(mut self, h: bool) -> Self {
         self.homogeneous = h;
+        self
+    }
+    /// Follows the window's mode: in mobile mode (`window::is_mobile(width)`, the `[windows]
+    /// mobile-max-width` breakpoint) every segment that has an icon *and* a label shows the icon
+    /// only; above it, icon and text. A segment with no icon has nothing shorter to show and
+    /// falls back to its text. Same rule as [`MenuPresentation::resolve`](super::MenuPresentation).
+    pub fn window_width(self, width: f32) -> Self {
+        self.compact(Some(crate::window::is_mobile(width)))
+    }
+    /// Icons or full content for the segments that have both, all together. Prefer
+    /// [`window_width`](Self::window_width); this takes the decision directly. Without either
+    /// (`None`) the group falls back to the space: icons as soon as any segment would be squeezed.
+    pub fn compact(mut self, compact: Option<bool>) -> Self {
+        self.compact = compact;
         self
     }
     /// `Length::Fill` makes the group fill the available width, each segment
@@ -219,6 +235,7 @@ impl<'a, T: Clone + PartialEq + 'a, M: 'a> From<ToggleGroup<'a, T, M>> for Eleme
         super::segmented::Segmented::new(segments, active, g.on_select)
             .width(g.width)
             .homogeneous(g.homogeneous)
+            .compact(g.compact)
             .metrics(m)
             .into()
     }

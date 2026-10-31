@@ -53,7 +53,7 @@ Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 wi
 | shortcuts | `enabled` | bool (true) | keyboard shortcuts work and are shown at all |
 | | `hints` | auto / always / never (auto) | accelerator hints in menus; auto hides them in the touch full-page menu |
 | toasts | `position` | top-left / top-center / top-right / bottom-left / bottom-center / bottom-right (bottom-center) | `Toast::position` default |
-| | `target` | window / content (window) | `widget::toast_target()`: where the app places `toast_overlay` |
+| | `target` | window / content (content) | `widget::toast_target()`: where the app places `toast_overlay` |
 | rows | `collapse` | stacked / flex (stacked) | rows' wrapped suffix |
 | | `wrap-basis` | px (128) | when a suffix wraps |
 | icons | `theme` | system / name (system) | window-control icon lookup |

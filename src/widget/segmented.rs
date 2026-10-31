@@ -47,6 +47,7 @@ pub struct Segmented<'a, T, M> {
     on_select: Box<dyn Fn(T) -> M + 'a>,
     width: Length,
     homogeneous: bool,
+    compact: Option<bool>,
     metrics: Metrics,
     // Results of the last layout (relative to the widget's bounds).
     rects: Vec<Rectangle>,
@@ -84,6 +85,7 @@ impl<'a, T: Clone, M: 'a> Segmented<'a, T, M> {
             on_select: Box::new(on_select),
             width: Length::Shrink,
             homogeneous: false,
+            compact: None,
             metrics: Metrics::desktop(),
             rects: Vec::new(),
             use_compact: vec![false; n],
@@ -99,6 +101,16 @@ impl<'a, T: Clone, M: 'a> Segmented<'a, T, M> {
     /// content sets it, or the equal share when filling, whichever is larger.
     pub fn homogeneous(mut self, h: bool) -> Self {
         self.homogeneous = h;
+        self
+    }
+
+    /// Which form the segments take. `Some(true)` shows every segment that has an icon-only form
+    /// as that icon; `Some(false)` always shows the full content. Pass the breakpoint here
+    /// (`window::is_mobile(width)`) so the control follows the window's mode. `None` (the default)
+    /// decides from the space: icons as soon as any segment would be squeezed. Either way the
+    /// segments switch together, never half icons and half labels.
+    pub fn compact(mut self, compact: Option<bool>) -> Self {
+        self.compact = compact;
         self
     }
 
@@ -212,6 +224,12 @@ fn needs_compact(widths: &[f32], nat_full: &[f32], nat_compact: &[Option<f32>]) 
     (0..widths.len()).any(|i| widths[i] + 0.5 < nat_full[i] && nat_compact[i].is_some())
 }
 
+/// Whether the segments take their compact form: as told by the breakpoint (`forced`), else
+/// because the space is short.
+fn use_compact(forced: Option<bool>, widths: &[f32], nat_full: &[f32], nat_compact: &[Option<f32>]) -> bool {
+    forced.unwrap_or_else(|| needs_compact(widths, nat_full, nat_compact))
+}
+
 /// Chooses the distribution: equal `flex: 1` shares when there is room to
 /// stretch, natural widths when exactly fitting, fair shrinking when short.
 fn distribute(nat: &[f32], target: f32, homogeneous: bool) -> Vec<f32> {
@@ -303,7 +321,7 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
         let mut nat = nat_full.clone();
         let mut widths = distribute(&nat, target, self.homogeneous);
         self.use_compact = vec![false; n];
-        if needs_compact(&widths, &nat_full, &nat_compact) {
+        if use_compact(self.compact, &widths, &nat_full, &nat_compact) {
             for i in 0..n {
                 if let Some(c) = nat_compact[i] {
                     self.use_compact[i] = true;
@@ -512,6 +530,41 @@ mod tests {
         assert!(super::needs_compact(&[100.0, 100.0, 60.0], &nat, &comp));
         // A squeezed segment with no compact form cannot trigger it.
         assert!(!super::needs_compact(&[100.0, 100.0, 60.0], &nat, &[Some(36.0), Some(36.0), None]));
+    }
+
+    /// Five segments with icons, crowded: one squeezed segment turns *all five* into icons, so
+    /// the control is never half labels, half icons.
+    #[test]
+    fn five_crowded_segments_collapse_uniformly_to_icons() {
+        let nat = [70.0, 70.0, 80.0, 70.0, 70.0];
+        let comp = [Some(36.0); 5];
+        // 300 for 360 of content: the fair shrink squeezes the long ones.
+        let widths = super::distribute(&nat, 300.0, false);
+        assert!(widths.iter().any(|w| *w + 0.5 < 80.0));
+        assert!(super::use_compact(None, &widths, &nat, &comp));
+        // Compact, all five fit with room to spare and share it equally.
+        let compact = super::distribute(&[36.0; 5], 300.0, false);
+        assert!(compact.iter().all(|w| (w - 60.0).abs() < 1e-3), "{compact:?}");
+        // Room for the labels: nothing collapses.
+        let roomy = super::distribute(&nat, 400.0, false);
+        assert!(!super::use_compact(None, &roomy, &nat, &comp));
+    }
+
+    /// The breakpoint decides when it is given, whatever the space.
+    #[test]
+    fn the_breakpoint_overrides_the_space() {
+        let nat = [70.0; 5];
+        let comp = [Some(36.0); 5];
+        let roomy = super::distribute(&nat, 600.0, false);
+        assert!(super::use_compact(Some(true), &roomy, &nat, &comp), "mobile: icons even with room");
+        let tight = super::distribute(&nat, 200.0, false);
+        assert!(!super::use_compact(Some(false), &tight, &nat, &comp), "desktop: never icons");
+    }
+
+    #[test]
+    fn mobile_mode_is_a_width_rule() {
+        assert!(crate::window::is_mobile(400.0));
+        assert!(!crate::window::is_mobile(900.0));
     }
 
     #[test]

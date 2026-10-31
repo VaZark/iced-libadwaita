@@ -890,7 +890,7 @@ thing=1
     fn toast_position_and_target_are_configurable() {
         use crate::widget::{ToastPosition, ToastTarget};
         let d = Config::default();
-        assert_eq!((d.toast_position, d.toast_target), (ToastPosition::BottomCenter, ToastTarget::Window));
+        assert_eq!((d.toast_position, d.toast_target), (ToastPosition::BottomCenter, ToastTarget::Content));
         let c = Config::from_keyfile("[toasts]\nposition=top-right\ntarget=content\n");
         assert_eq!((c.toast_position, c.toast_target), (ToastPosition::TopRight, ToastTarget::Content));
         assert!(c.warnings().is_empty());

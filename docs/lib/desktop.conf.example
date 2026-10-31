@@ -72,7 +72,7 @@ hints=auto               # auto | always | never: accelerator hints in menus (au
 
 [toasts]
 position=bottom-center   # top|bottom - left|center|right, e.g. top-right
-target=window            # window (over the sidebar too) | content (content area only)
+target=content           # content (content area only, centered on it) | window (over the sidebar too)
 
 [rows]
 collapse=stacked         # stacked | flex  (what a wrapped row suffix does)

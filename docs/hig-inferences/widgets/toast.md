@@ -59,8 +59,9 @@ toast filled with the accent (`role(Role::Accent)`) it falls back to a text-colo
 `BottomLeft`, `BottomCenter` (default) or `BottomRight`, and it slides in from the edge it is
 anchored to. Without the call it follows `[toasts] position` in the desktop config.
 
-The **target** is the container the toast is placed in: the whole **window** (over the sidebar too)
-or only the **content area** beside the sidebar. `toast_overlay` fills whatever it wraps, so the
+The **target** is the container the toast is placed in: the **content area** beside the sidebar
+(default, so a toast is centered on the content, not on the window) or the whole **window** (over
+the sidebar too). `toast_overlay` fills whatever it wraps, so the
 app chooses by wrapping the window or the content pane, and reads the shared setting with
 `widget::toast_target()` (`[toasts] target`). Keep both layers mounted
 (`toast_overlay(x, None)` for the inactive one) so switching the target does not rebuild the tree.
