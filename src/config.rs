@@ -504,7 +504,7 @@ impl Config {
         if let Some(v) = get("navigation", "mobile-sidebar") {
             match v {
                 "drawer" => self.mobile_sidebar = CollapsedSidebar::Drawer,
-                "first-page" => self.mobile_sidebar = CollapsedSidebar::FirstPage,
+                "parent-page" => self.mobile_sidebar = CollapsedSidebar::ParentPage,
                 _ => bad!("navigation", "mobile-sidebar", v),
             }
         }
@@ -992,7 +992,7 @@ button-layout=close,minimize,maximize:
 mobile-max-width=500
 
 [navigation]
-mobile-sidebar=first-page
+mobile-sidebar=parent-page
 
 [menus]
 presentation=dropdown
@@ -1004,6 +1004,13 @@ wrap-basis=200
 [bogus]
 thing=1
 "#;
+
+    #[test]
+    fn the_retired_name_first_page_is_an_invalid_value() {
+        let c = Config::from_keyfile("[navigation]\nmobile-sidebar=first-page\n");
+        assert_eq!(c.mobile_sidebar, CollapsedSidebar::Drawer);
+        assert_eq!(c.warnings().len(), 1);
+    }
 
     #[test]
     fn defaults_are_libadwaita() {
@@ -1029,7 +1036,7 @@ thing=1
             Pick::Fixed("close,minimize,maximize:".into())
         );
         assert_eq!(c.mobile_max_width, 500.0);
-        assert_eq!(c.mobile_sidebar, CollapsedSidebar::FirstPage);
+        assert_eq!(c.mobile_sidebar, CollapsedSidebar::ParentPage);
         assert_eq!(c.menu_presentation, MenuPresentationSetting::Dropdown);
         assert_eq!(c.row_collapse, CollapseBehavior::Flex);
         assert_eq!(c.row_wrap_basis, 200.0);
@@ -1084,10 +1091,10 @@ thing=1
             Config::from_keyfile("[motion]\nanimations=on\n[navigation]\nmobile-sidebar=drawer\n")
                 .opt_out(|o| {
                     o.animations(false)
-                        .mobile_sidebar(CollapsedSidebar::FirstPage);
+                        .mobile_sidebar(CollapsedSidebar::ParentPage);
                 });
         assert_eq!(c.animations, Pick::Fixed(false));
-        assert_eq!(c.mobile_sidebar, CollapsedSidebar::FirstPage);
+        assert_eq!(c.mobile_sidebar, CollapsedSidebar::ParentPage);
         assert_eq!(
             c.overridden(),
             &[Setting::Animations, Setting::MobileSidebar]

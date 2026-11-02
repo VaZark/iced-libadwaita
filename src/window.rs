@@ -2,7 +2,8 @@
 //!
 //! Adwaita dislikes server-side decorations (SSD): the app draws its own
 //! [`HeaderBar`](crate::widget::HeaderBar), which carries the title, window
-//! controls and acts as the drag handle. So SSD is off by default; use
+//! controls and acts as the drag handle. So SSD is off by default (the toolkit config, `[windows]
+//! decorations`, decides: see [`csd`]); use
 //! [`settings`] for the iced window and [`frame`] to get rounded corners and
 //! edge resize grips, which a decoration-less window otherwise lacks.
 //!
@@ -22,6 +23,13 @@ pub const MIN_SIZE: Size = Size::new(360.0, 200.0);
 pub fn min_size() -> Size {
     let c = crate::config::current();
     Size::new(c.min_window_width, c.min_window_height)
+}
+
+/// Whether windows draw their own decorations: the toolkit's `[windows] decorations` setting
+/// (client-side unless the desktop config says `ssd`). Apps follow it as it is; it is not a
+/// per-app switch.
+pub fn csd() -> bool {
+    crate::config::current().decorations == crate::config::DecorationMode::Csd
 }
 
 /// Window settings following the desktop config: client-side decorations unless the config
@@ -207,9 +215,215 @@ pub fn frame<'a, M: Clone + 'a>(
     stack![body, outline, grips].into()
 }
 
+// ---------------------------------------------------------------------------
+// Client-side window chrome, and windows of their own
+// ---------------------------------------------------------------------------
+
+/// What the chrome of a window (its header bars and frame) asks of the window. A widget cannot
+/// act on its window, so it sends one of these as a message and the app performs it with
+/// [`Action::perform`].
+#[derive(Debug, Clone, Copy)]
+pub enum Action {
+    /// Press on the empty header area: move the window.
+    Drag,
+    Minimize,
+    ToggleMaximize,
+    Close,
+    /// Press on a resize grip of the [`frame`].
+    Resize(Direction),
+}
+
+impl Action {
+    /// The task that does it to window `id`.
+    pub fn perform<T>(self, id: iced::window::Id) -> Task<T> {
+        match self {
+            Self::Drag => iced::window::drag(id),
+            Self::Minimize => iced::window::minimize(id, true),
+            Self::ToggleMaximize => iced::window::toggle_maximize(id),
+            Self::Close => iced::window::close(id),
+            Self::Resize(d) => iced::window::drag_resize(id, d),
+        }
+    }
+}
+
+/// The client-side decorations of one window, as the toolkit config says
+/// ([`csd`]): which of its edges a header bar or surface touches, which buttons it has, and
+/// whether the window is maximized. One value describes the window; ask it for the
+/// [`frame`] and give it to each header bar with
+/// [`HeaderBar::chrome`](crate::widget::HeaderBar::chrome).
+///
+/// Without client-side decorations the chrome draws nothing of its own: no buttons, drag area
+/// or rounded corners, and [`Chrome::frame`] is just the window background.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Chrome {
+    pub(crate) csd: bool,
+    pub(crate) state: State,
+    pub(crate) left: bool,
+    pub(crate) right: bool,
+    pub(crate) minimize: bool,
+    pub(crate) maximize: bool,
+}
+
+impl Chrome {
+    /// The chrome of a window in `state`, with every button, touching both side edges.
+    pub fn new(state: State) -> Self {
+        Self {
+            csd: csd(),
+            state,
+            left: true,
+            right: true,
+            minimize: true,
+            maximize: true,
+        }
+    }
+
+    /// Overrides the toolkit's decoration mode (for tests; apps follow the config).
+    pub fn csd_override(mut self, csd: bool) -> Self {
+        self.csd = csd;
+        self
+    }
+
+    /// Which side edges of the window the header bar (or surface) touches: it shows the window
+    /// buttons the user's layout puts on those sides, and rounds those corners. In a split view
+    /// each pane's header gets its own.
+    pub fn edges(mut self, left: bool, right: bool) -> Self {
+        self.left = left;
+        self.right = right;
+        self
+    }
+
+    /// Only a close button, no minimize or maximize: a dialog.
+    pub fn close_only(mut self) -> Self {
+        self.minimize = false;
+        self.maximize = false;
+        self
+    }
+
+    /// The window corner radius: none without client-side decorations, and none edge to edge.
+    pub fn radius(&self) -> f32 {
+        if self.csd {
+            self.state.radius(&Metrics::default())
+        } else {
+            0.0
+        }
+    }
+
+    /// The window around `content`: the [`frame`] (rounded, outlined, with resize grips) with
+    /// client-side decorations, plain window background without. Grips send
+    /// [`Action::Resize`] through `on_action`.
+    pub fn frame<'a, M: Clone + 'a>(
+        &self,
+        content: impl Into<Element<'a, M>>,
+        on_action: impl Fn(Action) -> M + 'a,
+    ) -> Element<'a, M> {
+        if self.csd {
+            frame(content, self.state, move |d| on_action(Action::Resize(d)))
+        } else {
+            crate::widget::window(content)
+        }
+    }
+}
+
+/// A window the app opens besides its main one: a dialog in a window of its own (a
+/// preferences window) or a whole second shell. It owns the window's id and its state, opens
+/// with the toolkit's decorations and can disable its parent the way a regular dialog does.
+///
+/// Keep it in an `Option` in your state (`None` while closed), route
+/// [`Action`]s from its chrome to [`Action::perform`] with its id, and clear it when iced
+/// reports the window closed.
+#[derive(Debug)]
+pub struct Child<T> {
+    id: iced::window::Id,
+    modal: bool,
+    /// Whatever the window needs (`()` for a static dialog).
+    pub state: T,
+}
+
+impl<T> Child<T> {
+    /// Opens a **dialog** window of `size`: centered, never narrower than a phone, and modal:
+    /// while it is open the parent is disabled (see [`Child::disable_parent`]).
+    pub fn dialog(size: Size, state: T) -> (Self, Task<iced::window::Id>) {
+        Self::open(dialog_settings(size), true, state)
+    }
+
+    /// Opens an ordinary second **window** of `size` that does not disable its parent.
+    pub fn window(size: Size, state: T) -> (Self, Task<iced::window::Id>) {
+        Self::open(Settings { size, ..settings() }, false, state)
+    }
+
+    fn open(settings: Settings, modal: bool, state: T) -> (Self, Task<iced::window::Id>) {
+        let (id, open) = iced::window::open(settings);
+        (Self { id, modal, state }, open)
+    }
+
+    pub fn id(&self) -> iced::window::Id {
+        self.id
+    }
+
+    /// Whether `id` is this window.
+    pub fn is(&self, id: iced::window::Id) -> bool {
+        self.id == id
+    }
+
+    pub fn is_modal(&self) -> bool {
+        self.modal
+    }
+
+    /// Brings the window forward (what pressing the disabled parent does).
+    pub fn focus<M>(&self) -> Task<M> {
+        iced::window::gain_focus(self.id)
+    }
+
+    /// Closes the window. Clear the `Option` when the close event arrives.
+    pub fn close<M>(&self) -> Task<M> {
+        iced::window::close(self.id)
+    }
+
+    /// Disables `parent` while a **modal** child is open, like a regular dialog: a scrim over
+    /// it swallows input, and pressing it sends `on_press` (use it to [`focus`](Self::focus)
+    /// the child). Both windows can still be moved on the screen independently. With no child
+    /// (or a non-modal one) the parent is returned in the same tree position, so opening or
+    /// closing the child does not disturb it. `radius` rounds the scrim to the parent's
+    /// corners ([`Chrome::radius`]).
+    pub fn disable_parent<'a, M: Clone + 'a>(
+        child: Option<&Self>,
+        parent: impl Into<Element<'a, M>>,
+        on_press: M,
+        radius: f32,
+    ) -> Element<'a, M> {
+        crate::widget::present_dialog(
+            parent,
+            child.filter(|c| c.modal).map(|_| Element::from(space())),
+            Some(on_press),
+            radius,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chrome_rounds_only_floating_client_side_windows() {
+        let floating = Chrome::new(State::default()).csd_override(true);
+        assert_eq!(floating.radius(), Metrics::default().radius_window);
+        let maximized = Chrome::new(State {
+            maximized: true,
+            fullscreen: false,
+        })
+        .csd_override(true);
+        assert_eq!(maximized.radius(), 0.0);
+        assert_eq!(floating.csd_override(false).radius(), 0.0);
+    }
+
+    #[test]
+    fn chrome_builders_set_edges_and_buttons() {
+        let c: Chrome = Chrome::new(State::default())
+            .close_only()
+            .edges(true, false);
+        assert!(!c.minimize && !c.maximize && c.left && !c.right);
+    }
 
     #[test]
     fn dialog_windows_are_decorated_by_us_and_opened_centered() {

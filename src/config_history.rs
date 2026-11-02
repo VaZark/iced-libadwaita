@@ -342,7 +342,7 @@ pub const PROPERTIES: &[Property] = &[
     p(
         "navigation",
         "mobile-sidebar",
-        Choice(&["drawer", "first-page"]),
+        Choice(&["drawer", "parent-page"]),
         "drawer",
     ),
     p(

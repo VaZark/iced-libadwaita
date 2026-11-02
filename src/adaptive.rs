@@ -104,8 +104,6 @@ impl<K: Clone + PartialEq> Layouts<K> {
             .map(|e| &e.key)
     }
 
-
-
     /// Whether `key` declares `class` in its range. A layout whose range is every class supports
     /// everything.
     pub fn allows(&self, key: &K, class: WidthClass) -> bool {

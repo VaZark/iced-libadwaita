@@ -1,27 +1,19 @@
 # Gallery
 
-`cargo run --example gallery` is a tour of the components. These notes describe how the
-gallery itself is organized; they are about the example, not the library.
+`cargo run --example gallery` is a tour of the components. These notes describe how the gallery itself is organized; they are about the example, not the library.
 
 ## Navigation
 
 Two levels:
 
-1. **Sidebar: functional groups** (Buttons, Inputs, Rows & Lists, Layout, Navigation,
-   Feedback, Dialogs & Sheets). Components are grouped by what they are _for_, not by what
-   they look like: every text field, switch, check and radio is under Inputs. Typography and
-   Theming are single pages.
-2. **A group page** lists its components in sections. Each component is presented in one of
-   three ways, chosen by the rule below.
+1. **Sidebar: functional groups** (Buttons, Inputs, Rows & Lists, Layout, Navigation, Feedback, Dialogs & Sheets). Components are grouped by what they are _for_, not by what they look like: every text field, switch, check and radio is under Inputs. Typography and Theming are single pages.
+2. **A group page** lists its components in sections. Each component is presented in one of three ways, chosen by the rule below.
 
 `nav.rs` holds the tree (`Page` → sections of `Entry`); `details.rs` holds the content.
 
 ## Presentation rule
 
-Count a component's **properties**: things you can vary that change what it is or how it is
-built, such as validation state, password mode, color override, width, icon, shape, style,
-placeholder, read-only, children. **States** (enabled, disabled, checked, selected) are values
-of a property and do not count as separate properties. Then:
+Count a component's **properties**: things you can vary that change what it is or how it is built, such as validation state, password mode, color override, width, icon, shape, style, placeholder, read-only, children. **States** (enabled, disabled, checked, selected) are values of a property and do not count as separate properties. Then:
 
 | The component has…                                                    | It is shown as                                                                         | `Entry`          |
 | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------- |
@@ -38,17 +30,13 @@ flowchart TD
     T -- no --> I["Inline demo<br/>on the group page"]
 ```
 
-Examples: Text input (validation, password, color override, width) is nested; a Check button
-(checked, unchecked, disabled) is inline; Alert dialog is an action row; the whole Feedback group
-is inline or actions, so it has no nested pages.
+Examples: Text input (validation, password, color override, width) is nested; a Check button (checked, unchecked, disabled) is inline; Alert dialog is an action row; the whole Feedback group is inline or actions, so it has no nested pages.
 
 Guidelines:
 
-- Show the **disabled** state of every control that can be disabled, next to its enabled
-  form, on whichever page presents it.
+- Show the **disabled** state of every control that can be disabled, next to its enabled form, on whichever page presents it.
 - A nested page is a group per property, each with a heading, not a flat list.
-- Do not add a nested page to hold a single card. If a component grows a second property,
-  promote it from `Inline` to `Detail` (move its demo into `detail_page`, add the groups).
+- Do not add a nested page to hold a single card. If a component grows a second property, promote it from `Inline` to `Detail` (move its demo into `detail_page`, add the groups).
 - Keep demos small. Anything that only repeats another component's demo belongs there.
 
 ## Running
@@ -59,21 +47,4 @@ cargo run --example gallery -- --screenshot DIR      # every page, light, and th
 GALLERY_PAGE=inputs GALLERY_DETAIL=textinput cargo run --example gallery
 ```
 
-Other environment switches: `GALLERY_SIZE=WxH`, `GALLERY_SIDEBAR_MODE=first-page`,
-`GALLERY_SIDEBAR=1` (start on the sidebar when collapsed), `GALLERY_MENU=page|dropdown`,
-`GALLERY_DIALOG=alert|about|shortcuts|preferences`, `GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push`.
-
-## AppShell
-
-_Layout > AppShell_ is a nested page of prose plus one trigger: its **Open** button opens
-`appshell.rs` in a window of its own, the way the preferences dialog is one. It is a window and
-not a page because what it demonstrates is the window's width: resize it across the breakpoints.
-It has its own state and messages (`appshell::Message`, wrapped as `Message::Shell`); the gallery
-only routes it that window's resizes and ticks.
-
-- The **parent** is `Adaptive`: layouts that differ in kind, each declaring the widths it
-  supports, changed by an ordered close-then-open transition.
-- The **downstream** is `SidebarList`: the navbar and the aside are the same component, and its
-  presentation follows the layout that is shown (`SidebarList::follow`).
-- The **item** is `SidebarItem`: a destination described once (icon, title, subtitle, selected,
-  message) and handed to every layout.
+Other environment switches: `GALLERY_SIZE=WxH`, `GALLERY_SIDEBAR_MODE=parent-page`, `GALLERY_SIDEBAR=1` (start on the sidebar when collapsed), `GALLERY_MENU=page|dropdown`, `GALLERY_DIALOG=alert|about|shortcuts|preferences`, `GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push`.

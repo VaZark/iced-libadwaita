@@ -263,7 +263,7 @@ pub enum SidebarStyle {
     List,
     /// A page of cards: a padded, scrolling boxed list on the content color, each row with
     /// its icon, title, **subtitle** and a chevron, as in a mobile settings app. Use it for
-    /// the sidebar as the first page ([`CollapsedSidebar::FirstPage`]) when collapsed.
+    /// the sidebar as the parent page ([`CollapsedSidebar::ParentPage`]) when collapsed.
     Cards,
 }
 
@@ -383,22 +383,22 @@ pub enum CollapsedSidebar {
     /// ([`NavigationSplitView::show_sidebar`]). (default)
     #[default]
     Drawer,
-    /// The sidebar is the *first page* of a navigation stack, as in a settings app: it
+    /// The sidebar is the *parent page* of a navigation stack, as in a settings app: it
     /// is the landing page, painted in the **content** color (not the sidebar color),
     /// and choosing an item pushes the content page (`show_content`) with a back button.
     /// Beside the content the sidebar keeps its own color.
-    FirstPage,
+    ParentPage,
 }
 
 impl CollapsedSidebar {
-    pub const ALL: [Self; 2] = [Self::Drawer, Self::FirstPage];
+    pub const ALL: [Self; 2] = [Self::Drawer, Self::ParentPage];
 }
 
 impl std::fmt::Display for CollapsedSidebar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::Drawer => "Drawer",
-            Self::FirstPage => "First page",
+            Self::ParentPage => "Parent page",
         })
     }
 }
@@ -435,7 +435,7 @@ pub fn sidebar_width_for(total: f32, fraction: f32, min: f32, max: f32) -> f32 {
 pub const COLLAPSE_WIDTH: f32 = crate::breakpoints::MD - 1.0;
 
 /// The narrowest the content area may get beside a sidebar before it collapses. Content must
-/// never feel squeezed: below this the sidebar becomes a drawer or the first page, whatever
+/// never feel squeezed: below this the sidebar becomes a drawer or the parent page, whatever
 /// the window width.
 pub const MIN_CONTENT_WIDTH: f32 = 520.0;
 
@@ -496,7 +496,7 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
         }
     }
     /// What the sidebar becomes when collapsed: [`CollapsedSidebar::Drawer`]
-    /// (default) or [`CollapsedSidebar::FirstPage`].
+    /// (default) or [`CollapsedSidebar::ParentPage`].
     pub fn collapsed_sidebar(mut self, mode: CollapsedSidebar) -> Self {
         self.collapsed_sidebar = mode;
         self
@@ -585,7 +585,7 @@ impl<'a, M: Clone + 'a> NavigationSplitView<'a, M> {
         // The sidebar pane carries the sidebar color (`.sidebar-pane`), so a flat header
         // above the list continues it. It sits at the window edge, so it rounds the
         // window's corners: left only when beside the content or as a drawer, all four
-        // when it is the whole (collapsed, first-page) window.
+        // when it is the whole (collapsed, parent-page) window.
         let pane = move |radius: iced::border::Radius| {
             move |t: &crate::Theme| iced::widget::container::Style {
                 border: iced::Border::default().rounded(radius),
@@ -599,7 +599,7 @@ impl<'a, M: Clone + 'a> NavigationSplitView<'a, M> {
             bottom_left: r,
         };
         if v.collapsed && v.collapsed_sidebar != CollapsedSidebar::Drawer {
-            // The sidebar is the first page; the content is pushed over it (and popped back)
+            // The sidebar is the parent page; the content is pushed over it (and popped back)
             // with the navigation slide.
             let first: Element<'a, M> = container(v.sidebar)
                 .width(Length::Fill)
@@ -854,7 +854,7 @@ mod tests {
 
     #[test]
     fn full_page_uses_the_regular_width_rule() {
-        let f = split(CollapsedSidebar::FirstPage).adapt(300.0);
+        let f = split(CollapsedSidebar::ParentPage).adapt(300.0);
         assert!(f.collapsed && (f.sidebar_width - 180.0).abs() < 1e-3);
     }
 

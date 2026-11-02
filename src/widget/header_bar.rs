@@ -157,6 +157,45 @@ impl<'a, M> HeaderBar<'a, M> {
     }
     /// Rounds only the outer corners: `left` and `right` radii. Use in split views
     /// where each pane has its own header (left pane: `(r, 0)`, right pane: `(0, r)`).
+    /// Makes this header bar part of the window's client-side decorations: the window buttons
+    /// the user's layout puts on the edges `chrome` says it touches, the drag area (press to
+    /// move, double-click to maximize), and the window's rounded corners at those edges. Every
+    /// press is sent through `on_action`; perform it with
+    /// [`Action::perform`](crate::window::Action::perform). Without client-side decorations it
+    /// only clears the window buttons.
+    pub fn chrome(
+        self,
+        chrome: &crate::window::Chrome,
+        on_action: impl Fn(crate::window::Action) -> M,
+    ) -> Self {
+        use crate::window::Action;
+        let r = chrome.radius();
+        let bar = self.window_corners(
+            if chrome.left { r } else { 0.0 },
+            if chrome.right { r } else { 0.0 },
+        );
+        if !chrome.csd {
+            return bar
+                .show_start_title_buttons(false)
+                .show_end_title_buttons(false);
+        }
+        let mut bar = bar
+            .show_start_title_buttons(chrome.left)
+            .show_end_title_buttons(chrome.right)
+            .window_controls(WindowControls {
+                on_minimize: chrome.minimize.then(|| on_action(Action::Minimize)),
+                on_maximize: chrome.maximize.then(|| on_action(Action::ToggleMaximize)),
+                on_close: Some(on_action(Action::Close)),
+                maximized: chrome.state.maximized,
+                layout: None,
+            })
+            .on_drag(on_action(Action::Drag));
+        if chrome.maximize {
+            bar = bar.on_double_click(on_action(Action::ToggleMaximize));
+        }
+        bar
+    }
+
     pub fn window_corners(mut self, left: f32, right: f32) -> Self {
         self.corners = (left, right);
         self
@@ -267,3 +306,42 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
 
 #[allow(dead_code)]
 fn _assert_types(_: Padding, _: &Theme, _: text::Text<'static, Theme>) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::window::{Action, Chrome, State};
+
+    #[test]
+    fn chrome_puts_buttons_and_corners_on_the_edges_it_touches() {
+        let r = Metrics::default().radius_window;
+        let chrome = Chrome::new(State::default())
+            .csd_override(true)
+            .edges(false, true);
+        let bar = HeaderBar::<Action>::new().chrome(&chrome, |a| a);
+        assert!(!bar.show_start_buttons && bar.show_end_buttons);
+        assert_eq!(bar.corners, (0.0, r));
+        assert!(bar.on_drag.is_some() && bar.on_double_click.is_some());
+        assert!(bar.controls.is_some());
+    }
+
+    #[test]
+    fn a_dialog_chrome_has_no_double_click_to_maximize() {
+        let chrome = Chrome::new(State::default())
+            .csd_override(true)
+            .close_only();
+        let bar = HeaderBar::<Action>::new().chrome(&chrome, |a| a);
+        assert!(bar.on_double_click.is_none());
+        let c = bar.controls.unwrap();
+        assert!(c.on_close.is_some() && c.on_minimize.is_none() && c.on_maximize.is_none());
+    }
+
+    #[test]
+    fn without_client_side_decorations_the_header_draws_no_window_chrome() {
+        let chrome = Chrome::new(State::default()).csd_override(false);
+        let bar = HeaderBar::<Action>::new().chrome(&chrome, |a| a);
+        assert!(!bar.show_start_buttons && !bar.show_end_buttons);
+        assert_eq!(bar.corners, (0.0, 0.0));
+        assert!(bar.on_drag.is_none() && bar.controls.is_none());
+    }
+}

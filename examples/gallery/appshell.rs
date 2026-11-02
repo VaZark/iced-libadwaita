@@ -1,5 +1,5 @@
-//! AppShell: a Mantine-style application shell (header, navbar, aside, footer, main) whose
-//! layouts differ in kind. The gallery opens it in a window of its own (Layout > AppShell).
+//! AppShell: a Mantine-style application shell (header, navbar, drawer, footer, main) whose
+//! layouts differ in kind. The gallery opens it in a window of its own (Layout page).
 //!
 //! The parent is [`Adaptive`]: it maps width classes to whole layouts (`Layouts`), each
 //! declaring the widths it supports, and runs the ordered `Close(old)` then `Open(new)`
@@ -9,9 +9,14 @@
 //! * **manual triggers**: `Adaptive::pin`, accepted only where the layout supports the width,
 //!   plus the burger buttons, which are plain app state.
 //!
-//! The downstream is [`w::SidebarList`]: the navbar and the aside are the same component,
-//! built from the same [`w::SidebarItem`]s in every layout. Its presentation follows the
-//! layout that is shown (`SidebarList::follow`); as a first page it is a page of cards.
+//! The downstream is [`w::SidebarList`]: the navbar and the drawer's list are the same
+//! component, built from the same [`w::SidebarItem`]s in every layout. Its presentation follows the
+//! layout that is shown (`SidebarList::follow`); as a parent page it is a page of cards.
+//!
+//! Two things are independent: what the *sidebar* becomes when collapsed (a drawer or a parent
+//! page, `[navigation] mobile-sidebar`) and the *bottom navigation* (a layout choice: Mobile has
+//! it in both modes). The *drawer* is a pane that pops up from an edge, by default the right on
+//! a desktop and the bottom (a sheet) elsewhere.
 //!
 //! All state (page, panes open, mobile sidebar mode) lives here in the app, so changing layout
 //! loses nothing. The panel in the main area drives the knobs: hysteresis (pixels or a delay),
@@ -19,8 +24,8 @@
 //! the coordinator time them out).
 //!
 //! Start-up switches for screenshots: `APPSHELL_PIN=mobile|tablet|desktop`,
-//! `APPSHELL_SIDEBAR_MODE=drawer|first-page`, `APPSHELL_CONTENT=1`, `APPSHELL_DRAWER=1`,
-//! `APPSHELL_NAVBAR=0`, `APPSHELL_ASIDE=0`.
+//! `APPSHELL_SIDEBAR_MODE=drawer|parent-page`, `APPSHELL_CONTENT=1`, `APPSHELL_NAV_DRAWER=1`,
+//! `APPSHELL_DRAWER=1`, `APPSHELL_EDGE=right|bottom`, `APPSHELL_NAVBAR=0`.
 
 use adw::Icon;
 use adw::style;
@@ -37,7 +42,7 @@ use adw::breakpoints::{Breakpoints, WidthClass};
 type Element<'a> = adw::Element<'a, Message>;
 
 const NAVBAR_WIDTH: f32 = 240.0;
-const ASIDE_WIDTH: f32 = 260.0;
+const DRAWER_WIDTH: f32 = 260.0;
 
 /// The layouts of this app. Whatever the dev needs: each is built and judged alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,7 +95,22 @@ pub enum Hyst {
     Delay,
 }
 
-/// What the aside lists: the same `SidebarItem` as the navbar, a different list.
+/// Which window edges a piece of the shell touches: it rounds its corners and shows the window
+/// buttons there.
+#[derive(Debug, Clone, Copy)]
+struct Touches {
+    left: bool,
+    right: bool,
+}
+
+/// The edge the drawer pops up from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Edge {
+    Right,
+    Bottom,
+}
+
+/// What the drawer lists: the same `SidebarItem` as the navbar, a different list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Section {
     Overview,
@@ -154,10 +174,18 @@ pub enum Message {
     Section(Section),
     Back,
     MobileSidebar(w::CollapsedSidebar),
+    /// Window chrome with client-side decorations; the parent app performs it on this window.
+    Window(adw::window::Action),
+    /// The window's maximized state, to draw the frame (the gallery queries it on resize).
+    Maximized(bool),
     // Manual triggers owned by the app.
-    ToggleDrawer,
+    /// The navbar as a drawer (Mobile).
+    ToggleNavDrawer,
     ToggleNavbar,
-    ToggleAside,
+    /// The drawer that pops up from an edge.
+    ToggleDrawer,
+    /// `None`: by layout (right on a desktop, bottom elsewhere).
+    DrawerEdge(Option<Edge>),
     // The Layout control.
     Trigger(Trigger),
     Hysteresis(Hyst),
@@ -167,6 +195,7 @@ pub enum Message {
 }
 
 pub struct AppShell {
+    maximized: bool,
     adaptive: Adaptive<Shell>,
     width: f32,
     hyst: Hyst,
@@ -175,11 +204,14 @@ pub struct AppShell {
     section: Section,
     /// What the sidebar becomes on Mobile: `[navigation] mobile-sidebar`, here switchable.
     mobile_sidebar: w::CollapsedSidebar,
-    /// First page mode: whether the content page is pushed over the sidebar page.
+    /// Parent page mode: whether the content page is pushed over the sidebar page.
     show_content: bool,
-    drawer_open: bool,
+    /// The navbar as a drawer (Mobile).
+    nav_drawer_open: bool,
     navbar_open: bool,
-    aside_open: bool,
+    /// The drawer popping up from an edge, and which edge (`None`: by layout).
+    drawer_open: bool,
+    drawer_edge: Option<Edge>,
     // Test knobs.
     answer: bool,
     close_ms: f32,
@@ -188,23 +220,30 @@ pub struct AppShell {
 }
 
 impl AppShell {
-    /// The shell for a window `width` px wide.
+    /// The shell for a window `width` px wide. Its decorations follow the toolkit config, like
+    /// every window.
     pub fn new(width: f32) -> (Self, Task<Message>) {
         let mut app = Self {
+            maximized: false,
             adaptive: Adaptive::new(layouts()),
             width,
             hyst: Hyst::Pixels,
             page: Page::Dashboard,
             section: Section::Overview,
             mobile_sidebar: match std::env::var("APPSHELL_SIDEBAR_MODE").as_deref() {
-                Ok("first-page") => w::CollapsedSidebar::FirstPage,
+                Ok("parent-page") => w::CollapsedSidebar::ParentPage,
                 Ok("drawer") => w::CollapsedSidebar::Drawer,
                 _ => adw::config::current().mobile_sidebar,
             },
             show_content: std::env::var_os("APPSHELL_CONTENT").is_some(),
-            drawer_open: std::env::var_os("APPSHELL_DRAWER").is_some(),
+            nav_drawer_open: std::env::var_os("APPSHELL_NAV_DRAWER").is_some(),
             navbar_open: std::env::var("APPSHELL_NAVBAR").as_deref() != Ok("0"),
-            aside_open: std::env::var("APPSHELL_ASIDE").as_deref() != Ok("0"),
+            drawer_open: std::env::var_os("APPSHELL_DRAWER").is_some(),
+            drawer_edge: match std::env::var("APPSHELL_EDGE").as_deref() {
+                Ok("right") => Some(Edge::Right),
+                Ok("bottom") => Some(Edge::Bottom),
+                _ => None,
+            },
             answer: true,
             close_ms: 150.0,
             open_ms: 150.0,
@@ -294,8 +333,13 @@ impl AppShell {
             Message::Transition(e) => self.adaptive.report(e, now),
             Message::Page(p) => {
                 self.page = p;
-                self.drawer_open = false;
+                self.nav_drawer_open = false;
                 self.show_content = true;
+                Vec::new()
+            }
+            Message::Window(_) => Vec::new(), // performed by the parent app
+            Message::Maximized(m) => {
+                self.maximized = m;
                 Vec::new()
             }
             Message::Back => {
@@ -304,7 +348,7 @@ impl AppShell {
             }
             Message::MobileSidebar(m) => {
                 self.mobile_sidebar = m;
-                self.drawer_open = false;
+                self.nav_drawer_open = false;
                 self.show_content = false;
                 Vec::new()
             }
@@ -312,20 +356,24 @@ impl AppShell {
                 self.section = sec;
                 Vec::new()
             }
+            Message::ToggleNavDrawer => {
+                self.nav_drawer_open = !self.nav_drawer_open;
+                Vec::new()
+            }
             Message::ToggleDrawer => {
                 self.drawer_open = !self.drawer_open;
+                Vec::new()
+            }
+            Message::DrawerEdge(e) => {
+                self.drawer_edge = e;
                 Vec::new()
             }
             Message::ToggleNavbar => {
                 self.navbar_open = !self.navbar_open;
                 Vec::new()
             }
-            Message::ToggleAside => {
-                self.aside_open = !self.aside_open;
-                Vec::new()
-            }
             Message::Trigger(t) => {
-                self.drawer_open = false;
+                self.nav_drawer_open = false;
                 let pin = match t {
                     Trigger::Breakpoints => None,
                     Trigger::Pinned(s) => Some(s),
@@ -380,17 +428,53 @@ impl AppShell {
     // them. So the navbar's toggle sits at the start of the header, the aside's at its end, and
     // both ride the content area's edges as the panes slide in and out.
 
-    fn header(&self, start: Option<(Icon, Message)>, end: Option<Message>) -> Element<'_> {
-        let mut bar = w::header_bar()
-            .title("AppShell")
-            .subtitle(
-                self.adaptive
-                    .shown()
-                    .last()
-                    .map_or("-".into(), |s| s.to_string()),
-            )
-            .show_start_title_buttons(false)
-            .show_end_title_buttons(false);
+    /// The window's decorations, for the part of it that touches `edges`.
+    fn chrome(&self, edges: Touches) -> adw::window::Chrome {
+        adw::window::Chrome::new(adw::window::State {
+            maximized: self.maximized,
+            fullscreen: false,
+        })
+        .edges(edges.left, edges.right)
+    }
+
+    /// A header bar for a piece of the shell touching `edges`: the window buttons, drag area
+    /// and rounded corners the toolkit's decorations give it.
+    fn bar(&self, edges: Touches) -> w::HeaderBar<'_, Message> {
+        w::header_bar().chrome(&self.chrome(edges), Message::Window)
+    }
+
+    /// `base` with the bottom corners at `edges` rounded to the window frame.
+    fn rounded_bottom(
+        &self,
+        base: fn(&adw::Theme) -> iced::widget::container::Style,
+        edges: Touches,
+    ) -> impl Fn(&adw::Theme) -> iced::widget::container::Style + 'static {
+        let r = self.chrome(edges).radius();
+        move |t| iced::widget::container::Style {
+            border: iced::Border::default().rounded(iced::border::Radius {
+                top_left: 0.0,
+                top_right: 0.0,
+                bottom_right: if edges.right { r } else { 0.0 },
+                bottom_left: if edges.left { r } else { 0.0 },
+            }),
+            ..base(t)
+        }
+    }
+
+    /// The content area's header: the pane toggles at its ends, window buttons where it meets
+    /// the window edge.
+    fn header(
+        &self,
+        start: Option<(Icon, Message)>,
+        end: Option<Message>,
+        edges: Touches,
+    ) -> Element<'_> {
+        let mut bar = self.bar(edges).title("AppShell").subtitle(
+            self.adaptive
+                .shown()
+                .last()
+                .map_or("-".into(), |s| s.to_string()),
+        );
         if let Some((icon, m)) = start {
             bar = bar.pack_start(w::icon_button(icon).on_press(m));
         }
@@ -412,37 +496,38 @@ impl AppShell {
             .into()
     }
 
-    /// A sidebar: a title over a `SidebarList`. The list's presentation follows the layout,
-    /// the items do not change.
+    /// A sidebar pane: its own header bar over a `SidebarList`, full height. The list's
+    /// presentation follows the layout, the items do not change.
     fn sidebar<'a>(
         &'a self,
         title: &'static str,
         items: Vec<w::SidebarItem<Message>>,
+        edges: Touches,
     ) -> Element<'a> {
-        let list = w::SidebarList::new(items).follow(&self.adaptive, |layout| match layout {
-            // Roomy targets for touch, dense rows where there is a pointer and space.
-            Shell::Mobile => (w::SidebarStyle::List, w::SidebarPadding::Lg),
-            Shell::Tablet => (w::SidebarStyle::List, w::SidebarPadding::Md),
-            Shell::Desktop => (w::SidebarStyle::List, w::SidebarPadding::Sm),
-        });
+        let list = w::SidebarList::new(items).follow(&self.adaptive, presentation);
         // The list is transparent: the pane supplies the sidebar color.
         container(column![
-            container(ty::heading(title))
-                .padding([10, 12])
-                .width(Length::Fill),
+            Element::from(self.bar(edges).title(title)),
             Element::from(list),
         ])
-        .style(style::container::sidebar)
+        .style(self.rounded_bottom(style::container::sidebar, edges))
         .width(Length::Fill)
         .height(Length::Fill)
         .into()
     }
 
     fn navbar(&self) -> Element<'_> {
-        self.sidebar("AppShell", self.destinations())
+        self.sidebar(
+            "AppShell",
+            self.destinations(),
+            Touches {
+                left: true,
+                right: false,
+            },
+        )
     }
 
-    fn tab_bar(&self) -> Element<'_> {
+    fn tab_bar(&self, edges: Touches) -> Element<'_> {
         // `flat_button` has a minimum height, so the icon over the label grows it.
         let tabs = Page::ALL.map(|p| {
             w::flat_button(
@@ -456,37 +541,114 @@ impl AppShell {
             .into()
         });
         container(row(tabs).padding(4))
-            .style(style::container::headerbar)
+            .style(self.rounded_bottom(style::container::headerbar, edges))
             .width(Length::Fill)
             .into()
     }
 
-    /// The aside is a sidebar too: the same `SidebarItem` and `SidebarList`, other items.
-    fn aside(&self) -> Element<'_> {
+    /// The edge the drawer pops up from in `layout`: the right on a desktop, the bottom
+    /// elsewhere, unless the Drawer edge control says otherwise.
+    fn edge(&self, layout: Shell) -> Edge {
+        self.drawer_edge.unwrap_or(match layout {
+            Shell::Desktop => Edge::Right,
+            _ => Edge::Bottom,
+        })
+    }
+
+    /// Whether the right window edge is free for the window buttons and corners: not while the
+    /// drawer is open from the right.
+    fn right_free(&self, layout: Shell) -> bool {
+        !(self.drawer_open && self.edge(layout) == Edge::Right)
+    }
+
+    /// What the drawer lists: the same `SidebarItem` as the navbar, other items.
+    fn drawer_items(&self) -> Vec<w::SidebarItem<Message>> {
+        Section::ALL
+            .map(|sec| {
+                w::SidebarItem::new(sec.label(), Message::Section(sec))
+                    .selected(self.section == sec)
+            })
+            .into()
+    }
+
+    /// The drawer from the right edge: a full-height sidebar with its own header bar.
+    fn drawer_pane(&self) -> Element<'_> {
         self.sidebar(
             "On this page",
-            Section::ALL
-                .map(|sec| {
-                    w::SidebarItem::new(sec.label(), Message::Section(sec))
-                        .selected(self.section == sec)
-                })
-                .into(),
+            self.drawer_items(),
+            Touches {
+                left: false,
+                right: true,
+            },
         )
     }
 
-    fn footer(&self) -> Element<'_> {
+    /// The drawer from the bottom: a sheet, a title over the same list. A `SidebarList` fills its
+    /// height, so the sheet is given the height its rows need.
+    fn drawer_sheet(&self) -> Element<'_> {
+        let items = self.drawer_items();
+        let rows = items.len() as f32;
+        let layout = self
+            .adaptive
+            .shown()
+            .last()
+            .copied()
+            .unwrap_or(Shell::Mobile);
+        let (_, pad) = presentation(&layout);
+        let m = adw::Metrics::default();
+        let height =
+            rows * pad.row_height(&m) + (rows - 1.0) * pad.gap(&m) + 2.0 * pad.inset(&m) + 8.0;
+        let list = w::SidebarList::new(items).follow(&self.adaptive, presentation);
+        column![
+            ty::title_4("On this page"),
+            container(Element::from(list)).height(Length::Fixed(height)),
+        ]
+        .spacing(8)
+        .padding(12)
+        .into()
+    }
+
+    /// `content` with the drawer for `layout`: a pane that slides in beside it from the right,
+    /// or a sheet over it from the bottom.
+    fn with_drawer<'a>(&'a self, layout: Shell, content: Element<'a>) -> Element<'a> {
+        match self.edge(layout) {
+            Edge::Right => w::adaptive_split(
+                self.drawer_pane(),
+                content,
+                self.drawer_open,
+                DRAWER_WIDTH,
+                DRAWER_WIDTH,
+            )
+            .end(true)
+            .into(),
+            Edge::Bottom => w::bottom_sheet_in_window(
+                content,
+                self.drawer_sheet(),
+                self.drawer_open,
+                Message::ToggleDrawer,
+                self.chrome(Touches {
+                    left: true,
+                    right: true,
+                })
+                .radius(),
+            ),
+        }
+    }
+
+    fn footer(&self, edges: Touches) -> Element<'_> {
         container(ty::caption(format!(
             "Footer · {} px · {:?}",
             self.width as u32,
             WidthClass::of(self.width)
         )))
         .padding([6, 12])
-        .style(style::container::headerbar)
+        .style(self.rounded_bottom(style::container::headerbar, edges))
         .width(Length::Fill)
         .into()
     }
 
-    fn main_area(&self) -> Element<'_> {
+    /// `edges`: the window edges its bottom corners touch (none when a bottom bar is below).
+    fn main_area(&self, edges: Touches) -> Element<'_> {
         let pin = Trigger::Pinned;
         let layout_items = vec![
             w::ToggleItem::new(Trigger::Breakpoints, "Auto"),
@@ -530,10 +692,23 @@ impl AppShell {
                         .suffix(w::toggle_group(
                             vec![
                                 w::ToggleItem::new(w::CollapsedSidebar::Drawer, "Drawer"),
-                                w::ToggleItem::new(w::CollapsedSidebar::FirstPage, "First page"),
+                                w::ToggleItem::new(w::CollapsedSidebar::ParentPage, "Parent page"),
                             ],
                             Some(self.mobile_sidebar),
                             Message::MobileSidebar,
+                        )),
+                )
+                .push(
+                    w::action_row("Drawer edge")
+                        .subtitle("Where the drawer pops up from")
+                        .suffix(w::toggle_group(
+                            vec![
+                                w::ToggleItem::new(None, "Auto"),
+                                w::ToggleItem::new(Some(Edge::Right), "Right"),
+                                w::ToggleItem::new(Some(Edge::Bottom), "Bottom"),
+                            ],
+                            Some(self.drawer_edge),
+                            Message::DrawerEdge,
                         )),
                 )
                 .push(
@@ -574,81 +749,127 @@ impl AppShell {
         .max_width(720);
         // Centered in the content area, so it stays put when a pane slides in or out beside it.
         container(scrollable(container(body).center_x(Length::Fill)).width(Length::Fill))
-            .style(style::container::view)
+            .style(self.rounded_bottom(style::container::view, edges))
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
     }
 
-    /// The content area: header, main, and an optional bottom bar.
-    fn content<'a>(&'a self, header: Element<'a>, bottom: Option<Element<'a>>) -> Element<'a> {
-        let mut col = column![header, self.main_area()];
-        if let Some(b) = bottom {
-            col = col.push(b);
+    /// The content area: header, main, and an optional bottom bar. `edges`: the window edges the
+    /// content's bottom corners touch.
+    fn content<'a>(&'a self, header: Element<'a>, bottom: Bottom, edges: Touches) -> Element<'a> {
+        let none = Touches {
+            left: false,
+            right: false,
+        };
+        match bottom {
+            Bottom::None => column![header, self.main_area(edges)].into(),
+            Bottom::Tabs => column![header, self.main_area(none), self.tab_bar(edges)].into(),
+            Bottom::Footer => column![header, self.main_area(none), self.footer(edges)].into(),
         }
-        col.into()
     }
 
     // ---- layouts ----------------------------------------------------------------------
 
-    /// Mobile: what the sidebar becomes is `[navigation] mobile-sidebar`.
+    /// Mobile: what the sidebar becomes is `[navigation] mobile-sidebar`. The bottom navigation
+    /// is the layout's, whichever it is.
     fn mobile(&self) -> Element<'_> {
         match self.mobile_sidebar {
             w::CollapsedSidebar::Drawer => self.mobile_drawer(),
-            w::CollapsedSidebar::FirstPage => self.mobile_first_page(),
+            w::CollapsedSidebar::ParentPage => self.mobile_parent_page(),
         }
     }
 
     /// The navbar is a drawer over the content, full height; the burger opens it.
     fn mobile_drawer(&self) -> Element<'_> {
+        let edges = Touches {
+            left: true,
+            right: self.right_free(Shell::Mobile),
+        };
+        let content = self.content(
+            self.header(
+                Some((Icon::Sidebar, Message::ToggleNavDrawer)),
+                Some(Message::ToggleDrawer),
+                edges,
+            ),
+            Bottom::Tabs,
+            edges,
+        );
         w::adaptive_split(
             self.navbar(),
-            self.content(
-                self.header(Some((Icon::Sidebar, Message::ToggleDrawer)), None),
-                Some(self.tab_bar()),
-            ),
+            self.with_drawer(Shell::Mobile, content),
             false,
             NAVBAR_WIDTH,
             NAVBAR_WIDTH,
         )
-        .drawer_open(self.drawer_open)
-        .on_close(Message::ToggleDrawer)
+        .drawer_open(self.nav_drawer_open)
+        .on_close(Message::ToggleNavDrawer)
+        .window_radius(self.chrome(edges).radius())
         .into()
     }
 
-    /// The sidebar is the landing page, a page of cards (the same `SidebarItem`s); choosing one
-    /// pushes the content over it, with a back button. No tab bar: the first page is the
-    /// navigation.
-    fn mobile_first_page(&self) -> Element<'_> {
-        let landing = column![
-            w::header_bar()
-                .title("AppShell")
-                .show_start_title_buttons(false)
-                .show_end_title_buttons(false),
+    /// The sidebar is the parent page, a page of cards (the same `SidebarItem`s); choosing one
+    /// pushes the content over it, with a back button. The bottom navigation stays under both
+    /// pages: it is not part of this mode.
+    fn mobile_parent_page(&self) -> Element<'_> {
+        let all = Touches {
+            left: true,
+            right: self.right_free(Shell::Mobile),
+        };
+        let none = Touches {
+            left: false,
+            right: false,
+        };
+        let parent = column![
+            self.bar(all).title("AppShell"),
             container(Element::from(
                 w::SidebarList::new(self.destinations())
                     .style(w::SidebarStyle::Cards)
                     .padding(w::SidebarPadding::Lg)
             ))
-            .style(style::container::view)
+            .style(self.rounded_bottom(style::container::view, none))
             .width(Length::Fill)
             .height(Length::Fill),
         ];
         let content = self.content(
-            self.header(Some((Icon::GoPrevious, Message::Back)), None),
-            None,
+            self.header(
+                Some((Icon::GoPrevious, Message::Back)),
+                Some(Message::ToggleDrawer),
+                all,
+            ),
+            Bottom::None,
+            none,
         );
-        w::push_stack(landing, content, self.show_content).into()
+        column![
+            w::push_stack(
+                parent,
+                self.with_drawer(Shell::Mobile, content),
+                self.show_content
+            )
+            .window_radius(0.0),
+            self.tab_bar(all),
+        ]
+        .into()
     }
 
     /// The navbar sits beside the content and slides away with the burger.
     fn tablet(&self) -> Element<'_> {
+        let edges = Touches {
+            left: !self.navbar_open,
+            right: self.right_free(Shell::Tablet),
+        };
+        let content = self.content(
+            self.header(
+                Some((Icon::Sidebar, Message::ToggleNavbar)),
+                Some(Message::ToggleDrawer),
+                edges,
+            ),
+            Bottom::None,
+            edges,
+        );
         w::adaptive_split(
             self.navbar(),
-            self.content(
-                self.header(Some((Icon::Sidebar, Message::ToggleNavbar)), None),
-                None,
-            ),
+            self.with_drawer(Shell::Tablet, content),
             self.navbar_open,
             NAVBAR_WIDTH,
             NAVBAR_WIDTH,
@@ -656,25 +877,24 @@ impl AppShell {
         .into()
     }
 
-    /// Navbar, content and aside; the aside slides in from the end edge.
+    /// Navbar and content; the drawer pops up from the right.
     fn desktop(&self) -> Element<'_> {
-        let inner = w::adaptive_split(
-            self.aside(),
-            self.content(
-                self.header(
-                    Some((Icon::Sidebar, Message::ToggleNavbar)),
-                    Some(Message::ToggleAside),
-                ),
-                Some(self.footer()),
+        let edges = Touches {
+            left: !self.navbar_open,
+            right: self.right_free(Shell::Desktop),
+        };
+        let content = self.content(
+            self.header(
+                Some((Icon::Sidebar, Message::ToggleNavbar)),
+                Some(Message::ToggleDrawer),
+                edges,
             ),
-            self.aside_open,
-            ASIDE_WIDTH,
-            ASIDE_WIDTH,
-        )
-        .end(true);
+            Bottom::Footer,
+            edges,
+        );
         w::adaptive_split(
             self.navbar(),
-            inner,
+            self.with_drawer(Shell::Desktop, content),
             self.navbar_open,
             NAVBAR_WIDTH,
             NAVBAR_WIDTH,
@@ -683,11 +903,33 @@ impl AppShell {
     }
 
     pub fn view(&self) -> Element<'_> {
-        w::window(
-            adaptive(&self.adaptive)
-                .layout(Shell::Mobile, || self.mobile())
-                .layout(Shell::Tablet, || self.tablet())
-                .layout(Shell::Desktop, || self.desktop()),
-        )
+        let body = adaptive(&self.adaptive)
+            .layout(Shell::Mobile, || self.mobile())
+            .layout(Shell::Tablet, || self.tablet())
+            .layout(Shell::Desktop, || self.desktop());
+        // The frame draws the window background, rounded corners, outline and resize edges (with
+        // client-side decorations), or just the background.
+        self.chrome(Touches {
+            left: true,
+            right: true,
+        })
+        .frame(body, Message::Window)
     }
+}
+
+/// How a sidebar list is drawn in each layout: roomy rows for touch, dense rows where there is a
+/// pointer and space. The items do not change.
+fn presentation(layout: &Shell) -> (w::SidebarStyle, w::SidebarPadding) {
+    match layout {
+        Shell::Mobile => (w::SidebarStyle::List, w::SidebarPadding::Lg),
+        Shell::Tablet => (w::SidebarStyle::List, w::SidebarPadding::Md),
+        Shell::Desktop => (w::SidebarStyle::List, w::SidebarPadding::Sm),
+    }
+}
+
+/// What sits under the main area.
+enum Bottom {
+    None,
+    Tabs,
+    Footer,
 }

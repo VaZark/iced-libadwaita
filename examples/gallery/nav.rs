@@ -118,9 +118,11 @@ impl Page {
                 ("Groups", vec![n(PreferencesGroup)]),
             ],
             Page::Layout => vec![
-                ("Containers", vec![n(Card), i(I::Clamp), i(I::StatusPage)]),
+                (
+                    "Containers",
+                    vec![a(AppShell), n(Card), i(I::Clamp), i(I::StatusPage)],
+                ),
                 ("Flow", vec![i(I::WrapBox), i(I::Collapse)]),
-                ("Shell", vec![n(AppShell)]),
             ],
             Page::Navigation => vec![
                 (
@@ -186,7 +188,6 @@ pub enum Detail {
     PreferencesGroup,
     // Layout
     Card,
-    AppShell,
     // Feedback
     Toast,
     // Theming
@@ -232,6 +233,8 @@ pub enum Action {
     ShortcutsDialog,
     PreferencesDialog,
     BottomSheet,
+    /// Opens the AppShell demo in a window of its own.
+    AppShell,
 }
 
 impl Action {
@@ -242,6 +245,7 @@ impl Action {
             Action::ShortcutsDialog => "Shortcuts dialog",
             Action::PreferencesDialog => "Preferences dialog",
             Action::BottomSheet => "Bottom sheet",
+            Action::AppShell => "AppShell",
         }
     }
     pub fn description(self) -> &'static str {
@@ -251,6 +255,9 @@ impl Action {
             Action::ShortcutsDialog => "Keyboard shortcuts in sections",
             Action::PreferencesDialog => "A page of preference rows in a dialog",
             Action::BottomSheet => "A panel sliding up from the bottom",
+            Action::AppShell => {
+                "A header, navbar, drawer and footer that adapt to the window width"
+            }
         }
     }
     /// The label of the button on the row.
@@ -296,7 +303,6 @@ impl Detail {
             Detail::EntryRow => "Entry row",
             Detail::PreferencesGroup => "Preferences group",
             Detail::Card => "Card",
-            Detail::AppShell => "AppShell",
             Detail::Toast => "Toast",
             Detail::ThemeColors => "Colors",
             Detail::ThemeShape => "Shape & shadows",
@@ -318,7 +324,6 @@ impl Detail {
             Detail::EntryRow => "Entry and password rows",
             Detail::PreferencesGroup => "Title, description and a header suffix",
             Detail::Card => "Padding, chained children, separators and size",
-            Detail::AppShell => "Adaptive layouts and transitions, with sidebars that follow them",
             Detail::Toast => "Call to action, status dot, radius, placement and colors",
             Detail::ThemeColors => "Scheme, accent, density and a card color override",
             Detail::ThemeShape => "Control, card and toast radii, shadows, with a live preview",
