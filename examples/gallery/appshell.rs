@@ -936,7 +936,7 @@ impl AppShell {
                 right: true,
             })
             .frame(body, Message::Window);
-        window.into()
+        window
     }
 
     /// The size of the shell: the width class large and bold, the width in pixels small under
