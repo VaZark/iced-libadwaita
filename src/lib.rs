@@ -17,6 +17,7 @@ pub mod color;
 pub mod config;
 pub mod config_history;
 pub mod icon;
+pub mod lookup;
 pub mod metrics;
 pub mod palette;
 pub mod prelude;
