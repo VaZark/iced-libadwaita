@@ -30,6 +30,7 @@ One file per libadwaita element. Each ends with an **iced mapping** section.
 - [Field (form field and validation)](field.md)
 - [Form (submit, reset and multi-step wizard)](form.md)
 - [Stepper (steps, statuses, click-to-jump, content)](stepper.md)
+- [Indicator and docked surfaces (footer, banner, drawer)](anchored.md)
 - [Pagination](pagination.md)
 - [Infinite list and Load more](infinite-list.md)
 - [Table sorting](table-sorting.md)

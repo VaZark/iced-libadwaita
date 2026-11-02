@@ -152,7 +152,14 @@ impl Page {
                 ("Messages", vec![i(I::Banner), n(Toast)]),
                 (
                     "Status",
-                    vec![i(I::Progress), i(I::Avatar), i(I::Tag), i(I::BadgeChip)],
+                    vec![
+                        i(I::Progress),
+                        i(I::Avatar),
+                        i(I::Tag),
+                        i(I::BadgeChip),
+                        i(I::Indicator),
+                        i(I::Docked),
+                    ],
                 ),
             ],
             Page::Dialogs => vec![(
@@ -244,6 +251,8 @@ pub enum Inline {
     Avatar,
     Tag,
     BadgeChip,
+    Indicator,
+    Docked,
     MultiSelect,
     DateInput,
     RangeSlider,

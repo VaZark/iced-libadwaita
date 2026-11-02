@@ -7,6 +7,7 @@
 //! built, so use `.metrics(..)` on a widget to deviate from the defaults.
 
 mod accordion;
+mod anchored;
 mod autocomplete;
 mod avatar;
 mod badge;
@@ -63,6 +64,9 @@ pub use crate::primitives::validation::{
 };
 pub use crate::primitives::{Selection, Trigger, When};
 pub use accordion::{Accordion, AccordionItem};
+pub use anchored::{
+    Anchored, Indicator, dock_banner, dock_center, dock_drawer, dock_footer, docked_anchored,
+};
 pub use autocomplete::Autocomplete;
 pub use avatar::{Avatar, avatar};
 pub use badge::{Badge, Chip};

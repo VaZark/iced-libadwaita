@@ -237,6 +237,22 @@ pub static COMPONENTS: &[Component] = &[
     ),
     // -- boxed lists & rows
     c(
+        "indicator",
+        "-",
+        "Indicator::new(child, badge)",
+        &["corner", "offset", "cross_offset", "show"],
+        &["child", "badge"],
+        &[],
+    ),
+    c(
+        "anchored",
+        "-",
+        "Anchored::new(base, floating)",
+        &["placement", "sizing"],
+        &["base", "floating"],
+        &[],
+    ),
+    c(
         "collapsible",
         "-",
         "Collapsible::new(header, body, open)",

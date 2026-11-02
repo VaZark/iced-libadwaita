@@ -202,6 +202,27 @@ impl Sizing {
         self
     }
 
+    /// The layout limits `(min, max)` to lay a surface out with *before* its size is known: a
+    /// dimension that is not [`Dim::Auto`] is already decided by the anchor (`Fixed`,
+    /// `MatchAnchor`, `Fraction`, `Fill`, within min / max), so its limits are that exact value;
+    /// an `Auto` one is free from `min` up to `room`. Laying the content out once with these
+    /// (instead of once for its size and again for the result) gives the same size
+    /// [`place_sized`] then positions. `room` is the most an `Auto` dimension may take.
+    pub fn limits(&self, anchor: Rectangle, p: &Placement, room: Size) -> (Size, Size) {
+        let available = match p.relation {
+            Relation::Inside | Relation::Center => inset(anchor, p.offset).size(),
+            _ => room,
+        };
+        let known = self.resolve(Size::ZERO, anchor.size(), available);
+        let one = |d: Dim, v: f32, min: f32, room: f32| match d {
+            Dim::Auto => (min, room.max(min)),
+            _ => (v, v),
+        };
+        let (min_w, max_w) = one(self.width, known.width, self.min.width, room.width);
+        let (min_h, max_h) = one(self.height, known.height, self.min.height, room.height);
+        (Size::new(min_w, min_h), Size::new(max_w, max_h))
+    }
+
     fn resolve(&self, intrinsic: Size, anchor: Size, available: Size) -> Size {
         let one = |d: Dim, own: f32, anchor: f32, avail: f32, min: f32, max: f32| {
             let v = match d {
@@ -871,5 +892,33 @@ mod tests {
                 .x,
             297.0
         );
+    }
+
+    #[test]
+    fn limits_make_one_layout_enough() {
+        // A drawer: fixed width, as tall as the parent: both exact. An auto height gets the room.
+        let sizing = Sizing::new()
+            .width(Dim::Fixed(120.0))
+            .height(Dim::MatchAnchor);
+        let (min, max) = sizing.limits(
+            PARENT,
+            &Placement::inside(Side::Left),
+            Size::new(300.0, 200.0),
+        );
+        assert_eq!(
+            (min, max),
+            (Size::new(120.0, 200.0), Size::new(120.0, 200.0))
+        );
+        // A footer: exact width (the parent less its inset), height free up to the room.
+        let sizing = Sizing::new().width(Dim::Fill);
+        let q = Placement {
+            offset: 8.0,
+            ..Placement::inside(Side::Bottom)
+        };
+        let (min, max) = sizing.limits(PARENT, &q, Size::new(284.0, 184.0));
+        assert_eq!((min, max), (Size::new(284.0, 0.0), Size::new(284.0, 184.0)));
+        // And the size place_sized then gives a surface that took those limits is the same.
+        let r = place_sized(PARENT, Size::new(284.0, 48.0), sizing, VIEW, q);
+        assert_eq!(r.size, Size::new(284.0, 48.0));
     }
 }

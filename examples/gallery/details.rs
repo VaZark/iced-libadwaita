@@ -942,6 +942,96 @@ impl Gallery {
                 .spacing(m.group_spacing)
                 .into()
             }
+            Inline::Indicator => {
+                let dot = |c: fn(&adw::Semantic) -> iced::Color| -> Element<'static> {
+                    container(iced::widget::space().width(12).height(12))
+                        .style(move |t: &adw::Theme| iced::widget::container::Style {
+                            background: Some(iced::Background::Color(c(&t.semantic))),
+                            border: iced::Border::default().rounded(6).width(2).color(t.semantic.window.bg),
+                            ..Default::default()
+                        })
+                        .into()
+                };
+                let ok = |s: &adw::Semantic| s.success.color;
+                let bad = |s: &adw::Semantic| s.error.color;
+                let av = |n: &str| Element::from(w::avatar(48.0, n.to_string()));
+                use adw::primitives::anchor::{Align, Side};
+                let ind = |child: Element<'static>, badge: Element<'static>| w::Indicator::new(child, badge);
+                let corners = row![
+                    ind(av("Ada Lovelace"), w::Badge::count(3, 99).role(Role::Error).solid(true).into()),
+                    ind(av("Grace Hopper"), dot(ok)).corner(Side::Bottom, Align::End).offset(4.0),
+                    ind(av("Linus T"), dot(bad)).corner(Side::Top, Align::Start).offset(4.0),
+                    ind(av("Margaret H"), w::Badge::new("Pro").role(Role::Accent).solid(true).into()).corner(Side::Bottom, Align::Center),
+                    ind(av("Alan Turing"), w::Badge::count(120, 99).role(Role::Accent).solid(true).into()),
+                    ind(av("Hidden"), dot(bad)).show(false),
+                ]
+                .spacing(m.space_l)
+                .wrap();
+                let on_buttons = row![
+                    ind(w::raised_button(ty::label("Inbox")).on_press(Message::Noop).into(), w::Badge::count(12, 99).role(Role::Error).solid(true).into()),
+                    ind(w::icon_button(Icon::Search).on_press(Message::Noop).into(), dot(bad)),
+                    ind(w::flat_button(ty::label("Updates")).on_press(Message::Noop).into(), w::Badge::new("new").role(Role::Success).solid(true).into()).offset(2.0),
+                ]
+                .spacing(m.space_l)
+                .align_y(iced::Alignment::Center)
+                .wrap();
+                column![
+                    g("Indicator").description("A badge centered on a corner, whatever its shape (round dot, count, pill). `offset` moves it in; `show(false)` removes it.").push(w::card(container(corners).padding(sp))),
+                    g("On buttons").push(w::card(container(on_buttons).padding(sp))),
+                ]
+                .spacing(m.group_spacing)
+                .into()
+            }
+            Inline::Docked => {
+                use adw::primitives::anchor::{Dim, Side};
+                let stage = |lines: &'static str| -> Element<'static> {
+                    container(column![ty::heading("Content"), ty::body(lines).style(adw::style::text::dim)].spacing(4))
+                        .padding(12)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .style(|t: &adw::Theme| iced::widget::container::Style {
+                            background: Some(iced::Background::Color(t.semantic.card.bg)),
+                            border: iced::Border::default().rounded(8),
+                            ..Default::default()
+                        })
+                        .into()
+                };
+                let bar = |label: &'static str| -> Element<'static> {
+                    container(row![ty::label(label), iced::widget::space().width(Length::Fill), w::suggested_button(ty::label("Save")).on_press(Message::Noop)].align_y(iced::Alignment::Center))
+                        .padding(8)
+                        .width(Length::Fill)
+                        .style(|t: &adw::Theme| iced::widget::container::Style {
+                            background: Some(iced::Background::Color(t.semantic.window.bg)),
+                            border: iced::Border::default().width(1).color(t.semantic.card.fg.scale_alpha(0.12)),
+                            ..Default::default()
+                        })
+                        .into()
+                };
+                let pane = || -> Element<'static> {
+                    container(column![ty::heading("Drawer"), ty::body("Docked left, full height").style(adw::style::text::dim)].spacing(4))
+                        .padding(12)
+                        .style(|t: &adw::Theme| iced::widget::container::Style {
+                            background: Some(iced::Background::Color(t.semantic.window.bg)),
+                            border: iced::Border::default().width(1).color(t.semantic.card.fg.scale_alpha(0.12)),
+                            ..Default::default()
+                        })
+                        .into()
+                };
+                let frame = |e: Element<'static>| -> Element<'static> {
+                    container(e).width(Length::Fixed(300.0)).height(Length::Fixed(190.0)).into()
+                };
+                let demos = row![
+                    frame(w::dock_footer(stage("Footer: inside the bottom edge, as wide as the content."), bar("Unsaved changes"))),
+                    frame(w::dock_banner(stage("Banner: inside the top edge, over the content."), bar("Offline: changes are kept"))),
+                    frame(w::dock_drawer(stage("Drawer: left edge, 120 wide, full height."), pane(), Side::Left, Dim::Fixed(120.0))),
+                    frame(w::dock_drawer(stage("Drawer: right edge, 60% of the width."), pane(), Side::Right, Dim::Fraction(0.6))),
+                    frame(w::dock_center(stage("Centered over the content."), bar("Centered"))),
+                ]
+                .spacing(m.space_m)
+                .wrap();
+                column![g("Docked").description("One placement primitive: an edge, an alignment along it, an inset and a size rule (`anchor::place_sized`).").push(demos)]
+                    .into()
+            }
             Inline::MultiSelect => {
                 let open = std::env::var("GALLERY_OPEN").as_deref() == Ok("multiselect");
                 let controls = stack(sp, vec![
