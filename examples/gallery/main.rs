@@ -875,7 +875,11 @@ impl Gallery {
             if kind == "appshell" {
                 return match i {
                     0 => {
-                        self.scheme = Scheme::Light;
+                        self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
+                            Scheme::Dark
+                        } else {
+                            Scheme::Light
+                        };
                         let open = self.open_shell();
                         self.shot_tag = Some("parent");
                         open.chain(Task::perform(

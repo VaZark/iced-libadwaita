@@ -484,6 +484,24 @@ mod tests {
     }
 
     #[test]
+    fn icon_tint_is_opaque_and_readable_in_both_schemes() {
+        fn lum(c: iced::Color) -> f32 {
+            0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+        }
+        for t in [Theme::light(), Theme::dark()] {
+            let s = &t.semantic;
+            let on = s.icon_solid(false);
+            let off = s.icon_solid(true);
+            assert_eq!(on.a, 1.0);
+            // The enabled tint is the foreground: far from the background in either scheme
+            // (a black default would vanish on the dark one).
+            assert!((lum(on) - lum(s.window.bg)).abs() > 0.5);
+            // Disabled sits between the background and the foreground.
+            assert!((lum(off) - lum(s.window.bg)).abs() < (lum(on) - lum(s.window.bg)).abs());
+        }
+    }
+
+    #[test]
     fn accent_flows_into_semantic_layer() {
         let t = Theme::dark().accent(AccentColor::Green);
         assert_eq!(t.semantic.accent.bg, AccentColor::Green.to_color());

@@ -259,6 +259,21 @@ impl Semantic {
         crate::color::mix(self.window.bg, self.window.fg, self.opacity.dim)
     }
 
+    /// The tint for an icon that follows the window foreground, as an opaque color; a disabled
+    /// icon is mixed towards the window background (SVG tints ignore alpha). Always `Some`-able:
+    /// an svg style with `color: None` draws the icon black, which vanishes in the dark scheme.
+    pub fn icon_solid(&self, disabled: bool) -> Color {
+        let fg = Color {
+            a: 1.0,
+            ..self.window.fg
+        };
+        if disabled {
+            crate::color::mix(self.window.bg, fg, self.opacity.disabled)
+        } else {
+            fg
+        }
+    }
+
     /// Foreground at dim-label opacity.
     pub fn dim(&self) -> Color {
         alpha(self.window.fg, self.opacity.dim)

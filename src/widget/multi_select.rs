@@ -117,8 +117,8 @@ where
         let chevron = Icon::GoDown
             .view(m.icon_size)
             .style(move |t: &crate::Theme, _| iced::widget::svg::Style {
-                color: disabled
-                    .then(|| crate::color::fade(t.semantic.window.fg, t.semantic.opacity.disabled)),
+                // Always a color: `None` would draw the chevron black, invisible in dark.
+                color: Some(t.semantic.icon_solid(disabled)),
             });
         let trigger = container(
             row![container(pills).width(Length::Fill), chevron]
