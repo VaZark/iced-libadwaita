@@ -21,10 +21,11 @@
 //! state, once [`revealed`](DateRangeInput::revealed) (pass the `Field`'s interaction inside a
 //! [`Field`](super::Field)); [`validity`](DateRangeInput::validity) is the message for it.
 
-use super::date_input::{CELL, POPOVER_WIDTH, calendar};
+use super::date_input::{CELL, Cal, OnNav, OnView, POPOVER_WIDTH, calendar, nav_message};
 use super::dropdown::{Align, Appearance, Dropdown, popover};
 use super::{Element, EntryState, entry};
 use crate::Theme;
+use crate::primitives::calendar::{CalendarView, Level};
 use crate::primitives::date::{self, Date};
 use crate::primitives::range::{DateRange, DayRole, Edge, within};
 use crate::primitives::validation::{self, Presentation, Validity};
@@ -42,7 +43,11 @@ pub struct DateRangeInput<'a, M> {
     view: Date,
     on_input: Option<OnInput<'a, M>>,
     on_pick: Option<Box<dyn Fn(DateRange) -> M + 'a>>,
-    on_view: Option<Box<dyn Fn(Date) -> M + 'a>>,
+    on_view: Option<OnView<'a, M>>,
+    on_nav: Option<OnNav<'a, M>>,
+    level: Level,
+    max_level: Level,
+    today: Date,
     on_hover: Option<Box<dyn Fn(Option<Date>) -> M + 'a>>,
     selected: DateRange,
     hover: Option<Date>,
@@ -71,6 +76,10 @@ impl<'a, M> DateRangeInput<'a, M> {
             on_input: Some(Box::new(on_input)),
             on_pick: None,
             on_view: None,
+            on_nav: None,
+            level: Level::Month,
+            max_level: Level::Decade,
+            today: Date::today(),
             on_hover: None,
             selected: DateRange::default(),
             hover: None,
@@ -100,8 +109,39 @@ impl<'a, M> DateRangeInput<'a, M> {
         self
     }
     /// The previous / next month button was pressed; gets the first day of the new month.
+    /// The month-level compatibility path: called only while months show, and the title is
+    /// not navigable. Use [`on_nav`](Self::on_nav) for the levels (it takes precedence).
     pub fn on_view(mut self, f: impl Fn(Date) -> M + 'a) -> Self {
         self.on_view = Some(Box::new(f));
+        self
+    }
+    /// The calendar moved (arrow, title, month or year cell, "Today"): gets the whole new
+    /// [`CalendarView`]. Drilling down never changes the selection: days are picked only at
+    /// the `Month` level, so the range rule ([`DateRange::pick`]) is untouched by zooming.
+    pub fn on_nav(mut self, f: impl Fn(CalendarView) -> M + 'a) -> Self {
+        self.on_nav = Some(Box::new(f));
+        self
+    }
+    /// The level on show (default `Month`); see [`DateInput::level`](super::DateInput::level).
+    pub fn level(mut self, l: Level) -> Self {
+        self.level = l;
+        self
+    }
+    /// The calendar position as one value.
+    pub fn calendar(mut self, v: CalendarView) -> Self {
+        self.view = v.date;
+        self.level = v.level;
+        self
+    }
+    /// The coarsest level the title can zoom out to (default `Decade`). A range is always
+    /// picked in days, so there is no `min_level`.
+    pub fn max_level(mut self, l: Level) -> Self {
+        self.max_level = l;
+        self
+    }
+    /// The date "Today" jumps to and that is marked (default: the system clock, UTC).
+    pub fn today(mut self, d: Date) -> Self {
+        self.today = d;
         self
     }
     /// The pointer entered a day (`Some`) or left it (`None`); keep it and pass it to
@@ -274,7 +314,28 @@ impl<'a, M: Clone + 'a> From<DateRangeInput<'a, M>> for Element<'a, M> {
 
         let (selected, hover, min, max) = (d.selected, d.hover, d.min, d.max);
         let previewing = selected.start.is_some() && selected.end.is_none();
-        let grid = calendar(d.view, m, &d.on_view, true, |date| {
+        let view = CalendarView::new(d.view, d.level).clamped(Level::Month, d.max_level);
+        let nav = nav_message(&d.on_nav, &d.on_view);
+        let span = match (selected.start, selected.end) {
+            (Some(a), Some(b)) => Some((a.min(b), a.max(b))),
+            (Some(a), None) | (None, Some(a)) => Some((a, a)),
+            _ => None,
+        };
+        let no_select = |_: Date| None;
+        let cal = Cal {
+            view,
+            levels: (Level::Month, d.max_level),
+            today: d.today,
+            span,
+            min,
+            max,
+            band: true,
+            metrics: m,
+            navigable: d.on_nav.is_some(),
+            nav: &nav,
+            select: &no_select,
+        };
+        let grid = calendar(cal, |date| {
             let ok = within(date, min, max);
             let role = selected.role(date, hover, min, max);
             let mut b = button(
