@@ -974,6 +974,8 @@ impl Gallery {
                 ]);
                 column![g("Date input").description("Type YYYY-MM-DD or pick from the calendar.").push(w::card(controls))].into()
             }
+            Inline::RangeSlider => self.range.slider_view(m).map(Message::Range),
+            Inline::DateRange => self.range.date_view(m).map(Message::Range),
             Inline::AnchoredPopover => {
                 let open = std::env::var("GALLERY_OPEN").as_deref() == Ok("anchor");
                 let menu = |t: &'static str| {

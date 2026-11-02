@@ -105,7 +105,14 @@ impl Page {
                 ),
                 (
                     "Ranges & choosers",
-                    vec![i(I::Scale), n(Dropdown), i(I::MultiSelect), i(I::DateInput)],
+                    vec![
+                        i(I::Scale),
+                        i(I::RangeSlider),
+                        n(Dropdown),
+                        i(I::MultiSelect),
+                        i(I::DateInput),
+                        i(I::DateRange),
+                    ],
                 ),
             ],
             Page::Lists => vec![
@@ -236,6 +243,8 @@ pub enum Inline {
     MultiSelect,
     DateInput,
     AnchoredPopover,
+    RangeSlider,
+    DateRange,
     ResponsiveTable,
     MetaComponent,
     Accordion,

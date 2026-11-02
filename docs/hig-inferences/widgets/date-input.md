@@ -9,3 +9,5 @@ libadwaita and GTK 4 have no date picker (`GtkCalendar` is a bare month grid, wi
 ## iced mapping
 
 `widget::DateInput`: an `Entry` plus a `Dropdown` (with `keep_open(true)`, so paging months and picking a day do not close the calendar; click outside or Escape closes it). Date arithmetic is the dependency-free `Date` type (no `chrono`): validation, weekday (Sakamoto), month navigation and the grid are unit tested. Locale is not modeled: English month names, Monday first, ISO format.
+
+For an interval, use [`DateRangeInput`](date-range.md), which shares this calendar.

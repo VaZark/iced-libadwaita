@@ -38,10 +38,12 @@ const R: f32 = HANDLE_RADIUS;
 /// Extra height under the rail for the tick marks.
 const MARKS: f32 = 10.0;
 
+type OnChange<'a, M> = Box<dyn Fn((f32, f32)) -> M + 'a>;
+
 pub struct RangeSlider<'a, M> {
     value: Range<f32>,
     track: Track<f32>,
-    on_change: Option<Box<dyn Fn((f32, f32)) -> M + 'a>>,
+    on_change: Option<OnChange<'a, M>>,
     marks: Vec<f32>,
     disabled: bool,
     width: Length,
@@ -462,8 +464,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
                     Background::Color(Color::TRANSPARENT),
                 );
             }
+            // Opaque even when disabled (a faded handle would show the fill through it): the
+            // handle is mixed towards the window instead.
             let bg = match st.handle.background {
-                Background::Color(c) => Background::Color(dim(c)),
+                Background::Color(c) => {
+                    Background::Color(crate::color::mix(theme.semantic.window.bg, c, k))
+                }
                 other => other,
             };
             renderer.fill_quad(
