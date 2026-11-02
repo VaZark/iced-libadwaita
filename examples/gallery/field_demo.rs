@@ -1,9 +1,11 @@
 //! The Field page: every control type wrapped in a `Field`, live-validated, plus a static
 //! matrix of states (pristine / valid / warning / invalid / disabled / required) and a
-//! submit button that flips every field to touched.
+//! submit button. The touched / submitted bookkeeping is one `FormState` and one `FormSpec`:
+//! the way to use forms (see docs/lib/components.md, "How to use forms").
 
 use iced_libadwaita as adw;
 
+use adw::primitives::form::{FormSpec, FormState, Outcome};
 use adw::widget::validation::{chain, required};
 use adw::widget::{self as w, Field, FieldLayout, Validity, typography as ty};
 use adw::{Element, Metrics};
@@ -41,8 +43,17 @@ pub struct State {
     plan: Option<u8>,
     notify: bool,
     volume: f32,
-    touched: Vec<&'static str>,
-    submitted: bool,
+    /// What the user touched or submitted: the only interaction state the page keeps.
+    form: FormState<&'static str>,
+}
+
+/// The form's field keys: one single-page step.
+const KEYS: [&str; 9] = [
+    "name", "password", "bio", "fruit", "multi", "date", "agree", "plan", "volume",
+];
+
+fn spec() -> FormSpec<&'static str> {
+    FormSpec::single(KEYS)
 }
 
 impl Default for State {
@@ -58,8 +69,7 @@ impl Default for State {
             plan: None,
             notify: false,
             volume: 10.0,
-            touched: Vec::new(),
-            submitted: false,
+            form: FormState::new(),
         }
     }
 }
@@ -100,9 +110,7 @@ fn password_rules(s: &str) -> Validity {
 
 impl State {
     fn touch(&mut self, k: &'static str) {
-        if !self.touched.contains(&k) {
-            self.touched.push(k);
-        }
+        self.form.touch(k);
     }
 
     pub fn update(&mut self, m: Msg) {
@@ -150,74 +158,80 @@ impl State {
                 self.volume = v;
                 self.touch("volume");
             }
-            Msg::Submit => self.submitted = true,
-            Msg::Reset => *self = Self::default(),
+            Msg::Submit => match self.submit_form() {
+                // Every error now shows; a real app would also send the values here.
+                Outcome::Submitted => {}
+                // A real app would focus `key` (the toolkit entries take no widget id yet).
+                Outcome::Blocked { .. } | Outcome::Moved { .. } | Outcome::Ignored => {}
+            },
+            Msg::Reset => {
+                // The form forgets what was touched; the app resets its own values.
+                self.form.reset();
+                let form = std::mem::take(&mut self.form);
+                *self = Self {
+                    form,
+                    ..Self::default()
+                };
+            }
             Msg::Noop => {}
         }
     }
 
     /// Opens the page already submitted (screenshots).
     pub fn submit(&mut self) {
-        self.submitted = true;
+        self.submit_form();
     }
 
-    fn t(&self, k: &'static str) -> bool {
-        self.touched.contains(&k)
+    fn submit_form(&mut self) -> Outcome<&'static str> {
+        let mut form = std::mem::take(&mut self.form);
+        let outcome = form.submit(&spec(), &|k| self.validity(k));
+        self.form = form;
+        outcome
     }
 
-    fn validities(&self) -> Vec<Validity> {
-        vec![
-            name_rules(&self.name),
-            password_rules(&self.password),
-            required(&self.bio.text(), "Tell us a little."),
-            self.fruit
+    /// The validity of the field `key`: all the form needs from the app's values.
+    fn validity(&self, key: &&'static str) -> Validity {
+        match *key {
+            "name" => name_rules(&self.name),
+            "password" => password_rules(&self.password),
+            "bio" => required(&self.bio.text(), "Tell us a little."),
+            "fruit" => self
+                .fruit
                 .map_or(Validity::error("Pick a fruit."), |_| Validity::Ok),
-            if self.multi.len() < 2 {
-                Validity::error("Pick at least two.")
-            } else {
-                Validity::Ok
-            },
-            w::validate_date(&self.date, None, None),
-            if self.agree {
-                Validity::Ok
-            } else {
-                Validity::error("You must agree to continue.")
-            },
-            self.plan
+            "multi" if self.multi.len() < 2 => Validity::error("Pick at least two."),
+            "date" => w::validate_date(&self.date, None, None),
+            "agree" if !self.agree => Validity::error("You must agree to continue."),
+            "plan" => self
+                .plan
                 .map_or(Validity::error("Choose a plan."), |_| Validity::Ok),
-            if self.volume > 80.0 {
-                Validity::warning("That is loud.")
-            } else {
-                Validity::Ok
-            },
-        ]
+            "volume" if self.volume > 80.0 => Validity::warning("That is loud."),
+            _ => Validity::Ok,
+        }
     }
 
     pub fn view(&self, m: Metrics) -> Element<'_, Msg> {
         let sp = m.space_m;
-        let v = self.validities();
+        let spec = spec();
+        // Each field: its validity and its interaction, both by key.
         fn mk<'a>(
             s: &State,
+            spec: &FormSpec<&'static str>,
             m: Metrics,
-            v: &[Validity],
             label: &'static str,
             k: &'static str,
-            i: usize,
             c: Element<'a, Msg>,
         ) -> Field<'a, Msg> {
             Field::new(label, c)
-                .validity(v[i].clone())
-                .touched(s.t(k))
-                .submitted(s.submitted)
+                .validity(s.validity(&k))
+                .interaction(s.form.interaction(spec, &k))
                 .metrics(m)
         }
-        let f = |label, k, i, c| mk(self, m, &v, label, k, i, c);
+        let f = |label, k, c| mk(self, &spec, m, label, k, c);
 
         let live = column![
             f(
                 "Name",
                 "name",
-                0,
                 w::entry("Ada", &self.name)
                     .on_input(Msg::Name)
                     .metrics(m)
@@ -228,7 +242,6 @@ impl State {
             f(
                 "Password",
                 "password",
-                1,
                 w::password_entry("Password", &self.password)
                     .on_input(Msg::Password)
                     .metrics(m)
@@ -238,7 +251,6 @@ impl State {
             f(
                 "Bio",
                 "bio",
-                2,
                 w::text_view(&self.bio)
                     .on_action(Msg::Bio)
                     .placeholder("About you")
@@ -248,14 +260,12 @@ impl State {
             f(
                 "Favorite fruit",
                 "fruit",
-                3,
                 w::dropdown(&FRUITS, self.fruit, Msg::Fruit).into()
             )
             .required(true),
             f(
                 "Toppings",
                 "multi",
-                4,
                 w::MultiSelect::selecting(
                     &FRUITS5,
                     &self.multi,
@@ -268,15 +278,13 @@ impl State {
             f(
                 "Birthday",
                 "date",
-                5,
                 w::DateInput::new(&self.date, w::Date::new(2026, 11, 1).unwrap(), Msg::Date)
-                    .revealed(self.t("date") || self.submitted)
+                    .revealed(self.form.revealed(&spec, &"date"))
                     .into()
             ),
             f(
                 "Terms",
                 "agree",
-                6,
                 w::check_button("I agree to the terms", self.agree)
                     .on_toggle(Msg::Agree)
                     .into()
@@ -286,7 +294,6 @@ impl State {
             f(
                 "Plan",
                 "plan",
-                7,
                 row![
                     w::radio_button("Free", 0u8, self.plan, Msg::Plan),
                     w::radio_button("Pro", 1u8, self.plan, Msg::Plan),
@@ -299,7 +306,6 @@ impl State {
             f(
                 "Volume",
                 "volume",
-                8,
                 w::scale(0.0..=100.0, self.volume, Msg::Volume).into()
             )
             .inline(true),

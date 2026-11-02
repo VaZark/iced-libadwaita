@@ -20,16 +20,6 @@ fn flush<'a>(
     }
 }
 
-/// A label on the start edge and a control on the end edge.
-fn labeled<'a>(label: &'static str, control: impl Into<Element<'a>>) -> Element<'a> {
-    row![
-        container(ty::body(label)).width(Length::Fill),
-        control.into()
-    ]
-    .align_y(iced::Alignment::Center)
-    .into()
-}
-
 impl Gallery {
     /// Identifies the page being shown, so switching it fades the new one in.
     pub(super) fn view_key(&self) -> u64 {
@@ -330,9 +320,9 @@ impl Gallery {
             Detail::Autocomplete => self.autocomplete.view(m).map(Message::Autocomplete),
             Detail::Dropdown => {
                 let plain = stack(sp, vec![
-                    labeled("Choose a fruit", Element::from(w::dropdown(&FRUITS, self.picked, Message::Picked))),
-                    labeled("Selected", Element::from(w::dropdown(&FRUITS, Some("Banana"), Message::Picked))),
-                    labeled("Disabled", Element::from(w::dropdown_disabled::<&str, Message>(Some(&"Apple")))),
+                    w::Field::new("Choose a fruit", Element::from(w::dropdown(&FRUITS, self.picked, Message::Picked))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Selected", Element::from(w::dropdown(&FRUITS, Some("Banana"), Message::Picked))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Disabled", Element::from(w::dropdown_disabled::<&str, Message>(Some(&"Apple")))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
                 ]);
                 column![
                     g("Dropdown").push(w::card(plain)),
@@ -646,10 +636,10 @@ impl Gallery {
         match i {
             Inline::Switch => {
                 let bare = stack(sp, vec![
-                    labeled("Enabled", w::switch(self.sw).on_toggle(Message::Sw)),
-                    labeled("Off", w::switch(false).on_toggle(|_| Message::Noop)),
-                    labeled("Disabled, on", w::switch(true)),
-                    labeled("Disabled, off", w::switch(false)),
+                    w::Field::new("Enabled", w::switch(self.sw).on_toggle(Message::Sw)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Off", w::switch(false).on_toggle(|_| Message::Noop)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Disabled, on", w::switch(true)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Disabled, off", w::switch(false)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
                 ]);
                 column![g("Switch").push(w::card(bare))].into()
             }
@@ -954,10 +944,10 @@ impl Gallery {
             Inline::MultiSelect => {
                 let open = std::env::var("GALLERY_OPEN").as_deref() == Ok("multiselect");
                 let controls = stack(sp, vec![
-                    labeled("Fruits", Element::from(w::MultiSelect::new(&FRUITS5, &self.multi, Message::MultiToggle).width(Length::Fixed(260.0)).open_initially(open))),
-                    labeled("Empty", Element::from(w::MultiSelect::new(&FRUITS5, &[], Message::MultiToggle).placeholder("Pick fruits").width(Length::Fixed(260.0)))),
-                    labeled("Crowded (+n)", Element::from(w::MultiSelect::new(&FRUITS5, &FRUITS5, Message::MultiToggle).max_chips(2).width(Length::Fixed(260.0)))),
-                    labeled("Disabled", Element::from(w::MultiSelect::new(&FRUITS5, &self.multi, Message::MultiToggle).disabled(true).width(Length::Fixed(260.0)))),
+                    w::Field::new("Fruits", Element::from(w::MultiSelect::new(&FRUITS5, &self.multi, Message::MultiToggle).width(Length::Fixed(260.0)).open_initially(open))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Empty", Element::from(w::MultiSelect::new(&FRUITS5, &[], Message::MultiToggle).placeholder("Pick fruits").width(Length::Fixed(260.0)))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Crowded (+n)", Element::from(w::MultiSelect::new(&FRUITS5, &FRUITS5, Message::MultiToggle).max_chips(2).width(Length::Fixed(260.0)))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Disabled", Element::from(w::MultiSelect::new(&FRUITS5, &self.multi, Message::MultiToggle).disabled(true).width(Length::Fixed(260.0)))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
                 ]);
                 column![g("Multi select").description("The popover stays open while options are toggled.").push(w::card(controls))].into()
             }

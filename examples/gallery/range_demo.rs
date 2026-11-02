@@ -3,8 +3,9 @@
 
 use iced_libadwaita as adw;
 
+use adw::primitives::form::{FormSpec, FormState, Outcome};
 use adw::primitives::range::{DateRange, Edge, Range, Track};
-use adw::widget::{self as w, CalendarView, Date, Field, Level, typography as ty};
+use adw::widget::{self as w, CalendarView, Date, Field, Level, Validity};
 use adw::{Element, Metrics};
 use iced::Length;
 use iced::widget::{column, container, row};
@@ -94,8 +95,15 @@ pub struct State {
     live: Dates,
     field_dates: Dates,
     bounded: Dates,
-    submitted: bool,
-    touched: Vec<&'static str>,
+    /// What the user touched or submitted, for the two fields below.
+    form: FormState<&'static str>,
+}
+
+/// The form's field keys: the slider field and the date range field.
+const KEYS: [&str; 2] = ["range", "dates"];
+
+fn spec() -> FormSpec<&'static str> {
+    FormSpec::single(KEYS)
 }
 
 impl Default for State {
@@ -138,8 +146,7 @@ impl Default for State {
             live,
             field_dates: Dates::new(Some(d(2026, 11, 12)), Some(d(2026, 11, 8))),
             bounded,
-            submitted: false,
-            touched: Vec::new(),
+            form: FormState::new(),
         }
     }
 }
@@ -176,30 +183,57 @@ impl State {
             Msg::BoundedPick(r) => self.bounded.pick(r),
             Msg::BoundedNav(v) => self.bounded.nav = v,
             Msg::BoundedHover(h) => self.bounded.hover = h,
-            Msg::Submit => self.submitted = true,
-            Msg::Reset => *self = Self::default(),
+            Msg::Submit => {
+                let mut form = std::mem::take(&mut self.form);
+                let outcome = form.submit(&spec(), &|k| self.validity(k));
+                self.form = form;
+                match outcome {
+                    // Every error now shows; a real app would also send the values here.
+                    Outcome::Submitted => {}
+                    // A real app would focus `key` (the toolkit entries take no widget id yet).
+                    Outcome::Blocked { .. } | Outcome::Moved { .. } | Outcome::Ignored => {}
+                }
+            }
+            Msg::Reset => {
+                // The form forgets what was touched; the app resets its own values.
+                self.form.reset();
+                let form = std::mem::take(&mut self.form);
+                *self = Self {
+                    form,
+                    ..Self::default()
+                };
+            }
             Msg::Noop => {}
         }
     }
 
     fn touch(&mut self, k: &'static str) {
-        if !self.touched.contains(&k) {
-            self.touched.push(k);
+        self.form.touch(k);
+    }
+
+    /// The validity of the field `key`, from the app's values.
+    fn validity(&self, key: &&'static str) -> Validity {
+        match *key {
+            "range" => Track::new(0.0f32, 100.0)
+                .min_gap(30.0)
+                .validity(Range::from(self.field_range)),
+            "dates" => Self::dates_input(&self.field_dates, Metrics::desktop()).validity(),
+            _ => Validity::Ok,
         }
+    }
+
+    /// The date range of the "In a field" demo: strict, so the end must be after the start.
+    fn dates_input(f: &Dates, m: Metrics) -> w::DateRangeInput<'_, Msg> {
+        Self::live_input(f, m, false, Msg::FieldText)
+            .strict(true)
+            .on_pick(Msg::FieldPick)
+            .on_nav(Msg::FieldNav)
+            .on_hover(Msg::FieldHover)
     }
 
     fn group<'a>(title: &'static str, m: Metrics) -> w::PreferencesGroup<'a, Msg> {
         w::PreferencesGroup::<Msg>::new().title(title).metrics(m)
     }
-}
-
-fn item<'a>(label: String, control: impl Into<Element<'a, Msg>>) -> Element<'a, Msg> {
-    column![
-        ty::caption(label).style(adw::style::text::dim),
-        control.into()
-    ]
-    .spacing(4)
-    .into()
 }
 
 fn pair((lo, hi): (f32, f32)) -> String {
@@ -214,42 +248,56 @@ impl State {
             w::range_slider(r, v, f)
         };
         let sliders = column![
-            item(
+            Field::new(
                 format!("Basic: {}", pair(self.basic)),
                 rs(0.0..=100.0, self.basic, Msg::Basic)
-            ),
-            item(
+            )
+            .plain_label(true)
+            .metrics(m),
+            Field::new(
                 format!("Step 5: {}", pair(self.step)),
                 rs(0.0..=100.0, self.step, Msg::Step).step(5.0)
-            ),
-            item(
+            )
+            .plain_label(true)
+            .metrics(m),
+            Field::new(
                 format!("Minimum gap 20, thumbs stop: {}", pair(self.gap)),
                 rs(0.0..=100.0, self.gap, Msg::Gap).step(5.0).min_gap(20.0)
-            ),
-            item(
+            )
+            .plain_label(true)
+            .metrics(m),
+            Field::new(
                 format!("Minimum gap 20, thumbs push: {}", pair(self.push)),
                 rs(0.0..=100.0, self.push, Msg::Push)
                     .step(5.0)
                     .min_gap(20.0)
                     .push_thumbs(true)
-            ),
-            item(
+            )
+            .plain_label(true)
+            .metrics(m),
+            Field::new(
                 format!("Marks every 10: {}", pair(self.marks)),
                 rs(0.0..=50.0, self.marks, Msg::Marks)
                     .step(5.0)
                     .marks_every(10.0)
-            ),
-            item(
-                "Disabled".into(),
+            )
+            .plain_label(true)
+            .metrics(m),
+            Field::new(
+                "Disabled",
                 rs(0.0..=100.0, (25.0, 75.0), |_| Msg::Noop).disabled(true)
-            ),
-            item(
-                "Disabled, with marks".into(),
+            )
+            .plain_label(true)
+            .metrics(m),
+            Field::new(
+                "Disabled, with marks",
                 rs(0.0..=50.0, (10.0, 40.0), |_| Msg::Noop)
                     .step(5.0)
                     .marks_every(10.0)
                     .disabled(true)
-            ),
+            )
+            .plain_label(true)
+            .metrics(m),
         ]
         .spacing(sp);
 
@@ -275,18 +323,14 @@ impl State {
                     .metrics(m),
             );
 
-        let track = Track::new(0.0f32, 100.0).min_gap(30.0);
-        let span = Range::from(self.field_range);
-        let validity = track.validity(span);
-        let touched = self.t("range");
+        let spec = spec();
         let field = Field::new(
             "Allowed volume",
             w::range_slider(0.0..=100.0, self.field_range, Msg::FieldRange),
         )
         .description(format!("At least 30 wide: {}", pair(self.field_range)))
-        .validity(validity)
-        .touched(touched)
-        .submitted(self.submitted)
+        .validity(self.validity(&"range"))
+        .interaction(self.form.interaction(&spec, &"range"))
         .inline(true)
         .metrics(m);
 
@@ -301,10 +345,6 @@ impl State {
         ]
         .spacing(m.group_spacing)
         .into()
-    }
-
-    fn t(&self, k: &'static str) -> bool {
-        self.touched.contains(&k)
     }
 
     fn live_input<'a>(
@@ -345,42 +385,46 @@ impl State {
             .on_nav(Msg::BoundedNav)
             .on_hover(Msg::BoundedHover);
         let controls = column![
-            item("Date range".into(), live),
-            item(
-                "Between 2025-03-10 and 2027-06-20 (months and years outside are disabled)".into(),
+            Field::new("Date range", live).plain_label(true).metrics(m),
+            Field::new(
+                "Between 2025-03-10 and 2027-06-20 (months and years outside are disabled)",
                 bounded
-            ),
-            item("Empty".into(), fixed("", "")),
-            item("Start chosen".into(), fixed("2026-11-10", "")),
-            item("Selected".into(), fixed("2026-11-03", "2026-11-09")),
-            item(
-                "Minimum 2026-11-01 (the first is before it)".into(),
+            )
+            .plain_label(true)
+            .metrics(m),
+            Field::new("Empty", fixed("", ""))
+                .plain_label(true)
+                .metrics(m),
+            Field::new("Start chosen", fixed("2026-11-10", ""))
+                .plain_label(true)
+                .metrics(m),
+            Field::new("Selected", fixed("2026-11-03", "2026-11-09"))
+                .plain_label(true)
+                .metrics(m),
+            Field::new(
+                "Minimum 2026-11-01 (the first is before it)",
                 fixed("2026-10-28", "2026-11-09").min(min)
-            ),
-            item("End before start".into(), fixed("2026-11-09", "2026-11-02")),
-            item(
-                "Disabled".into(),
-                fixed("2026-11-03", "2026-11-09").disabled(true)
-            ),
+            )
+            .plain_label(true)
+            .metrics(m),
+            Field::new("End before start", fixed("2026-11-09", "2026-11-02"))
+                .plain_label(true)
+                .metrics(m),
+            Field::new("Disabled", fixed("2026-11-03", "2026-11-09").disabled(true))
+                .plain_label(true)
+                .metrics(m),
         ]
         .spacing(sp);
 
         // In a Field: validity from the primitive, revealed once touched or submitted.
         let f = &self.field_dates;
-        let revealed = self.t("dates") || self.submitted;
-        let input = Self::live_input(f, m, false, Msg::FieldText)
-            .revealed(revealed)
-            .strict(true)
-            .on_pick(Msg::FieldPick)
-            .on_nav(Msg::FieldNav)
-            .on_hover(Msg::FieldHover);
-        let validity = input.validity();
+        let spec = spec();
+        let input = Self::dates_input(f, m).revealed(self.form.revealed(&spec, &"dates"));
         let field = Field::new("Stay", input)
             .description("From check-in to check-out.")
             .required(true)
-            .validity(validity)
-            .touched(self.t("dates"))
-            .submitted(self.submitted)
+            .validity(self.validity(&"dates"))
+            .interaction(self.form.interaction(&spec, &"dates"))
             .metrics(m);
         let buttons = row![
             container(w::flat_button("Reset").on_press(Msg::Reset)),
