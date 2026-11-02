@@ -11,12 +11,13 @@
 
 use iced_libadwaita as adw;
 
+use crate::appshell::{self, AppShell};
 use adw::breakpoints::{Breakpoints, WidthClass};
 use adw::primitives::resize::{Constraints, Grip};
 use adw::widget::{self as w, MetaComponent, Resizable, When, typography as ty};
 use adw::{Element, Metrics, Role};
 use iced::widget::{column, container, row};
-use iced::{Length, Size};
+use iced::{Length, Size, Subscription, Task};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Layout {
@@ -30,9 +31,14 @@ pub enum Msg {
     Meta(Size),
     Table(Size),
     Edge(Size),
+    /// The embedded app shell's own messages.
+    Shell(appshell::Message),
+    ShellFrame(Size),
 }
 
 pub struct State {
+    shell: AppShell,
+    shell_size: Size,
     meta: Size,
     table: Size,
     edge: Size,
@@ -47,7 +53,12 @@ impl Default for State {
                 Some(Size::new(w.parse().ok()?, h.parse().ok()?))
             })
             .unwrap_or(Size::new(820.0, 190.0));
+        let shell_size = Size::new(900.0, 460.0);
+        // The shell's first layout is chosen from this width; later widths come from the frame.
+        let (shell, _boot) = AppShell::embedded(shell_size.width);
         Self {
+            shell,
+            shell_size,
             meta,
             table: Size::new(560.0, 300.0),
             edge: Size::new(420.0, 120.0),
@@ -102,12 +113,27 @@ fn group<'a>(
 }
 
 impl State {
-    pub fn update(&mut self, msg: Msg) {
+    pub fn update(&mut self, msg: Msg) -> Task<Msg> {
         match msg {
             Msg::Meta(s) => self.meta = s,
             Msg::Table(s) => self.table = s,
             Msg::Edge(s) => self.edge = s,
+            Msg::Shell(m) => return self.shell.update(m).map(Msg::Shell),
+            Msg::ShellFrame(s) => {
+                self.shell_size = s;
+                // The frame's width is the shell's width: its adaptive layout follows it.
+                return self
+                    .shell
+                    .update(appshell::Message::Resized(s.width))
+                    .map(Msg::Shell);
+            }
         }
+        Task::none()
+    }
+
+    /// The shell's transition ticks, while it has a deadline.
+    pub fn subscription(&self) -> Subscription<Msg> {
+        self.shell.subscription().map(Msg::Shell)
     }
 
     pub fn view(&self, m: Metrics) -> Element<'_, Msg> {
@@ -195,6 +221,14 @@ impl State {
             .on_resize(Msg::Table)
             .constraints(constraints(Size::new(1100.0, 420.0)));
 
+        // -- the app shell, in a frame: its layout (mobile, tablet, desktop) follows the width
+        let shell = Resizable::new(
+            Element::from(self.shell.view().map(Msg::Shell)),
+            self.shell_size,
+        )
+        .on_resize(Msg::ShellFrame)
+        .constraints(constraints(Size::new(1500.0, 620.0)).clone());
+
         // -- other grips
         let edge = Resizable::new(
             Element::from(
@@ -216,6 +250,13 @@ impl State {
                 "Drag the corner: the layout is chosen by the frame's width, and the width snaps to the breakpoints.",
                 self.meta,
                 meta.into(),
+            ),
+            group(
+                m,
+                "App shell",
+                "The shell's header, navbar, drawer and tabs follow the frame's width.",
+                self.shell_size,
+                shell.into(),
             ),
             group(
                 m,

@@ -195,6 +195,8 @@ pub enum Message {
 }
 
 pub struct AppShell {
+    /// Drawn inside another window (a resizable frame): no window buttons or frame of its own.
+    embedded: bool,
     maximized: bool,
     adaptive: Adaptive<Shell>,
     width: f32,
@@ -222,8 +224,18 @@ pub struct AppShell {
 impl AppShell {
     /// The shell for a window `width` px wide. Its decorations follow the toolkit config, like
     /// every window.
+    /// A shell to draw inside another window, `width` px wide (a resizable frame): it has no
+    /// window buttons or frame of its own, and the owner feeds it the width with
+    /// [`Message::Resized`].
+    pub fn embedded(width: f32) -> (Self, Task<Message>) {
+        let (mut app, boot) = Self::new(width);
+        app.embedded = true;
+        (app, boot)
+    }
+
     pub fn new(width: f32) -> (Self, Task<Message>) {
         let mut app = Self {
+            embedded: false,
             maximized: false,
             adaptive: Adaptive::new(layouts()),
             width,
@@ -430,11 +442,17 @@ impl AppShell {
 
     /// The window's decorations, for the part of it that touches `edges`.
     fn chrome(&self, edges: Touches) -> adw::window::Chrome {
-        adw::window::Chrome::new(adw::window::State {
+        let chrome = adw::window::Chrome::new(adw::window::State {
             maximized: self.maximized,
             fullscreen: false,
         })
-        .edges(edges.left, edges.right)
+        .edges(edges.left, edges.right);
+        // Embedded: server-side look, so no window buttons and no frame.
+        if self.embedded {
+            chrome.csd_override(false)
+        } else {
+            chrome
+        }
     }
 
     /// A header bar for a piece of the shell touching `edges`: the window buttons, drag area

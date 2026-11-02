@@ -13,7 +13,8 @@
 //!         .snap_to(breakpoints, 8.0))
 //! ```
 //!
-//! The frame is clamped to the room its parent gives it. The handle is the bottom-right corner
+//! The frame is clamped to the room its parent gives it, and `on_resize` then reports the size it
+//! actually got (once, on the next redraw), so the app's `Size` never claims more than is shown. The handle is the bottom-right corner
 //! by default ([`Grip`] for the edges and other corners).
 
 use crate::Theme;
@@ -205,6 +206,15 @@ impl<'a, M: 'a, R: iced::advanced::Renderer + 'a> Widget<M, Theme, R> for Resiza
                 }
                 _ => {}
             }
+        }
+        // Clamped by the parent: tell the app the size that is really shown.
+        if let Event::Window(iced::window::Event::RedrawRequested(_)) = event
+            && state.drag.is_none()
+            && let Some(f) = &self.on_resize
+            && ((bounds.width - self.size.width).abs() > 0.5
+                || (bounds.height - self.size.height).abs() > 0.5)
+        {
+            shell.publish(f(bounds.size()));
         }
         // While the handle is held the content does not see the pointer.
         if state.drag.is_some() {
