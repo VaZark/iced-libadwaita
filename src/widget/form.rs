@@ -38,15 +38,15 @@
 //! the shortcut scope; a text input that handles Enter itself takes precedence. Turn it off
 //! with [`enter_submits`](Form::enter_submits).
 
-use super::{Element, flat_button, raised_button, suggested_button};
+use super::{Element, Stepper, StepperStep, raised_button, suggested_button};
 use crate::primitives::form::{FormSpec, FormState, StepStatus};
 use crate::primitives::meta::{self, Trigger};
 use crate::primitives::validation::Validity;
 use crate::shortcut::Shortcuts;
 use crate::style::text as st;
-use crate::{Icon, Metrics, Theme};
-use iced::widget::{column, container, row, space, svg, text};
-use iced::{Alignment, Border, Length, Padding};
+use crate::{Metrics, Theme};
+use iced::Length;
+use iced::widget::{column, container, row, space};
 
 /// One step of a [`Form`]: a label and a closure that builds its content, called only while
 /// the step is current.
@@ -322,7 +322,8 @@ fn label<'a>(s: &str) -> iced::widget::Text<'a, Theme> {
 
 /// The numbered, labelled steps of a wizard, joined by lines: completed (check), current,
 /// upcoming, and invalid (an error mark after a refused Next / Submit). Part of [`Form`], and
-/// usable alone.
+/// usable alone. A thin wrapper over [`Stepper`] (indicator only, given statuses and reachable
+/// steps); use `Stepper` directly for content, orientation, icons and the rest.
 pub struct StepIndicator<'a, M> {
     items: Vec<(String, StepStatus)>,
     clickable: Vec<bool>,
@@ -357,124 +358,24 @@ impl<'a, M> StepIndicator<'a, M> {
     }
 }
 
-const MARK: f32 = 26.0;
-
-fn mark<'a, M: 'a>(n: usize, status: StepStatus, m: Metrics) -> Element<'a, M> {
-    let size = m.space_m + 2.0;
-    let inner: Element<'a, M> = match status {
-        StepStatus::Completed => Icon::Check
-            .view(size)
-            .style(|t: &Theme, _| svg::Style {
-                color: Some(t.semantic.accent.color),
-            })
-            .into(),
-        StepStatus::Invalid => text("!")
-            .size(size + 2.0)
-            .font(bold())
-            .style(|t: &Theme| text::Style {
-                color: Some(t.semantic.error.color),
-            })
-            .into(),
-        _ => text((n + 1).to_string())
-            .size(size)
-            .font(bold())
-            .style(move |t: &Theme| text::Style {
-                color: Some(match status {
-                    StepStatus::Current => t.semantic.accent.fg,
-                    _ => crate::color::fade(t.semantic.window.fg, 0.7),
-                }),
-            })
-            .into(),
-    };
-    container(inner)
-        .center(Length::Fixed(MARK))
-        .style(move |t: &Theme| {
-            let s = &t.semantic;
-            let (bg, border) = match status {
-                StepStatus::Current => (Some(s.accent.bg), s.accent.bg),
-                StepStatus::Completed => (Some(crate::color::fade(s.accent.bg, 0.18)), s.accent.bg),
-                StepStatus::Invalid => (Some(crate::color::fade(s.error.bg, 0.18)), s.error.bg),
-                StepStatus::Upcoming => (None, s.border),
-            };
-            container::Style {
-                background: bg.map(Into::into),
-                border: Border {
-                    color: border,
-                    width: 1.5,
-                    radius: (MARK / 2.0).into(),
-                },
-                ..Default::default()
-            }
-        })
-        .into()
-}
-
-fn bold() -> iced::Font {
-    iced::Font {
-        weight: iced::font::Weight::Bold,
-        ..iced::Font::DEFAULT
-    }
-}
-
 impl<'a, M: Clone + 'a> From<StepIndicator<'a, M>> for Element<'a, M> {
     fn from(s: StepIndicator<'a, M>) -> Self {
-        let m = s.metrics;
-        let n = s.items.len();
-        let mut r = row![].align_y(Alignment::Center).spacing(m.space_s);
-        for (i, (name, status)) in s.items.into_iter().enumerate() {
-            let status_c = status;
-            let title = text(name)
-                .size(m.space_m + 1.0)
-                .wrapping(text::Wrapping::None)
-                .font(if status == StepStatus::Current {
-                    bold()
-                } else {
-                    iced::Font::DEFAULT
-                })
-                .style(move |t: &Theme| text::Style {
-                    color: Some(match status_c {
-                        StepStatus::Invalid => t.semantic.error.color,
-                        StepStatus::Upcoming => crate::color::fade(t.semantic.window.fg, 0.7),
-                        _ => t.semantic.window.fg,
-                    }),
-                });
-            let item = row![mark(i, status, m), title]
-                .spacing(m.space_s)
-                .align_y(Alignment::Center);
-            let item: Element<'a, M> = if s.clickable.get(i).copied().unwrap_or(false)
-                && let Some(msg) = s.messages.get(i)
-            {
-                flat_button(item)
-                    .padding(Padding::from([m.space_xs, m.space_s]))
-                    .on_press(msg.clone())
-                    .into()
-            } else {
-                container(item)
-                    .padding(Padding::from([m.space_xs, m.space_s]))
-                    .into()
-            };
-            r = r.push(item);
-            if i + 1 < n {
-                let done = status == StepStatus::Completed;
-                r = r.push(
-                    container(space())
-                        .width(Length::Fill)
-                        .height(Length::Fixed(2.0))
-                        .style(move |t: &Theme| container::Style {
-                            background: Some(
-                                if done {
-                                    t.semantic.accent.bg
-                                } else {
-                                    t.semantic.border
-                                }
-                                .into(),
-                            ),
-                            border: Border::default().rounded(1.0),
-                            ..Default::default()
-                        }),
-                );
-            }
+        let statuses = s.items.iter().map(|(_, st)| *st).collect();
+        let clickable = (0..s.items.len())
+            .map(|i| s.clickable.get(i).copied().unwrap_or(false) && i < s.messages.len())
+            .collect();
+        let messages = s.messages;
+        let mut st = Stepper::new()
+            .statuses(statuses)
+            .clickable(clickable)
+            // As before the extraction: a long row clips instead of collapsing.
+            .collapse(false)
+            .metrics(s.metrics);
+        // Out of range of `active` is irrelevant: statuses and clickable are explicit.
+        st = st.on_step_click(move |i| messages[i].clone());
+        for (label, _) in s.items {
+            st = st.step(StepperStep::new(label));
         }
-        r.width(Length::Fill).into()
+        st.into()
     }
 }

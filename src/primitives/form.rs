@@ -15,6 +15,11 @@
 //! * going **back** is always allowed; going **forward** (Next, or jumping to a later step)
 //!   needs every step before the target to be valid.
 //!
+//! Relation to [`stepper`](super::stepper): this module decides *whether* the user may advance
+//! and derives each step's [`StepStatus`] (the stepper's [`Status`](super::stepper::Status))
+//! from validity; the stepper primitive decides how a row of steps *looks and responds* to a
+//! plain `active` index (click rules, connector fill, next / back), with no gating.
+//!
 //! ```ignore
 //! // update:
 //! Msg::Next => { if let Blocked { key, .. } = self.form.next(&spec, &|k| self.validity(k)) { /* focus key */ } }
@@ -86,19 +91,11 @@ pub enum Outcome<K> {
     Ignored,
 }
 
-/// How a step shows in a step indicator.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StepStatus {
-    /// Before the current step and valid.
-    Completed,
-    /// The step being filled.
-    Current,
-    /// Not reached yet.
-    Upcoming,
-    /// Has an error the user has been shown (a Next or Submit was refused on it, or a field
-    /// of it was touched): drawn as needing attention.
-    Invalid,
-}
+/// How a step shows in a step indicator: the one status type of the
+/// [`stepper`](super::stepper) primitive. A form step is [`Invalid`](StepStatus::Invalid) once
+/// the user was shown its errors (a Next or Submit was refused on it, or a field of it was
+/// touched); the form never produces `Loading`.
+pub use super::stepper::Status as StepStatus;
 
 /// The form's interaction state. Controlled: the app stores it and replaces it with the
 /// result of these operations.
