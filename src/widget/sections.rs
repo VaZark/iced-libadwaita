@@ -12,14 +12,21 @@ pub fn section_size(m: &Metrics) -> f32 {
     m.icon_size + 2.0 * m.space_xs
 }
 
+/// The icon tint as a solid color: iced's svg tint ignores alpha, so a dim or disabled icon is
+/// mixed towards the background instead of faded.
 fn tint(t: &Theme, active: bool, disabled: bool) -> iced::Color {
     let s = &t.semantic;
-    let c = if active { s.accent.color } else { s.dim() };
-    if disabled {
-        crate::color::fade(c, s.opacity.disabled)
+    let (bg, fg, level) = if active {
+        (s.window.bg, s.accent.color, 1.0)
     } else {
-        c
-    }
+        (s.window.bg, s.window.fg, s.opacity.dim)
+    };
+    let level = if disabled {
+        level * s.opacity.disabled
+    } else {
+        level
+    };
+    crate::color::mix(bg, iced::Color { a: 1.0, ..fg }, level)
 }
 
 /// A dim, non-interactive icon sized to sit inside an entry.

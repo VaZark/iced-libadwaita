@@ -6,6 +6,10 @@
 //! [`max_chips`](MultiSelect::max_chips). State is controlled: pass the current selection and
 //! turn `on_toggle(option)` into your own update. The trigger's pills are display-only (the
 //! trigger toggles the popover); remove a value by toggling it in the list.
+//!
+//! [`selecting`](MultiSelect::selecting) takes the new list instead of one toggled option,
+//! computed by the shared [`Selection`](crate::primitives::Selection) rule, which also gives
+//! a single-choice variant (`Selection::SINGLE`) with the same widget.
 
 use super::dropdown::{Dropdown, option_items, popover};
 use super::{Badge, Element};
@@ -66,6 +70,21 @@ impl<'a, T, M> MultiSelect<'a, T, M> {
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
+    }
+}
+
+impl<'a, T: Clone + PartialEq + 'a, M: 'a> MultiSelect<'a, T, M> {
+    /// Like [`new`](Self::new), but `on_change` receives the whole new selection, worked out by
+    /// `rule` ([`Selection::Multiple`](crate::primitives::Selection) for any number).
+    pub fn selecting(
+        options: &'a [T],
+        selected: &'a [T],
+        rule: crate::primitives::Selection,
+        on_change: impl Fn(Vec<T>) -> M + 'a,
+    ) -> Self {
+        Self::new(options, selected, move |option| {
+            on_change(rule.toggle(selected, &option))
+        })
     }
 }
 

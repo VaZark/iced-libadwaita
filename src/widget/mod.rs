@@ -46,7 +46,7 @@ mod toolbar;
 pub mod typography;
 
 pub use crate::primitives::anchor::{self, Align as AnchorAlign, Placed, Placement, Side, place};
-pub use crate::primitives::date::{Date, days_in_month, is_leap_year};
+pub use crate::primitives::date::{Date, days_in_month, is_leap_year, validate as validate_date};
 pub use crate::primitives::validation::{
     self, Interaction, Presentation as ValidationState, Validity,
 };

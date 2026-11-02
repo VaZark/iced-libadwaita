@@ -145,6 +145,29 @@ impl std::fmt::Display for Date {
     }
 }
 
+/// Validates typed `text` as a date within `min..=max`: empty is `Ok` (use `required` for that),
+/// an unparsable date or one out of range is an error with a message a field can show.
+pub fn validate(
+    text: &str,
+    min: Option<Date>,
+    max: Option<Date>,
+) -> crate::primitives::validation::Validity {
+    use crate::primitives::validation::Validity;
+    if text.trim().is_empty() {
+        return Validity::Ok;
+    }
+    match Date::parse(text) {
+        None => Validity::error("Not a date. Use YYYY-MM-DD."),
+        Some(d) if min.is_some_and(|m| d < m) => {
+            Validity::error(format!("Must be {} or later.", min.unwrap()))
+        }
+        Some(d) if max.is_some_and(|m| d > m) => {
+            Validity::error(format!("Must be {} or earlier.", max.unwrap()))
+        }
+        Some(_) => Validity::Ok,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,5 +232,16 @@ mod tests {
         let feb = d(2027, 2, 1).month_grid(); // Monday, 28 days: exactly four weeks
         assert_eq!(feb.len(), 4);
         assert_eq!(feb[3][6], Some(28));
+    }
+
+    #[test]
+    fn validate_reports_unparsable_and_out_of_range() {
+        use crate::primitives::validation::Validity;
+        let (a, b) = (Date::new(2026, 1, 1), Date::new(2026, 12, 31));
+        assert_eq!(validate("", a, b), Validity::Ok);
+        assert_eq!(validate("2026-06-01", a, b), Validity::Ok);
+        assert!(validate("2026-13-01", a, b).blocks_submit());
+        assert!(validate("2025-12-31", a, b).blocks_submit());
+        assert!(validate("2027-01-01", a, b).blocks_submit());
     }
 }

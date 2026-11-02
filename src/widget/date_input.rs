@@ -37,6 +37,7 @@ pub struct DateInput<'a, M> {
     disabled: bool,
     width: Length,
     open_initially: bool,
+    revealed: bool,
     metrics: Metrics,
 }
 
@@ -55,6 +56,7 @@ impl<'a, M> DateInput<'a, M> {
             disabled: false,
             width: Length::Fixed(220.0),
             open_initially: false,
+            revealed: true,
             metrics: Metrics::desktop(),
         }
     }
@@ -81,6 +83,14 @@ impl<'a, M> DateInput<'a, M> {
         self.max = Some(d);
         self
     }
+    /// Whether validation may show yet (`:user-invalid`). Default `true`: a bad date shows its
+    /// error ring at once. Inside a [`Field`](super::Field) pass the field's
+    /// [`Interaction::revealed`](crate::primitives::validation::Interaction::revealed) so a
+    /// pristine field stays quiet and the Field draws the one ring.
+    pub fn revealed(mut self, revealed: bool) -> Self {
+        self.revealed = revealed;
+        self
+    }
     /// A disabled input is drawn dimmed and cannot be edited or opened.
     pub fn disabled(mut self, d: bool) -> Self {
         self.disabled = d;
@@ -103,15 +113,18 @@ impl<'a, M> DateInput<'a, M> {
         self.min.is_none_or(|m| d >= m) && self.max.is_none_or(|m| d <= m)
     }
 
-    /// Validation of the typed text: empty is neutral, an unparsable or out-of-range date is an
-    /// error.
+    /// The validity of the typed text ([`crate::primitives::date::validate`]).
+    pub fn validity(&self) -> crate::primitives::validation::Validity {
+        crate::primitives::date::validate(self.text, self.min, self.max)
+    }
+
+    /// The entry state of the typed text: an error only once [`revealed`](Self::revealed).
     pub fn text_state(&self) -> EntryState {
-        if self.text.trim().is_empty() {
-            return EntryState::Normal;
-        }
-        match Date::parse(self.text) {
-            Some(d) if self.allowed(d) => EntryState::Normal,
-            _ => EntryState::Error,
+        // Only errors are drawn on the entry itself; a valid date keeps the normal ring (a Field
+        // may add a success ring around it).
+        match crate::primitives::validation::present(&self.validity(), self.revealed) {
+            crate::primitives::validation::Presentation::Invalid => EntryState::Error,
+            _ => EntryState::Normal,
         }
     }
 }
@@ -213,5 +226,10 @@ mod tests {
         assert_eq!(mk("2026-11-02").text_state(), EntryState::Normal);
         assert_eq!(mk("2026-13-02").text_state(), EntryState::Error);
         assert_eq!(mk("2025-12-31").text_state(), EntryState::Error);
+        // Inside a pristine Field the error stays hidden until revealed.
+        assert_eq!(
+            mk("2026-13-02").revealed(false).text_state(),
+            EntryState::Normal
+        );
     }
 }
