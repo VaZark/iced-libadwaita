@@ -6,9 +6,9 @@
 //! an `offset`, then **flip** to the opposite side if the surface does not fit and **shift**
 //! along the side so it stays inside the viewport (minus a `margin`).
 //!
-//! Three kinds of placement ([`Relation`]): **outside** the anchor (popovers: a side, an
+//! Four kinds of placement ([`Relation`]): **outside** the anchor (popovers: a side, an
 //! alignment, a gap, flip and shift), **inside** it docked to an edge (footers, banners, drawers,
-//! sheets, toasts: the edge, an alignment along it, an inset) and **centered** in it (dialogs).
+//! sheets, toasts: the edge, an alignment along it, an inset) and **centered** in it (dialogs) and **straddling** an edge or corner (badges and indicators on an avatar or button).
 //! [`place_sized`] also decides the surface's size from [`Sizing`]: `Auto`, `Fixed`, as large as
 //! the anchor (`MatchAnchor`), a fraction of it, or `Fill`, with min / max and a `fit` that
 //! shrinks a popover to the room it has, like CSS `anchor-size()`.
@@ -62,6 +62,13 @@ pub enum Relation {
     Inside,
     /// In the middle of the anchor (dialogs, status overlays); `side` is ignored.
     Center,
+    /// Centered on an edge or corner of the anchor, half outside and half in (a badge or an
+    /// indicator dot on an avatar or button, a notification count, a ribbon). `side` is the edge,
+    /// `align` the corner (`Start` / `End`) or the middle of it (`Center`); `offset` moves it
+    /// inward from the corner on both axes (Mantine `Indicator`'s `offset`). Unlike `Inside` with
+    /// a negative inset, the badge's own size is accounted for, so any shape sits exactly on the
+    /// corner. It is not kept inside the anchor or the viewport.
+    Straddle,
 }
 
 /// A placement request.
@@ -105,6 +112,16 @@ impl Placement {
         Self {
             side,
             relation: Relation::Inside,
+            offset: 0.0,
+            ..Self::default()
+        }
+    }
+    /// Centered on the edge `side` of the anchor, and with `align` on its corner: a badge on the
+    /// top-right of an avatar is `Placement::straddle(Side::Top)` with `align: Align::End`.
+    pub fn straddle(side: Side) -> Self {
+        Self {
+            side,
+            relation: Relation::Straddle,
             offset: 0.0,
             ..Self::default()
         }
@@ -257,6 +274,7 @@ pub fn place_sized(
         Relation::Outside => outside(anchor, intrinsic, sizing, bounds, p),
         Relation::Inside => inside(anchor, intrinsic, sizing, p),
         Relation::Center => center(anchor, intrinsic, sizing, p),
+        Relation::Straddle => straddle(anchor, intrinsic, sizing, p),
     }
 }
 
@@ -397,6 +415,34 @@ fn inside(anchor: Rectangle, intrinsic: Size, sizing: Sizing, p: Placement) -> P
     }
     Placed {
         position: Point::new(x, y),
+        size,
+        side: p.side,
+    }
+}
+
+fn straddle(anchor: Rectangle, intrinsic: Size, sizing: Sizing, p: Placement) -> Placed {
+    let size = sizing.resolve(intrinsic, anchor.size(), anchor.size());
+    let (right, bottom) = (anchor.x + anchor.width, anchor.y + anchor.height);
+    // The corner (or middle) the surface is centered on, `offset` in from it on both axes.
+    let across = |start: f32, end: f32| match p.align {
+        Align::Start => start + p.offset,
+        Align::Center => (start + end) / 2.0,
+        Align::End => end - p.offset,
+    };
+    let (cx, cy) = match p.side {
+        Side::Top => (
+            across(anchor.x, right) + p.cross_offset,
+            anchor.y + p.offset,
+        ),
+        Side::Bottom => (across(anchor.x, right) + p.cross_offset, bottom - p.offset),
+        Side::Left => (
+            anchor.x + p.offset,
+            across(anchor.y, bottom) + p.cross_offset,
+        ),
+        Side::Right => (right - p.offset, across(anchor.y, bottom) + p.cross_offset),
+    };
+    Placed {
+        position: Point::new(cx - size.width / 2.0, cy - size.height / 2.0),
         size,
         side: p.side,
     }
@@ -730,5 +776,100 @@ mod tests {
     fn place_is_place_sized_with_the_content_size() {
         let a = place(anchor(50.0, 50.0), S, VIEW, p(Side::Bottom, Align::Start));
         assert_eq!(a.size, S);
+    }
+
+    #[test]
+    fn a_negative_inset_overflows_a_square_badge_onto_the_corner() {
+        // Inside, top-right, inset -6: a 12x12 badge's center lands on the corner (310, 20).
+        let q = Placement {
+            align: Align::End,
+            offset: -6.0,
+            ..Placement::inside(Side::Top)
+        };
+        let r = place_sized(PARENT, Size::new(12.0, 12.0), Sizing::new(), VIEW, q);
+        assert_eq!(r.position, Point::new(304.0, 14.0));
+        // A pill is not: one scalar cannot center both axes (x is 10 px short of the corner).
+        let r = place_sized(PARENT, Size::new(32.0, 12.0), Sizing::new(), VIEW, q);
+        assert_eq!(r.position, Point::new(284.0, 14.0));
+    }
+
+    #[test]
+    fn straddle_centers_a_badge_on_the_corner_whatever_its_shape() {
+        let corner = |side, align, size: Size, offset| {
+            let q = Placement {
+                align,
+                offset,
+                ..Placement::straddle(side)
+            };
+            let r = place_sized(PARENT, size, Sizing::new(), VIEW, q);
+            // The center of the surface.
+            Point::new(
+                r.position.x + size.width / 2.0,
+                r.position.y + size.height / 2.0,
+            )
+        };
+        let dot = Size::new(12.0, 12.0);
+        let pill = Size::new(32.0, 12.0);
+        // Top-right (310, 20), top-left (10, 20), bottom-right (310, 220), bottom-left (10, 220).
+        assert_eq!(
+            corner(Side::Top, Align::End, dot, 0.0),
+            Point::new(310.0, 20.0)
+        );
+        assert_eq!(
+            corner(Side::Top, Align::End, pill, 0.0),
+            Point::new(310.0, 20.0)
+        );
+        assert_eq!(
+            corner(Side::Top, Align::Start, pill, 0.0),
+            Point::new(10.0, 20.0)
+        );
+        assert_eq!(
+            corner(Side::Bottom, Align::End, pill, 0.0),
+            Point::new(310.0, 220.0)
+        );
+        assert_eq!(
+            corner(Side::Bottom, Align::Start, dot, 0.0),
+            Point::new(10.0, 220.0)
+        );
+        // Side edges: the left edge, top and bottom corners, and the middle.
+        assert_eq!(
+            corner(Side::Left, Align::Start, pill, 0.0),
+            Point::new(10.0, 20.0)
+        );
+        assert_eq!(
+            corner(Side::Right, Align::End, pill, 0.0),
+            Point::new(310.0, 220.0)
+        );
+        assert_eq!(
+            corner(Side::Right, Align::Center, dot, 0.0),
+            Point::new(310.0, 120.0)
+        );
+        assert_eq!(
+            corner(Side::Top, Align::Center, dot, 0.0),
+            Point::new(160.0, 20.0)
+        );
+    }
+
+    #[test]
+    fn straddle_offset_moves_the_badge_inward_along_both_axes() {
+        // An avatar's badge sits 4 px in from the corner (Mantine Indicator's `offset`).
+        let q = Placement {
+            align: Align::End,
+            offset: 4.0,
+            ..Placement::straddle(Side::Top)
+        };
+        let r = place_sized(PARENT, Size::new(12.0, 12.0), Sizing::new(), VIEW, q);
+        assert_eq!(r.position, Point::new(310.0 - 4.0 - 6.0, 20.0 + 4.0 - 6.0));
+        // And the cross offset slides it along the edge.
+        let q = Placement {
+            cross_offset: -3.0,
+            ..q
+        };
+        assert_eq!(
+            place_sized(PARENT, Size::new(12.0, 12.0), Sizing::new(), VIEW, q)
+                .position
+                .x,
+            297.0
+        );
     }
 }
