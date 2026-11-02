@@ -6,6 +6,7 @@
 //! `docs/lib/primitives.md`.
 //!
 //! * [`anchor`]: where a floating surface sits against an anchor (flip, shift);
+//! * [`calendar`]: calendar navigation by level (month, year, decade);
 //! * [`date`]: calendar dates and month math;
 //! * [`form`]: submit / reset / next / back gating and when a form's fields reveal errors (steps);
 //! * [`lookup`]: a query answered asynchronously: debounce, stale-response discarding, cache;
@@ -17,6 +18,7 @@
 //! * [`responsive`]: which presentation a width gets ([`When`](responsive::When)).
 
 pub mod anchor;
+pub mod calendar;
 pub mod date;
 pub mod form;
 pub mod lookup;

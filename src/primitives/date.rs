@@ -24,6 +24,9 @@ pub const MONTHS: [&str; 12] = [
     "November",
     "December",
 ];
+pub const MONTHS_SHORT: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
 pub const WEEKDAYS: [&str; 7] = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
 pub fn is_leap_year(y: i32) -> bool {
@@ -77,6 +80,66 @@ impl Date {
         let w = (y + y / 4 - y / 100 + y / 400 + T[self.month as usize - 1] + self.day as i32)
             .rem_euclid(7);
         ((w + 6) % 7) as u8
+    }
+
+    /// Days since 1970-01-01 (Hinnant's `days_from_civil`).
+    pub fn to_days(&self) -> i64 {
+        let y = self.year as i64 - (self.month <= 2) as i64;
+        let era = y.div_euclid(400);
+        let yoe = y - era * 400;
+        let m = self.month as i64;
+        let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + self.day as i64 - 1;
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        era * 146097 + doe - 719468
+    }
+
+    /// The date `z` days after 1970-01-01.
+    pub fn from_days(z: i64) -> Self {
+        let z = z + 719468;
+        let era = z.div_euclid(146097);
+        let doe = z - era * 146097;
+        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let d = doy - (153 * mp + 2) / 5 + 1;
+        let m = if mp < 10 { mp + 3 } else { mp - 9 };
+        let y = yoe + era * 400 + (m <= 2) as i64;
+        Self {
+            year: y as i32,
+            month: m as u8,
+            day: d as u8,
+        }
+    }
+
+    /// Today according to the system clock (UTC); falls back to 1970-01-01 if the clock is
+    /// before the epoch.
+    pub fn today() -> Self {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs() as i64);
+        Self::from_days(secs.div_euclid(86_400))
+    }
+
+    /// `n` days later (earlier when negative).
+    pub fn add_days(&self, n: i64) -> Self {
+        Self::from_days(self.to_days() + n)
+    }
+
+    /// `n` months later (earlier when negative); the day is clamped to the new month's length
+    /// (31 January + 1 month = 28 or 29 February).
+    pub fn add_months(&self, n: i32) -> Self {
+        let total = self.year * 12 + (self.month as i32 - 1) + n;
+        let (year, month) = (total.div_euclid(12), total.rem_euclid(12) as u8 + 1);
+        Self {
+            year,
+            month,
+            day: self.day.min(days_in_month(year, month)),
+        }
+    }
+
+    /// `n` years later (earlier when negative); 29 February clamps to the 28th in a common year.
+    pub fn add_years(&self, n: i32) -> Self {
+        self.add_months(n * 12)
     }
 
     /// The first day of this date's month.
@@ -214,6 +277,28 @@ mod tests {
         assert_eq!(d(2026, 11, 2).weekday(), 0, "a Monday");
         assert_eq!(d(2000, 1, 1).weekday(), 5, "a Saturday");
         assert_eq!(d(2026, 11, 8).weekday(), 6);
+    }
+
+    #[test]
+    fn day_counts_round_trip() {
+        assert_eq!(d(1970, 1, 1).to_days(), 0);
+        for z in [-800_000i64, -1, 0, 1, 11_000, 20_000, 2_932_896] {
+            assert_eq!(Date::from_days(z).to_days(), z);
+        }
+        assert_eq!(d(2026, 11, 2).add_days(30), d(2026, 12, 2));
+        assert_eq!(d(2026, 1, 1).add_days(-1), d(2025, 12, 31));
+    }
+
+    #[test]
+    fn adding_months_and_years_clamps_the_day() {
+        assert_eq!(d(2026, 1, 31).add_months(1), d(2026, 2, 28));
+        assert_eq!(d(2024, 1, 31).add_months(1), d(2024, 2, 29));
+        assert_eq!(d(2026, 11, 15).add_months(2), d(2027, 1, 15));
+        assert_eq!(d(2026, 1, 15).add_months(-1), d(2025, 12, 15));
+        assert_eq!(d(2026, 3, 15).add_months(-26), d(2024, 1, 15));
+        assert_eq!(d(2024, 2, 29).add_years(1), d(2025, 2, 28));
+        assert_eq!(d(2024, 2, 29).add_years(4), d(2028, 2, 29));
+        assert_eq!(d(2024, 2, 29).add_years(-4), d(2020, 2, 29));
     }
 
     #[test]

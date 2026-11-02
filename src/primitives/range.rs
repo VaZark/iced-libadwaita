@@ -45,33 +45,12 @@ impl Scalar for i32 {
     }
 }
 
-/// Days since 1970-01-01 (Hinnant's `days_from_civil`).
 fn days_from_civil(d: Date) -> i64 {
-    let y = d.year as i64 - (d.month <= 2) as i64;
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let m = d.month as i64;
-    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d.day as i64 - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146097 + doe - 719468
+    d.to_days()
 }
 
-/// The date `z` days after 1970-01-01.
 fn civil_from_days(z: i64) -> Date {
-    let z = z + 719468;
-    let era = z.div_euclid(146097);
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = yoe + era * 400 + (m <= 2) as i64;
-    Date {
-        year: y as i32,
-        month: m as u8,
-        day: d as u8,
-    }
+    Date::from_days(z)
 }
 
 impl Scalar for Date {
