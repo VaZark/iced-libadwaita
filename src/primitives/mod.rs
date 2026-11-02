@@ -13,6 +13,7 @@
 //! * [`range`]: a value with two ends (`lo <= hi`): the two-thumb slider's thumbs, a date range;
 //! * [`sections`]: text padding around an input's left / right sections;
 //! * [`selection`]: which keys are on (single, required single, multiple);
+//! * [`stepper`]: step statuses from an `active` index, click rules, next / back, connector fill;
 //! * [`validation`]: when a field shows valid / invalid, and chaining validators;
 //! * [`meta`]: which variant of a meta component shows, and its [`Trigger`] (breakpoint or select);
 //! * [`responsive`]: which presentation a width gets ([`When`](responsive::When)).
@@ -27,6 +28,7 @@ pub mod range;
 pub mod responsive;
 pub mod sections;
 pub mod selection;
+pub mod stepper;
 pub mod validation;
 
 pub use form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
@@ -34,3 +36,4 @@ pub use lookup::{Highlight, Lookup, Query, Request, RequestId, Status as LookupS
 pub use meta::Trigger;
 pub use responsive::When;
 pub use selection::Selection;
+pub use stepper::{Fill as StepperFill, Status as StepperStatus, StepperState};
