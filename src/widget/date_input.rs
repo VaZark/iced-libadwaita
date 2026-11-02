@@ -301,13 +301,23 @@ pub(super) fn calendar<'a, M: Clone + 'a>(
     let body_h = WEEKDAY_H + 6.0 * cell_h + 6.0 * GAP;
 
     let arrow = |icon: Icon, dir: Dir| {
-        let mut b = button(icon.view(m.icon_size))
-            .padding(m.space_s)
-            .style(sb::flat);
         let to = view.step(dir);
-        if view.can_step(dir, c.min, c.max)
-            && let Some(msg) = (c.nav)(to)
-        {
+        let msg = (c.nav)(to).filter(|_| view.can_step(dir, c.min, c.max));
+        // An icon takes no part in the button's disabled look: dim it here.
+        let on = msg.is_some();
+        let glyph = icon.view(m.icon_size).style(move |t: &Theme, _| {
+            let (fg, bg) = (t.semantic.popover.fg, t.semantic.popover.bg);
+            // Mixed toward the popover, not faded: a tinted icon ignores alpha.
+            iced::widget::svg::Style {
+                color: Some(if on {
+                    fg
+                } else {
+                    crate::color::mix(bg, fg, t.semantic.opacity.disabled)
+                }),
+            }
+        });
+        let mut b = button(glyph).padding(m.space_s).style(sb::flat);
+        if let Some(msg) = msg {
             b = b.on_press(msg);
         }
         b
