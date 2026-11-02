@@ -6,24 +6,33 @@
 //! come from [`Metrics`](crate::Metrics) and are resolved when the view is
 //! built, so use `.metrics(..)` on a widget to deviate from the defaults.
 
+mod accordion;
 mod avatar;
+mod badge;
 mod banner;
 mod button;
 mod carousel;
+mod collapsible;
+mod date_input;
 mod dialog;
 mod divider;
 mod dropdown;
 mod elevated;
 mod extra;
+mod field;
 mod flex;
 mod forms;
 mod header_bar;
 mod menu;
+mod meta_component;
 mod motion;
+mod multi_select;
 mod navigation;
 mod preferences;
+mod responsive_table;
 mod rows;
 mod scrolled;
+mod sections;
 mod segmented;
 mod shortcut_scope;
 mod slots;
@@ -36,7 +45,15 @@ mod toast;
 mod toolbar;
 pub mod typography;
 
+pub use crate::primitives::anchor::{self, Align as AnchorAlign, Placed, Placement, Side, place};
+pub use crate::primitives::date::{Date, days_in_month, is_leap_year};
+pub use crate::primitives::validation::{
+    self, Interaction, Presentation as ValidationState, Validity,
+};
+pub use crate::primitives::{Selection, Trigger, When};
+pub use accordion::{Accordion, AccordionItem};
 pub use avatar::{Avatar, avatar};
+pub use badge::{Badge, Chip};
 pub use banner::{Banner, banner};
 pub use button::{
     ButtonContent, ToggleGroup, ToggleItem, circular_button, destructive_button, flat_button,
@@ -44,6 +61,8 @@ pub use button::{
     toggle_group,
 };
 pub use carousel::{Carousel, CarouselIndicator, carousel};
+pub use collapsible::Collapsible;
+pub use date_input::DateInput;
 pub use dialog::{
     AboutDialog, AlertDialog, ResponseAppearance, dialog, dialog_in_window, present_dialog,
 };
@@ -60,6 +79,7 @@ pub use extra::{
     preferences_dialog, shortcut_label, shortcuts_dialog, sidebar, tab_bar, tab_button,
     view_switcher, view_switcher_bar, window, wrap_box,
 };
+pub use field::{Field, FieldLayout, outlined as field_outline};
 pub use flex::FlexRow;
 pub use forms::{
     Entry, EntryState, TextView, accent_picker, card_button, check_button, color_swatch, entry,
@@ -68,10 +88,12 @@ pub use forms::{
 pub use header_bar::{HeaderBar, WindowControls, header_bar, window_title};
 pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent};
 pub use menu::{Menu, MenuButton, MenuItem, MenuPresentation, menu_button, primary_menu};
+pub use meta_component::MetaComponent;
 pub use motion::{
     DrawerLayer, Entrance, Highlight, PageTransition, PushStack, Reveal, drawer_layer, entrance,
     highlight, layered, page_transition, push_stack, reveal,
 };
+pub use multi_select::MultiSelect;
 pub use navigation::{
     Breakpoint, COLLAPSE_WIDTH, CollapsedSidebar, DRAWER_MAX_FRACTION, MIN_CONTENT_WIDTH,
     NavigationPage, NavigationSplitView, OverlaySplitView, SIDEBAR_FRACTION, SIDEBAR_MAX_WIDTH,
@@ -81,11 +103,15 @@ pub use navigation::{
     sidebar_width_for, split_collapsed,
 };
 pub use preferences::{PreferencesGroup, PreferencesPage, preferences_group, preferences_page};
+pub use responsive_table::{
+    Column, Mode as TableMode, Presentation as TablePresentation, ResponsiveTable,
+};
 pub use rows::{
     ActionRow, ButtonRow, ComboRow, EntryRow, ExpanderRow, SliderRow, SpinRow, SwitchRow,
     ToggleGroupRow, action_row, boxed_list,
 };
 pub use scrolled::{scrollbar, scrolled_window, scrolled_window_both, scrolled_window_horizontal};
+pub use sections::{SectionButton, SectionIcon, section_button, section_icon, section_size};
 pub use shortcut_scope::shortcuts;
 pub use spinner::{Spinner, spinner};
 pub use split::{SplitAction, SplitButton, SplitButtonAction, split_button};

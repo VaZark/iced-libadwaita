@@ -18,7 +18,9 @@ type Element<'a> = adw::Element<'a, Message>;
 
 mod appshell;
 mod details;
+mod field_demo;
 mod nav;
+mod sections_demo;
 
 use nav::{Action, Detail, Entry, Inline, Page};
 
@@ -145,6 +147,15 @@ struct Gallery {
     /// The selected action of the split-button-action demo.
     split_choice: &'static str,
     picked: Option<&'static str>,
+    multi: Vec<&'static str>,
+    date_text: String,
+    date_view: w::Date,
+    field: field_demo::State,
+    sections: sections_demo::State,
+    date_pick: Option<w::Date>,
+    chips: Vec<&'static str>,
+    acc_single: Vec<u8>,
+    acc_multi: Vec<u8>,
 
     dialog: Option<Dialog>,
     show_content: bool,
@@ -236,6 +247,15 @@ enum Message {
     Editor(w::TextAction),
     EditorEmpty(w::TextAction),
     Picked(&'static str),
+    MultiToggle(&'static str),
+    DateText(String),
+    DatePick(w::Date),
+    DateView(w::Date),
+    Field(field_demo::Msg),
+    Sections(sections_demo::Msg),
+    ChipRemove(&'static str),
+    AccSingle(Vec<u8>),
+    AccMulti(Vec<u8>),
     OpenDialog(Dialog),
     /// Opens the AppShell window (Layout > AppShell).
     OpenShell,
@@ -293,6 +313,41 @@ static INDICATORS: [w::CarouselIndicator; 3] = w::CarouselIndicator::ALL;
 static TOAST_POSITIONS: [w::ToastPosition; 6] = w::ToastPosition::ALL;
 static MOTIONS: [DemoMotion; 8] = DemoMotion::ALL;
 const FRUITS: [&str; 3] = ["Apple", "Banana", "Cherry"];
+const FRUITS5: [&str; 5] = ["Apple", "Banana", "Cherry", "Damson", "Elderberry"];
+
+struct Person {
+    name: &'static str,
+    role: &'static str,
+    team: &'static str,
+    email: &'static str,
+}
+static PEOPLE: [Person; 4] = [
+    Person {
+        name: "Ada Lovelace",
+        role: "Engineer",
+        team: "Compilers",
+        email: "ada@example.org",
+    },
+    Person {
+        name: "Grace Hopper",
+        role: "Admiral",
+        team: "Languages",
+        email: "grace@example.org",
+    },
+    Person {
+        name: "Linus T.",
+        role: "Maintainer",
+        team: "Kernel",
+        email: "linus@example.org",
+    },
+    Person {
+        name: "Margaret H.",
+        role: "Director",
+        team: "Flight software",
+        email: "margaret@example.org",
+    },
+];
+
 const COMBO: [&str; 3] = ["Adwaita Sans", "Cantarell", "Inter"];
 
 impl Gallery {
@@ -386,6 +441,21 @@ impl Gallery {
                 combo2: None,
                 split_choice: "merge",
                 picked: None,
+                multi: vec!["Banana", "Cherry"],
+                date_text: String::from("2026-11-02"),
+                date_view: w::Date::new(2026, 11, 1).unwrap(),
+                sections: sections_demo::State::default(),
+                field: {
+                    let mut f = field_demo::State::default();
+                    if std::env::var_os("GALLERY_FIELD_SUBMIT").is_some() {
+                        f.submit();
+                    }
+                    f
+                },
+                date_pick: w::Date::new(2026, 11, 2),
+                chips: vec!["Rust", "iced", "GTK"],
+                acc_single: vec![0],
+                acc_multi: vec![0, 1],
                 dialog: None,
                 show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
                 sidebar_mode: match std::env::var("GALLERY_SIDEBAR_MODE").as_deref() {
@@ -588,6 +658,29 @@ impl Gallery {
             Message::Editor(a) => self.editor.perform(a),
             Message::EditorEmpty(a) => self.editor_empty.perform(a),
             Message::Picked(s) => self.picked = Some(s),
+            Message::MultiToggle(s) => match self.multi.iter().position(|x| *x == s) {
+                Some(i) => {
+                    self.multi.remove(i);
+                }
+                None => self.multi.push(s),
+            },
+            Message::DateText(t) => {
+                if let Some(d) = w::Date::parse(&t) {
+                    self.date_pick = Some(d);
+                    self.date_view = d.month_start();
+                }
+                self.date_text = t;
+            }
+            Message::DatePick(d) => {
+                self.date_pick = Some(d);
+                self.date_text = d.format();
+            }
+            Message::DateView(d) => self.date_view = d,
+            Message::Field(m) => self.field.update(m),
+            Message::Sections(m) => self.sections.update(m),
+            Message::AccSingle(v) => self.acc_single = v,
+            Message::AccMulti(v) => self.acc_multi = v,
+            Message::ChipRemove(c) => self.chips.retain(|x| *x != c),
             // Preferences is a window of its own; the other dialogs stay in the window.
             Message::OpenShell => return self.open_shell(),
             // Chrome of the shell's window is its own message; everything else goes to the shell.

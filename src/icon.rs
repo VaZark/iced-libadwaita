@@ -34,6 +34,8 @@ pub enum Icon {
     Delete,
     Settings,
     Home,
+    /// A funnel: filter a list (`funnel-symbolic` / `view-filter`).
+    Filter,
 }
 
 const HEAD: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">"#;
@@ -79,6 +81,7 @@ impl Icon {
             Icon::Settings => {
                 r#"<circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6L5 5M11 11l1.4 1.4M12.4 3.6L11 5M5 11l-1.4 1.4"/>"#
             }
+            Icon::Filter => r#"<path d="M2 3h12l-4.5 5.5V13l-3-1.5V8.5z"/>"#,
             Icon::Home => r#"<path d="M2 8l6-5.5L14 8M3.5 7v6.5h3.2V10h2.6v3.5h3.2V7"/>"#,
         }
     }

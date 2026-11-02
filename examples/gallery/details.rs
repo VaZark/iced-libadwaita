@@ -60,7 +60,17 @@ impl Gallery {
         for (title, entries) in page.sections() {
             // Consecutive rows (nested / action) share one list; inline demos are their own groups.
             let mut list: Option<w::PreferencesGroup<'_, Message>> = None;
+            // GALLERY_ONLY=<inline name>: show only that demo (screenshots of long pages).
+            let only = std::env::var("GALLERY_ONLY").ok();
             for entry in entries {
+                if let (Some(o), Entry::Inline(i)) = (&only, entry)
+                    && !format!("{i:?}").eq_ignore_ascii_case(o)
+                {
+                    continue;
+                }
+                if only.is_some() && !matches!(entry, Entry::Inline(_)) {
+                    continue;
+                }
                 match entry {
                     Entry::Nested(d) => {
                         let row = w::ActionRow::new(d.title())
@@ -290,6 +300,7 @@ impl Gallery {
                     g("Password").push(w::card(password)),
                     g("Color override").push(w::card(color)),
                     g("Width").push(w::card(width)),
+                    self.sections.view(m).map(Message::Sections),
                 ]
                 .spacing(m.group_spacing)
                 .into()
@@ -309,6 +320,7 @@ impl Gallery {
                 .spacing(m.group_spacing)
                 .into()
             }
+            Detail::Field => self.field.view(m).map(Message::Field),
             Detail::Dropdown => {
                 let plain = stack(sp, vec![
                     labeled("Choose a fruit", Element::from(w::dropdown(&FRUITS, self.picked, Message::Picked))),
@@ -892,6 +904,140 @@ impl Gallery {
                 .spacing(m.space_s)
                 .wrap();
                 column![g("Tag").push(w::card(tags))].into()
+            }
+
+            Inline::BadgeChip => {
+                let badges = row![
+                    w::Badge::new("New").role(Role::Accent),
+                    w::Badge::new("Stable").role(Role::Success),
+                    w::Badge::new("Beta").role(Role::Warning),
+                    w::Badge::new("Broken").role(Role::Error),
+                    w::Badge::count(7, 99).role(Role::Error).solid(true),
+                    w::Badge::count(120, 99).role(Role::Accent).solid(true),
+                    w::Badge::new("Neutral"),
+                ]
+                .spacing(m.space_s)
+                .wrap();
+                let chips = row(self.chips.iter().map(|c| {
+                    Element::from(
+                        w::Chip::new(*c).role(Role::Accent).on_press(Message::Noop).on_remove(Message::ChipRemove(c)),
+                    )
+                }))
+                .spacing(m.space_s)
+                .wrap();
+                let states = row![
+                    w::Chip::new("Plain").on_press(Message::Noop),
+                    w::Chip::new("Icon").icon(Icon::Check).role(Role::Success).on_press(Message::Noop),
+                    w::Chip::new("Selected").role(Role::Accent).selected(true).on_press(Message::Noop),
+                    w::Chip::new("Disabled").on_press(Message::Noop).disabled(true),
+                    w::Chip::new("Disabled ✕").role(Role::Accent).on_remove(Message::Noop).disabled(true),
+                ]
+                .spacing(m.space_s)
+                .wrap();
+                column![
+                    g("Badge").push(w::card(badges)),
+                    g("Chip").description("Press the ✕ to remove one.").push(w::card(chips)).push(w::card(states)),
+                ]
+                .spacing(m.group_spacing)
+                .into()
+            }
+            Inline::MultiSelect => {
+                let open = std::env::var("GALLERY_OPEN").as_deref() == Ok("multiselect");
+                let controls = stack(sp, vec![
+                    labeled("Fruits", Element::from(w::MultiSelect::new(&FRUITS5, &self.multi, Message::MultiToggle).width(Length::Fixed(260.0)).open_initially(open))),
+                    labeled("Empty", Element::from(w::MultiSelect::new(&FRUITS5, &[], Message::MultiToggle).placeholder("Pick fruits").width(Length::Fixed(260.0)))),
+                    labeled("Crowded (+n)", Element::from(w::MultiSelect::new(&FRUITS5, &FRUITS5, Message::MultiToggle).max_chips(2).width(Length::Fixed(260.0)))),
+                    labeled("Disabled", Element::from(w::MultiSelect::new(&FRUITS5, &self.multi, Message::MultiToggle).disabled(true).width(Length::Fixed(260.0)))),
+                ]);
+                column![g("Multi select").description("The popover stays open while options are toggled.").push(w::card(controls))].into()
+            }
+            Inline::DateInput => {
+                let open = std::env::var("GALLERY_OPEN").as_deref() == Ok("date");
+                let min = w::Date::new(2026, 11, 1).unwrap();
+                let live = w::DateInput::new(&self.date_text, self.date_view, Message::DateText)
+                    .selected(self.date_pick)
+                    .on_pick(Message::DatePick)
+                    .on_view(Message::DateView)
+                    .open_initially(open);
+                let ranged = w::DateInput::new("2026-10-15", self.date_view, Message::DateText).min(min);
+                let invalid = w::DateInput::new("2026-02-30", self.date_view, Message::DateText);
+                let off = w::DateInput::new("2026-11-02", self.date_view, Message::DateText).disabled(true);
+                let controls = stack(sp, vec![
+                    labeled("Date", Element::from(live)),
+                    labeled("Before the minimum", Element::from(ranged)),
+                    labeled("Not a date", Element::from(invalid)),
+                    labeled("Disabled", Element::from(off)),
+                ]);
+                column![g("Date input").description("Type YYYY-MM-DD or pick from the calendar.").push(w::card(controls))].into()
+            }
+            Inline::AnchoredPopover => {
+                let open = std::env::var("GALLERY_OPEN").as_deref() == Ok("anchor");
+                let menu = |t: &'static str| {
+                    w::popover([w::menu_item(t, false, Message::Noop), w::menu_item("Second", true, Message::Noop)], 160.0)
+                };
+                let pop = |label: &'static str, side: w::Side, o: bool| {
+                    Element::from(
+                        w::Dropdown::custom(text(label), menu(label))
+                            .side(side)
+                            .offset(8.0)
+                            .popover_width(140.0)
+                            .open_initially(o),
+                    )
+                };
+                let sides = row![
+                    pop("Bottom", w::Side::Bottom, false),
+                    pop("Top", w::Side::Top, false),
+                    pop("Right", w::Side::Right, open),
+                    pop("Left", w::Side::Left, false),
+                ]
+                .spacing(m.space_m);
+                column![g("Anchored popover").description("Side and offset against the trigger; it flips to the other side and shifts to stay inside the window.").push(w::card(sides))].into()
+            }
+            Inline::MetaComponent => self.sections.meta_view(m).map(Message::Sections),
+            Inline::ResponsiveTable => {
+                let table = |mode: w::TableMode| {
+                    w::ResponsiveTable::<Person, Message>::new(&PEOPLE)
+                        .column(w::Column::new("Name", |p: &Person| ty::heading(p.name).into()).min_width(110.0))
+                        .column(w::Column::new("Role", |p: &Person| ty::body(p.role).into()).min_width(90.0))
+                        .column(w::Column::new("Team", |p: &Person| ty::body(p.team).into()).min_width(100.0))
+                        .column(w::Column::new("Email", |p: &Person| ty::body(p.email).into()).width(Length::FillPortion(2)).min_width(150.0))
+                        .card(|p: &Person| {
+                            column![
+                                row![ty::heading(p.name), w::Badge::new(p.role).role(Role::Accent)].spacing(8).align_y(iced::Alignment::Center),
+                                ty::caption(p.email),
+                                ty::body(p.team),
+                            ]
+                            .spacing(4)
+                            .into()
+                        })
+                        .mode(mode)
+                        .height(Length::Fixed(300.0))
+                };
+                let wide = container(Element::from(table(w::TableMode::Auto))).width(Length::Fixed(600.0)).height(Length::Fixed(300.0));
+                let narrow = container(Element::from(table(w::TableMode::Auto))).width(Length::Fixed(340.0)).height(Length::Fixed(300.0));
+                column![
+                    g("Wide container").description("The columns fit: a table.").push(wide),
+                    g("Narrow container").description("They do not: every row is a card with a custom layout.").push(narrow),
+                ]
+                .spacing(m.group_spacing)
+                .into()
+            }
+
+            Inline::Accordion => {
+                let body = |t: &'static str| Element::from(container(ty::body(t)).padding(m.space_m));
+                let items = |acc: w::Accordion<'static, u8, Message>| {
+                    acc.item(w::AccordionItem::new(0u8, "Shipping", body("Two to four working days.")).subtitle("2-4 days"))
+                        .item(w::AccordionItem::new(1u8, "Returns", body("Thirty days, unused.")).subtitle("30 days"))
+                        .item(w::AccordionItem::new(2u8, "Warranty", body("Two years.")))
+                };
+                column![
+                    g("Accordion, single").description("One item open at a time; opening another closes it, and the open one can be closed.")
+                        .push(Element::from(items(w::Accordion::new(&self.acc_single, Message::AccSingle).selection(w::Selection::SINGLE)))),
+                    g("Accordion, multiple").description("Any number open.")
+                        .push(Element::from(items(w::Accordion::new(&self.acc_multi, Message::AccMulti).selection(w::Selection::Multiple)))),
+                ]
+                .spacing(m.group_spacing)
+                .into()
             }
 
             Inline::LinkButton => column![g("Link button").push(w::card(

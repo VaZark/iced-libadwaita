@@ -597,31 +597,30 @@ impl<'a, M: Clone + 'a> From<ExpanderRow<'a, M>> for Element<'a, M> {
             .row
             .suffix(icon.view(16.0))
             .on_activate((x.on_toggle)(!x.expanded));
-        let mut col = column![Element::from(header)];
-        if !x.children.is_empty() {
-            let mut inner = column![];
-            for c in x.children {
-                inner = inner
-                    .push(
-                        container(space().height(1))
-                            .width(Length::Fill)
-                            .style(sc::card_separator),
-                    )
-                    .push(c);
-            }
-            let list = container(inner).width(Length::Fill).style(|t: &Theme| {
-                iced::widget::container::Style {
-                    background: Some(iced::Background::Color(crate::color::alpha(
-                        t.semantic.card.fg,
-                        0.03,
-                    ))),
-                    ..Default::default()
-                }
-            });
-            // Always mounted: the revealer slides it open/closed (250ms, ADW_EASE).
-            col = col.push(Element::from(super::reveal(list, x.expanded)));
+        if x.children.is_empty() {
+            return Element::from(header);
         }
-        col.into()
+        let mut inner = column![];
+        for c in x.children {
+            inner = inner
+                .push(
+                    container(space().height(1))
+                        .width(Length::Fill)
+                        .style(sc::card_separator),
+                )
+                .push(c);
+        }
+        let list = container(inner).width(Length::Fill).style(|t: &Theme| {
+            iced::widget::container::Style {
+                background: Some(iced::Background::Color(crate::color::alpha(
+                    t.semantic.card.fg,
+                    0.03,
+                ))),
+                ..Default::default()
+            }
+        });
+        // The disclosure primitive: always mounted, the revealer slides it (250ms, ADW_EASE).
+        super::Collapsible::new(Element::from(header), Element::from(list), x.expanded).into()
     }
 }
 

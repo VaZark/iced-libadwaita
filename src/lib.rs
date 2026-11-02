@@ -20,6 +20,7 @@ pub mod icon;
 pub mod metrics;
 pub mod palette;
 pub mod prelude;
+pub mod primitives;
 pub mod semantic;
 pub mod shadow;
 pub mod shortcut;
