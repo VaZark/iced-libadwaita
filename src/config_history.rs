@@ -188,6 +188,24 @@ pub const PROPERTIES: &[Property] = &[
     p("motion", "carousel", Choice(MOTION), "default"),
     p("motion", "layout", Choice(MOTION), "default"),
     p(
+        "motion",
+        "transition-close",
+        Number {
+            min: 0.0,
+            max: 2000.0,
+        },
+        "30",
+    ),
+    p(
+        "motion",
+        "transition-open",
+        Number {
+            min: 0.0,
+            max: 2000.0,
+        },
+        "30",
+    ),
+    p(
         "breakpoints",
         "sm",
         Number {

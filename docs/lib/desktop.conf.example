@@ -35,6 +35,11 @@ switch=default           # switch knob slides
 carousel=default         # carousel spring
 layout=default           # the sidebar slides in/out of the layout at the collapse breakpoint
 
+# Time budgets (milliseconds) of the steps of a layout change (`transition`, `adaptive`): the
+# old layout has this long to close, then the new one this long to open. 0 = instant.
+transition-close=30
+transition-open=30
+
 [windows]
 decorations=csd          # csd (Adwaita) | ssd (discouraged)
 button-layout=system     # system | a GTK button-layout string, e.g. appmenu:close

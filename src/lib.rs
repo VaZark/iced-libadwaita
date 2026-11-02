@@ -9,6 +9,7 @@
 //! * [`widget`]: Adw-named widgets (`HeaderBar`, `ActionRow`, `PreferencesGroup`,
 //!   `StatusPage`, `AlertDialog`, …).
 
+pub mod adaptive;
 pub mod animation;
 pub mod breakpoints;
 pub mod catalog;
@@ -25,6 +26,7 @@ pub mod shortcut;
 pub mod style;
 pub mod system;
 pub mod theme;
+pub mod transition;
 pub mod widget;
 pub mod window;
 

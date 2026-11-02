@@ -17,6 +17,8 @@
 //! }
 //! ```
 
+pub use crate::adaptive::{Adaptive, Hysteresis, Layouts, adaptive};
+pub use crate::breakpoints::WidthClass;
 pub use crate::widget::typography::{
     self, body, caption, heading, title_1, title_2, title_3, title_4,
 };

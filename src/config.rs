@@ -123,6 +123,10 @@ pub struct Config {
     pub reduced_motion: bool,
     /// Per-trigger overrides from `[motion] <trigger>=default|none`.
     pub motion: std::collections::HashMap<crate::animation::Trigger, crate::animation::Motion>,
+    /// `[motion] transition-close`: the time budget of a close step, in milliseconds.
+    pub transition_close_ms: f32,
+    /// `[motion] transition-open`: the time budget of an open step, in milliseconds.
+    pub transition_open_ms: f32,
     pub decorations: DecorationMode,
     /// `system` follows GNOME's `button-layout`; `Fixed(string)` is a GTK layout string.
     pub button_layout: Pick<String>,
@@ -187,6 +191,8 @@ impl Default for Config {
             animations: Pick::System,
             reduced_motion: false,
             motion: Default::default(),
+            transition_close_ms: 30.0,
+            transition_open_ms: 30.0,
             decorations: DecorationMode::Csd,
             button_layout: Pick::System,
             mobile_max_width: crate::window::MOBILE_MAX_WIDTH,
@@ -371,6 +377,20 @@ impl Config {
                 .map(|b| self.reduced_motion = b)
                 .unwrap_or_else(|| bad!("motion", "reduced-motion", v));
         }
+        num!(
+            "motion",
+            "transition-close",
+            self.transition_close_ms,
+            0.0,
+            2000.0
+        );
+        num!(
+            "motion",
+            "transition-open",
+            self.transition_open_ms,
+            0.0,
+            2000.0
+        );
         if let Some(v) = get("windows", "decorations") {
             match v {
                 "csd" => self.decorations = DecorationMode::Csd,

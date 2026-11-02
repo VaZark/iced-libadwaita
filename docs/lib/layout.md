@@ -34,6 +34,32 @@ flowchart TD
   use full-page menus. Width classes (`breakpoints::WidthClass`) follow Bootstrap/Mantine
   (576, 768, 992, 1200, 1400).
 
+#### Choosing between layouts
+
+When narrow and wide differ in kind (a bottom tab bar against a sidebar with actions in the
+header), do not squeeze one set of widgets. Build each layout alone and let `adaptive` choose by
+width class (`breakpoints::WidthClass`, so thresholds follow `[breakpoints]`):
+
+```rust
+let layouts = Layouts::new()
+    .layout(..WidthClass::Md, Layout::Narrow)
+    .layout(WidthClass::Md.., Layout::Wide);   // a tablet layout is one more entry
+```
+
+- Keep an `Adaptive` in your state; feed it `resize(width, now)` and the transition events, and
+  render with `adaptive(&state).layout(key, || build())`: only the shown layout is built.
+- It changes layout only after the width is 16px past a threshold (`.hysteresis(16.0)`, the
+  default; `.hysteresis(Duration::from_millis(200))` waits instead for the new layout to hold),
+  then runs
+  `Close(old)` then `Open(new)` as an ordered [transition](motion.md#ordered-transitions)
+  instead of cutting. `subscription` ticks only while a deadline is pending.
+- Layouts hold visual state only. Current page and open overlays live in your state, so a layout
+  change loses nothing. A page that exists in one layout only is the application's to handle:
+  navigate when the close or open command names the layout being moved to.
+- `NavigationSplitView::adapt` is still right for a sidebar that collapses; `adaptive` sits above
+  it and picks whole layouts, one of which may contain a split view.
+- `Adaptive::force(key)` pins a layout for a gallery or a test.
+
 #### Rows and content
 
 - Rows wrap their control below the title when they cannot share a line; the control then goes
