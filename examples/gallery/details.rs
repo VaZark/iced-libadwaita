@@ -317,6 +317,7 @@ impl Gallery {
             Detail::Field => self.field.view(m).map(Message::Field),
             Detail::Form => self.form.view(m).map(Message::Form),
             Detail::Stepper => self.stepper.view(m).map(Message::Stepper),
+            Detail::Data => self.data.view(m).map(Message::Data),
             Detail::Autocomplete => self.autocomplete.view(m).map(Message::Autocomplete),
             Detail::Dropdown => {
                 let plain = stack(sp, vec![

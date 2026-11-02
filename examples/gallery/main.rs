@@ -18,6 +18,7 @@ type Element<'a> = adw::Element<'a, Message>;
 
 mod appshell;
 mod autocomplete_demo;
+mod data_demo;
 mod date_demo;
 mod details;
 mod field_demo;
@@ -160,6 +161,7 @@ struct Gallery {
     sections: sections_demo::State,
     range: range_demo::State,
     stepper: stepper_demo::State,
+    data: data_demo::State,
     chips: Vec<&'static str>,
     acc_single: Vec<u8>,
     acc_multi: Vec<u8>,
@@ -264,6 +266,7 @@ enum Message {
     Sections(sections_demo::Msg),
     Range(range_demo::Msg),
     Stepper(stepper_demo::Msg),
+    Data(data_demo::Msg),
     ChipRemove(&'static str),
     AccSingle(Vec<u8>),
     AccMulti(Vec<u8>),
@@ -463,6 +466,7 @@ impl Gallery {
                 sections: sections_demo::State::default(),
                 range: range_demo::State::default(),
                 stepper: stepper_demo::State::default(),
+                data: data_demo::State::default(),
                 field: {
                     let mut f = field_demo::State::default();
                     if std::env::var_os("GALLERY_FIELD_SUBMIT").is_some() {
@@ -690,6 +694,7 @@ impl Gallery {
             Message::Sections(m) => self.sections.update(m),
             Message::Range(m) => self.range.update(m),
             Message::Stepper(m) => self.stepper.update(m),
+            Message::Data(m) => return self.data.update(m).map(Message::Data),
             Message::AccSingle(v) => self.acc_single = v,
             Message::AccMulti(v) => self.acc_multi = v,
             Message::ChipRemove(c) => self.chips.retain(|x| *x != c),
