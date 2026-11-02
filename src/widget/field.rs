@@ -35,6 +35,7 @@ pub struct Field<'a, M> {
     submitted: bool,
     disabled: bool,
     inline: bool,
+    plain_label: bool,
     show_valid: bool,
     layout: FieldLayout,
     metrics: Metrics,
@@ -52,6 +53,7 @@ impl<'a, M: 'a> Field<'a, M> {
             submitted: false,
             disabled: false,
             inline: false,
+            plain_label: false,
             show_valid: false,
             layout: FieldLayout::Stacked,
             metrics: Metrics::desktop(),
@@ -111,6 +113,13 @@ impl<'a, M: 'a> Field<'a, M> {
     /// outline so the ring does not touch its content.
     pub fn inline(mut self, i: bool) -> Self {
         self.inline = i;
+        self
+    }
+    /// Draws the label in the body size and regular weight instead of
+    /// the bold form label: for a plain list of controls with their names (a settings card,
+    /// a gallery of states), where bold labels would shout.
+    pub fn plain_label(mut self, plain: bool) -> Self {
+        self.plain_label = plain;
         self
     }
     pub fn layout(mut self, l: FieldLayout) -> Self {
@@ -205,18 +214,18 @@ impl<'a, M: 'a> From<Field<'a, M>> for Element<'a, M> {
         };
 
         // Label (+ required marker).
-        let mut title = row![
-            text(f.label)
-                .size(m.space_m + 1.0)
-                .font(iced::Font {
-                    weight: iced::font::Weight::Bold,
-                    ..iced::Font::DEFAULT
-                })
-                .style(move |t: &Theme| text::Style {
-                    color: Some(dim(t))
-                })
-        ]
-        .spacing(m.space_xxs);
+        let label = if f.plain_label {
+            crate::Typography::default().body(f.label)
+        } else {
+            text(f.label).size(m.space_m + 1.0).font(iced::Font {
+                weight: iced::font::Weight::Bold,
+                ..iced::Font::DEFAULT
+            })
+        }
+        .style(move |t: &Theme| text::Style {
+            color: Some(dim(t)),
+        });
+        let mut title = row![label].spacing(m.space_xxs);
         title = title.push(if f.required {
             Element::from(
                 text("*")
@@ -234,6 +243,7 @@ impl<'a, M: 'a> From<Field<'a, M>> for Element<'a, M> {
         });
 
         // Description or message, always one element so positions are stable.
+        let has_note = msg.is_some() || f.description.is_some();
         let note: Element<'a, M> = if let Some(msg) = msg {
             let invalid = p == Presentation::Invalid;
             let icon = if invalid {
@@ -272,7 +282,12 @@ impl<'a, M: 'a> From<Field<'a, M>> for Element<'a, M> {
             space().into()
         };
         let note = container(note).padding(Padding {
-            top: m.space_xxs,
+            // A row with nothing to say below it takes no space for it.
+            top: if has_note || f.layout == FieldLayout::Stacked {
+                m.space_xxs
+            } else {
+                0.0
+            },
             ..Padding::ZERO
         });
 
@@ -287,20 +302,34 @@ impl<'a, M: 'a> From<Field<'a, M>> for Element<'a, M> {
             ]
             .width(Length::Fill)
             .into(),
-            FieldLayout::Row => column![
-                row![
-                    container(title).width(Length::Fill),
-                    container(outlined(control, p, m))
-                        .width(Length::FillPortion(2))
-                        .align_x(Alignment::End),
+            FieldLayout::Row => {
+                let (start, end) = row_widths(control.as_widget().size().width);
+                column![
+                    row![
+                        container(title).width(start),
+                        container(outlined(control, p, m))
+                            .width(end)
+                            .align_x(Alignment::End),
+                    ]
+                    .spacing(m.space_m)
+                    .align_y(Alignment::Center),
+                    note
                 ]
-                .spacing(m.space_m)
-                .align_y(Alignment::Center),
-                note
-            ]
-            .width(Length::Fill)
-            .into(),
+                .width(Length::Fill)
+                .into()
+            }
         }
+    }
+}
+
+/// The widths of the title and the control in a [`FieldLayout::Row`]. A control that hugs
+/// its content (a switch, a dropdown, a fixed-width input) keeps its size and the title takes
+/// the rest, so a long title wraps only where it must; a control that fills (a slider, an
+/// entry) shares the row, a third for the title and two thirds for the control.
+fn row_widths(control: Length) -> (Length, Length) {
+    match control {
+        Length::Shrink | Length::Fixed(_) => (Length::Fill, Length::Shrink),
+        _ => (Length::Fill, Length::FillPortion(2)),
     }
 }
 
@@ -319,6 +348,19 @@ mod tests {
         assert_eq!(
             field().submitted(true).presentation(),
             Presentation::Invalid
+        );
+    }
+
+    #[test]
+    fn row_gives_a_hugging_control_its_size() {
+        assert_eq!(row_widths(Length::Shrink), (Length::Fill, Length::Shrink));
+        assert_eq!(
+            row_widths(Length::Fixed(260.0)),
+            (Length::Fill, Length::Shrink)
+        );
+        assert_eq!(
+            row_widths(Length::Fill),
+            (Length::Fill, Length::FillPortion(2))
         );
     }
 

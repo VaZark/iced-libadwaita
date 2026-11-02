@@ -5,7 +5,7 @@ libadwaita has no form-field widget: rows (`AdwEntryRow`, `AdwSpinRow`, ...) car
 - **Pristine until touched.** Like CSS `:user-valid` / `:user-invalid`, nothing is shown while the user has not interacted; once the field is `touched` (edited or left) or a submit was attempted (`submitted`), it shows warning or invalid. **Only `:user-invalid` (and a warning) is highlighted: `:user-valid` adds nothing special by default**; `Presentation::Valid` is still reported so the app can read it, and `.show_valid(true)` opts in to a success ring. Disabled fields never show validation.
 - **Required** is a marker (a red asterisk after the title); it does not validate by itself. `validation::required(value, msg)` produces the error.
 - **Message.** The description sits below the control; while a message is shown it replaces the description, in the semantic error (or warning) color with a leading icon. A valid field shows nothing extra unless `.show_valid(true)`.
-- **Outline.** One ring (focus-ring width, `radius_m` plus the ring) around the control in the semantic error, warning or success color; transparent when pristine so nothing shifts. Layouts: `Stacked` (title above) and `Row` (title and description at the start, control at the end, message below).
+- **Outline.** One ring (focus-ring width, `radius_m` plus the ring) around the control in the semantic error, warning or success color; transparent when pristine so nothing shifts. Layouts: `Stacked` (title above) and `Row` (title and description at the start, control at the end, message below). In a `Row`, a control that hugs its content keeps its size and the title takes the rest (a long title wraps only where it must); a control that fills shares the row, a third for the title. `.plain_label(true)` draws the title in the body style instead of bold, for plain lists of controls.
 
 ## iced mapping
 
@@ -19,3 +19,5 @@ Deviations:
 - `.disabled(true)` dims the label and hides validation; disabling the control itself is done as everywhere else, by omitting its `on_*` callback.
 - The `*Row` widgets already carry a title and are not wrapped; they should show errors through their own style.
 - `DateInput` still colors its entry from its own parse check (`text_state`) even while the field is pristine.
+
+- A `Row` field reserves the focus-ring width around its control, so the control sits that much inside the row's end edge (a bare `Switch` in a card is flush); the title stays flush at the start.
