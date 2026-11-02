@@ -19,7 +19,7 @@ pub enum Msg {
     Password(String),
     Bio(w::TextAction),
     Fruit(&'static str),
-    Multi(&'static str),
+    Multi(Vec<&'static str>),
     Date(String),
     Agree(bool),
     Plan(u8),
@@ -127,12 +127,7 @@ impl State {
                 self.touch("fruit");
             }
             Msg::Multi(v) => {
-                match self.multi.iter().position(|x| *x == v) {
-                    Some(i) => {
-                        self.multi.remove(i);
-                    }
-                    None => self.multi.push(v),
-                }
+                self.multi = v;
                 self.touch("multi");
             }
             Msg::Date(v) => {
@@ -182,11 +177,7 @@ impl State {
             } else {
                 Validity::Ok
             },
-            if w::Date::parse(&self.date).is_some() {
-                Validity::Ok
-            } else {
-                Validity::error("Not a date. Use YYYY-MM-DD.")
-            },
+            w::validate_date(&self.date, None, None),
             if self.agree {
                 Validity::Ok
             } else {
@@ -265,14 +256,22 @@ impl State {
                 "Toppings",
                 "multi",
                 4,
-                w::MultiSelect::new(&FRUITS5, &self.multi, Msg::Multi).into()
+                w::MultiSelect::selecting(
+                    &FRUITS5,
+                    &self.multi,
+                    w::Selection::Multiple,
+                    Msg::Multi
+                )
+                .into()
             )
             .description("At least two."),
             f(
                 "Birthday",
                 "date",
                 5,
-                w::DateInput::new(&self.date, w::Date::new(2026, 11, 1).unwrap(), Msg::Date).into()
+                w::DateInput::new(&self.date, w::Date::new(2026, 11, 1).unwrap(), Msg::Date)
+                    .revealed(self.t("date") || self.submitted)
+                    .into()
             ),
             f(
                 "Terms",

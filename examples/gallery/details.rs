@@ -295,6 +295,10 @@ impl Gallery {
                     w::entry("Fixed width", "200px").on_input(noop).width(Length::Fixed(200.0)).metrics(m).into(),
                     w::entry("Fills", "fills the card").on_input(noop).metrics(m).into(),
                 ]);
+                // GALLERY_ONLY=sections: only the sections demo (a screenshot is one window tall).
+                if std::env::var("GALLERY_ONLY").as_deref() == Ok("sections") {
+                    return self.sections.view(m).map(Message::Sections);
+                }
                 column![
                     g("States").push(w::card(states)),
                     g("Password").push(w::card(password)),

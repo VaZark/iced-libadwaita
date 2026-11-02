@@ -146,6 +146,11 @@ impl State {
         }
     }
 
+    /// Escape: back from the search bar to the path bar.
+    pub fn leave_search(&mut self) {
+        self.searching = false;
+    }
+
     fn filtered(&self) -> bool {
         self.when != When::Any || self.kind != Kind::Any
     }

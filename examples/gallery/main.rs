@@ -775,6 +775,9 @@ impl Gallery {
                     self.sheet = false;
                 } else if self.drawer_open {
                     self.drawer_open = false;
+                } else {
+                    // Leaves the search bar (the on-select trigger demo) back to the path bar.
+                    self.sections.leave_search();
                 }
             }
             Message::Narrow(n) => self.narrow = n,
