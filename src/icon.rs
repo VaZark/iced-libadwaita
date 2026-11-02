@@ -13,6 +13,12 @@ pub enum Icon {
     GoPrevious,
     GoDown,
     GoUp,
+    /// Two chevrons, one up and one down: a column that can be sorted but is not.
+    GoUpDown,
+    /// A chevron against a bar, pointing left: the first page.
+    GoFirst,
+    /// A chevron against a bar, pointing right: the last page.
+    GoLast,
     Check,
     WindowClose,
     WindowMinimize,
@@ -47,6 +53,9 @@ impl Icon {
             Icon::GoPrevious => r#"<path d="M10 3L5 8l5 5"/>"#,
             Icon::GoDown => r#"<path d="M3 6l5 5 5-5"/>"#,
             Icon::GoUp => r#"<path d="M3 10l5-5 5 5"/>"#,
+            Icon::GoUpDown => r#"<path d="M4 6.5l4-4 4 4M4 9.5l4 4 4-4"/>"#,
+            Icon::GoFirst => r#"<path d="M3.5 3v10M11 3L6 8l5 5"/>"#,
+            Icon::GoLast => r#"<path d="M12.5 3v10M5 3l5 5-5 5"/>"#,
             Icon::Check => r#"<path d="M3 8.5l3.5 3.5L13 4.5"/>"#,
             Icon::WindowClose => r#"<path d="M4 4l8 8M12 4l-8 8"/>"#,
             Icon::WindowMinimize => r#"<path d="M3 12h10"/>"#,

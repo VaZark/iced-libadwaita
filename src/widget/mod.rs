@@ -26,11 +26,13 @@ mod flex;
 mod form;
 mod forms;
 mod header_bar;
+mod infinite;
 mod menu;
 mod meta_component;
 mod motion;
 mod multi_select;
 mod navigation;
+mod pagination;
 mod preferences;
 mod range_slider;
 mod responsive_table;
@@ -99,6 +101,7 @@ pub use forms::{
 };
 pub use header_bar::{HeaderBar, WindowControls, header_bar, window_title};
 pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent};
+pub use infinite::{InfiniteList, LoadTrigger};
 pub use menu::{Menu, MenuButton, MenuItem, MenuPresentation, menu_button, primary_menu};
 pub use meta_component::MetaComponent;
 pub use motion::{
@@ -114,6 +117,8 @@ pub use navigation::{
     navigation_sidebar_rounded_padded, navigation_view, sidebar_row, sidebar_row_padded,
     sidebar_width_for, split_collapsed,
 };
+pub use pagination::label as pagination_label;
+pub use pagination::{PageSize, Pagination, PaginationSize, page_size_dropdown};
 pub use preferences::{PreferencesGroup, PreferencesPage, preferences_group, preferences_page};
 pub use range_slider::{RangeSlider, range_slider};
 pub use responsive_table::{

@@ -16,17 +16,32 @@
 //!     .card(|p| column![heading(&p.name), caption(&p.email)].into())
 //! ```
 //!
+//! **Sorting.** Mark columns with [`Column::sortable`]`(key)`, pass the app's
+//! [`SortState`](crate::primitives::sorting::SortState) to [`ResponsiveTable::sort`] and handle
+//! [`ResponsiveTable::on_sort`]`(key)` by calling `state.activate(key, false)` (ascending,
+//! descending, unsorted; see [`primitives::sorting`](crate::primitives::sorting)) and sorting the
+//! rows with `state.apply`. In the table the header cell is a button with an arrow (none, up,
+//! down; a number when several columns sort); the cards presentation has no header row, so the
+//! same events come from a **sort control above the cards**: a dropdown of the sortable columns
+//! and a direction button. Both send the same `on_sort(key)`, so the app has one code path.
+//! Sorting the data and paging it are the app's job; [`ResponsiveTable::footer`] is where a
+//! [`Pagination`](super::Pagination) goes.
+//!
 //! `ResponsiveTable` is a [`MetaComponent`](super::MetaComponent) with two variants, a table
 //! and cards; the choice is [`ResponsiveTable::when`]. Like [`responsive`](iced::widget::responsive),
 //! it fills its container and scrolls vertically by itself; give it a bounded height.
 
 use super::Element;
 use super::meta_component::MetaComponent;
-use crate::Metrics;
 use crate::breakpoints::WidthClass;
 use crate::primitives::When;
-use iced::Length;
-use iced::widget::{column, container, row, space};
+use crate::primitives::sorting::{Direction, SortState};
+use crate::style::button as sb;
+use crate::{Icon, Metrics, Theme};
+use iced::alignment::Vertical;
+use iced::widget::{button, column, container, row, space, text};
+use iced::{Length, Padding};
+use std::any::{Any, TypeId};
 use std::rc::Rc;
 
 /// What the table is drawn as.
@@ -59,6 +74,7 @@ pub struct Column<'a, T, M> {
     cell: Cell<'a, T, M>,
     width: Length,
     min_width: f32,
+    sort_key: Option<Rc<dyn Any>>,
 }
 
 impl<'a, T, M> Column<'a, T, M> {
@@ -68,7 +84,14 @@ impl<'a, T, M> Column<'a, T, M> {
             cell: Rc::new(cell),
             width: Length::Fill,
             min_width: 100.0,
+            sort_key: None,
         }
+    }
+    /// Makes the column sortable under `key` (any type; the table's [`sort`](ResponsiveTable::sort)
+    /// and [`on_sort`](ResponsiveTable::on_sort) must use the same type).
+    pub fn sortable<K: Any>(mut self, key: K) -> Self {
+        self.sort_key = Some(Rc::new(key));
+        self
     }
     /// The column's share of the table width (default `Fill`).
     pub fn width(mut self, w: impl Into<Length>) -> Self {
@@ -82,6 +105,12 @@ impl<'a, T, M> Column<'a, T, M> {
     }
 }
 
+/// How the table reads the app's sort state and reports a header activation, type-erased so
+/// that `ResponsiveTable` does not need the key type as a parameter.
+type DirOf<'a> = Rc<dyn Fn(&dyn Any) -> Option<(Direction, Option<usize>)> + 'a>;
+type Fire<'a, M> = Rc<dyn Fn(&dyn Any) -> M + 'a>;
+type Footer<'a, M> = Rc<dyn Fn() -> Element<'a, M> + 'a>;
+
 /// Rows of `T` as a table or as cards, by the width of the container. See the
 /// [module](self).
 pub struct ResponsiveTable<'a, T, M> {
@@ -91,6 +120,9 @@ pub struct ResponsiveTable<'a, T, M> {
     mode: Mode,
     metrics: Metrics,
     height: Length,
+    sort: Option<(TypeId, DirOf<'a>)>,
+    on_sort: Option<(TypeId, Fire<'a, M>)>,
+    footer: Option<Footer<'a, M>>,
 }
 
 impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
@@ -102,6 +134,9 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
             mode: Mode::Auto,
             metrics: Metrics::desktop(),
             height: Length::Fill,
+            sort: None,
+            on_sort: None,
+            footer: None,
         }
     }
     pub fn column(mut self, c: Column<'a, T, M>) -> Self {
@@ -128,6 +163,54 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
         self
     }
 
+    /// The sort state to show (arrows on the headers, the cards' sort control). The table does
+    /// not sort anything: sort the rows you pass in with [`SortState::apply`].
+    pub fn sort<K: Clone + PartialEq + 'static>(mut self, state: &'a SortState<K>) -> Self {
+        self.sort = Some((
+            TypeId::of::<K>(),
+            Rc::new(move |any| {
+                let key = any.downcast_ref::<K>()?;
+                state.direction(key).map(|d| (d, state.priority(key)))
+            }),
+        ));
+        self
+    }
+    /// A sortable column was activated (its header, or its entry in the cards' sort control;
+    /// the direction button sends the current column). Call `state.activate(key, false)`.
+    pub fn on_sort<K: Clone + 'static>(mut self, f: impl Fn(K) -> M + 'a) -> Self {
+        self.on_sort = Some((
+            TypeId::of::<K>(),
+            Rc::new(move |any| f(any.downcast_ref::<K>().expect("checked by type id").clone())),
+        ));
+        self
+    }
+    /// Content below the rows, outside the scrolling part: a [`Pagination`](super::Pagination)
+    /// bar, a count. A closure, since the table is built once per presentation.
+    pub fn footer(mut self, build: impl Fn() -> Element<'a, M> + 'a) -> Self {
+        self.footer = Some(Rc::new(build));
+        self
+    }
+
+    /// A column's sort key and everything a header needs, if it is sortable here: the message
+    /// for activating it, its direction and its priority (with several sort keys).
+    fn sorting(&self, col: &Column<'a, T, M>) -> Option<ColumnSort<M>> {
+        let key = col.sort_key.as_deref()?;
+        let (id, fire) = self.on_sort.as_ref()?;
+        if (*key).type_id() != *id {
+            return None;
+        }
+        let dir = self
+            .sort
+            .as_ref()
+            .filter(|(sid, _)| sid == id)
+            .and_then(|(_, f)| f(key));
+        Some(ColumnSort {
+            press: fire(key),
+            dir: dir.map(|d| d.0),
+            priority: dir.and_then(|d| d.1),
+        })
+    }
+
     /// The width the columns need to sit side by side, with gaps and padding.
     pub fn needed_width(&self) -> f32 {
         let m = &self.metrics;
@@ -137,13 +220,19 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
     }
 }
 
+struct ColumnSort<M> {
+    press: M,
+    dir: Option<Direction>,
+    priority: Option<usize>,
+}
+
 fn dim_caption<'a, M: 'a>(s: &str) -> Element<'a, M> {
     super::typography::caption_heading(s.to_owned())
         .style(crate::style::text::dim)
         .into()
 }
 
-impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
+impl<'a, T: 'a, M: Clone + 'a> ResponsiveTable<'a, T, M> {
     /// The condition under which the table (rather than cards) is shown, per [`Mode`].
     pub fn when(&self) -> Option<When> {
         let needed = self.needed_width();
@@ -169,7 +258,7 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
     }
 }
 
-impl<'a, T: 'a, M: 'a> From<ResponsiveTable<'a, T, M>> for Element<'a, M> {
+impl<'a, T: 'a, M: Clone + 'a> From<ResponsiveTable<'a, T, M>> for Element<'a, M> {
     fn from(t: ResponsiveTable<'a, T, M>) -> Self {
         t.into_meta().into()
     }
@@ -179,7 +268,7 @@ fn is_empty<T, M>(t: &ResponsiveTable<'_, T, M>) -> bool {
     t.rows.is_empty() || t.columns.is_empty()
 }
 
-fn table_view<'a, T: 'a, M: 'a>(t: &ResponsiveTable<'a, T, M>) -> Element<'a, M> {
+fn table_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Element<'a, M> {
     if is_empty(t) {
         return space().into();
     }
@@ -191,7 +280,7 @@ fn table_view<'a, T: 'a, M: 'a>(t: &ResponsiveTable<'a, T, M>) -> Element<'a, M>
             .map(|(c, col)| container(c).width(col.width).into()))
         .spacing(m.row_spacing)
     };
-    let header = line(t.columns.iter().map(|c| dim_caption(&c.header)).collect());
+    let header = line(t.columns.iter().map(|c| header_cell(t, c)).collect());
     let mut rows = t
         .rows
         .iter()
@@ -200,15 +289,140 @@ fn table_view<'a, T: 'a, M: 'a>(t: &ResponsiveTable<'a, T, M>) -> Element<'a, M>
     for r in rows {
         card = card.push(r);
     }
-    let body = column![
+    let mut body = column![
         container(header).padding(m.card_padding),
         super::scrolled_window(card).height(Length::Fill),
     ]
     .spacing(m.space_s);
+    if let Some(footer) = &t.footer {
+        body = body.push(footer());
+    }
     container(body).padding(m.page_padding).into()
 }
 
-fn cards_view<'a, T: 'a, M: 'a>(t: &ResponsiveTable<'a, T, M>) -> Element<'a, M> {
+/// A column header: dim caption text, or for a sortable column a button with the arrow.
+fn header_cell<'a, T: 'a, M: Clone + 'a>(
+    t: &ResponsiveTable<'a, T, M>,
+    col: &Column<'a, T, M>,
+) -> Element<'a, M> {
+    let Some(sort) = t.sorting(col) else {
+        return dim_caption(&col.header);
+    };
+    let m = &t.metrics;
+    let sorted = sort.dir.is_some();
+    let arrow = match sort.dir {
+        Some(Direction::Asc) => Icon::GoUp,
+        Some(Direction::Desc) => Icon::GoDown,
+        None => Icon::GoUpDown,
+    };
+    // SVG tints ignore alpha: a solid foreground when sorted, a solid dim mix otherwise.
+    let icon =
+        arrow
+            .view(m.icon_size * 0.75)
+            .style(move |th: &Theme, _| iced::widget::svg::Style {
+                color: Some(if sorted {
+                    th.semantic.icon_solid(false)
+                } else {
+                    th.semantic.dim_solid()
+                }),
+            });
+    let mut content = row![super::typography::caption_heading(col.header.clone()), icon]
+        .spacing(m.space_xs)
+        .align_y(Vertical::Center);
+    if let Some(n) = sort.priority {
+        content = content.push(super::typography::caption(n.to_string()));
+    }
+    // No padding: the label stays on the column's left edge, aligned with the cells.
+    button(content)
+        .padding(Padding::ZERO)
+        .style(move |th: &Theme, status| {
+            let hot = sorted || matches!(status, button::Status::Hovered | button::Status::Pressed);
+            button::Style {
+                text_color: if hot {
+                    th.semantic.window.fg
+                } else {
+                    th.semantic.dim()
+                },
+                ..button::Style::default()
+            }
+        })
+        .on_press(sort.press)
+        .into()
+}
+
+/// The cards' stand-in for the header row: a dropdown of the sortable columns and a button
+/// that cycles the direction of the current one. `None` if nothing is sortable.
+fn sort_control<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Option<Element<'a, M>> {
+    let m = &t.metrics;
+    let cols: Vec<(&Column<'a, T, M>, ColumnSort<M>)> = t
+        .columns
+        .iter()
+        .filter_map(|c| t.sorting(c).map(|s| (c, s)))
+        .collect();
+    if cols.is_empty() {
+        return None;
+    }
+    let current = cols
+        .iter()
+        .find(|(_, s)| s.dir.is_some() && s.priority.is_none_or(|p| p == 1));
+    let side = m.button_min_height;
+    let items = cols
+        .iter()
+        .map(|(c, s)| super::menu_item(c.header.clone(), s.dir.is_some(), s.press.clone()));
+    let trigger = container(
+        row![
+            text(
+                current
+                    .map_or("None", |(c, _)| c.header.as_str())
+                    .to_owned()
+            )
+            .wrapping(text::Wrapping::None),
+            Icon::GoDown.view(m.icon_size),
+        ]
+        .spacing(m.space_s)
+        .align_y(Vertical::Center),
+    )
+    .center_y(Length::Fixed(side - m.button_padding.y()));
+    let picker = super::Dropdown::custom(trigger, super::popover(items, 280.0));
+
+    let (arrow, press) = match current {
+        Some((_, s)) => (
+            if s.dir == Some(Direction::Desc) {
+                Icon::GoDown
+            } else {
+                Icon::GoUp
+            },
+            Some(s.press.clone()),
+        ),
+        None => (Icon::GoUpDown, None),
+    };
+    let enabled = press.is_some();
+    let dir_button =
+        button(
+            container(arrow.view(m.icon_size).style(move |th: &Theme, _| {
+                iced::widget::svg::Style {
+                    color: Some(th.semantic.icon_solid(!enabled)),
+                }
+            }))
+            .center(Length::Fixed(side)),
+        )
+        .padding(Padding::ZERO)
+        .style(sb::default)
+        .on_press_maybe(press);
+
+    Some(
+        row![
+            super::typography::caption_heading("Sort by").style(crate::style::text::dim),
+            picker,
+            dir_button,
+        ]
+        .spacing(m.space_s)
+        .align_y(Vertical::Center)
+        .into(),
+    )
+}
+
+fn cards_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Element<'a, M> {
     if is_empty(t) {
         return space().into();
     }
@@ -220,8 +434,16 @@ fn cards_view<'a, T: 'a, M: 'a>(t: &ResponsiveTable<'a, T, M>) -> Element<'a, M>
         };
         super::Card::new(inner).into()
     });
-    let body = super::scrolled_window(column(cards).spacing(m.space_m).width(Length::Fill))
+    let scroll = super::scrolled_window(column(cards).spacing(m.space_m).width(Length::Fill))
         .height(Length::Fill);
+    let mut body = column![].spacing(m.space_m);
+    if let Some(sort) = sort_control(t) {
+        body = body.push(sort);
+    }
+    body = body.push(scroll);
+    if let Some(footer) = &t.footer {
+        body = body.push(footer());
+    }
     container(body).padding(m.page_padding).into()
 }
 
@@ -305,5 +527,51 @@ mod tests {
             .column(Column::new("b", |_| space().into()).min_width(50.0));
         let m = Metrics::desktop();
         assert_eq!(t.needed_width(), 150.0 + m.row_spacing + m.card_padding.x());
+    }
+
+    #[derive(Clone, Copy, PartialEq, Debug)]
+    enum Key {
+        Name,
+        Age,
+    }
+
+    #[test]
+    fn sorting_reads_the_state_and_reports_the_key() {
+        let rows = [()];
+        let mut state = SortState::new().multi(true);
+        state.activate(Key::Age, false);
+        state.activate(Key::Name, true);
+        let t = ResponsiveTable::<(), Key>::new(&rows)
+            .column(Column::new("Name", |_| space().into()).sortable(Key::Name))
+            .column(Column::new("Age", |_| space().into()).sortable(Key::Age))
+            .column(Column::new("Plain", |_| space().into()))
+            .sort(&state)
+            .on_sort(|k: Key| k);
+        let s = t.sorting(&t.columns[0]).unwrap();
+        assert_eq!(
+            (s.press, s.dir, s.priority),
+            (Key::Name, Some(Direction::Asc), Some(2))
+        );
+        let s = t.sorting(&t.columns[1]).unwrap();
+        assert_eq!((s.press, s.priority), (Key::Age, Some(1)));
+        assert!(t.sorting(&t.columns[2]).is_none(), "no key, not sortable");
+    }
+
+    #[test]
+    fn a_column_is_not_sortable_without_a_handler_or_with_another_key_type() {
+        let rows = [()];
+        let state = SortState::<Key>::new();
+        let t = ResponsiveTable::<(), Key>::new(&rows)
+            .column(Column::new("Name", |_| space().into()).sortable(Key::Name))
+            .sort(&state);
+        assert!(t.sorting(&t.columns[0]).is_none(), "no on_sort");
+        let t = t.on_sort(|n: u8| Key::Age.max_if(n));
+        assert!(t.sorting(&t.columns[0]).is_none(), "key type differs");
+    }
+
+    impl Key {
+        fn max_if(self, _: u8) -> Key {
+            self
+        }
     }
 }
