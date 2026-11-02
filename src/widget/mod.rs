@@ -14,6 +14,7 @@ mod button;
 mod carousel;
 mod collapsible;
 mod date_input;
+mod date_range_input;
 mod dialog;
 mod divider;
 mod dropdown;
@@ -50,7 +51,7 @@ pub mod typography;
 pub use crate::primitives::anchor::{self, Align as AnchorAlign, Placed, Placement, Side, place};
 pub use crate::primitives::date::{Date, days_in_month, is_leap_year, validate as validate_date};
 pub use crate::primitives::form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
-pub use crate::primitives::range::{Collide, DateRange, Range, Track};
+pub use crate::primitives::range::{Collide, DateRange, DayRole, Edge, Range, Thumb, Track};
 pub use crate::primitives::validation::{
     self, Interaction, Presentation as ValidationState, Validity,
 };
@@ -67,6 +68,7 @@ pub use button::{
 pub use carousel::{Carousel, CarouselIndicator, carousel};
 pub use collapsible::Collapsible;
 pub use date_input::DateInput;
+pub use date_range_input::DateRangeInput;
 pub use dialog::{
     AboutDialog, AlertDialog, ResponseAppearance, dialog, dialog_in_window, present_dialog,
 };

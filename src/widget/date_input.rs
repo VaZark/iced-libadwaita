@@ -19,6 +19,7 @@
 use super::dropdown::{Align, Appearance, Dropdown, popover};
 use super::{Element, EntryState, entry};
 use crate::primitives::date::{Date, MONTHS, WEEKDAYS};
+use crate::primitives::range::within;
 use crate::style::button as sb;
 use crate::{Icon, Metrics};
 use iced::Length;
@@ -109,10 +110,6 @@ impl<'a, M> DateInput<'a, M> {
         self
     }
 
-    fn allowed(&self, d: Date) -> bool {
-        self.min.is_none_or(|m| d >= m) && self.max.is_none_or(|m| d <= m)
-    }
-
     /// The validity of the typed text ([`crate::primitives::date::validate`]).
     pub fn validity(&self) -> crate::primitives::validation::Validity {
         crate::primitives::date::validate(self.text, self.min, self.max)
@@ -129,6 +126,61 @@ impl<'a, M> DateInput<'a, M> {
     }
 }
 
+/// Side of a day cell in the calendar.
+pub(super) const CELL: f32 = 34.0;
+/// Width of the calendar popover: seven cells, their gaps and the popover's padding.
+pub(super) const POPOVER_WIDTH: f32 = CELL * 7.0 + 2.0 * 6.0 + 12.0 + 12.0;
+
+/// The month grid shared by [`DateInput`] and [`DateRangeInput`](super::DateRangeInput): a
+/// header with the month and the previous / next buttons, the weekday names and `day(date)` for
+/// every day. `band`: no gap between the days of a week, so a highlighted range reads as one
+/// band.
+pub(super) fn calendar<'a, M: Clone + 'a>(
+    view: Date,
+    m: Metrics,
+    on_view: &Option<Box<dyn Fn(Date) -> M + 'a>>,
+    band: bool,
+    day: impl Fn(Date) -> Element<'a, M>,
+) -> Element<'a, M> {
+    let nav = |icon: Icon, to: Date| {
+        let mut b = button(icon.view(m.icon_size))
+            .padding(m.space_s)
+            .style(sb::flat);
+        if let Some(f) = on_view {
+            b = b.on_press(f(to));
+        }
+        b
+    };
+    let header = row![
+        nav(Icon::GoPrevious, view.prev_month()),
+        container(text(format!(
+            "{} {}",
+            MONTHS[view.month as usize - 1],
+            view.year
+        )))
+        .width(Length::Fill)
+        .align_x(Horizontal::Center),
+        nav(Icon::GoNext, view.next_month()),
+    ]
+    .align_y(Vertical::Center);
+    let weekdays = row(WEEKDAYS.iter().map(|w| {
+        container(text(*w).size(m.space_m).style(crate::style::text::dim))
+            .center_x(Length::Fixed(CELL))
+            .into()
+    }));
+    let mut grid = column![weekdays].spacing(2);
+    for week in view.month_grid() {
+        grid = grid.push(
+            row(week.iter().map(|slot| match slot {
+                None => space().width(CELL).height(CELL).into(),
+                Some(d) => day(Date { day: *d, ..view }),
+            }))
+            .spacing(if band { 0.0 } else { 2.0 }),
+        );
+    }
+    column![header, grid].spacing(m.space_s).into()
+}
+
 impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
     fn from(mut d: DateInput<'a, M>) -> Self {
         let m = d.metrics;
@@ -142,64 +194,28 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
         {
             field = field.on_input(f);
         }
-        let v = d.view;
-        let nav = |icon: Icon, to: Date, on: &Option<Box<dyn Fn(Date) -> M + 'a>>| {
-            let mut b = button(icon.view(m.icon_size))
-                .padding(m.space_s)
-                .style(sb::flat);
-            if let Some(f) = on {
-                b = b.on_press(f(to));
+        let selected = d.selected;
+        let (min, max) = (d.min, d.max);
+        let grid = calendar(d.view, m, &d.on_view, false, |date| {
+            let mut b = button(
+                container(text(date.day.to_string()))
+                    .center_x(Length::Fixed(CELL - 4.0))
+                    .center_y(Length::Fixed(CELL - 4.0)),
+            )
+            .padding(0)
+            .style(sb::menu_item(selected == Some(date)));
+            if within(date, min, max)
+                && let Some(f) = &d.on_pick
+            {
+                b = b.on_press(f(date));
             }
-            b
-        };
-        let header = row![
-            nav(Icon::GoPrevious, v.prev_month(), &d.on_view),
-            container(text(format!("{} {}", MONTHS[v.month as usize - 1], v.year)))
-                .width(Length::Fill)
-                .align_x(Horizontal::Center),
-            nav(Icon::GoNext, v.next_month(), &d.on_view),
-        ]
-        .align_y(Vertical::Center);
-        let cell = 34.0;
-        let weekdays = row(WEEKDAYS.iter().map(|w| {
-            container(text(*w).size(m.space_m).style(crate::style::text::dim))
-                .center_x(Length::Fixed(cell))
-                .into()
-        }));
-        let mut grid = column![weekdays].spacing(2);
-        for week in v.month_grid() {
-            grid = grid.push(
-                row(week.iter().map(|slot| match slot {
-                    None => space().width(cell).height(cell).into(),
-                    Some(day) => {
-                        let date = Date { day: *day, ..v };
-                        let chosen = d.selected == Some(date);
-                        let mut b = button(
-                            container(text(day.to_string()))
-                                .center_x(Length::Fixed(cell - 4.0))
-                                .center_y(Length::Fixed(cell - 4.0)),
-                        )
-                        .padding(0)
-                        .style(sb::menu_item(chosen));
-                        if d.allowed(date)
-                            && let Some(f) = &d.on_pick
-                        {
-                            b = b.on_press(f(date));
-                        }
-                        b.into()
-                    }
-                }))
-                .spacing(2),
-            );
-        }
-        let calendar = popover(
-            [Element::from(column![header, grid].spacing(m.space_s))],
-            400.0,
-        );
+            b.into()
+        });
+        let calendar = popover([grid], 400.0);
         let opener = Dropdown::custom(Icon::GoDown.view(m.icon_size), calendar)
             .appearance(Appearance::Button)
             .align(Align::End)
-            .popover_width(cell * 7.0 + 2.0 * 6.0 + 12.0 + 12.0)
+            .popover_width(POPOVER_WIDTH)
             .keep_open(true)
             .disabled(d.disabled)
             .open_initially(d.open_initially);
