@@ -689,6 +689,117 @@ impl<'a, M: Clone + 'a> From<SliderRow<'a, M>> for Element<'a, M> {
     }
 }
 
+/// `SliderRow` with two thumbs: a row with a title, an optional subtitle and a
+/// [`RangeSlider`](super::RangeSlider), with the current `lo – hi` shown next to it. Wraps
+/// below the title like [`SliderRow`] (see [`CollapseBehavior`]).
+pub struct RangeSliderRow<'a, M> {
+    row: ActionRow<'a, M>,
+    slider: super::RangeSlider<'a, M>,
+    value: (f32, f32),
+    step: f32,
+    format: Option<Box<dyn Fn(f32) -> String + 'a>>,
+    bounds: (f32, f32),
+    basis: f32,
+    metrics: Metrics,
+}
+
+impl<'a, M> RangeSliderRow<'a, M> {
+    pub fn new(
+        title: impl Into<String>,
+        value: (f32, f32),
+        range: std::ops::RangeInclusive<f32>,
+        on_change: impl Fn((f32, f32)) -> M + 'a,
+    ) -> Self {
+        Self {
+            row: ActionRow::new(title),
+            bounds: (*range.start(), *range.end()),
+            slider: super::RangeSlider::new(range, value, on_change),
+            value,
+            step: 1.0,
+            format: None,
+            basis: 240.0,
+            metrics: Metrics::desktop(),
+        }
+    }
+    pub fn subtitle(mut self, s: impl Into<String>) -> Self {
+        self.row = self.row.subtitle(s);
+        self
+    }
+    pub fn step(mut self, step: f32) -> Self {
+        self.step = step;
+        self.slider = self.slider.step(step);
+        self
+    }
+    pub fn min_gap(mut self, gap: f32) -> Self {
+        self.slider = self.slider.min_gap(gap);
+        self
+    }
+    pub fn collide(mut self, c: crate::primitives::range::Collide) -> Self {
+        self.slider = self.slider.collide(c);
+        self
+    }
+    pub fn marks(mut self, marks: impl IntoIterator<Item = f32>) -> Self {
+        self.slider = self.slider.marks(marks);
+        self
+    }
+    pub fn disabled(mut self, d: bool) -> Self {
+        self.slider = self.slider.disabled(d);
+        self
+    }
+    /// How one end is written (default: as many decimals as the step has).
+    pub fn format(mut self, f: impl Fn(f32) -> String + 'a) -> Self {
+        self.format = Some(Box::new(f));
+        self
+    }
+    /// The width the slider and the value take while sharing a line with the title.
+    pub fn basis(mut self, px: f32) -> Self {
+        self.basis = px;
+        self
+    }
+    pub fn collapse(mut self, c: CollapseBehavior) -> Self {
+        self.row = self.row.collapse(c);
+        self
+    }
+    pub fn metrics(mut self, m: Metrics) -> Self {
+        self.row = self.row.metrics(m);
+        self.metrics = m;
+        self
+    }
+}
+
+impl<'a, M: Clone + 'a> From<RangeSliderRow<'a, M>> for Element<'a, M> {
+    fn from(r: RangeSliderRow<'a, M>) -> Self {
+        let decimals = {
+            let mut d = 0;
+            while d < 4 && (r.step * 10f32.powi(d) - (r.step * 10f32.powi(d)).round()).abs() > 1e-4
+            {
+                d += 1;
+            }
+            d as usize
+        };
+        let fmt = |v: f32| match &r.format {
+            Some(f) => f(v),
+            None => format!("{v:.decimals$}"),
+        };
+        let size = r.metrics.space_m + 1.0;
+        // Wide enough for the longest end, so the slider does not move while dragging.
+        let longest = fmt(r.bounds.0).len().max(fmt(r.bounds.1).len()) as f32;
+        let label = container(
+            text(format!("{} \u{2013} {}", fmt(r.value.0), fmt(r.value.1)))
+                .size(size)
+                .wrapping(text::Wrapping::None)
+                .style(crate::style::text::dim),
+        )
+        .width(Length::Fixed((2.0 * longest + 3.0) * size * 0.56))
+        .align_x(Horizontal::Right);
+        let both = row![r.slider, label]
+            .spacing(r.metrics.space_m)
+            .align_y(Vertical::Center)
+            .width(Length::Fill);
+        r.row.suffix(both).suffix_basis(r.basis).into()
+    }
+}
+
 /// A row with a toggle group (segmented control) as its suffix. The group stretches to
 /// 100% (equal `flex: 1` segments) when it wraps below the title.
 pub struct ToggleGroupRow<'a, T, M> {

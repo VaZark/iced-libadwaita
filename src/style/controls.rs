@@ -251,6 +251,9 @@ pub mod slider {
     use iced::widget::slider::{Handle, HandleShape, Rail, Status, Style};
     use iced::{Background, Border, Color};
 
+    /// Radius of the round handle, shared with the two-thumb [`RangeSlider`](crate::widget::RangeSlider).
+    pub const HANDLE_RADIUS: f32 = 9.0;
+
     /// `GtkScale`: thin accent progress, round white handle.
     pub fn default(theme: &Theme, status: Status) -> Style {
         let s = &theme.semantic;
@@ -269,7 +272,9 @@ pub mod slider {
                 border: Border::default().rounded(3.0),
             },
             handle: Handle {
-                shape: HandleShape::Circle { radius: 9.0 },
+                shape: HandleShape::Circle {
+                    radius: HANDLE_RADIUS,
+                },
                 background: Background::Color(handle),
                 border_width: 1.0,
                 border_color: alpha(Color::BLACK, 0.2),

@@ -29,6 +29,7 @@ mod motion;
 mod multi_select;
 mod navigation;
 mod preferences;
+mod range_slider;
 mod responsive_table;
 mod rows;
 mod scrolled;
@@ -47,6 +48,7 @@ pub mod typography;
 
 pub use crate::primitives::anchor::{self, Align as AnchorAlign, Placed, Placement, Side, place};
 pub use crate::primitives::date::{Date, days_in_month, is_leap_year, validate as validate_date};
+pub use crate::primitives::range::{Collide, DateRange, Range, Track};
 pub use crate::primitives::validation::{
     self, Interaction, Presentation as ValidationState, Validity,
 };
@@ -103,12 +105,13 @@ pub use navigation::{
     sidebar_width_for, split_collapsed,
 };
 pub use preferences::{PreferencesGroup, PreferencesPage, preferences_group, preferences_page};
+pub use range_slider::{RangeSlider, range_slider};
 pub use responsive_table::{
     Column, Mode as TableMode, Presentation as TablePresentation, ResponsiveTable,
 };
 pub use rows::{
-    ActionRow, ButtonRow, ComboRow, EntryRow, ExpanderRow, SliderRow, SpinRow, SwitchRow,
-    ToggleGroupRow, action_row, boxed_list,
+    ActionRow, ButtonRow, ComboRow, EntryRow, ExpanderRow, RangeSliderRow, SliderRow, SpinRow,
+    SwitchRow, ToggleGroupRow, action_row, boxed_list,
 };
 pub use scrolled::{scrollbar, scrolled_window, scrolled_window_both, scrolled_window_horizontal};
 pub use sections::{SectionButton, SectionIcon, section_button, section_icon, section_size};
