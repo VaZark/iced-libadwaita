@@ -9,6 +9,8 @@
 //!
 //! See `docs/hig-inferences/design-language/windows-and-csd.md`.
 
+pub mod dialog;
+
 use crate::widget::Element;
 use crate::{Metrics, Theme};
 use iced::widget::{column, container, mouse_area, row, space, stack};

@@ -37,7 +37,7 @@ How the gallery is organized, and when a component gets a nested page: [examples
 
 #### Layout of the repo
 
-- `src/`: the library (`widget/`, `style/`, `theme`, `config`, `animation`, …).
+- `src/`: the library (`widget/`, `primitives/` headless logic, `window/` window logic and the dialogs, `style/`, `theme`, `config`, `animation`, …).
 - `examples/`: `gallery/` (including `appshell.rs`, the adaptive-layout demo) and `catalog.rs` (prints the component catalog).
 - `docs/lib/`: guidance on using the library. `docs/hig-inferences/`: what we target.
 

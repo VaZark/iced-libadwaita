@@ -17,7 +17,6 @@ mod carousel;
 mod collapsible;
 mod date_input;
 mod date_range_input;
-mod dialog;
 mod divider;
 mod dropdown;
 mod elevated;
@@ -63,6 +62,10 @@ pub use crate::primitives::validation::{
     self, Interaction, Presentation as ValidationState, Validity,
 };
 pub use crate::primitives::{Selection, Trigger, When};
+pub use crate::window::dialog::{
+    AboutDialog, AlertDialog, ResponseAppearance, dialog, dialog_in_window, preferences_dialog,
+    present_dialog, shortcuts_dialog,
+};
 pub use accordion::{Accordion, AccordionItem};
 pub use anchored::{
     Anchored, Indicator, dock_banner, dock_center, dock_drawer, dock_footer, docked_anchored,
@@ -80,9 +83,6 @@ pub use carousel::{Carousel, CarouselIndicator, carousel};
 pub use collapsible::Collapsible;
 pub use date_input::DateInput;
 pub use date_range_input::DateRangeInput;
-pub use dialog::{
-    AboutDialog, AlertDialog, ResponseAppearance, dialog, dialog_in_window, present_dialog,
-};
 pub use divider::{Divider, DividerTone, divider};
 pub use dropdown::{
     Align as PopoverAlign, Appearance as DropdownAppearance, Dropdown,
@@ -92,9 +92,8 @@ pub use dropdown::{
 pub use elevated::{Elevated, card_shadow};
 pub use extra::{
     bottom_sheet, bottom_sheet_in_window, breakpoint_bin, carousel_indicator_dots,
-    carousel_indicator_lines, inline_view_switcher, password_entry_row, path_bar,
-    preferences_dialog, shortcut_label, shortcuts_dialog, sidebar, tab_bar, tab_button,
-    view_switcher, view_switcher_bar, window, wrap_box,
+    carousel_indicator_lines, inline_view_switcher, password_entry_row, path_bar, shortcut_label,
+    sidebar, tab_bar, tab_button, view_switcher, view_switcher_bar, window, wrap_box,
 };
 pub use field::{Field, FieldLayout, outlined as field_outline};
 pub use flex::FlexRow;

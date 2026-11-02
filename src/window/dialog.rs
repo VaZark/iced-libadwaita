@@ -1,10 +1,12 @@
-//! `AdwDialog`, `AdwAlertDialog`, `AdwAboutDialog`.
+//! Dialogs, with the window logic they live beside (`window`): `AdwDialog` (modal over a
+//! base), `AdwAlertDialog`, `AdwAboutDialog`, and the dialogs with a header bar
+//! (`AdwShortcutsDialog`, `AdwPreferencesDialog`).
 
-use super::Element;
 use crate::style::{button as sb, container as sc, text as st};
-use crate::{Metrics, Role, Theme, Typography};
+use crate::widget::Element;
+use crate::{DecorationLayout, Metrics, Role, Theme, Typography, WindowButton};
 use iced::Length;
-use iced::alignment::Horizontal;
+use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{button, column, container, mouse_area, opaque, row, space, stack, text};
 
 /// Presents `dialog` modally over `base` with a dimmed backdrop.
@@ -38,10 +40,10 @@ pub fn dialog_in_window<'a, M: Clone + 'a>(
             .center(Length::Fill)
             .padding(12)
     ];
-    super::layered(
+    crate::widget::layered(
         base,
         Some(Element::from(
-            super::entrance(layer, iced::Vector::new(0.0, 24.0)).scrim(window_radius),
+            crate::widget::entrance(layer, iced::Vector::new(0.0, 24.0)).scrim(window_radius),
         )),
     )
 }
@@ -57,7 +59,7 @@ pub fn present_dialog<'a, M: Clone + 'a>(
 ) -> Element<'a, M> {
     match dialog {
         Some(d) => dialog_in_window(base, d, on_backdrop, window_radius),
-        None => super::layered(base, None),
+        None => crate::widget::layered(base, None),
     }
 }
 
@@ -311,4 +313,81 @@ impl<'a, M: Clone + 'a> From<AboutDialog<'a, M>> for Element<'a, M> {
             .style(sc::dialog)
             .into()
     }
+}
+
+/// `AdwShortcutsDialog` content: sections of `(label, accelerator)`.
+pub fn shortcuts_dialog<'a, M: Clone + 'a>(
+    sections: Vec<(String, Vec<(String, String)>)>,
+    on_close: M,
+) -> Element<'a, M> {
+    let m = Metrics::desktop();
+    let t = Typography::default();
+    let mut col = column![].spacing(m.space_l);
+    for (title, items) in sections {
+        let mut list = column![t.heading(title)].spacing(m.space_s);
+        for (label, accel) in items {
+            list = list.push(
+                row![
+                    container(t.body(label)).width(Length::Fill),
+                    crate::widget::shortcut_label(&accel)
+                ]
+                .align_y(Vertical::Center),
+            );
+        }
+        col = col.push(list);
+    }
+    dialog_frame("Keyboard Shortcuts", col.into(), on_close, 480.0, 420.0)
+}
+
+/// `AdwPreferencesDialog`: a dialog with a header bar wrapping a page.
+pub fn preferences_dialog<'a, M: Clone + 'a>(
+    title: impl Into<String>,
+    page: impl Into<Element<'a, M>>,
+    on_close: M,
+) -> Element<'a, M> {
+    dialog_frame(&title.into(), page.into(), on_close, 640.0, 520.0)
+}
+
+fn dialog_frame<'a, M: Clone + 'a>(
+    title: &str,
+    body: Element<'a, M>,
+    on_close: M,
+    width: f32,
+    height: f32,
+) -> Element<'a, M> {
+    // `AdwHeaderBar` in a dialog: the dialog title and only a close button, on the
+    // side the system puts it (end by default). The header is flat so it shares the
+    // dialog's background.
+    let close_at_start = DecorationLayout::detect()
+        .start
+        .contains(&WindowButton::Close);
+    let close = |at: bool| {
+        if at {
+            vec![WindowButton::Close]
+        } else {
+            vec![]
+        }
+    };
+    let layout = DecorationLayout {
+        start: close(close_at_start),
+        end: close(!close_at_start),
+    };
+    let bar = crate::widget::header_bar()
+        .title(title.to_string())
+        // Flat: the header flows into the dialog body instead of having its own color.
+        .flat(true)
+        .window_controls(crate::widget::WindowControls {
+            on_close: Some(on_close),
+            layout: Some(layout),
+            ..Default::default()
+        });
+    let content = container(body).padding(Metrics::desktop().space_l);
+    container(crate::widget::toolbar_view(crate::widget::scrolled_window(content)).top_bar(bar))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .max_width(width)
+        .max_height(height)
+        .clip(true)
+        .style(sc::dialog)
+        .into()
 }
