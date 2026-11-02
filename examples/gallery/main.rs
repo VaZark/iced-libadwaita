@@ -12,7 +12,7 @@ use iced::widget::{column, container, text};
 use iced::{Element as IcedElement, Length, Subscription, Task, window};
 use iced_libadwaita as adw;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 type Element<'a> = adw::Element<'a, Message>;
 
@@ -182,8 +182,10 @@ struct Gallery {
     carousel: usize,
     carousel_indicator: w::CarouselIndicator,
     /// The toasts on screen, oldest first, each with its id (stacked notifications).
-    toasts: Vec<(u32, ToastSpec)>,
+    toasts: adw::primitives::notifications::Queue<ToastSpec>,
     toast_seq: u32,
+    /// Whether toasts dismiss themselves after 4 s (the queue's timeout).
+    toast_auto: bool,
     /// Screenshot harness: behave as if the window were narrow.
     narrow: bool,
     toast_position: w::ToastPosition,
@@ -279,8 +281,10 @@ enum Message {
     ShowToastSpec(ToastSpec),
     ToastPosition(w::ToastPosition),
     ToastTarget(w::ToastTarget),
-    ToastAction(u32),
-    DismissToast(u32),
+    ToastAction(adw::primitives::notifications::Id),
+    DismissToast(adw::primitives::notifications::Id),
+    ToastAuto(bool),
+    ToastTick(Instant),
     ClearToasts,
     Frame(std::time::Instant),
     Animations(bool),
@@ -491,8 +495,9 @@ impl Gallery {
                 sheet: false,
                 carousel: 0,
                 carousel_indicator: w::CarouselIndicator::default(),
-                toasts: Vec::new(),
+                toasts: adw::primitives::notifications::Queue::new(),
                 toast_seq: 0,
+                toast_auto: false,
                 narrow: false,
                 toast_position: cfg.toast_position,
                 toast_target: cfg.toast_target,
@@ -601,13 +606,10 @@ impl Gallery {
         t
     }
 
-    /// Adds a toast to the stack; at most four are kept, the oldest dropped first.
+    /// Adds a toast to the queue (at most four kept, the oldest dropped first).
     fn push_toast(&mut self, spec: ToastSpec) {
         self.toast_seq += 1;
-        self.toasts.push((self.toast_seq, spec));
-        if self.toasts.len() > 4 {
-            self.toasts.remove(0);
-        }
+        self.toasts.push(spec, Instant::now());
     }
 
     fn update(&mut self, msg: Message) -> Task<Message> {
@@ -731,11 +733,20 @@ impl Gallery {
             Message::ToastTarget(t) => self.toast_target = t,
             // The action runs and the toast is replaced by a plain confirmation.
             Message::ToastAction(id) => {
-                if let Some((_, t)) = self.toasts.iter_mut().find(|(i, _)| *i == id) {
-                    *t = ToastSpec::plain("File restored");
-                }
+                self.toasts
+                    .replace(id, ToastSpec::plain("File restored"), Instant::now());
             }
-            Message::DismissToast(id) => self.toasts.retain(|(i, _)| *i != id),
+            Message::DismissToast(id) => {
+                self.toasts.dismiss(id);
+            }
+            Message::ToastAuto(on) => {
+                self.toast_auto = on;
+                self.toasts
+                    .set_timeout(on.then_some(Duration::from_secs(4)));
+            }
+            Message::ToastTick(now) => {
+                self.toasts.expire(now);
+            }
             Message::ClearToasts => self.toasts.clear(),
             Message::Frame(now) => {
                 self.angle += 0.12;
@@ -1021,8 +1032,15 @@ impl Gallery {
         } else {
             Subscription::none()
         };
+        // Tick only while a toast can expire.
+        let toast_clock = if self.toasts.next_expiry().is_some() {
+            iced::time::every(Duration::from_millis(250)).map(Message::ToastTick)
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
             frames,
+            toast_clock,
             self.autocomplete.subscription().map(Message::Autocomplete),
             adw::window::changes().map(|_| Message::WindowChanged),
             window::close_events().map(Message::WindowClosed),
@@ -1216,31 +1234,31 @@ impl Gallery {
         .scroll_key(self.view_key());
         // The toast is placed in the whole window or only the content area (the shared
         // `[toasts] target` setting). Both layers stay mounted so the tree does not change.
-        let mut toasts: Vec<w::Toast<Message>> = self
-            .toasts
-            .iter()
-            .map(|&(id, spec)| {
-                let mut t = w::Toast::new(spec.title)
-                    .on_dismiss(Message::DismissToast(id))
-                    .position(self.toast_position);
-                if let Some(label) = spec.action {
-                    t = t.action(label, Message::ToastAction(id));
-                }
-                if let Some(status) = spec.status {
-                    t = t.status(status);
-                }
-                t
-            })
-            .collect();
+        let toast_for = |id, spec: &ToastSpec| {
+            let mut t = w::Toast::new(spec.title)
+                .on_dismiss(Message::DismissToast(id))
+                .position(self.toast_position);
+            if let Some(label) = spec.action {
+                t = t.action(label, Message::ToastAction(id));
+            }
+            if let Some(status) = spec.status {
+                t = t.status(status);
+            }
+            t
+        };
         let in_content = self.toast_target == w::ToastTarget::Content;
-        let content_pane = w::toast_stack(
-            Element::from(w::toolbar_view(page).top_bar(content_bar)),
-            if in_content {
-                std::mem::take(&mut toasts)
-            } else {
-                Vec::new()
-            },
-        );
+        let content_pane: Element = if in_content {
+            w::toast_stack_from(
+                Element::from(w::toolbar_view(page).top_bar(content_bar)),
+                &self.toasts,
+                toast_for,
+            )
+        } else {
+            w::toast_stack(
+                Element::from(w::toolbar_view(page).top_bar(content_bar)),
+                Vec::new(),
+            )
+        };
         let body = w::NavigationSplitView::new(sidebar_pane, content_pane)
             .adapt(width)
             .window_radius(corner)
@@ -1250,10 +1268,12 @@ impl Gallery {
             .show_content(self.show_content);
 
         // The window background comes from `adw::window::frame` (rounded when floating).
-        let base: Element = w::toast_stack(
-            container(body).width(Length::Fill).height(Length::Fill),
-            if in_content { Vec::new() } else { toasts },
-        );
+        let body = container(body).width(Length::Fill).height(Length::Fill);
+        let base: Element = if in_content {
+            w::toast_stack(body, Vec::new())
+        } else {
+            w::toast_stack_from(body, &self.toasts, toast_for)
+        };
 
         let base: Element = w::bottom_sheet_in_window(
             base,

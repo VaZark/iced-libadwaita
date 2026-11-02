@@ -239,11 +239,8 @@ impl State {
             list = list.push(dim("No files match."));
         }
         for (name, kind, age) in results {
-            let when = match age {
-                0 => "today".to_string(),
-                1 => "yesterday".to_string(),
-                n => format!("{n} days ago"),
-            };
+            let today = adw::primitives::date::Date::today();
+            let when = adw::primitives::Relative::from_dates(today.add_days(-(age as i64)), today);
             list = list.push(
                 row![
                     text(name).width(Length::Fill),

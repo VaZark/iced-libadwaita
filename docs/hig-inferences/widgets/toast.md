@@ -24,7 +24,7 @@ OSD surface, pill radius, centered at the bottom.
 
 ## Deviations / gaps
 
-No timeout/priority queue; no hide animation (fade + 0.95 scale) because the app removes the toast.
+No priority queue (the notifications queue is a plain ordered list with a limit and an optional timeout, see [Notifications](notifications.md)); no hide animation (fade + 0.95 scale) because the app removes the toast.
 
 ## Colors
 

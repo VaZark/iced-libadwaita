@@ -202,11 +202,26 @@ impl State {
             labeled("Disabled", Element::from(off)),
         ]
         .spacing(sp);
+        // Relative time wording, from an explicit `now` (today here; the instants are offsets).
+        let today = Date::today();
+        let day_rows = [0i64, -1, 1, -3, -12, -45, -400, 9].into_iter().map(|n| {
+            let r = adw::primitives::Relative::from_dates(today.add_days(n), today);
+            labeled_owned(format!("{n:+} days"), r.to_string())
+        });
+        let second_rows = [-20i64, -300, -3 * 3600, 2 * 3600].into_iter().map(|n| {
+            let r = adw::primitives::Relative::from_seconds(n);
+            labeled_owned(format!("{n:+} seconds"), r.to_string())
+        });
+        let relative = column(day_rows.chain(second_rows)).spacing(sp);
         column![
             group("Date input")
                 .description("Type YYYY-MM-DD or pick. The title zooms out from days to months to years; picking a month or year drills back down; Today returns to the current month.")
-                .push(w::card(controls))
+                .push(w::card(controls)),
+            group("Relative time")
+                .description("Wording for a distance from now (primitives::Relative): words for today and its neighbours, then days, weeks, months and years; minutes and hours for instants.")
+                .push(w::card(relative))
         ]
+        .spacing(m.group_spacing)
         .into()
     }
 }
@@ -215,6 +230,15 @@ fn labeled<'a>(label: &'static str, c: Element<'a, Msg>) -> Element<'a, Msg> {
     row![
         iced::widget::container(ty::body(label)).width(Length::Fill),
         c
+    ]
+    .align_y(Alignment::Center)
+    .into()
+}
+
+fn labeled_owned<'a>(label: String, value: String) -> Element<'a, Msg> {
+    row![
+        iced::widget::container(ty::body(label)).width(Length::Fill),
+        ty::body(value).style(adw::style::text::dim)
     ]
     .align_y(Alignment::Center)
     .into()

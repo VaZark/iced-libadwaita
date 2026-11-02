@@ -53,6 +53,7 @@ One file per libadwaita element. Each ends with an **iced mapping** section.
 - [SwitchRow](switch-row.md)
 - [TabBar, TabView, TabOverview, TabButton](tab-bar.md)
 - [Toast and ToastOverlay](toast.md)
+- [Notifications queue](notifications.md)
 - [ToggleGroup and Toggle](toggle-group.md)
 - [ToolbarView](toolbar-view.md)
 - [ViewSwitcher, ViewSwitcherBar, InlineViewSwitcher](view-switcher.md)
