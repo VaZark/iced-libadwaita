@@ -174,7 +174,14 @@ impl<'a, M: 'a, R: iced::advanced::Renderer + 'a> Widget<M, Theme, R> for Resiza
                         return;
                     }
                 }
-                Event::Mouse(mouse::Event::CursorMoved { position }) if state.drag.is_some() => {
+                Event::Mouse(mouse::Event::CursorMoved { .. }) if state.drag.is_some() => {
+                    // The pointer from `cursor`, as at the press: a scrollable parent shifts it
+                    // by its scroll offset, which the raw event position does not include, so
+                    // mixing the two made the first move look like a huge drag.
+                    let Some(position) = cursor.position() else {
+                        shell.capture_event();
+                        return;
+                    };
                     let (from, start) = state.drag.expect("dragging");
                     let mut c = self.constraints.clone();
                     if let Some(room) = state.room {
@@ -464,5 +471,94 @@ mod tests {
         let r = grip_rect(b, Grip::Right);
         assert_eq!((r.x + r.width, r.height), (310.0, 200.0));
         assert!(grip_rect(b, Grip::TopLeft).contains(Point::new(12.0, 22.0)));
+    }
+
+    /// Drags the corner handle of a 300x200 frame by `by` in a parent scrolled by `scrolled`:
+    /// a scrollable shifts the `cursor` it passes down by its scroll offset, while the raw
+    /// position carried by the event is not shifted. Returns the sizes the frame asked for.
+    fn drag_scrolled(by: Vector, scrolled: Vector) -> Vec<Size> {
+        use iced::advanced::clipboard;
+        type S = iced::Element<'static, Size, Theme, ()>;
+        let content: S = space().width(Length::Fill).height(Length::Fill).into();
+        let mut el: S = Resizable::<Size, ()>::new(content, Size::new(300.0, 200.0))
+            .on_resize(|s| s)
+            .into();
+        let mut tree = Tree::new(&el);
+        let node = el.as_widget_mut().layout(
+            &mut tree,
+            &(),
+            &layout::Limits::new(Size::ZERO, Size::new(900.0, 700.0)),
+        );
+        let layout = Layout::new(&node);
+        let mut messages: Vec<Size> = Vec::new();
+        let mut shell = Shell::new(&mut messages);
+        let view = Rectangle::new(Point::ORIGIN, Size::new(900.0, 700.0));
+        let mut send = |shell: &mut Shell<'_, Size>, e: Event, cursor: Point| {
+            el.as_widget_mut().update(
+                &mut tree,
+                &e,
+                layout,
+                mouse::Cursor::Available(cursor),
+                &(),
+                &mut clipboard::Null,
+                shell,
+                &view,
+            );
+        };
+        let press = Point::new(295.0, 195.0);
+        send(
+            &mut shell,
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            press,
+        );
+        let cursor = Point::new(press.x + by.x, press.y + by.y);
+        send(
+            &mut shell,
+            Event::Mouse(mouse::Event::CursorMoved {
+                position: Point::new(cursor.x + scrolled.x, cursor.y + scrolled.y),
+            }),
+            cursor,
+        );
+        drop(shell);
+        messages
+    }
+
+    #[test]
+    fn a_drag_in_a_vertically_scrolled_parent_is_not_thrown_by_the_offset() {
+        // The reported bug: with the page scrolled 400 px down, a 20 px drag down collapsed the
+        // frame to its minimum height and it never grew again.
+        let got = drag_scrolled(Vector::new(0.0, 20.0), Vector::new(0.0, 400.0));
+        assert_eq!(got, vec![Size::new(300.0, 220.0)]);
+    }
+
+    #[test]
+    fn the_reported_collapse_a_page_scrolled_so_the_raw_position_is_smaller() {
+        // Raw event y = cursor y - 400: the old code saw a 380 px drag up from a 20 px drag down
+        // and clamped the frame to its minimum height.
+        let got = drag_scrolled(Vector::new(0.0, 20.0), Vector::new(0.0, -400.0));
+        assert_eq!(got, vec![Size::new(300.0, 220.0)]);
+        let got = drag_scrolled(Vector::new(20.0, 0.0), Vector::new(-250.0, 0.0));
+        assert_eq!(got, vec![Size::new(320.0, 200.0)]);
+    }
+
+    #[test]
+    fn a_drag_in_a_horizontally_scrolled_parent_is_not_thrown_by_the_offset() {
+        let got = drag_scrolled(Vector::new(30.0, 0.0), Vector::new(250.0, 0.0));
+        assert_eq!(got, vec![Size::new(330.0, 200.0)]);
+    }
+
+    #[test]
+    fn a_drag_in_a_parent_scrolled_both_ways_changes_both_axes_correctly() {
+        let got = drag_scrolled(Vector::new(-40.0, 25.0), Vector::new(180.0, 400.0));
+        assert_eq!(got, vec![Size::new(260.0, 225.0)]);
+        // Shrinking is right too (a drag up and left), not a collapse to the minimum.
+        let got = drag_scrolled(Vector::new(-60.0, -50.0), Vector::new(120.0, 300.0));
+        assert_eq!(got, vec![Size::new(240.0, 150.0)]);
+    }
+
+    #[test]
+    fn without_scrolling_the_drag_is_unchanged() {
+        let got = drag_scrolled(Vector::new(10.0, 15.0), Vector::ZERO);
+        assert_eq!(got, vec![Size::new(310.0, 215.0)]);
     }
 }
