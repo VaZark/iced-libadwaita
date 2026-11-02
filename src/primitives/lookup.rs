@@ -642,7 +642,10 @@ mod tests {
         let r = l.poll(t0 + ms(200)).unwrap();
         l.complete(r.id, Ok(vec!["apple"]));
         l.clear();
-        assert_eq!((l.status(), l.query(), l.results().len()), (&Status::Idle, None, 0));
+        assert_eq!(
+            (l.status(), l.query(), l.results().len()),
+            (&Status::Idle, None, 0)
+        );
         l.input(s("a"), t0 + ms(300));
         assert_eq!(l.poll(t0 + ms(500)), None);
         assert_eq!(l.results(), ["apple"]);
