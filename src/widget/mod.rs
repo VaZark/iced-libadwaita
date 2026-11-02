@@ -35,6 +35,7 @@ mod navigation;
 mod pagination;
 mod preferences;
 mod range_slider;
+mod resizable;
 mod responsive_table;
 mod rows;
 mod scrolled;
@@ -124,6 +125,7 @@ pub use pagination::label as pagination_label;
 pub use pagination::{PageSize, Pagination, PaginationSize, page_size_dropdown};
 pub use preferences::{PreferencesGroup, PreferencesPage, preferences_group, preferences_page};
 pub use range_slider::{RangeSlider, range_slider};
+pub use resizable::Resizable;
 pub use responsive_table::{
     Column, Mode as TableMode, Presentation as TablePresentation, ResponsiveTable,
 };

@@ -21,6 +21,7 @@
 //! * [`stepper`]: step statuses from an `active` index, click rules, next / back, connector fill;
 //! * [`validation`]: when a field shows valid / invalid, and chaining validators;
 //! * [`meta`]: which variant of a meta component shows, and its [`Trigger`] (breakpoint or select);
+//! * [`resize`]: dragging a handle into a size (grips, min / max, grid and breakpoint snapping);
 //! * [`responsive`]: which presentation a width gets ([`When`](responsive::When)).
 
 pub mod anchor;
@@ -34,6 +35,7 @@ pub mod notifications;
 pub mod pagination;
 pub mod range;
 pub mod relative;
+pub mod resize;
 pub mod responsive;
 pub mod sections;
 pub mod selection;

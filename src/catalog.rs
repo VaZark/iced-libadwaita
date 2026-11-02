@@ -237,6 +237,14 @@ pub static COMPONENTS: &[Component] = &[
     ),
     // -- boxed lists & rows
     c(
+        "resizable",
+        "-",
+        "Resizable::new(content, size)",
+        &["constraints", "grip", "border"],
+        &["content"],
+        &["on_resize"],
+    ),
+    c(
         "indicator",
         "-",
         "Indicator::new(child, badge)",
