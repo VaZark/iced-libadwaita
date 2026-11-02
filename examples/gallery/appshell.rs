@@ -930,13 +930,11 @@ impl AppShell {
             .layout(Shell::Desktop, || self.desktop());
         // The frame draws the window background, rounded corners, outline and resize edges (with
         // client-side decorations), or just the background.
-        let window = self
-            .chrome(Touches {
-                left: true,
-                right: true,
-            })
-            .frame(body, Message::Window);
-        window
+        self.chrome(Touches {
+            left: true,
+            right: true,
+        })
+        .frame(body, Message::Window)
     }
 
     /// The size of the shell: the width class large and bold, the width in pixels small under
