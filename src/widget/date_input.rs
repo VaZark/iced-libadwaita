@@ -163,22 +163,38 @@ pub(super) fn calendar<'a, M: Clone + 'a>(
         nav(Icon::GoNext, view.next_month()),
     ]
     .align_y(Vertical::Center);
+    // The header is exactly as wide as the grid, so the arrows sit over its edges.
+    let header = container(header).width(Length::Fixed(
+        CELL * 7.0 + 6.0 * if band { 0.0 } else { 2.0 },
+    ));
+    // One pitch for the weekday labels and the day cells, so every label sits exactly over its
+    // column: cells are CELL wide and `gap` apart in both rows.
+    let gap = if band { 0.0 } else { 2.0 };
     let weekdays = row(WEEKDAYS.iter().map(|w| {
         container(text(*w).size(m.space_m).style(crate::style::text::dim))
             .center_x(Length::Fixed(CELL))
             .into()
-    }));
+    }))
+    .spacing(gap);
     let mut grid = column![weekdays].spacing(2);
     for week in view.month_grid() {
         grid = grid.push(
             row(week.iter().map(|slot| match slot {
-                None => space().width(CELL).height(CELL).into(),
+                None => space()
+                    .width(CELL)
+                    .height(if band { CELL - 4.0 } else { CELL })
+                    .into(),
                 Some(d) => day(Date { day: *d, ..view }),
             }))
-            .spacing(if band { 0.0 } else { 2.0 }),
+            .spacing(gap),
         );
     }
-    column![header, grid].spacing(m.space_s).into()
+    // The grid is as wide as seven cells: center it (and the title) in the popover.
+    column![header, grid]
+        .spacing(m.space_s)
+        .align_x(Horizontal::Center)
+        .width(Length::Fill)
+        .into()
 }
 
 impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
@@ -199,8 +215,8 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
         let grid = calendar(d.view, m, &d.on_view, false, |date| {
             let mut b = button(
                 container(text(date.day.to_string()))
-                    .center_x(Length::Fixed(CELL - 4.0))
-                    .center_y(Length::Fixed(CELL - 4.0)),
+                    .center_x(Length::Fixed(CELL))
+                    .center_y(Length::Fixed(CELL)),
             )
             .padding(0)
             .style(sb::menu_item(selected == Some(date)));
