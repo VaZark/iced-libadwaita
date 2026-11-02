@@ -27,7 +27,8 @@
 //! assert_eq!(p.page_count(), Some(10));
 //! p.goto(2);
 //! assert_eq!(p.label(), "Showing 21\u{2013}40 of 187");
-//! assert_eq!(p.items(1, 1), [Page(1), Page(2), Page(3), Ellipsis, Page(10)]);
+//! // Mantine pads the run next to the edge to a constant width (7 items), so the pager does not jump.
+//! assert_eq!(p.items(1, 1), [Page(1), Page(2), Page(3), Page(4), Page(5), Ellipsis, Page(10)]);
 //! ```
 
 use std::fmt;
