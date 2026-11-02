@@ -19,6 +19,7 @@ type Element<'a> = adw::Element<'a, Message>;
 mod appshell;
 mod details;
 mod field_demo;
+mod form_demo;
 mod nav;
 mod range_demo;
 mod sections_demo;
@@ -152,6 +153,7 @@ struct Gallery {
     date_text: String,
     date_view: w::Date,
     field: field_demo::State,
+    form: form_demo::State,
     sections: sections_demo::State,
     range: range_demo::State,
     date_pick: Option<w::Date>,
@@ -254,6 +256,7 @@ enum Message {
     DatePick(w::Date),
     DateView(w::Date),
     Field(field_demo::Msg),
+    Form(form_demo::Msg),
     Sections(sections_demo::Msg),
     Range(range_demo::Msg),
     ChipRemove(&'static str),
@@ -456,6 +459,7 @@ impl Gallery {
                     }
                     f
                 },
+                form: form_demo::State::default(),
                 date_pick: w::Date::new(2026, 11, 2),
                 chips: vec!["Rust", "iced", "GTK"],
                 acc_single: vec![0],
@@ -681,6 +685,7 @@ impl Gallery {
             }
             Message::DateView(d) => self.date_view = d,
             Message::Field(m) => self.field.update(m),
+            Message::Form(m) => self.form.update(m),
             Message::Sections(m) => self.sections.update(m),
             Message::Range(m) => self.range.update(m),
             Message::AccSingle(v) => self.acc_single = v,

@@ -98,7 +98,7 @@ impl Page {
             ],
             Page::Inputs => vec![
                 ("Text", vec![n(TextInput), n(TextView)]),
-                ("Forms", vec![n(Field)]),
+                ("Forms", vec![n(Field), n(Form)]),
                 (
                     "Toggles",
                     vec![i(I::Switch), i(I::CheckButton), i(I::RadioButton)],
@@ -197,6 +197,7 @@ pub enum Detail {
     TextInput,
     TextView,
     Field,
+    Form,
     Dropdown,
     // Lists
     ActionRow,
@@ -322,6 +323,7 @@ impl Detail {
             Detail::TextInput => "Text input",
             Detail::TextView => "Multi-line text",
             Detail::Field => "Form field",
+            Detail::Form => "Form",
             Detail::Dropdown => "Dropdown",
             Detail::ActionRow => "Action row",
             Detail::SwitchAndComboRows => "Switch & combo rows",
@@ -344,6 +346,7 @@ impl Detail {
             Detail::TextInput => "Validation, password, color override and width",
             Detail::TextView => "Editable, placeholder and read-only",
             Detail::Field => "Label, control and message with shared validation",
+            Detail::Form => "Submit, reset and a multi-step wizard with gated Next",
             Detail::Dropdown => "Selected, empty and disabled; combo rows with disabled options",
             Detail::ActionRow => "Subtitle, prefix, suffix and chevron",
             Detail::SwitchAndComboRows => "Switch, combo, spin and slider rows, with disabled",
