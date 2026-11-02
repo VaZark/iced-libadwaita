@@ -958,25 +958,7 @@ impl Gallery {
                 ]);
                 column![g("Multi select").description("The popover stays open while options are toggled.").push(w::card(controls))].into()
             }
-            Inline::DateInput => {
-                let open = std::env::var("GALLERY_OPEN").as_deref() == Ok("date");
-                let min = w::Date::new(2026, 11, 1).unwrap();
-                let live = w::DateInput::new(&self.date_text, self.date_view, Message::DateText)
-                    .selected(self.date_pick)
-                    .on_pick(Message::DatePick)
-                    .on_view(Message::DateView)
-                    .open_initially(open);
-                let ranged = w::DateInput::new("2026-10-15", self.date_view, Message::DateText).min(min);
-                let invalid = w::DateInput::new("2026-02-30", self.date_view, Message::DateText);
-                let off = w::DateInput::new("2026-11-02", self.date_view, Message::DateText).disabled(true);
-                let controls = stack(sp, vec![
-                    labeled("Date", Element::from(live)),
-                    labeled("Before the minimum", Element::from(ranged)),
-                    labeled("Not a date", Element::from(invalid)),
-                    labeled("Disabled", Element::from(off)),
-                ]);
-                column![g("Date input").description("Type YYYY-MM-DD or pick from the calendar.").push(w::card(controls))].into()
-            }
+            Inline::DateInput => self.date.view(m).map(Message::Date),
             Inline::RangeSlider => self.range.slider_view(m).map(Message::Range),
             Inline::DateRange => self.range.date_view(m).map(Message::Range),
             Inline::AnchoredPopover => {

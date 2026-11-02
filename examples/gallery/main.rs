@@ -18,6 +18,7 @@ type Element<'a> = adw::Element<'a, Message>;
 
 mod appshell;
 mod autocomplete_demo;
+mod date_demo;
 mod details;
 mod field_demo;
 mod form_demo;
@@ -152,15 +153,13 @@ struct Gallery {
     split_choice: &'static str,
     picked: Option<&'static str>,
     multi: Vec<&'static str>,
-    date_text: String,
-    date_view: w::Date,
+    date: date_demo::State,
     field: field_demo::State,
     form: form_demo::State,
     autocomplete: autocomplete_demo::State,
     sections: sections_demo::State,
     range: range_demo::State,
     stepper: stepper_demo::State,
-    date_pick: Option<w::Date>,
     chips: Vec<&'static str>,
     acc_single: Vec<u8>,
     acc_multi: Vec<u8>,
@@ -256,9 +255,7 @@ enum Message {
     EditorEmpty(w::TextAction),
     Picked(&'static str),
     MultiToggle(&'static str),
-    DateText(String),
-    DatePick(w::Date),
-    DateView(w::Date),
+    Date(date_demo::Msg),
     Field(field_demo::Msg),
     Form(form_demo::Msg),
     Autocomplete(autocomplete_demo::Msg),
@@ -458,8 +455,7 @@ impl Gallery {
                 split_choice: "merge",
                 picked: None,
                 multi: vec!["Banana", "Cherry"],
-                date_text: String::from("2026-11-02"),
-                date_view: w::Date::new(2026, 11, 1).unwrap(),
+                date: date_demo::State::default(),
                 sections: sections_demo::State::default(),
                 range: range_demo::State::default(),
                 stepper: stepper_demo::State::default(),
@@ -472,7 +468,6 @@ impl Gallery {
                 },
                 form: form_demo::State::default(),
                 autocomplete: autocomplete_demo::State::default(),
-                date_pick: w::Date::new(2026, 11, 2),
                 chips: vec!["Rust", "iced", "GTK"],
                 acc_single: vec![0],
                 acc_multi: vec![0, 1],
@@ -684,18 +679,7 @@ impl Gallery {
                 }
                 None => self.multi.push(s),
             },
-            Message::DateText(t) => {
-                if let Some(d) = w::Date::parse(&t) {
-                    self.date_pick = Some(d);
-                    self.date_view = d.month_start();
-                }
-                self.date_text = t;
-            }
-            Message::DatePick(d) => {
-                self.date_pick = Some(d);
-                self.date_text = d.format();
-            }
-            Message::DateView(d) => self.date_view = d,
+            Message::Date(m) => self.date.update(m),
             Message::Field(m) => self.field.update(m),
             Message::Form(m) => self.form.update(m),
             Message::Autocomplete(m) => {

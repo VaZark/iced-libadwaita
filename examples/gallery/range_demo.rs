@@ -4,7 +4,7 @@
 use iced_libadwaita as adw;
 
 use adw::primitives::range::{DateRange, Edge, Range, Track};
-use adw::widget::{self as w, Date, Field, typography as ty};
+use adw::widget::{self as w, CalendarView, Date, Field, Level, typography as ty};
 use adw::{Element, Metrics};
 use iced::Length;
 use iced::widget::{column, container, row};
@@ -21,12 +21,16 @@ pub enum Msg {
     FieldRange((f32, f32)),
     Text(Edge, String),
     Pick(DateRange),
-    View(Date),
+    Nav(CalendarView),
     Hover(Option<Date>),
     FieldText(Edge, String),
     FieldPick(DateRange),
-    FieldView(Date),
+    FieldNav(CalendarView),
     FieldHover(Option<Date>),
+    BoundedText(Edge, String),
+    BoundedPick(DateRange),
+    BoundedNav(CalendarView),
+    BoundedHover(Option<Date>),
     Submit,
     Reset,
     Noop,
@@ -38,7 +42,7 @@ struct Dates {
     start: String,
     end: String,
     range: DateRange,
-    view: Date,
+    nav: CalendarView,
     hover: Option<Date>,
 }
 
@@ -52,7 +56,7 @@ impl Dates {
             start: start.map(|d| d.format()).unwrap_or_default(),
             end: end.map(|d| d.format()).unwrap_or_default(),
             range: DateRange::new(start, end),
-            view: d(2026, 11, 1),
+            nav: CalendarView::month(d(2026, 11, 1)),
             hover: None,
         }
     }
@@ -60,7 +64,7 @@ impl Dates {
         let parsed = Date::parse(&t);
         self.range = self.range.with(edge, parsed);
         if let Some(p) = parsed {
-            self.view = p.month_start();
+            self.nav = CalendarView::new(p, self.nav.level);
         }
         match edge {
             Edge::Start => self.start = t,
@@ -73,7 +77,7 @@ impl Dates {
             end: r.end.map(|d| d.format()).unwrap_or_default(),
             range: r,
             hover: self.hover,
-            view: self.view,
+            nav: self.nav,
         };
     }
 }
@@ -89,6 +93,7 @@ pub struct State {
     field_range: (f32, f32),
     live: Dates,
     field_dates: Dates,
+    bounded: Dates,
     submitted: bool,
     touched: Vec<&'static str>,
 }
@@ -103,6 +108,24 @@ impl Default for State {
             live = Dates::new(Some(d(2026, 11, 10)), None);
             live.hover = Some(d(2026, 11, 14));
         }
+        // daterange-year / daterange-decade: open at that level (the range is kept).
+        if let Some(level) = match open.as_str() {
+            "daterange-year" => Some(Level::Year),
+            "daterange-decade" => Some(Level::Decade),
+            _ => None,
+        } {
+            live.nav = CalendarView::new(d(2026, 11, 1), level);
+        }
+        // daterange-bounded[-year|-decade]: the min/max demo, across two year boundaries.
+        let mut bounded = Dates::new(Some(d(2026, 2, 3)), Some(d(2026, 9, 9)));
+        if let Some(level) = match open.as_str() {
+            "daterange-bounded" => Some(Level::Month),
+            "daterange-bounded-year" => Some(Level::Year),
+            "daterange-bounded-decade" => Some(Level::Decade),
+            _ => None,
+        } {
+            bounded.nav = CalendarView::new(d(2026, 2, 1), level);
+        }
         Self {
             basic: (20.0, 70.0),
             step: (25.0, 75.0),
@@ -114,6 +137,7 @@ impl Default for State {
             field_range: (45.0, 55.0),
             live,
             field_dates: Dates::new(Some(d(2026, 11, 12)), Some(d(2026, 11, 8))),
+            bounded,
             submitted: false,
             touched: Vec::new(),
         }
@@ -136,7 +160,7 @@ impl State {
             }
             Msg::Text(e, t) => self.live.text(e, t),
             Msg::Pick(r) => self.live.pick(r),
-            Msg::View(v) => self.live.view = v,
+            Msg::Nav(v) => self.live.nav = v,
             Msg::Hover(h) => self.live.hover = h,
             Msg::FieldText(e, t) => {
                 self.field_dates.text(e, t);
@@ -146,8 +170,12 @@ impl State {
                 self.field_dates.pick(r);
                 self.touch("dates");
             }
-            Msg::FieldView(v) => self.field_dates.view = v,
+            Msg::FieldNav(v) => self.field_dates.nav = v,
             Msg::FieldHover(h) => self.field_dates.hover = h,
+            Msg::BoundedText(e, t) => self.bounded.text(e, t),
+            Msg::BoundedPick(r) => self.bounded.pick(r),
+            Msg::BoundedNav(v) => self.bounded.nav = v,
+            Msg::BoundedHover(h) => self.bounded.hover = h,
             Msg::Submit => self.submitted = true,
             Msg::Reset => *self = Self::default(),
             Msg::Noop => {}
@@ -285,7 +313,8 @@ impl State {
         open: bool,
         wrap: impl Fn(Edge, String) -> Msg + 'a,
     ) -> w::DateRangeInput<'a, Msg> {
-        w::DateRangeInput::new(&t.start, &t.end, t.view, wrap)
+        w::DateRangeInput::new(&t.start, &t.end, t.nav.date, wrap)
+            .calendar(t.nav)
             .selected(t.range)
             .hover(t.hover)
             .open_initially(open)
@@ -295,10 +324,12 @@ impl State {
     /// The date range demos.
     pub fn date_view(&self, m: Metrics) -> Element<'_, Msg> {
         let sp = m.space_m;
-        let open = std::env::var("GALLERY_OPEN").is_ok_and(|v| v.starts_with("daterange"));
+        let open_env = std::env::var("GALLERY_OPEN").unwrap_or_default();
+        let open_bounded = open_env.starts_with("daterange-bounded");
+        let open = open_env.starts_with("daterange") && !open_bounded;
         let live = Self::live_input(&self.live, m, open, Msg::Text)
             .on_pick(Msg::Pick)
-            .on_view(Msg::View)
+            .on_nav(Msg::Nav)
             .on_hover(Msg::Hover);
 
         let fixed = |a: &'static str, b: &'static str| {
@@ -307,8 +338,18 @@ impl State {
                 .metrics(m)
         };
         let min = d(2026, 11, 1);
+        let bounded = Self::live_input(&self.bounded, m, open_bounded, Msg::BoundedText)
+            .min(d(2025, 3, 10))
+            .max(d(2027, 6, 20))
+            .on_pick(Msg::BoundedPick)
+            .on_nav(Msg::BoundedNav)
+            .on_hover(Msg::BoundedHover);
         let controls = column![
             item("Date range".into(), live),
+            item(
+                "Between 2025-03-10 and 2027-06-20 (months and years outside are disabled)".into(),
+                bounded
+            ),
             item("Empty".into(), fixed("", "")),
             item("Start chosen".into(), fixed("2026-11-10", "")),
             item("Selected".into(), fixed("2026-11-03", "2026-11-09")),
@@ -331,7 +372,7 @@ impl State {
             .revealed(revealed)
             .strict(true)
             .on_pick(Msg::FieldPick)
-            .on_view(Msg::FieldView)
+            .on_nav(Msg::FieldNav)
             .on_hover(Msg::FieldHover);
         let validity = input.validity();
         let field = Field::new("Stay", input)
