@@ -21,6 +21,7 @@ mod elevated;
 mod extra;
 mod field;
 mod flex;
+mod form;
 mod forms;
 mod header_bar;
 mod menu;
@@ -48,6 +49,7 @@ pub mod typography;
 
 pub use crate::primitives::anchor::{self, Align as AnchorAlign, Placed, Placement, Side, place};
 pub use crate::primitives::date::{Date, days_in_month, is_leap_year, validate as validate_date};
+pub use crate::primitives::form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
 pub use crate::primitives::range::{Collide, DateRange, Range, Track};
 pub use crate::primitives::validation::{
     self, Interaction, Presentation as ValidationState, Validity,
@@ -83,6 +85,7 @@ pub use extra::{
 };
 pub use field::{Field, FieldLayout, outlined as field_outline};
 pub use flex::FlexRow;
+pub use form::{Form, FormActions, Step, StepIndicator};
 pub use forms::{
     Entry, EntryState, TextView, accent_picker, card_button, check_button, color_swatch, entry,
     link_button, password_entry, radio_button, scale, status_swatch, tag, text_view,

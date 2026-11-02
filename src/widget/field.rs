@@ -9,7 +9,7 @@
 //! and overlays (dropdown popovers) survive validity changes.
 
 use super::Element;
-use crate::primitives::validation::{self, Presentation, Validity};
+use crate::primitives::validation::{self, Interaction, Presentation, Validity};
 use crate::{Icon, Metrics, Theme};
 use iced::widget::{column, container, row, space, text};
 use iced::{Alignment, Border, Length, Padding};
@@ -92,6 +92,13 @@ impl<'a, M: 'a> Field<'a, M> {
     /// A submit was attempted: reveals validity like `touched`.
     pub fn submitted(mut self, s: bool) -> Self {
         self.submitted = s;
+        self
+    }
+    /// Sets `touched` and `submitted` together from an [`Interaction`], e.g. the one a
+    /// [`FormState`](crate::primitives::FormState) computes for this field's key.
+    pub fn interaction(mut self, i: Interaction) -> Self {
+        self.touched = i.touched;
+        self.submitted = i.submitted;
         self
     }
     /// Dims the label and description and hides validation. Disable the control itself by
