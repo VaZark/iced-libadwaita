@@ -146,6 +146,7 @@ pub struct ToggleItem<'a, T, M> {
     pub label: Option<String>,
     pub icon: Option<Icon>,
     custom: Option<Element<'a, M>>,
+    disabled: bool,
 }
 
 impl<'a, T, M> ToggleItem<'a, T, M> {
@@ -156,6 +157,7 @@ impl<'a, T, M> ToggleItem<'a, T, M> {
             label: Some(label.into()),
             icon: None,
             custom: None,
+            disabled: false,
         }
     }
     /// An icon-only segment.
@@ -165,6 +167,7 @@ impl<'a, T, M> ToggleItem<'a, T, M> {
             label: None,
             icon: Some(icon),
             custom: None,
+            disabled: false,
         }
     }
     /// A segment with any content (an avatar, a badge, a row of widgets…).
@@ -174,7 +177,14 @@ impl<'a, T, M> ToggleItem<'a, T, M> {
             label: None,
             icon: None,
             custom: Some(content.into()),
+            disabled: false,
         }
+    }
+    /// A segment that cannot be chosen (the choice is not available now): dimmed, and it does
+    /// not react to the pointer.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
     }
     /// Adds an icon before the label. When the group is too narrow for icon and
     /// label together, the segment falls back to the icon alone.
@@ -255,6 +265,7 @@ impl<'a, T: Clone + PartialEq + 'a, M: 'a> From<ToggleGroup<'a, T, M>> for Eleme
             .active
             .as_ref()
             .and_then(|a| g.items.iter().position(|i| &i.value == a));
+        let disabled: Vec<bool> = g.items.iter().map(|i| i.disabled).collect();
         let segments = g
             .items
             .into_iter()
@@ -281,6 +292,7 @@ impl<'a, T: Clone + PartialEq + 'a, M: 'a> From<ToggleGroup<'a, T, M>> for Eleme
             .width(g.width)
             .homogeneous(g.homogeneous)
             .compact(g.compact)
+            .disabled(disabled)
             .metrics(m)
             .into()
     }

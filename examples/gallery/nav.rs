@@ -255,9 +255,7 @@ impl Action {
             Action::ShortcutsDialog => "Keyboard shortcuts in sections",
             Action::PreferencesDialog => "A page of preference rows in a dialog",
             Action::BottomSheet => "A panel sliding up from the bottom",
-            Action::AppShell => {
-                "A header, navbar, drawer and footer that adapt to the window width"
-            }
+            Action::AppShell => "A header, navbar and drawer that adapt to the window width",
         }
     }
     /// The label of the button on the row.

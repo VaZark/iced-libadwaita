@@ -1,4 +1,4 @@
-//! AppShell: a Mantine-style application shell (header, navbar, drawer, footer, main) whose
+//! AppShell: a Mantine-style application shell (header, navbar, drawer, main) whose
 //! layouts differ in kind. The gallery opens it in a window of its own (Layout page).
 //!
 //! The parent is [`Adaptive`]: it maps width classes to whole layouts (`Layouts`), each
@@ -469,12 +469,7 @@ impl AppShell {
         end: Option<Message>,
         edges: Touches,
     ) -> Element<'_> {
-        let mut bar = self.bar(edges).title("AppShell").subtitle(
-            self.adaptive
-                .shown()
-                .last()
-                .map_or("-".into(), |s| s.to_string()),
-        );
+        let mut bar = self.bar(edges);
         if let Some((icon, m)) = start {
             bar = bar.pack_start(w::icon_button(icon).on_press(m));
         }
@@ -635,26 +630,21 @@ impl AppShell {
         }
     }
 
-    fn footer(&self, edges: Touches) -> Element<'_> {
-        container(ty::caption(format!(
-            "Footer · {} px · {:?}",
-            self.width as u32,
-            WidthClass::of(self.width)
-        )))
-        .padding([6, 12])
-        .style(self.rounded_bottom(style::container::headerbar, edges))
-        .width(Length::Fill)
-        .into()
-    }
-
     /// `edges`: the window edges its bottom corners touch (none when a bottom bar is below).
     fn main_area(&self, edges: Touches) -> Element<'_> {
-        let pin = Trigger::Pinned;
+        // A layout can be chosen only where its declared range holds the width: the others are
+        // disabled (Auto always is available).
+        let allowed = self
+            .adaptive
+            .allowed_at(&Breakpoints::current(), self.width);
+        let pin = |s: Shell| {
+            w::ToggleItem::new(Trigger::Pinned(s), s.to_string()).disabled(!allowed.contains(&&s))
+        };
         let layout_items = vec![
             w::ToggleItem::new(Trigger::Breakpoints, "Auto"),
-            w::ToggleItem::new(pin(Shell::Mobile), "Mobile"),
-            w::ToggleItem::new(pin(Shell::Tablet), "Tablet"),
-            w::ToggleItem::new(pin(Shell::Desktop), "Desktop"),
+            pin(Shell::Mobile),
+            pin(Shell::Tablet),
+            pin(Shell::Desktop),
         ];
         let hyst_items = vec![
             w::ToggleItem::new(Hyst::Pixels, "16 px"),
@@ -765,7 +755,6 @@ impl AppShell {
         match bottom {
             Bottom::None => column![header, self.main_area(edges)].into(),
             Bottom::Tabs => column![header, self.main_area(none), self.tab_bar(edges)].into(),
-            Bottom::Footer => column![header, self.main_area(none), self.footer(edges)].into(),
         }
     }
 
@@ -821,7 +810,7 @@ impl AppShell {
             right: false,
         };
         let parent = column![
-            self.bar(all).title("AppShell"),
+            self.bar(all),
             container(Element::from(
                 w::SidebarList::new(self.destinations())
                     .style(w::SidebarStyle::Cards)
@@ -889,7 +878,7 @@ impl AppShell {
                 Some(Message::ToggleDrawer),
                 edges,
             ),
-            Bottom::Footer,
+            Bottom::None,
             edges,
         );
         w::adaptive_split(
@@ -909,11 +898,38 @@ impl AppShell {
             .layout(Shell::Desktop, || self.desktop());
         // The frame draws the window background, rounded corners, outline and resize edges (with
         // client-side decorations), or just the background.
-        self.chrome(Touches {
-            left: true,
-            right: true,
-        })
-        .frame(body, Message::Window)
+        let window = self
+            .chrome(Touches {
+                left: true,
+                right: true,
+            })
+            .frame(body, Message::Window);
+        iced::widget::stack![window, self.readout()].into()
+    }
+
+    /// The window's size, always visible at the center of the top edge, whatever the layout:
+    /// the width class large and bold, the width in pixels small under it. It follows every
+    /// resize. It is drawn over the header bars and lets presses through to them.
+    fn readout(&self) -> Element<'_> {
+        let bold = iced::Font {
+            weight: iced::font::Weight::Bold,
+            ..iced::Font::DEFAULT
+        };
+        let height = adw::Metrics::default().headerbar_height;
+        container(
+            column![
+                text(format!("{:?}", WidthClass::of(self.width)).to_uppercase())
+                    .size(20)
+                    .font(bold),
+                text(format!("{}px", self.width.round() as u32))
+                    .size(11)
+                    .style(style::text::dim),
+            ]
+            .align_x(iced::Alignment::Center),
+        )
+        .center_x(Length::Fill)
+        .center_y(Length::Fixed(height))
+        .into()
     }
 }
 
@@ -931,5 +947,4 @@ fn presentation(layout: &Shell) -> (w::SidebarStyle, w::SidebarPadding) {
 enum Bottom {
     None,
     Tabs,
-    Footer,
 }
