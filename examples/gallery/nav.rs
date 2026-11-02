@@ -97,7 +97,7 @@ impl Page {
                 ("Groups", vec![n(ToggleGroup)]),
             ],
             Page::Inputs => vec![
-                ("Text", vec![n(TextInput), n(TextView)]),
+                ("Text", vec![n(TextInput), n(TextView), n(Autocomplete)]),
                 ("Forms", vec![n(Field), n(Form)]),
                 (
                     "Toggles",
@@ -198,6 +198,7 @@ pub enum Detail {
     TextView,
     Field,
     Form,
+    Autocomplete,
     Dropdown,
     // Lists
     ActionRow,
@@ -324,6 +325,7 @@ impl Detail {
             Detail::TextView => "Multi-line text",
             Detail::Field => "Form field",
             Detail::Form => "Form",
+            Detail::Autocomplete => "Autocomplete",
             Detail::Dropdown => "Dropdown",
             Detail::ActionRow => "Action row",
             Detail::SwitchAndComboRows => "Switch & combo rows",
@@ -347,6 +349,7 @@ impl Detail {
             Detail::TextView => "Editable, placeholder and read-only",
             Detail::Field => "Label, control and message with shared validation",
             Detail::Form => "Submit, reset and a multi-step wizard with gated Next",
+            Detail::Autocomplete => "Async suggestions: loading, results, empty, error, in a field",
             Detail::Dropdown => "Selected, empty and disabled; combo rows with disabled options",
             Detail::ActionRow => "Subtitle, prefix, suffix and chevron",
             Detail::SwitchAndComboRows => "Switch, combo, spin and slider rows, with disabled",

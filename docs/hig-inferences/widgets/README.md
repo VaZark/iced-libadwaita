@@ -5,6 +5,7 @@ One file per libadwaita element. Each ends with an **iced mapping** section.
 - [AboutDialog](about-dialog.md)
 - [ActionRow](action-row.md)
 - [AlertDialog](alert-dialog.md)
+- [Autocomplete (async suggestions)](autocomplete.md)
 - [Avatar](avatar.md)
 - [Badge and Chip](badge-chip.md)
 - [Banner](banner.md)

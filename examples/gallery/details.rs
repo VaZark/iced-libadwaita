@@ -326,6 +326,7 @@ impl Gallery {
             }
             Detail::Field => self.field.view(m).map(Message::Field),
             Detail::Form => self.form.view(m).map(Message::Form),
+            Detail::Autocomplete => self.autocomplete.view(m).map(Message::Autocomplete),
             Detail::Dropdown => {
                 let plain = stack(sp, vec![
                     labeled("Choose a fruit", Element::from(w::dropdown(&FRUITS, self.picked, Message::Picked))),

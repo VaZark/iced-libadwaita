@@ -17,6 +17,7 @@ use std::time::Duration;
 type Element<'a> = adw::Element<'a, Message>;
 
 mod appshell;
+mod autocomplete_demo;
 mod details;
 mod field_demo;
 mod form_demo;
@@ -154,6 +155,7 @@ struct Gallery {
     date_view: w::Date,
     field: field_demo::State,
     form: form_demo::State,
+    autocomplete: autocomplete_demo::State,
     sections: sections_demo::State,
     range: range_demo::State,
     date_pick: Option<w::Date>,
@@ -257,6 +259,7 @@ enum Message {
     DateView(w::Date),
     Field(field_demo::Msg),
     Form(form_demo::Msg),
+    Autocomplete(autocomplete_demo::Msg),
     Sections(sections_demo::Msg),
     Range(range_demo::Msg),
     ChipRemove(&'static str),
@@ -384,7 +387,11 @@ impl Gallery {
         };
         // A daemon opens its windows itself: the main one now, the preferences window on demand.
         let (main, open_main) = window::open(Self::main_settings());
-        let boot = Task::batch([open_main.map(|_| Message::Noop), boot]);
+        let boot = Task::batch([
+            open_main.map(|_| Message::Noop),
+            boot,
+            autocomplete_demo::script().map(Message::Autocomplete),
+        ]);
         (
             Self {
                 main,
@@ -460,6 +467,7 @@ impl Gallery {
                     f
                 },
                 form: form_demo::State::default(),
+                autocomplete: autocomplete_demo::State::default(),
                 date_pick: w::Date::new(2026, 11, 2),
                 chips: vec!["Rust", "iced", "GTK"],
                 acc_single: vec![0],
@@ -686,6 +694,9 @@ impl Gallery {
             Message::DateView(d) => self.date_view = d,
             Message::Field(m) => self.field.update(m),
             Message::Form(m) => self.form.update(m),
+            Message::Autocomplete(m) => {
+                return self.autocomplete.update(m).map(Message::Autocomplete);
+            }
             Message::Sections(m) => self.sections.update(m),
             Message::Range(m) => self.range.update(m),
             Message::AccSingle(v) => self.acc_single = v,
@@ -1019,6 +1030,7 @@ impl Gallery {
         };
         Subscription::batch([
             frames,
+            self.autocomplete.subscription().map(Message::Autocomplete),
             adw::window::changes().map(|_| Message::WindowChanged),
             window::close_events().map(Message::WindowClosed),
             window::resize_events().map(|(id, size)| Message::Resized(id, size.width)),

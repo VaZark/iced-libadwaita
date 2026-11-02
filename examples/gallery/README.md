@@ -47,4 +47,4 @@ cargo run --example gallery -- --screenshot DIR      # every page, light, and th
 GALLERY_PAGE=inputs GALLERY_DETAIL=textinput cargo run --example gallery
 ```
 
-Other environment switches: `GALLERY_SIZE=WxH`, `GALLERY_SIDEBAR_MODE=parent-page`, `GALLERY_SIDEBAR=1` (start on the sidebar when collapsed), `GALLERY_MENU=page|dropdown`, `GALLERY_DIALOG=alert|about|shortcuts|preferences`, `GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push`.
+Other environment switches: `GALLERY_SIZE=WxH`, `GALLERY_SIDEBAR_MODE=parent-page`, `GALLERY_SIDEBAR=1` (start on the sidebar when collapsed), `GALLERY_MENU=page|dropdown`, `GALLERY_DIALOG=alert|about|shortcuts|preferences`, `GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push`. `GALLERY_AUTOCOMPLETE=idle|loading|results|empty|error|disabled` opens that state of the Autocomplete page (`GALLERY_DETAIL=autocomplete`); `GALLERY_AUTOCOMPLETE=type:san>sant` types into its live entry (see `autocomplete_demo.rs`).
