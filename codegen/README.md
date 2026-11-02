@@ -1,7 +1,6 @@
 # Build-time XML UI code generation
 
-XML uses HTML-style kebab-case tags, attributes and slot names, mapped to Rust snake_case. Names follow `iced_libadwaita::catalog::COMPONENTS`
-(the same vocabulary documented in `docs/components.md`).
+XML uses HTML-style kebab-case tags, attributes and slot names, mapped to Rust snake_case. Names follow `iced_libadwaita::catalog::COMPONENTS` (the same vocabulary documented in `docs/components.md`).
 
 ```xml
 <toolbar-view>
@@ -14,18 +13,9 @@ XML uses HTML-style kebab-case tags, attributes and slot names, mapped to Rust s
 </toolbar-view>
 ```
 
-Underscored XML names are rejected. The build-time compiler validates component names, attribute names, and child slots
-against the **existing** component catalog. It then emits ordinary Rust code.
-The catalog describes the public vocabulary, while typed code-generation adapters
-are needed for each constructor signature. Components without an adapter are
-rejected explicitly. The initial supported set is `toolbar_view`, `header_bar`,
-`page`, `preferences_group`, `preferences_page`, and `action_row`.
-Only a subset of each component's catalogued attributes has a typed adapter so far.
+Underscored XML names are rejected. The build-time compiler validates component names, attribute names, and child slots against the **existing** component catalog. It then emits ordinary Rust code. The catalog describes the public vocabulary, while typed code-generation adapters are needed for each constructor signature. Components without an adapter are rejected explicitly. The initial supported set is `toolbar_view`, `header_bar`, `page`, `preferences_group`, `preferences_page`, and `action_row`. Only a subset of each component's catalogued attributes has a typed adapter so far.
 
-This is analogous to schema validation, but **not yet a full XSD**: the catalog
-currently records property and slot names, not all value types, required
-constructor arguments, child cardinality, or event signatures. Those constraints
-must be added as typed metadata to make validation complete.
+This is analogous to schema validation, but **not yet a full XSD**: the catalog currently records property and slot names, not all value types, required constructor arguments, child cardinality, or event signatures. Those constraints must be added as typed metadata to make validation complete.
 
 In the application's `Cargo.toml`:
 
@@ -53,6 +43,4 @@ mod ui {
 }
 ```
 
-The generated `view` function returns an iced-libadwaita element with the
-application's `crate::Message` type. No runtime XML parser or dynamic linking
-is needed.
+The generated `view` function returns an iced-libadwaita element with the application's `crate::Message` type. No runtime XML parser or dynamic linking is needed.

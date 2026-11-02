@@ -1,7 +1,6 @@
 # Style classes
 
-Source: [style classes](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/style-classes.html). All of these have a style
-function in `iced_libadwaita::style` (see mapping column).
+Source: [style classes](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/style-classes.html). All of these have a style function in `iced_libadwaita::style` (see mapping column).
 
 | Class                                                                               | Meaning                                                                                                                         | Combines with                                      | iced                                     |
 | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------- |
@@ -32,5 +31,4 @@ function in `iced_libadwaita::style` (see mapping column).
 | `.undershoot-*`                                                                     | Scroll shadows (prefer ToolbarView)                                                                                             |                                                    | n/a                                      |
 | `.flat` + `.round` on ToggleGroup                                                   | Flat group of buttons / rounded group                                                                                           |                                                    | `ToggleGroup::flat/round`                |
 
-Deprecated: `.content`, `.sidebar`, `.app-notification`, `.large-title`,
-`.opaque`, `.dim-label`, flat HeaderBar.
+Deprecated: `.content`, `.sidebar`, `.app-notification`, `.large-title`, `.opaque`, `.dim-label`, flat HeaderBar.

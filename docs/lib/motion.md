@@ -11,25 +11,16 @@ flowchart TD
     C -- no --> An["Its own animation"]
 ```
 
-- Components animate themselves (switch, reveal, drawer, dialogs, sheets, toasts, popovers,
-  page changes, navigation push, carousel). The app needs no subscription or timers.
-- Every animation is a **trigger** with its own animation and a `None` fallback. Under reduced
-  motion (`enable-animations` off, or `[motion] reduced-motion=true`) all triggers are `None` and
-  changes are instant. Individual triggers can be set to `none` in the desktop config.
-- Do not add animation in the app for things components already do. If you must animate
-  something yourself, use `animation::Tween` with a `Spec`, and gate it with
-  `Trigger::…::spec(..)` or `animation::enabled()` so reduced motion is respected.
-- Use springs for things the user moves (drawer, sheet, carousel), short eased transitions for
-  state changes.
+- Components animate themselves (switch, reveal, drawer, dialogs, sheets, toasts, popovers, page changes, navigation push, carousel). The app needs no subscription or timers.
+- Every animation is a **trigger** with its own animation and a `None` fallback. Under reduced motion (`enable-animations` off, or `[motion] reduced-motion=true`) all triggers are `None` and changes are instant. Individual triggers can be set to `none` in the desktop config.
+- Do not add animation in the app for things components already do. If you must animate something yourself, use `animation::Tween` with a `Spec`, and gate it with `Trigger::…::spec(..)` or `animation::enabled()` so reduced motion is respected.
+- Use springs for things the user moves (drawer, sheet, carousel), short eased transitions for state changes.
 
 Parameters and the full trigger table: [animations](../hig-inferences/design-language/animations.md).
 
 #### Ordered transitions
 
-Components report nothing when their animation ends, so "the old layout leaves, then the new one
-arrives" cannot be done with fixed delays. `transition` is a small protocol and a state machine
-(`transition::Transitions`) that keeps the order and the time. It is plain data in your
-application state: every call takes the current `Instant`, so it needs no window to test.
+Components report nothing when their animation ends, so "the old layout leaves, then the new one arrives" cannot be done with fixed delays. `transition` is a small protocol and a state machine (`transition::Transitions`) that keeps the order and the time. It is plain data in your application state: every call takes the current `Instant`, so it needs no window to test.
 
 | Direction             | Message                                     | Meaning                                                            |
 | --------------------- | ------------------------------------------- | ------------------------------------------------------------------ |
@@ -46,18 +37,10 @@ stateDiagram-v2
     Closing --> Closing: new sequence queued, the step in flight finishes first
 ```
 
-- The outcome is `Done` or `TimedOut`, decided by the coordinator, which owns the clock. At the
-  deadline it **hard-closes** (stops rendering) or **hard-opens** (renders) the target itself, so
-  a stuck target never blocks the next step. Any outcome lets the sequence continue; outcomes are
-  only logged (`take_records`) for tuning budgets.
+- The outcome is `Done` or `TimedOut`, decided by the coordinator, which owns the clock. At the deadline it **hard-closes** (stops rendering) or **hard-opens** (renders) the target itself, so a stuck target never blocks the next step. Any outcome lets the sequence continue; outcomes are only logged (`take_records`) for tuning budgets.
 - Every command has a generation; a late, duplicate or unknown report is ignored.
 - A zero budget (animations disabled, reduced motion, `layout=none`) settles in the same call.
-- A sequence is steps, each one action or a group run together; its longest duration is known up
-  front (`Sequence::budget`). A new sequence replaces steps that have not started but never
-  interrupts the one in flight.
+- A sequence is steps, each one action or a group run together; its longest duration is known up front (`Sequence::budget`). A new sequence replaces steps that have not started but never interrupts the one in flight.
 - Budgets are `[motion] transition-close` and `transition-open` (milliseconds, default 30).
-- Use it for **layouts** (global ideas). Popovers, sheets and panels are components a layout
-  implements and animate themselves.
-- **State is the application's.** The protocol moves layouts, not data. If a page cannot exist in
-  the layout being moved to, the application navigates itself when it sees `closing_for` /
-  `opening_for`; conflicts are the developer's to resolve.
+- Use it for **layouts** (global ideas). Popovers, sheets and panels are components a layout implements and animate themselves.
+- **State is the application's.** The protocol moves layouts, not data. If a page cannot exist in the layout being moved to, the application navigates itself when it sees `closing_for` / `opening_for`; conflicts are the developer's to resolve.

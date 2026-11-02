@@ -2,11 +2,13 @@
   "json": {
   },
   "markdown": {
+    "textWrap": "never"
   },
   "toml": {
   },
   "excludes": [
-    "**/*-lock.json"
+    "**/*-lock.json",
+    "docs/hig-inferences/gtk4/**"
   ],
   "plugins": [
     "npm:@dprint/json@0.25.2",

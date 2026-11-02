@@ -1,28 +1,13 @@
 # Animations
 
-Sources: [`AdwAnimation`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/class.Animation.html),
-[`AdwTimedAnimation`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/class.TimedAnimation.html),
-[`AdwSpringAnimation`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/class.SpringAnimation.html),
-[`AdwSpringParams`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/struct.SpringParams.html),
-[`AdwEasing`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/enum.Easing.html), and the
-parameters read from libadwaita's C source and stylesheet (`main`).
+Sources: [`AdwAnimation`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/class.Animation.html), [`AdwTimedAnimation`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/class.TimedAnimation.html), [`AdwSpringAnimation`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/class.SpringAnimation.html), [`AdwSpringParams`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/struct.SpringParams.html), [`AdwEasing`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/enum.Easing.html), and the parameters read from libadwaita's C source and stylesheet (`main`).
 
 ## The model
 
-- **`AdwTimedAnimation`**: value `from` → `to` over `duration` ms through an `easing`;
-  `repeat-count` (or forever), `reverse` (runs `to` → `from`, time mirrored before easing),
-  `alternate` (flip direction every other iteration).
-- **`AdwSpringAnimation`**: a physically simulated damped spring (`mass`, `stiffness`,
-  `damping` or `damping ratio`): 0 undamped, <1 underdamped (overshoots), 1 critically damped
-  (fastest without oscillating), >1 overdamped. Has `initial-velocity` (gesture hand-off),
-  `epsilon` (settle threshold, default 0.001), `clamp` (stop on reaching the target) and an
-  `estimated-duration` (springs have no fixed duration).
-- **`AdwEasing`**: 35 curves: linear; ease-in/out/in-out for quad, cubic, quart, quint, sine,
-  expo, circ, elastic, back and bounce; plus (1.7) the CSS cubic-beziers `ease`, `ease-in`,
-  `ease-out`, `ease-in-out`.
-- **System setting:** animations are skipped when `gtk-enable-animations` is off
-  (`follow-enable-animations-setting`, default on) or the widget is unmapped. Sheets use a
-  critically damped spring (ratio 1) when the user asks for reduced motion.
+- **`AdwTimedAnimation`**: value `from` → `to` over `duration` ms through an `easing`; `repeat-count` (or forever), `reverse` (runs `to` → `from`, time mirrored before easing), `alternate` (flip direction every other iteration).
+- **`AdwSpringAnimation`**: a physically simulated damped spring (`mass`, `stiffness`, `damping` or `damping ratio`): 0 undamped, <1 underdamped (overshoots), 1 critically damped (fastest without oscillating), >1 overdamped. Has `initial-velocity` (gesture hand-off), `epsilon` (settle threshold, default 0.001), `clamp` (stop on reaching the target) and an `estimated-duration` (springs have no fixed duration).
+- **`AdwEasing`**: 35 curves: linear; ease-in/out/in-out for quad, cubic, quart, quint, sine, expo, circ, elastic, back and bounce; plus (1.7) the CSS cubic-beziers `ease`, `ease-in`, `ease-out`, `ease-in-out`.
+- **System setting:** animations are skipped when `gtk-enable-animations` is off (`follow-enable-animations-setting`, default on) or the widget is unmapped. Sheets use a critically damped spring (ratio 1) when the user asks for reduced motion.
 - Retargeting an animation mid-flight must keep motion continuous (springs carry their velocity).
 
 ## What libadwaita actually uses (from source)
@@ -39,21 +24,13 @@ parameters read from libadwaita's C source and stylesheet (`main`).
 | Scrollbar slider/trough                                               | CSS       | 200ms linear                                                                             |
 | Backdrop / focus ring                                                 | CSS       | 200ms ease-out / `$ease-out-quad`                                                        |
 
-Not in the sources I could read (so not asserted): the `GtkRevealer` settings behind
-`AdwExpanderRow` / `AdwBanner` (we use the 250ms `ADW_EASE` reveal above) and the switch knob's
-own timing (we use the 200ms style transition).
+Not in the sources I could read (so not asserted): the `GtkRevealer` settings behind `AdwExpanderRow` / `AdwBanner` (we use the 250ms `ADW_EASE` reveal above) and the switch knob's own timing (we use the 200ms style transition).
 
 ## iced mapping
 
-`iced_libadwaita::animation` mirrors the model above in pure, unit-tested code:
-`Easing` (all 35 + `CubicBezier`), `TimedAnimation`, `SpringParams` / `SpringAnimation`
-(damped-spring solver, initial velocity, epsilon, clamp, estimated duration), `Tween` (the
-animated value a widget keeps; retargeting continues from the current value and velocity),
-`presets` (the table above), and `animation::enabled()` / `set_enabled(..)` (follows the
-desktop's `enable-animations`; disabled animations jump to the end value).
+`iced_libadwaita::animation` mirrors the model above in pure, unit-tested code: `Easing` (all 35 + `CubicBezier`), `TimedAnimation`, `SpringParams` / `SpringAnimation` (damped-spring solver, initial velocity, epsilon, clamp, estimated duration), `Tween` (the animated value a widget keeps; retargeting continues from the current value and velocity), `presets` (the table above), and `animation::enabled()` / `set_enabled(..)` (follows the desktop's `enable-animations`; disabled animations jump to the end value).
 
-Widgets animate themselves from iced's `RedrawRequested` events, so the app needs no
-subscription or messages:
+Widgets animate themselves from iced's `RedrawRequested` events, so the app needs no subscription or messages:
 
 | Widget                                                    | Motion                                                                                   |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -64,19 +41,11 @@ subscription or messages:
 | `toast_overlay`                                           | slide up, 300ms `ADW_EASE`                                                               |
 | `carousel`                                                | scroll spring (1, 0.5, 500), drag with velocity hand-off, indicator follows the position |
 
-Limitations: iced has no opacity layer or scaling transform, so dialogs/toasts slide and the
-scrim fades but children don't fade or scale; dialogs, bottom sheets and toasts are mounted
-only while shown, so they animate **in** but not out; no navigation-view page transition or
-swipe gestures; stock iced widgets (button hover, text input focus) can't animate because their
-style functions only receive the current status, so only crate-owned widgets (Switch, …) do.
+Limitations: iced has no opacity layer or scaling transform, so dialogs/toasts slide and the scrim fades but children don't fade or scale; dialogs, bottom sheets and toasts are mounted only while shown, so they animate **in** but not out; no navigation-view page transition or swipe gestures; stock iced widgets (button hover, text input focus) can't animate because their style functions only receive the current status, so only crate-owned widgets (Switch, …) do.
 
 ## Triggers
 
-Every action that animates is a `Trigger` with **its own** animation and a `None` fallback.
-`Trigger::motion()` resolves to `None` when the desktop disables animations
-(`enable-animations`, `[motion] animations=off`) or `[motion] reduced-motion=true`; otherwise it
-is the per-trigger `[motion] <key>=default|none` setting. A `None` trigger jumps to its end state
-(`Spec::Instant`); widgets still lay out and behave identically.
+Every action that animates is a `Trigger` with **its own** animation and a `None` fallback. `Trigger::motion()` resolves to `None` when the desktop disables animations (`enable-animations`, `[motion] animations=off`) or `[motion] reduced-motion=true`; otherwise it is the per-trigger `[motion] <key>=default|none` setting. A `None` trigger jumps to its end state (`Spec::Instant`); widgets still lay out and behave identically.
 
 | Trigger      | Config key    | Animation                                                                                                                                                                                                        |
 | ------------ | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -93,5 +62,4 @@ is the per-trigger `[motion] <key>=default|none` setting. A `None` trigger jumps
 | `Carousel`   | `carousel`    | scroll spring (1, 0.5, 500) with drag velocity hand-off                                                                                                                                                          |
 | `Layout`     | `layout`      | at the collapse breakpoint the sidebar slides out of (or into) the layout and displaces the content, on the drawer's sidebar spring (1, 0.5, 500). The drawer is the same motion on a higher layer, over a scrim |
 
-An app can override one trigger (discouraged, reported like any opt-out):
-`Config::load().opt_out(|o| { o.motion(Trigger::Toast, Motion::None); })`.
+An app can override one trigger (discouraged, reported like any opt-out): `Config::load().opt_out(|o| { o.motion(Trigger::Toast, Motion::None); })`.

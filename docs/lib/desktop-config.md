@@ -1,8 +1,6 @@
 # Desktop config
 
-Desktop-level behavior is defined **once per desktop**, in a shared config file, so every
-iced-libadwaita app behaves the same way. Apps do not hard-code these decisions; they read them.
-`iced_libadwaita::config`; example file: [desktop.conf.example](desktop.conf.example).
+Desktop-level behavior is defined **once per desktop**, in a shared config file, so every iced-libadwaita app behaves the same way. Apps do not hard-code these decisions; they read them. `iced_libadwaita::config`; example file: [desktop.conf.example](desktop.conf.example).
 
 ## Where and in what order
 
@@ -21,8 +19,7 @@ flowchart LR
     P{{"policy: allow-app-overrides"}} -.-> D
 ```
 
-Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 with one file
-(testing). Invalid or unknown values are ignored with a warning (`Config::warnings`).
+Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 with one file (testing). Invalid or unknown values are ignored with a warning (`Config::warnings`).
 
 ## Settings
 
@@ -49,7 +46,7 @@ Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 wi
 |             | `drawer-max-fraction`                                                                                                              | 0.85                                                                                           | the most of the window a drawer may take                                                                  |
 | windows     | `min-width`, `min-height`                                                                                                          | px (360, 200)                                                                                  | `window::settings()` minimum size                                                                         |
 | layout      | `page-max-width`                                                                                                                   | px (600)                                                                                       | the readable width pages and preference lists are clamped to                                              |
-|             | `mobile-sidebar`                                                                                                                   | drawer / first-page (drawer)                                                                   | `NavigationSplitView` default                                                                             |
+|             | `mobile-sidebar`                                                                                                                   | drawer / parent-page (drawer)                                                                  | `NavigationSplitView` default                                                                             |
 | menus       | `presentation`                                                                                                                     | auto / dropdown / full-page (auto)                                                             | `MenuPresentation::resolve`                                                                               |
 | shortcuts   | `enabled`                                                                                                                          | bool (true)                                                                                    | keyboard shortcuts work and are shown at all                                                              |
 |             | `hints`                                                                                                                            | auto / always / never (auto)                                                                   | accelerator hints in menus; auto hides them in the touch full-page menu                                   |
@@ -60,9 +57,7 @@ Later files win per key. `ICED_LIBADWAITA_CONFIG=/path.conf` replaces 2 and 3 wi
 | icons       | `theme`                                                                                                                            | system / name (system)                                                                         | window-control icon lookup                                                                                |
 | policy      | `allow-app-overrides`                                                                                                              | bool (true)                                                                                    | may apps opt out?                                                                                         |
 
-Every number the library uses for adaptive layout is a **fallback constant** in code (named, e.g.
-`breakpoints::MD`, `widget::MIN_CONTENT_WIDTH`, `widget::SIDEBAR_MAX_WIDTH`) that the config overrides.
-Widgets read the installed config, never the constant directly.
+Every number the library uses for adaptive layout is a **fallback constant** in code (named, e.g. `breakpoints::MD`, `widget::MIN_CONTENT_WIDTH`, `widget::SIDEBAR_MAX_WIDTH`) that the config overrides. Widgets read the installed config, never the constant directly.
 
 ## Using it
 
@@ -72,9 +67,7 @@ let theme = adw::Theme::from_config(&adw::config::current());
 let presentation = adw::widget::MenuPresentation::resolve(window_width);
 ```
 
-Widgets read the installed config themselves (`Metrics::desktop()`, mobile breakpoint, animation
-switch, button layout, icon theme, mobile sidebar default). Not installing one means libadwaita's
-defaults. Reload by calling `Config::load()` + `install` again (e.g. on a timer or file watch).
+Widgets read the installed config themselves (`Metrics::desktop()`, mobile breakpoint, animation switch, button layout, icon theme, mobile sidebar default). Not installing one means libadwaita's defaults. Reload by calling `Config::load()` + `install` again (e.g. on a timer or file watch).
 
 ## Opting out (highly discouraged, not forbidden)
 
@@ -87,9 +80,4 @@ let cfg = adw::config::Config::load().opt_out(|o| {
 adw::config::install(cfg);
 ```
 
-This makes the app behave differently from every other app on the desktop and ignores what the user
-configured, so it should be rare and justified. It is never silent: `install` prints one line to
-stderr, and `Config::overridden()` lists the opted-out settings. A desktop can forbid opt-outs
-with `[policy] allow-app-overrides=false`: they are then ignored and listed in `Config::denied()`.
-Using a widget's own setter for a desktop-level behavior (e.g. `.collapsed_sidebar(..)`) is the
-same kind of opt-out.
+This makes the app behave differently from every other app on the desktop and ignores what the user configured, so it should be rare and justified. It is never silent: `install` prints one line to stderr, and `Config::overridden()` lists the opted-out settings. A desktop can forbid opt-outs with `[policy] allow-app-overrides=false`: they are then ignored and listed in `Config::denied()`. Using a widget's own setter for a desktop-level behavior (e.g. `.collapsed_sidebar(..)`) is the same kind of opt-out.

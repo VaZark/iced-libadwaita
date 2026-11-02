@@ -28,8 +28,7 @@ A toast must not be the only way to learn something important; use a banner or d
 
 - **Dialog** (`dialog_in_window`): blocks the window for a decision or short task.
 - **Bottom sheet**: a task that belongs to the current page, mostly on narrow windows.
-- **Popover / menu**: a choice that does not interrupt; use `Menu` for commands, `dropdown` or
-  `ComboRow` for choosing a value.
+- **Popover / menu**: a choice that does not interrupt; use `Menu` for commands, `dropdown` or `ComboRow` for choosing a value.
 
 #### Choosing a value
 
@@ -37,14 +36,12 @@ A toast must not be the only way to learn something important; use a banner or d
 - One choice in a form that is submitted later: `check_button`; one of a few: `radio_button`.
 - One of 2-4 short options, always visible: `toggle_group`; more or longer: `dropdown` / `ComboRow`.
 - A number: `scale` for approximate, `SpinRow` for exact.
-- An action with alternatives: `split_button`; where the alternative _changes what the button
-  does_ (merge, squash, rebase): `SplitButtonAction`.
+- An action with alternatives: `split_button`; where the alternative _changes what the button does_ (merge, squash, rebase): `SplitButtonAction`.
 - Disable what is unavailable instead of hiding it, and show why in a subtitle when it is not obvious.
 
 #### Text
 
-`entry` for one line, `password_entry`, `text_view` for paragraphs. Mark validation with
-`EntryState`, not a custom color. In settings use `EntryRow`.
+`entry` for one line, `password_entry`, `text_view` for paragraphs. Mark validation with `EntryState`, not a custom color. In settings use `EntryRow`.
 
 #### Settings and lists
 
@@ -55,8 +52,7 @@ A toast must not be the only way to learn something important; use a banner or d
 
 #### Buttons
 
-- `suggested` for the one main action per view, `destructive` only for data loss, flat in
-  toolbars, `pill` for a standalone call to action, `link_button` for navigation to a place.
+- `suggested` for the one main action per view, `destructive` only for data loss, flat in toolbars, `pill` for a standalone call to action, `link_button` for navigation to a place.
 - Text buttons use verbs; icon buttons need a tooltip.
 
 #### Navigation
@@ -67,5 +63,4 @@ A toast must not be the only way to learn something important; use a banner or d
 
 #### Colors
 
-State and status come from `Role` (accent, success, warning, error, destructive), never from
-fixed hues; see [theming.md](theming.md).
+State and status come from `Role` (accent, success, warning, error, destructive), never from fixed hues; see [theming.md](theming.md).

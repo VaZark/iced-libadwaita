@@ -1,7 +1,6 @@
 # Colors
 
-Source: [CSS variables](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/css-variables.html), [styles and appearance](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/styles-and-appearance.html).
-Values are **light / dark**. `*` = outside sRGB gamut, clipped.
+Source: [CSS variables](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/css-variables.html), [styles and appearance](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/styles-and-appearance.html). Values are **light / dark**. `*` = outside sRGB gamut, clipped.
 
 ## Accent (system preference)
 
@@ -28,8 +27,7 @@ Per-widget override must set **both** `--accent-bg-color` and `--accent-color`.
 | warning     | #e5a50a / #cd9309 | rgb(0 0 0 / 80%) | #905400* / #ffc252       |
 | error       | #e01b24 / #c01c28 | #fff             | #c30000* / #ff938c*      |
 
-`.success` / `.warning` / `.error` also retint the accent (entries use them for
-validation). Success/warning are the high/low offsets of `GtkLevelBar`.
+`.success` / `.warning` / `.error` also retint the accent (entries use them for validation). Success/warning are the high/low offsets of `GtkLevelBar`.
 
 ## Surfaces
 
@@ -72,46 +70,32 @@ Supporting colors (always translucent black, "rgb(0 0 6 / x)"):
 | `--dim-opacity`      | 55%     | 90%           | `.dimmed`, subtitles                                        |
 | `--disabled-opacity` | 50%     | 40%           | insensitive widgets                                         |
 
-`--window-radius` = **15px** (follows window state; used to round focus rings
-near window edges).
+`--window-radius` = **15px** (follows window state; used to round focus rings near window edges).
 
 ## Standalone derivation
 
-`color: oklab(from <bg> var(--standalone-color-oklab))` where the variable is
-`min(l, 0.5) a b` (light) / `max(l, 0.85) a b` (dark).
+`color: oklab(from <bg> var(--standalone-color-oklab))` where the variable is `min(l, 0.5) a b` (light) / `max(l, 0.85) a b` (dark).
 
 ## Backdrop
 
-Unfocused windows swap in `--headerbar-backdrop-color`,
-`--sidebar-backdrop-color`, … so bars match the window background.
+Unfocused windows swap in `--headerbar-backdrop-color`, `--sidebar-backdrop-color`, … so bars match the window background.
 
 ## Palette (GNOME)
 
-`--blue-1..5`, `--green`, `--yellow`, `--orange`, `--red`, `--purple`,
-`--brown`, `--light`, `--dark` (five shades each, e.g. blue-3 `#3584e4`).
+`--blue-1..5`, `--green`, `--yellow`, `--orange`, `--red`, `--purple`, `--brown`, `--light`, `--dark` (five shades each, e.g. blue-3 `#3584e4`).
 
 ## iced mapping
 
-`Palette` holds these names; `Semantic` is the role layer; opacities live in
-`Semantic::opacity`. Palette values track the table above.
+`Palette` holds these names; `Semantic` is the role layer; opacities live in `Semantic::opacity`. Palette values track the table above.
 
 ## Text on colored fills: `color-contrast()`
 
-The text color on a status fill (`accent`, `destructive`, `success`, `warning`, `error`) is not a
-fixed white. It follows the CSS Color Module Level 5 rule `color-contrast(<fill> vs white, ink)`:
-of the light and dark text colors, take the one with the **higher WCAG 2 contrast ratio** against
-the fill (`color::readable_on`). A yellow accent therefore gets dark text while a blue or red one
-keeps white. Components that put text or icons on a colored fill (suggested/destructive buttons,
-banners, avatars, the accent picker's check, selected rows) use it by default.
+The text color on a status fill (`accent`, `destructive`, `success`, `warning`, `error`) is not a fixed white. It follows the CSS Color Module Level 5 rule `color-contrast(<fill> vs white, ink)`: of the light and dark text colors, take the one with the **higher WCAG 2 contrast ratio** against the fill (`color::readable_on`). A yellow accent therefore gets dark text while a blue or red one keeps white. Components that put text or icons on a colored fill (suggested/destructive buttons, banners, avatars, the accent picker's check, selected rows) use it by default.
 
-The pieces are public, so apps can use the same rule: `color::contrast_ratio`,
-`color::color_contrast(bg, &candidates)` (highest ratio) and `color::color_contrast_to(bg,
-&candidates, 4.5)` (first candidate reaching a target, e.g. AA, else the highest).
+The pieces are public, so apps can use the same rule: `color::contrast_ratio`, `color::color_contrast(bg, &candidates)` (highest ratio) and `color::color_contrast_to(bg, &candidates, 4.5)` (first candidate reaching a target, e.g. AA, else the highest).
 
 Overrides, from broad to narrow:
 
-- `Theme::with_auto_contrast(false)` or `[appearance] auto-contrast=false` in the desktop config:
-  keep the palette's fixed `*_fg_color`s (libadwaita's white).
+- `Theme::with_auto_contrast(false)` or `[appearance] auto-contrast=false` in the desktop config: keep the palette's fixed `*_fg_color`s (libadwaita's white).
 - `Theme::with_semantic(|s| s.accent.fg = …)`: a theme-wide hard value for one status color.
-- A component's own prop wins over everything: `Banner::text_color`, `Avatar::text_color`, and
-  `style::button::role_with_text(role, color)` for buttons.
+- A component's own prop wins over everything: `Banner::text_color`, `Avatar::text_color`, and `style::button::role_with_text(role, color)` for buttons.

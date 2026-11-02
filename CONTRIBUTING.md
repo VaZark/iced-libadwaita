@@ -2,8 +2,7 @@
 
 #### Setup
 
-Stable Rust (edition 2024) and the system libraries iced needs on Linux (Wayland or X11, Vulkan
-or OpenGL). Then:
+Stable Rust (edition 2024) and the system libraries iced needs on Linux (Wayland or X11, Vulkan or OpenGL). Then:
 
 ```text
 cargo build --all-targets
@@ -16,56 +15,47 @@ Both `cargo test` and `cargo clippy` should be clean before committing.
 
 #### Formatting
 
-Formatting is handled by the local pre-commit hooks: dprint formats configured JSON, Markdown,
-and TOML files, while `cargo fmt --all` formats Rust. Install the hooks with `pre-commit install`;
-run them across the repository with `pre-commit run --all-files`.
+Formatting is handled by the local pre-commit hooks: dprint formats configured JSON, Markdown, and TOML files, while `cargo fmt --all` formats Rust. Install the hooks with `pre-commit install`; run them across the repository with `pre-commit run --all-files`.
 
 #### The gallery
 
-`cargo run --example gallery` is the visual test. Render every page in light and dark with
-`-- --screenshot DIR`, and inspect the images; useful switches:
+`cargo run --example gallery` is the visual test. Render every page in light and dark with `-- --screenshot DIR`, and inspect the images; useful switches:
 
 ```text
 GALLERY_SIZE=WxH        GALLERY_DETAIL=textinput     GALLERY_PAGE=inputs
-GALLERY_SIDEBAR_MODE=first-page   GALLERY_MENU=page|dropdown
+GALLERY_SIDEBAR_MODE=parent-page   GALLERY_MENU=page|dropdown
 GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push|breakpoint
 GALLERY_DARK=1          # dark scheme for GALLERY_ANIM captures
 GALLERY_ANIM=keys       # waits 6s, then captures: send keys meanwhile (`ydotool key 29:1 50:1 50:0 29:0`)
 GALLERY_ANIM=prefs      # opens the preferences window; captures the parent, then the window
 GALLERY_ANIM=appshell   # opens the AppShell window (GALLERY_SHELL_SIZE=WxH); same capture
-APPSHELL_PIN=mobile|tablet|desktop  APPSHELL_SIDEBAR_MODE=first-page  APPSHELL_CONTENT=1  # AppShell start-up
+APPSHELL_PIN=mobile|tablet|desktop  APPSHELL_SIDEBAR_MODE=parent-page  APPSHELL_CONTENT=1  APPSHELL_DRAWER=1  APPSHELL_EDGE=right|bottom  # AppShell start-up
 ICED_LIBADWAITA_CONFIG=path.conf     # try a desktop config
 ```
 
-How the gallery is organized, and when a component gets a nested page: [examples/gallery/README.md](examples/gallery/README.md).
-Screenshots can be stale on slow debug builds; give them time before concluding a page is broken.
+How the gallery is organized, and when a component gets a nested page: [examples/gallery/README.md](examples/gallery/README.md). Screenshots can be stale on slow debug builds; give them time before concluding a page is broken.
 
 #### Layout of the repo
 
 - `src/`: the library (`widget/`, `style/`, `theme`, `config`, `animation`, …).
-- `examples/`: `gallery/` (including `appshell.rs`, the adaptive-layout demo) and `catalog.rs`
-  (prints the component catalog).
+- `examples/`: `gallery/` (including `appshell.rs`, the adaptive-layout demo) and `catalog.rs` (prints the component catalog).
 - `docs/lib/`: guidance on using the library. `docs/hig-inferences/`: what we target.
 
 #### Working on a component
 
 1. Read its file in `docs/hig-inferences/widgets/` and its _iced mapping_.
-2. Give it the shape in [docs/lib/components.md](docs/lib/components.md); add it to
-   `src/catalog.rs` and regenerate the catalog: `cargo run --example catalog > docs/lib/components-catalog.md`.
+2. Give it the shape in [docs/lib/components.md](docs/lib/components.md); add it to `src/catalog.rs` and regenerate the catalog: `cargo run --example catalog > docs/lib/components-catalog.md`.
 3. Show its states (including disabled) in the gallery.
 4. Record deviations from the reference in its _iced mapping_ section.
 5. Anything that wraps a child widget must forward `overlay()`; test popovers inside it.
 
 #### Docs
 
-Diagrams and charts are [Mermaid](https://mermaid.js.org/) fenced blocks (` ```mermaid `), not ASCII
-art or images. The GTK CSS-node listings under `docs/hig-inferences/gtk4/` are verbatim text from
-the GTK documentation and stay as they are.
+Diagrams and charts are [Mermaid](https://mermaid.js.org/) fenced blocks (` ```mermaid `), not ASCII art or images. The GTK CSS-node listings under `docs/hig-inferences/gtk4/` are verbatim text from the GTK documentation and stay as they are.
 
 #### Commits
 
-Small, logical groups; each commit should build. This project is managed primarily by AI; review
-changes before depending on them.
+Small, logical groups; each commit should build. This project is managed primarily by AI; review changes before depending on them.
 
 #### Status
 
