@@ -13,7 +13,7 @@
 //!   animation because the widget is gone as soon as the app unmounts it.
 
 use crate::Theme;
-use crate::animation::{Spec, Trigger, Tween, presets};
+use crate::animation::{Progress, Spec, Trigger, presets};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
 use iced::advanced::widget::{Tree, Widget, tree};
@@ -23,29 +23,42 @@ use iced::{
 };
 use std::time::Instant;
 
-/// Animated progress in `[0, 1]` (overshoot allowed for underdamped springs).
-pub(super) struct Progress {
-    tween: Tween,
-    pub(super) shown: f32,
+/// The frame loop every animated widget runs, written once: on a redraw, moves `progress`
+/// toward `target` with `spec`, and asks the shell for the next frame (and a new layout, when
+/// the progress changes the widget's size: `relayout`) while it is still moving. Returns whether
+/// it moved.
+pub(super) fn advance<M>(
+    progress: &mut Progress,
+    event: &Event,
+    target: f32,
+    spec: Spec,
+    shell: &mut Shell<'_, M>,
+    relayout: bool,
+) -> bool {
+    let Some(now) = redraw_time(event) else {
+        return false;
+    };
+    let moving = progress.drive(target, now, spec);
+    if moving {
+        if relayout {
+            shell.invalidate_layout();
+        }
+        shell.request_redraw();
+    }
+    moving
 }
 
-impl Progress {
-    pub(super) fn new(initial: f32) -> Self {
-        Self {
-            tween: Tween::new(initial),
-            shown: initial,
-        }
-    }
-
-    /// Moves toward `target` and advances to `now`. Returns whether it changed or is
-    /// still moving (the caller then requests a redraw/relayout).
-    pub(super) fn drive(&mut self, target: f32, now: Instant, spec: Spec) -> bool {
-        self.tween.set_target(target, now, spec);
-        let v = self.tween.tick(now);
-        let changed = (v - self.shown).abs() > f32::EPSILON;
-        self.shown = v;
-        changed || self.tween.is_animating()
-    }
+/// Draws `f` translated by `d` inside `bounds`, handing it the viewport it must clip to (see
+/// [`translated_viewport`]): the one place that draws a child sliding in or out.
+pub(super) fn draw_translated<R: iced::advanced::Renderer>(
+    renderer: &mut R,
+    bounds: Rectangle,
+    viewport: &Rectangle,
+    d: Vector,
+    f: impl FnOnce(&mut R, &Rectangle),
+) {
+    let view = translated_viewport(bounds, viewport, d);
+    renderer.with_translation(d, |r| f(r, &view));
 }
 
 pub(super) fn redraw_time(event: &Event) -> Option<Instant> {
@@ -163,16 +176,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Reveal<'a, M> {
         viewport: &Rectangle,
     ) {
         let state = tree.state.downcast_mut::<RevealState>();
-        if let Some(now) = redraw_time(event)
-            && state.progress.drive(
-                if self.revealed { 1.0 } else { 0.0 },
-                now,
-                Trigger::Reveal.spec(self.spec),
-            )
-        {
-            shell.invalidate_layout();
-            shell.request_redraw();
-        }
+        advance(
+            &mut state.progress,
+            event,
+            if self.revealed { 1.0 } else { 0.0 },
+            Trigger::Reveal.spec(self.spec),
+            shell,
+            true,
+        );
         if state.progress.shown > 0.001 {
             let bounds = layout.bounds();
             let cursor = if cursor.is_over(bounds) {
@@ -380,15 +391,14 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
         viewport: &Rectangle,
     ) {
         let state = tree.state.downcast_mut::<DrawerState>();
-        if let Some(now) = redraw_time(event)
-            && state.progress.drive(
-                if self.open { 1.0 } else { 0.0 },
-                now,
-                Trigger::Drawer.spec(self.spec),
-            )
-        {
-            shell.request_redraw();
-        }
+        advance(
+            &mut state.progress,
+            event,
+            if self.open { 1.0 } else { 0.0 },
+            Trigger::Drawer.spec(self.spec),
+            shell,
+            false,
+        );
         let p = state.progress.shown;
         if p <= 0.001 && !self.open {
             return; // closed: invisible and transparent to events
@@ -492,18 +502,23 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
             Background::Color(scrim(theme, p.min(1.0))),
         );
         let dx = -(1.0 - p) * self.width;
-        let view = translated_viewport(bounds, viewport, Vector::new(dx, 0.0));
-        renderer.with_translation(Vector::new(dx, 0.0), |r| {
-            self.pane.as_widget().draw(
-                &tree.children[0],
-                r,
-                theme,
-                style,
-                layout.children().next().unwrap(),
-                cursor,
-                &view,
-            );
-        });
+        draw_translated(
+            renderer,
+            bounds,
+            viewport,
+            Vector::new(dx, 0.0),
+            |r, view| {
+                self.pane.as_widget().draw(
+                    &tree.children[0],
+                    r,
+                    theme,
+                    style,
+                    layout.children().next().unwrap(),
+                    cursor,
+                    view,
+                );
+            },
+        );
     }
 }
 
@@ -623,11 +638,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         viewport: &Rectangle,
     ) {
         let state = tree.state.downcast_mut::<EntranceState>();
-        if let Some(now) = redraw_time(event)
-            && state.progress.drive(1.0, now, self.trigger.spec(self.spec))
-        {
-            shell.request_redraw();
-        }
+        advance(
+            &mut state.progress,
+            event,
+            1.0,
+            self.trigger.spec(self.spec),
+            shell,
+            false,
+        );
         let settled = (state.progress.shown - 1.0).abs() < 0.002;
         if settled {
             self.content.as_widget_mut().update(
@@ -704,8 +722,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
             );
         }
         let d = Vector::new(self.offset.x * (1.0 - p), self.offset.y * (1.0 - p));
-        let view = translated_viewport(layout.bounds(), viewport, d);
-        renderer.with_translation(d, |r| {
+        draw_translated(renderer, layout.bounds(), viewport, d, |r, view| {
             self.content.as_widget().draw(
                 &tree.children[0],
                 r,
@@ -713,7 +730,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
                 style,
                 layout.children().next().unwrap(),
                 cursor,
-                &view,
+                view,
             );
         });
     }
@@ -883,15 +900,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         shell: &mut Shell<'_, M>,
         viewport: &Rectangle,
     ) {
-        if let Some(now) = redraw_time(event)
-            && tree.state.downcast_mut::<PageState>().progress.drive(
-                1.0,
-                now,
-                self.trigger.spec(Spec::STYLE),
-            )
-        {
-            shell.request_redraw();
-        }
+        advance(
+            &mut tree.state.downcast_mut::<PageState>().progress,
+            event,
+            1.0,
+            self.trigger.spec(Spec::STYLE),
+            shell,
+            false,
+        );
         let child_layout = layout.children().next().unwrap();
         // Back to a page seen before: put its scroll position back once it has a layout.
         if matches!(
@@ -1131,15 +1147,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
         viewport: &Rectangle,
     ) {
         let state = tree.state.downcast_mut::<PushState>();
-        if let Some(now) = redraw_time(event)
-            && state.progress.drive(
-                if self.pushed { 1.0 } else { 0.0 },
-                now,
-                Trigger::PagePush.spec(Spec::Spring(presets::navigation())),
-            )
-        {
-            shell.request_redraw();
-        }
+        advance(
+            &mut state.progress,
+            event,
+            if self.pushed { 1.0 } else { 0.0 },
+            Trigger::PagePush.spec(Spec::Spring(presets::navigation())),
+            shell,
+            false,
+        );
         let p = state.progress.shown;
         let mut kids = layout.children();
         let (root_l, top_l) = (kids.next().unwrap(), kids.next().unwrap());
@@ -1301,9 +1316,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
         // Each part in its own layer: within one layer all quads paint before all text, so the
         // old page's text would show through the new page's backing.
         let root_shift = Vector::new(-bounds.width / 3.0 * p, 0.0);
-        let root_view = translated_viewport(bounds, viewport, root_shift);
         renderer.with_layer(bounds, |r| {
-            r.with_translation(root_shift, |r| draw_root(r, &root_view));
+            draw_translated(r, bounds, viewport, root_shift, |r, view| {
+                draw_root(r, view)
+            });
         });
         // The old page dims as the new one covers it.
         renderer.with_layer(bounds, |r| {
@@ -1318,11 +1334,8 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
             );
         });
         let dx = bounds.width * (1.0 - p);
-        // The sliding page clips to the part of the stack that is visible, in its own
-        // coordinates: otherwise its scrollable body paints outside the stack as it slides.
-        let top_view = translated_viewport(bounds, viewport, Vector::new(dx, 0.0));
         renderer.with_layer(bounds, |r| {
-            r.with_translation(Vector::new(dx, 0.0), |r| {
+            draw_translated(r, bounds, viewport, Vector::new(dx, 0.0), |r, view| {
                 // The sliding page is opaque and casts a shadow on the page it covers.
                 r.fill_quad(
                     Quad {
@@ -1340,7 +1353,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
                     },
                     Background::Color(theme.semantic.window.bg),
                 );
-                draw_top(r, &top_view);
+                draw_top(r, view);
             });
         });
     }
@@ -1424,15 +1437,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Highlight<'a, M> {
         shell: &mut Shell<'_, M>,
         viewport: &Rectangle,
     ) {
-        if let Some(now) = redraw_time(event)
-            && tree.state.downcast_mut::<HighlightState>().progress.drive(
-                if self.selected { 1.0 } else { 0.0 },
-                now,
-                Trigger::Selection.spec(Spec::STYLE),
-            )
-        {
-            shell.request_redraw();
-        }
+        advance(
+            &mut tree.state.downcast_mut::<HighlightState>().progress,
+            event,
+            if self.selected { 1.0 } else { 0.0 },
+            Trigger::Selection.spec(Spec::STYLE),
+            shell,
+            false,
+        );
         self.content.as_widget_mut().update(
             &mut tree.children[0],
             event,

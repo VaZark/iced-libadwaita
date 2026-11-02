@@ -76,8 +76,7 @@ pub struct Dropdown<'a, M> {
 struct State {
     open: bool,
     /// 0 → 1 while the popover opens; restarted each time it opens.
-    appear: crate::animation::Tween,
-    shown: f32,
+    appear: crate::animation::Progress,
 }
 
 impl State {
@@ -89,8 +88,7 @@ impl State {
         };
         Self {
             open,
-            appear: crate::animation::Tween::new(start),
-            shown: start,
+            appear: crate::animation::Progress::new(start),
         }
     }
     fn toggle(&mut self) {
@@ -101,8 +99,7 @@ impl State {
             } else {
                 1.0
             };
-            self.appear = crate::animation::Tween::new(start);
-            self.shown = start;
+            self.appear = crate::animation::Progress::new(start);
         }
     }
 }
@@ -485,7 +482,6 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Dropdown<'a, M> {
             tree: &mut children[1],
             open: &mut state.open,
             appear: &mut state.appear,
-            shown: &mut state.shown,
             anchor,
             align: self.align,
             min_width: self.popover_width,
@@ -501,8 +497,7 @@ struct Popover<'a, 'b, M> {
     content: &'b mut Element<'a, M>,
     tree: &'b mut Tree,
     open: &'b mut bool,
-    appear: &'b mut crate::animation::Tween,
-    shown: &'b mut f32,
+    appear: &'b mut crate::animation::Progress,
     anchor: Rectangle,
     align: Align,
     min_width: Option<f32>,
@@ -584,7 +579,7 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for Popover<'a, 'b, M
     ) {
         // Opening: a popover rises 8px into place (a page slides in from the end edge),
         // 200ms ease-out-quad.
-        let p = (*self.shown).clamp(0.0, 1.0);
+        let p = self.appear.shown.clamp(0.0, 1.0);
         let d = if self.presentation == Presentation::Page {
             iced::Vector::new(layout.bounds().width * (1.0 - p), 0.0)
         } else {
@@ -612,17 +607,14 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for Popover<'a, 'b, M
         clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, M>,
     ) {
-        if let Event::Window(iced::window::Event::RedrawRequested(now)) = event {
-            self.appear.set_target(
-                1.0,
-                *now,
-                crate::animation::Trigger::Popover.spec(crate::animation::Spec::STYLE),
-            );
-            *self.shown = self.appear.tick(*now);
-            if self.appear.is_animating() {
-                shell.request_redraw();
-            }
-        }
+        super::motion::advance(
+            self.appear,
+            event,
+            1.0,
+            crate::animation::Trigger::Popover.spec(crate::animation::Spec::STYLE),
+            shell,
+            false,
+        );
         let bounds = layout.bounds();
         let close = |open: &mut bool, shell: &mut Shell<'_, M>| {
             *open = false;

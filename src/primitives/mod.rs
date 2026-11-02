@@ -16,6 +16,8 @@
 //! * [`range`]: a value with two ends (`lo <= hi`): the two-thumb slider's thumbs, a date range;
 //! * [`sections`]: text padding around an input's left / right sections;
 //! * [`relative`]: relative time wording ("yesterday", "12 days ago", "in 3 hours") from an explicit `now`;
+//! * [`animation`]: the animation engine (easing, timed and spring animations, `Tween`, `Progress`);
+//! * [`transition`]: ordered close / open transitions between layouts (`Sequence`, `Transitions`);
 //! * [`selection`]: which keys are on (single, required single, multiple);
 //! * [`sorting`]: sort keys with the asc / desc / unsorted cycle, multi-column, a stable sort and comparators;
 //! * [`stepper`]: step statuses from an `active` index, click rules, next / back, connector fill;
@@ -25,6 +27,7 @@
 //! * [`responsive`]: which presentation a width gets ([`When`](responsive::When)).
 
 pub mod anchor;
+pub mod animation;
 pub mod calendar;
 pub mod date;
 pub mod form;
@@ -41,6 +44,7 @@ pub mod sections;
 pub mod selection;
 pub mod sorting;
 pub mod stepper;
+pub mod transition;
 pub mod validation;
 
 pub use form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};

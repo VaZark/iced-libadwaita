@@ -4,8 +4,9 @@
 //! iced's own `toggler` is always 2:1 and sizes the knob from the height, which
 //! looks too wide next to Adwaita. This widget uses Adwaita's proportions.
 
+use super::motion::advance;
 use crate::Theme;
-use crate::animation::{Spec, Tween};
+use crate::animation::{Progress, Spec};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
 use iced::advanced::widget::{Tree, Widget, tree};
@@ -27,8 +28,7 @@ pub struct Switch<'a, M> {
 struct State {
     pressed: bool,
     /// 0 = off, 1 = on; animated with the stylesheet's 200ms `$ease-out-quad`.
-    progress: Tween,
-    shown: f32,
+    progress: Progress,
 }
 
 /// Builds a [`Switch`]. Without `.on_toggle` it renders disabled.
@@ -55,8 +55,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
         let initial = if self.active { 1.0 } else { 0.0 };
         tree::State::new(State {
             pressed: false,
-            progress: Tween::new(initial),
-            shown: initial,
+            progress: Progress::new(initial),
         })
     }
 
@@ -81,19 +80,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
     ) {
         let state = tree.state.downcast_mut::<State>();
         // Animate the knob and track toward the current value.
-        if let Event::Window(iced::window::Event::RedrawRequested(now)) = event {
-            let target = if self.active { 1.0 } else { 0.0 };
-            state.progress.set_target(
-                target,
-                *now,
-                crate::animation::Trigger::Switch.spec(Spec::STYLE),
-            );
-            let v = state.progress.tick(*now);
-            if (v - state.shown).abs() > f32::EPSILON || state.progress.is_animating() {
-                state.shown = v;
-                shell.request_redraw();
-            }
-        }
+        advance(
+            &mut state.progress,
+            event,
+            if self.active { 1.0 } else { 0.0 },
+            crate::animation::Trigger::Switch.spec(Spec::STYLE),
+            shell,
+            false,
+        );
         let Some(on_toggle) = &self.on_toggle else {
             return;
         };
@@ -152,7 +146,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Switch<'a, M> {
         // round, 0 is square; the knob follows so it stays concentric with the track.
         let round = (theme.metrics.radius_m / crate::Metrics::MAX_RADIUS_M).clamp(0.0, 1.0);
 
-        let p = tree.state.downcast_ref::<State>().shown.clamp(0.0, 1.0);
+        let p = tree
+            .state
+            .downcast_ref::<State>()
+            .progress
+            .shown
+            .clamp(0.0, 1.0);
         let off = crate::color::alpha(
             s.window.fg,
             s.opacity.trough + if hovered { 0.05 } else { 0.0 },

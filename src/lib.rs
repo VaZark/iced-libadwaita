@@ -10,7 +10,6 @@
 //!   `StatusPage`, `AlertDialog`, …).
 
 pub mod adaptive;
-pub mod animation;
 pub mod breakpoints;
 pub mod catalog;
 pub mod color;
@@ -28,9 +27,13 @@ pub mod shortcut;
 pub mod style;
 pub mod system;
 pub mod theme;
-pub mod transition;
 pub mod widget;
 pub mod window;
+
+/// The animation engine, a [primitive](primitives::animation); kept at its old path.
+pub use primitives::animation;
+/// The ordered-transition coordinator, a [primitive](primitives::transition); kept at its old path.
+pub use primitives::transition;
 
 pub use icon::Icon;
 pub use metrics::{CollapseBehavior, Metrics, Typography};

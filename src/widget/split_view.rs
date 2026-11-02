@@ -11,9 +11,9 @@
 //! drawer slides over the content. The only difference is the layer: in flow the content moves
 //! out of its way instead of being covered.
 
-use super::motion::{Progress, redraw_time, scrim};
+use super::motion::{advance, scrim};
 use crate::Theme;
-use crate::animation::{Spec, Trigger, presets};
+use crate::animation::{Progress, Spec, Trigger, presets};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
 use iced::advanced::widget::{Operation, Tree, Widget, tree};
@@ -169,26 +169,27 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
     ) {
         let (slot, drawer) = {
             let st = tree.state.downcast_mut::<SplitState>();
-            if let Some(now) = redraw_time(event) {
-                let moving = st.slot.drive(
-                    if self.wide { 1.0 } else { 0.0 },
-                    now,
-                    Trigger::Layout.spec(spring()),
-                ) | st.drawer.drive(
-                    if self.drawer_open && !self.wide {
-                        1.0
-                    } else {
-                        0.0
-                    },
-                    now,
-                    Trigger::Drawer.spec(spring()),
-                );
-                if moving {
-                    // The content's width changes every frame while the sidebar slides.
-                    shell.invalidate_layout();
-                    shell.request_redraw();
-                }
-            }
+            // The content's width changes every frame while the sidebar slides: relayout.
+            advance(
+                &mut st.slot,
+                event,
+                if self.wide { 1.0 } else { 0.0 },
+                Trigger::Layout.spec(spring()),
+                shell,
+                true,
+            );
+            advance(
+                &mut st.drawer,
+                event,
+                if self.drawer_open && !self.wide {
+                    1.0
+                } else {
+                    0.0
+                },
+                Trigger::Drawer.spec(spring()),
+                shell,
+                true,
+            );
             (st.slot.shown, st.drawer.shown)
         };
         let mut kids = layout.children();

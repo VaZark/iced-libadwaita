@@ -11,9 +11,10 @@
 //!
 //! State is controlled: the app owns `index` and updates it from `on_navigate`.
 
+use super::motion::draw_translated;
 use crate::Theme;
 use crate::animation::Trigger;
-use crate::animation::{Spec, Tween, presets};
+use crate::animation::{Progress, Spec, presets};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
 use iced::advanced::widget::{Tree, Widget, tree};
@@ -112,8 +113,8 @@ impl<'a, M> Carousel<'a, M> {
 }
 
 struct State {
-    position: Tween,
-    shown: f32,
+    /// The scroll position in pages, and the value shown this frame (`progress.shown`).
+    progress: Progress,
     /// `(cursor x at press, position at press, last x, last time, velocity px/s)`.
     press: Option<Press>,
     dragging: bool,
@@ -143,8 +144,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
     }
     fn state(&self) -> tree::State {
         tree::State::new(State {
-            position: Tween::new(self.index as f32),
-            shown: self.index as f32,
+            progress: Progress::new(self.index as f32),
             press: None,
             dragging: false,
         })
@@ -218,16 +218,16 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
 
         // Animate the scroll position toward the current page (unless the user holds it).
         if let Event::Window(window::Event::RedrawRequested(now)) = event {
-            if !state.dragging {
-                state.position.set_target(
+            let moving = if state.dragging {
+                state.progress.step(*now)
+            } else {
+                state.progress.drive(
                     self.index.min(n - 1) as f32,
                     *now,
                     Trigger::Carousel.spec(self.spec),
-                );
-            }
-            let v = state.position.tick(*now);
-            if (v - state.shown).abs() > f32::EPSILON || state.position.is_animating() {
-                state.shown = v;
+                )
+            };
+            if moving {
                 shell.request_redraw();
             }
         }
@@ -244,7 +244,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
                     let x = cursor.position().map(|p| p.x).unwrap_or(0.0);
                     state.press = Some(Press {
                         x0: x,
-                        pos0: state.shown,
+                        pos0: state.progress.shown,
                         last_x: x,
                         last_t: Instant::now(),
                         velocity: 0.0,
@@ -266,8 +266,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
                             } else {
                                 raw
                             };
-                            state.position.set_immediate(pos);
-                            state.shown = pos;
+                            state.progress.set_immediate(pos);
                             let now = Instant::now();
                             let dt = now.duration_since(pr.last_t).as_secs_f32().max(1e-3);
                             // Smoothed velocity in pages per second (screen motion → page motion).
@@ -285,11 +284,11 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
                     if state.dragging {
                         let pr = state.press.unwrap();
                         // Project a little along the velocity, then snap to the nearest page.
-                        let target = (state.shown + pr.velocity * 0.12)
+                        let target = (state.progress.shown + pr.velocity * 0.12)
                             .round()
                             .clamp(0.0, max_pos) as usize;
                         let now = Instant::now();
-                        state.position.fling_to(
+                        state.progress.fling_to(
                             target as f32,
                             pr.velocity,
                             now,
@@ -326,9 +325,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
             return;
         }
         // Forward events to the current page when the carousel is at rest.
-        let settled = (state.shown - state.shown.round()).abs() < 0.001;
+        let settled = (state.progress.shown - state.progress.shown.round()).abs() < 0.001;
         if settled {
-            let i = (state.shown.round() as usize).min(n - 1);
+            let i = (state.progress.shown.round() as usize).min(n - 1);
             let off = i as f32 * pitch;
             let shift = |p: Point| Point::new(p.x + off, p.y);
             let cur = match cursor {
@@ -399,7 +398,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
             return;
         }
         let bounds = layout.bounds();
-        let pos = tree.state.downcast_ref::<State>().shown;
+        let pos = tree.state.downcast_ref::<State>().progress.shown;
         let pitch = self.page_w + self.spacing;
         let off = pos * pitch;
         let page_area = Rectangle {
@@ -408,24 +407,13 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Carousel<'a, M> {
         };
 
         renderer.with_layer(page_area, |r| {
-            // Slide everything left by `off`; shift the viewport back so clipping still
-            // matches the (translated) page.
-            let vp = Rectangle {
-                x: viewport.x + off,
-                ..*viewport
-            };
-            r.with_translation(Vector::new(-off, 0.0), |r| {
+            // Slide everything left by `off`, clipping to the part of the pages that is visible
+            // (in the pages' own coordinates), like every sliding child.
+            draw_translated(r, page_area, viewport, Vector::new(-off, 0.0), |r, vp| {
                 for (i, (page, node)) in self.pages.iter().zip(layout.children()).enumerate() {
                     if (i as f32 - pos).abs() < 1.0 + self.spacing / self.page_w.max(1.0) {
-                        page.as_widget().draw(
-                            &tree.children[i],
-                            r,
-                            theme,
-                            style,
-                            node,
-                            cursor,
-                            &vp,
-                        );
+                        page.as_widget()
+                            .draw(&tree.children[i], r, theme, style, node, cursor, vp);
                     }
                 }
             });

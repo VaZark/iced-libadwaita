@@ -1070,3 +1070,114 @@ mod tests {
         assert_eq!(presets::STYLE_TRANSITION.0, Duration::from_millis(200));
     }
 }
+
+/// Animated progress, the thing every animated widget keeps: a [`Tween`] and the value it shows
+/// this frame (`shown`, `[0, 1]`, overshoot allowed for underdamped springs).
+///
+/// [`drive`](Self::drive) moves it toward a target on each redraw; widgets call it through
+/// `widget::motion::advance`, which also asks the shell for the next frame, so the loop is
+/// written once. [`step`](Self::step), [`set_immediate`](Self::set_immediate) and
+/// [`fling_to`](Self::fling_to) are for the ones a pointer also moves (a carousel).
+#[derive(Debug, Clone)]
+pub struct Progress {
+    tween: Tween,
+    pub shown: f32,
+}
+
+impl Progress {
+    pub fn new(initial: f32) -> Self {
+        Self {
+            tween: Tween::new(initial),
+            shown: initial,
+        }
+    }
+
+    /// Moves toward `target` and advances to `now`. Returns whether it changed or is still
+    /// moving (the caller then requests a redraw / relayout).
+    pub fn drive(&mut self, target: f32, now: Instant, spec: Spec) -> bool {
+        self.tween.set_target(target, now, spec);
+        self.step(now)
+    }
+
+    /// Advances to `now` without a new target (a pointer holds the value). Returns whether it
+    /// changed or is still moving.
+    pub fn step(&mut self, now: Instant) -> bool {
+        let v = self.tween.tick(now);
+        let changed = (v - self.shown).abs() > f32::EPSILON;
+        self.shown = v;
+        changed || self.tween.is_animating()
+    }
+
+    /// Sets the value now, cancelling any animation (a drag).
+    pub fn set_immediate(&mut self, value: f32) {
+        self.tween.set_immediate(value);
+        self.shown = value;
+    }
+
+    /// Heads for `target` with the momentum of a released drag (see [`Tween::fling_to`]).
+    pub fn fling_to(&mut self, target: f32, velocity: f32, now: Instant, spec: Spec) {
+        self.tween.fling_to(target, velocity, now, spec);
+    }
+
+    pub fn is_animating(&self) -> bool {
+        self.tween.is_animating()
+    }
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn drive_moves_toward_the_target_and_reports_motion_until_it_settles() {
+        let t0 = Instant::now();
+        let mut p = Progress::new(0.0);
+        assert!(!p.drive(
+            0.0,
+            t0,
+            Spec::Timed(Duration::from_millis(100), Easing::Linear)
+        ));
+        assert!(p.drive(
+            1.0,
+            t0,
+            Spec::Timed(Duration::from_millis(100), Easing::Linear)
+        ));
+        assert!(p.drive(
+            1.0,
+            t0 + Duration::from_millis(50),
+            Spec::Timed(Duration::from_millis(100), Easing::Linear)
+        ));
+        assert!(p.shown > 0.0 && p.shown < 1.0);
+        // After the duration it has arrived; the last frame still reports the change.
+        p.drive(
+            1.0,
+            t0 + Duration::from_millis(200),
+            Spec::Timed(Duration::from_millis(100), Easing::Linear),
+        );
+        assert!(!p.drive(
+            1.0,
+            t0 + Duration::from_millis(300),
+            Spec::Timed(Duration::from_millis(100), Easing::Linear)
+        ));
+        assert_eq!(p.shown, 1.0);
+    }
+
+    #[test]
+    fn set_immediate_cancels_motion_and_step_follows_it() {
+        let t0 = Instant::now();
+        let mut p = Progress::new(0.0);
+        p.drive(
+            1.0,
+            t0,
+            Spec::Timed(Duration::from_millis(100), Easing::Linear),
+        );
+        p.set_immediate(0.4);
+        assert_eq!(p.shown, 0.4);
+        assert!(
+            !p.step(t0 + Duration::from_millis(10)),
+            "nothing is animating any more"
+        );
+        assert_eq!(p.shown, 0.4);
+    }
+}
