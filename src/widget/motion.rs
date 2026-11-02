@@ -64,6 +64,24 @@ pub(super) fn scrim(theme: &Theme, k: f32) -> Color {
     }
 }
 
+/// The `viewport` to give a child that is drawn translated by `d` inside `bounds`.
+///
+/// Widgets that clip (scrollables, clipping containers) open a layer of their own from the
+/// viewport they are handed, and a layer is not clipped by the one it is inside. A translated
+/// child handed the parent's viewport would clip in the wrong place and its content would be
+/// painted outside `bounds` while it slides: the part of `bounds` that is visible, moved back by
+/// the translation (the child's own coordinates), is what it must clip to.
+pub(super) fn translated_viewport(bounds: Rectangle, viewport: &Rectangle, d: Vector) -> Rectangle {
+    let visible = bounds
+        .intersection(viewport)
+        .unwrap_or(Rectangle::new(bounds.position(), Size::ZERO));
+    Rectangle {
+        x: visible.x - d.x,
+        y: visible.y - d.y,
+        ..visible
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Reveal
 // ---------------------------------------------------------------------------
@@ -474,6 +492,7 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
             Background::Color(scrim(theme, p.min(1.0))),
         );
         let dx = -(1.0 - p) * self.width;
+        let view = translated_viewport(bounds, viewport, Vector::new(dx, 0.0));
         renderer.with_translation(Vector::new(dx, 0.0), |r| {
             self.pane.as_widget().draw(
                 &tree.children[0],
@@ -482,7 +501,7 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
                 style,
                 layout.children().next().unwrap(),
                 cursor,
-                viewport,
+                &view,
             );
         });
     }
@@ -685,6 +704,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
             );
         }
         let d = Vector::new(self.offset.x * (1.0 - p), self.offset.y * (1.0 - p));
+        let view = translated_viewport(layout.bounds(), viewport, d);
         renderer.with_translation(d, |r| {
             self.content.as_widget().draw(
                 &tree.children[0],
@@ -693,7 +713,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
                 style,
                 layout.children().next().unwrap(),
                 cursor,
-                viewport,
+                &view,
             );
         });
     }
@@ -1262,32 +1282,28 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
         let bounds = layout.bounds();
         let mut kids = layout.children();
         let (root_l, top_l) = (kids.next().unwrap(), kids.next().unwrap());
-        let draw_root = |r: &mut iced::Renderer| {
-            self.root.as_widget().draw(
-                &tree.children[0],
-                r,
-                theme,
-                style,
-                root_l,
-                cursor,
-                viewport,
-            );
+        let draw_root = |r: &mut iced::Renderer, view: &Rectangle| {
+            self.root
+                .as_widget()
+                .draw(&tree.children[0], r, theme, style, root_l, cursor, view);
         };
-        let draw_top = |r: &mut iced::Renderer| {
+        let draw_top = |r: &mut iced::Renderer, view: &Rectangle| {
             self.top
                 .as_widget()
-                .draw(&tree.children[1], r, theme, style, top_l, cursor, viewport);
+                .draw(&tree.children[1], r, theme, style, top_l, cursor, view);
         };
         if p <= 0.001 {
-            return draw_root(renderer);
+            return draw_root(renderer, viewport);
         }
         if p >= 0.999 {
-            return draw_top(renderer);
+            return draw_top(renderer, viewport);
         }
         // Each part in its own layer: within one layer all quads paint before all text, so the
         // old page's text would show through the new page's backing.
+        let root_shift = Vector::new(-bounds.width / 3.0 * p, 0.0);
+        let root_view = translated_viewport(bounds, viewport, root_shift);
         renderer.with_layer(bounds, |r| {
-            r.with_translation(Vector::new(-bounds.width / 3.0 * p, 0.0), |r| draw_root(r));
+            r.with_translation(root_shift, |r| draw_root(r, &root_view));
         });
         // The old page dims as the new one covers it.
         renderer.with_layer(bounds, |r| {
@@ -1302,6 +1318,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
             );
         });
         let dx = bounds.width * (1.0 - p);
+        // The sliding page clips to the part of the stack that is visible, in its own
+        // coordinates: otherwise its scrollable body paints outside the stack as it slides.
+        let top_view = translated_viewport(bounds, viewport, Vector::new(dx, 0.0));
         renderer.with_layer(bounds, |r| {
             r.with_translation(Vector::new(dx, 0.0), |r| {
                 // The sliding page is opaque and casts a shadow on the page it covers.
@@ -1321,7 +1340,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
                     },
                     Background::Color(theme.semantic.window.bg),
                 );
-                draw_top(r);
+                draw_top(r, &top_view);
             });
         });
     }
@@ -1519,5 +1538,31 @@ mod layered_tests {
         assert_eq!(a.children.len(), 2);
         assert_eq!(b.children.len(), 2);
         assert_eq!(a.children[0].tag, b.children[0].tag);
+    }
+}
+
+#[cfg(test)]
+mod viewport_tests {
+    use super::*;
+    use iced::Point;
+
+    #[test]
+    fn a_translated_child_clips_to_the_visible_part_in_its_own_coordinates() {
+        let bounds = Rectangle::new(Point::new(100.0, 50.0), Size::new(300.0, 400.0));
+        let window = Rectangle::new(Point::ORIGIN, Size::new(1000.0, 800.0));
+        // A page 120 px in from the end edge: the child is drawn 120 px to the right, so it may
+        // paint its own x range [bounds.x - 120, bounds.x + width - 120).
+        let v = translated_viewport(bounds, &window, Vector::new(120.0, 0.0));
+        assert_eq!(
+            v,
+            Rectangle::new(Point::new(-20.0, 50.0), Size::new(300.0, 400.0))
+        );
+        // Shifted back left (the root under a push): the other way.
+        let v = translated_viewport(bounds, &window, Vector::new(-100.0, 0.0));
+        assert_eq!(v.x, 200.0);
+        // Never wider than what is on screen.
+        let narrow = Rectangle::new(Point::new(150.0, 0.0), Size::new(100.0, 800.0));
+        let v = translated_viewport(bounds, &narrow, Vector::ZERO);
+        assert_eq!((v.x, v.width), (150.0, 100.0));
     }
 }

@@ -29,6 +29,7 @@ GALLERY_DARK=1          # dark scheme for GALLERY_ANIM captures
 GALLERY_ANIM=keys       # waits 6s, then captures: send keys meanwhile (`ydotool key 29:1 50:1 50:0 29:0`)
 GALLERY_ANIM=prefs      # opens the preferences window; captures the parent, then the window
 GALLERY_ANIM=appshell   # opens the AppShell window (GALLERY_SHELL_SIZE=WxH); same capture
+GALLERY_ANIM=shell-back|embedded-back  # a page open in the mobile shell (window or embedded in Layout > Resizable), then Back, captured while it slides out
 APPSHELL_PIN=mobile|tablet|desktop  APPSHELL_SIDEBAR_MODE=parent-page  APPSHELL_CONTENT=1  APPSHELL_DRAWER=1  APPSHELL_EDGE=right|bottom  # AppShell start-up
 ICED_LIBADWAITA_CONFIG=path.conf     # try a desktop config
 ```

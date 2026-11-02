@@ -7,7 +7,8 @@
 //! * a `ResponsiveTable`, a table until its columns no longer fit, cards after;
 //! * the same frame with each of the other grips (an edge, another corner).
 //!
-//! `GALLERY_RESIZABLE=WxH` starts the first frame at that size (screenshots).
+//! `GALLERY_RESIZABLE=WxH` starts the first frame at that size, `GALLERY_RESIZABLE_SHELL=WxH` the
+//! app shell's (screenshots).
 
 use iced_libadwaita as adw;
 
@@ -53,7 +54,14 @@ impl Default for State {
                 Some(Size::new(w.parse().ok()?, h.parse().ok()?))
             })
             .unwrap_or(Size::new(820.0, 190.0));
-        let shell_size = Size::new(900.0, 460.0);
+        // GALLERY_RESIZABLE_SHELL=WxH starts the shell frame at that size (screenshots).
+        let shell_size = std::env::var("GALLERY_RESIZABLE_SHELL")
+            .ok()
+            .and_then(|v| {
+                let (w, h) = v.split_once('x')?;
+                Some(Size::new(w.parse().ok()?, h.parse().ok()?))
+            })
+            .unwrap_or(Size::new(900.0, 460.0));
         // The shell's first layout is chosen from this width; later widths come from the frame.
         let (shell, _boot) = AppShell::embedded(shell_size.width);
         Self {

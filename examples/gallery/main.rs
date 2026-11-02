@@ -915,6 +915,60 @@ impl Gallery {
                     _ => iced::exit(),
                 };
             }
+            // GALLERY_ANIM=shell-back: the AppShell window with a page open (use APPSHELL_PIN=mobile
+            // APPSHELL_SIDEBAR_MODE=parent-page APPSHELL_CONTENT=1 GALLERY_SHELL_SIZE=420x640), then
+            // Back to the parent page, captured while the page slides out.
+            if kind == "shell-back" {
+                return match i {
+                    0 => {
+                        self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
+                            Scheme::Dark
+                        } else {
+                            Scheme::Light
+                        };
+                        let open = self.open_shell();
+                        self.shot_tag = Some("a0-child");
+                        open.chain(Task::perform(
+                            tokio::time::sleep(Duration::from_millis(1500)),
+                            move |_| Message::Capture(i),
+                        ))
+                    }
+                    1 => {
+                        self.shot_window = self.shell.as_ref().map(|c| c.id());
+                        let back = self.update(Message::Shell(appshell::Message::Back));
+                        Task::batch([back, wait(70, "a1-70ms", self)])
+                    }
+                    2 => wait(90, "a2-160ms", self),
+                    3 => wait(120, "a3-280ms", self),
+                    4 => wait(700, "a4-end", self),
+                    _ => iced::exit(),
+                };
+            }
+            // GALLERY_ANIM=embedded-back: the shell embedded in Layout > Resizable, with a page open
+            // (APPSHELL_PIN=mobile APPSHELL_SIDEBAR_MODE=parent-page APPSHELL_CONTENT=1
+            // GALLERY_PAGE=layout GALLERY_ONLY=resizable), then Back, captured mid-transition.
+            if kind == "embedded-back" {
+                return match i {
+                    0 => {
+                        self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
+                            Scheme::Dark
+                        } else {
+                            Scheme::Light
+                        };
+                        wait(900, "a0-child", self)
+                    }
+                    1 => {
+                        let back = self.update(Message::Resizable(resizable_demo::Msg::Shell(
+                            appshell::Message::Back,
+                        )));
+                        Task::batch([back, wait(70, "a1-70ms", self)])
+                    }
+                    2 => wait(90, "a2-160ms", self),
+                    3 => wait(120, "a3-280ms", self),
+                    4 => wait(700, "a4-end", self),
+                    _ => iced::exit(),
+                };
+            }
             if kind == "prefs" {
                 return match i {
                     0 => {
