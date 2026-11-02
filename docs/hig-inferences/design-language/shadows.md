@@ -1,21 +1,12 @@
 # Shadows
 
-Source: libadwaita stylesheet (`_lists.scss`, `_popovers.scss`, `_dialogs.scss`,
-`_toolbars.scss`, `_scrolling.scss`, `_common.scss`). The published docs only name
-the shade colors; the geometry below is quoted from the SCSS. Light-style values;
-the sheet uses the same layer geometry in dark and relies on translucent fills and
-darker shade colors, so dark variants are otherwise unverified (‡).
+Source: libadwaita stylesheet (`_lists.scss`, `_popovers.scss`, `_dialogs.scss`, `_toolbars.scss`, `_scrolling.scss`, `_common.scss`). The published docs only name the shade colors; the geometry below is quoted from the SCSS. Light-style values; the sheet uses the same layer geometry in dark and relies on translucent fills and darker shade colors, so dark variants are otherwise unverified (‡).
 
 ## Principles
 
-- Elevation is a stack of CSS box-shadows: usually a **1px ring** (`0 0 0 1px`) plus
-  one or two **soft blurred layers**. Never a single hard drop shadow.
-- Colors are near-black `rgb(0 0 6 / x)` ("ink") at very low alpha (3–10%). Shade
-  CSS variables (`--shade-color`, `--card-shade-color`, `--headerbar-shade-color`,
-  `--popover-shade-color`) change between light and dark; the ring/blur alphas do not.
-- **Flat by default.** Bars (header, tab, action) are flat; separation comes from the
-  window/headerbar color difference plus a scroll _undershoot_, not a standing shadow.
-  `raised` / `raised-border` are opt-in styles.
+- Elevation is a stack of CSS box-shadows: usually a **1px ring** (`0 0 0 1px`) plus one or two **soft blurred layers**. Never a single hard drop shadow.
+- Colors are near-black `rgb(0 0 6 / x)` ("ink") at very low alpha (3–10%). Shade CSS variables (`--shade-color`, `--card-shade-color`, `--headerbar-shade-color`, `--popover-shade-color`) change between light and dark; the ring/blur alphas do not.
+- **Flat by default.** Bars (header, tab, action) are flat; separation comes from the window/headerbar color difference plus a scroll _undershoot_, not a standing shadow. `raised` / `raised-border` are opt-in styles.
 - High contrast replaces the ring with a `--border-color` outline.
 - Transitions for shadow/background: 200ms ease-out (`$ease-out-quad`).
 
@@ -37,18 +28,15 @@ darker shade colors, so dark variants are otherwise unverified (‡).
 
 ## Dim layer ("scrim")
 
-`floating-sheet > dimming`: `--shade-color` with **alpha doubled** (light 7%→14%,
-dark 25%→50%).
+`floating-sheet > dimming`: `--shade-color` with **alpha doubled** (light 7%→14%, dark 25%→50%).
 
 ## Scrollbar edge
 
-Overlay slider outline: `1px solid --scrollbar-outline-color` at 35% (rest) / 60%
-(hover); see [../gtk4/scrollbar.md](../gtk4/scrollbar.md).
+Overlay slider outline: `1px solid --scrollbar-outline-color` at 35% (rest) / 60% (hover); see [../gtk4/scrollbar.md](../gtk4/scrollbar.md).
 
 ## iced mapping
 
-`Shadows` (on `Theme`) holds one `Elevation` (the layer list above) per surface
-plus three settings:
+`Shadows` (on `Theme`) holds one `Elevation` (the layer list above) per surface plus three settings:
 
 - `enabled`: master switch (`Shadows::none()` for a flat look)
 - `scale`: multiplies offsets and blur radii
@@ -59,25 +47,10 @@ let theme = Theme::dark()
     .with_shadows(Shadows::default().with_scale(1.5).with_intensity(0.6));
 ```
 
-iced draws **one** shadow per quad, so `Shadows::resolve` splits an elevation into
-the 1px **ring** (drawn as the container border) and the blurred layers **merged**
-into one iced `Shadow` (alpha-weighted offset, largest blur+spread, summed alpha
-capped at 0.5). It is an approximation of stacked shadows.
-Raised bars are drawn as a 6px gradient strip because later siblings would paint
-over a real shadow. No `inset` layers, no window shadow, no transitions.
+iced draws **one** shadow per quad, so `Shadows::resolve` splits an elevation into the 1px **ring** (drawn as the container border) and the blurred layers **merged** into one iced `Shadow` (alpha-weighted offset, largest blur+spread, summed alpha capped at 0.5). It is an approximation of stacked shadows. Raised bars are drawn as a 6px gradient strip because later siblings would paint over a real shadow. No `inset` layers, no window shadow, no transitions.
 
 ## Drawing a shadow that follows the border
 
-iced draws one shadow per quad and has no _spread_, so merging Adwaita's stacked layers into a
-single blurred shadow gives a rectangular halo that ignores the card radius. Cards use the CSS
-trick instead: each soft layer is its own shape behind the surface, **inflated by the layer's
-spread, with its corner radius grown by the same amount**, offset by the layer's `x y` and blurred
-by its blur. The 1px ring stays the border. `widget::card_shadow` does this for `Card` (and so for
-`boxed_list` and preference groups); a plain `container(..).style(style::container::card)` still
-gets the single merged shadow.
+iced draws one shadow per quad and has no _spread_, so merging Adwaita's stacked layers into a single blurred shadow gives a rectangular halo that ignores the card radius. Cards use the CSS trick instead: each soft layer is its own shape behind the surface, **inflated by the layer's spread, with its corner radius grown by the same amount**, offset by the layer's `x y` and blurred by its blur. The 1px ring stays the border. `widget::card_shadow` does this for `Card` (and so for `boxed_list` and preference groups); a plain `container(..).style(style::container::card)` still gets the single merged shadow.
 
-Two corrections make it read as a shadow rather than an outline. iced's `blur_radius` falls off
-over a much shorter distance than a CSS blur (a gaussian with sigma = blur / 2), so the blur is
-multiplied by 3; and the shape is pulled in by 2px (negative spread) and lowered by 2px, so the
-shadow sits mostly below the card instead of forming a halo on every side. The card's own 1px
-ring is not drawn as a border (a hard line over the shadow beneath it looks like an outline).
+Two corrections make it read as a shadow rather than an outline. iced's `blur_radius` falls off over a much shorter distance than a CSS blur (a gaussian with sigma = blur / 2), so the blur is multiplied by 3; and the shape is pulled in by 2px (negative spread) and lowered by 2px, so the shadow sits mostly below the card instead of forming a halo on every side. The card's own 1px ring is not drawn as a border (a hard line over the shadow beneath it looks like an outline).

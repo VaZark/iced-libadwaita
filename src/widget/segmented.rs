@@ -43,6 +43,8 @@ pub struct Segmented<'a, T, M> {
     /// (icon-only) variant, or a placeholder when it has none.
     children: Vec<Element<'a, M, Theme>>,
     has_compact: Vec<bool>,
+    /// Segments that cannot be chosen: drawn dimmed, never hovered or pressed.
+    disabled: Vec<bool>,
     active: Option<usize>,
     on_select: Box<dyn Fn(T) -> M + 'a>,
     width: Length,
@@ -81,6 +83,7 @@ impl<'a, T: Clone, M: 'a> Segmented<'a, T, M> {
             values,
             children: full,
             has_compact,
+            disabled: vec![false; n],
             active,
             on_select: Box::new(on_select),
             width: Length::Shrink,
@@ -114,6 +117,14 @@ impl<'a, T: Clone, M: 'a> Segmented<'a, T, M> {
         self
     }
 
+    /// Which segments are disabled (one flag per segment, in order).
+    pub fn disabled(mut self, flags: Vec<bool>) -> Self {
+        if flags.len() == self.values.len() {
+            self.disabled = flags;
+        }
+        self
+    }
+
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -130,7 +141,10 @@ impl<'a, T: Clone, M: 'a> Segmented<'a, T, M> {
 
     fn hit(&self, bounds: Rectangle, cursor: mouse::Cursor) -> Option<usize> {
         let p = cursor.position_in(bounds)?;
-        self.rects.iter().position(|r| r.contains(p))
+        self.rects
+            .iter()
+            .enumerate()
+            .position(|(i, r)| r.contains(p) && !self.disabled[i])
     }
 }
 
@@ -504,7 +518,10 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
             } else {
                 Status::Active
             };
-            let st = sb::toggle(self.active == Some(i), Self::position(i, n))(theme, status);
+            let mut st = sb::toggle(self.active == Some(i), Self::position(i, n))(theme, status);
+            if self.disabled[i] {
+                st.text_color = crate::color::fade(st.text_color, theme.semantic.opacity.disabled);
+            }
             if let Some(bg) = st.background {
                 renderer.fill_quad(
                     Quad {
@@ -543,7 +560,32 @@ impl<'a, T: Clone + 'a, M: 'a> From<Segmented<'a, T, M>> for Element<'a, M, Them
 
 #[cfg(test)]
 mod tests {
-    use super::allot;
+    use super::*;
+    use iced::Point;
+
+    #[test]
+    fn a_disabled_segment_cannot_be_hit() {
+        let seg = |v: u8| -> Segment<'static, u8, ()> { (v, iced::widget::space().into(), None) };
+        let mut s = Segmented::new(vec![seg(0), seg(1)], None, |_| ());
+        s.rects = vec![
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(10.0, 10.0)),
+            Rectangle::new(Point::new(10.0, 0.0), Size::new(10.0, 10.0)),
+        ];
+        let bounds = Rectangle::new(Point::ORIGIN, Size::new(20.0, 10.0));
+        let at = |x| mouse::Cursor::Available(Point::new(x, 5.0));
+        assert_eq!(s.hit(bounds, at(15.0)), Some(1));
+
+        s = s.disabled(vec![false, true]);
+        assert_eq!(s.hit(bounds, at(5.0)), Some(0));
+        assert_eq!(
+            s.hit(bounds, at(15.0)),
+            None,
+            "the disabled segment ignores the pointer"
+        );
+        // A list of the wrong length is ignored rather than guessed at.
+        s = s.disabled(vec![true]);
+        assert_eq!(s.hit(bounds, at(5.0)), Some(0));
+    }
 
     #[test]
     fn allot_adds_equal_extra_when_there_is_room() {

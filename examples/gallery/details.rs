@@ -116,6 +116,7 @@ impl Gallery {
             Action::ShortcutsDialog => Message::OpenDialog(Dialog::Shortcuts),
             Action::PreferencesDialog => Message::OpenDialog(Dialog::Preferences),
             Action::BottomSheet => Message::Sheet(true),
+            Action::AppShell => Message::OpenShell,
         }
     }
 
@@ -566,7 +567,7 @@ impl Gallery {
                 g("Sidebar")
                     .push(
                         w::ComboRow::new("Mobile sidebar", &SIDEBAR_MODES, Some(self.sidebar_mode), Message::SidebarMode)
-                            .subtitle("Drawer over the content, or the first page of a stack"),
+                            .subtitle("Drawer over the content, or the parent page of a stack"),
                     )
                     .push(
                         w::ToggleGroupRow::new(

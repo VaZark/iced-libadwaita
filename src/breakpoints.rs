@@ -93,6 +93,47 @@ impl WidthClass {
             _ => Self::Xs,
         }
     }
+
+    /// The next wider class, if any.
+    pub fn next(self) -> Option<Self> {
+        match self {
+            Self::Xs => Some(Self::Sm),
+            Self::Sm => Some(Self::Md),
+            Self::Md => Some(Self::Lg),
+            Self::Lg => Some(Self::Xl),
+            Self::Xl => Some(Self::Xxl),
+            Self::Xxl => None,
+        }
+    }
+
+    /// The next narrower class, if any.
+    pub fn prev(self) -> Option<Self> {
+        match self {
+            Self::Xs => None,
+            Self::Sm => Some(Self::Xs),
+            Self::Md => Some(Self::Sm),
+            Self::Lg => Some(Self::Md),
+            Self::Xl => Some(Self::Lg),
+            Self::Xxl => Some(Self::Xl),
+        }
+    }
+
+    /// The minimum width of this class on the configured scale (`0` for [`WidthClass::Xs`]).
+    pub fn min_width(self) -> f32 {
+        self.min_width_with(&Breakpoints::current())
+    }
+
+    /// The minimum width of this class on an explicit scale.
+    pub fn min_width_with(self, b: &Breakpoints) -> f32 {
+        match self {
+            Self::Xs => 0.0,
+            Self::Sm => b.sm,
+            Self::Md => b.md,
+            Self::Lg => b.lg,
+            Self::Xl => b.xl,
+            Self::Xxl => b.xxl,
+        }
+    }
 }
 
 #[cfg(test)]

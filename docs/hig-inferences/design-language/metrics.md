@@ -1,7 +1,6 @@
 # Metrics
 
-The docs give very few numbers. Everything marked **‡** is from memory of the
-stylesheet source and should be checked against the SCSS.
+The docs give very few numbers. Everything marked **‡** is from memory of the stylesheet source and should be checked against the SCSS.
 
 | Item                                 | Value                                                                               | Source               |
 | ------------------------------------ | ----------------------------------------------------------------------------------- | -------------------- |
@@ -43,13 +42,8 @@ See also [shadows.md](shadows.md).
 
 ## Radii are capped
 
-Per project decision the HIG/Adwaita radii are the **maximum**: small 4,
-control 9 (`$button_radius`), menu 9, card 12, popover 15, window/dialog 15
-(`--window-radius`), pill 999. Themes may shrink radii but never exceed these
-(`Metrics::clamped`). _Correction:_ an earlier revision used 6px for controls
-from memory; the stylesheet says 9.
+Per project decision the HIG/Adwaita radii are the **maximum**: small 4, control 9 (`$button_radius`), menu 9, card 12, popover 15, window/dialog 15 (`--window-radius`), pill 999. Themes may shrink radii but never exceed these (`Metrics::clamped`). _Correction:_ an earlier revision used 6px for controls from memory; the stylesheet says 9.
 
 ## `sp`
 
-Breakpoints use `sp`: pixels scaled by the system text scale. iced has no text
-scale factor, so `sp` = logical px here.
+Breakpoints use `sp`: pixels scaled by the system text scale. iced has no text scale factor, so `sp` = logical px here.

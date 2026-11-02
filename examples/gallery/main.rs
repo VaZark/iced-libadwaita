@@ -16,6 +16,7 @@ use std::time::Duration;
 
 type Element<'a> = adw::Element<'a, Message>;
 
+mod appshell;
 mod details;
 mod nav;
 
@@ -154,7 +155,9 @@ struct Gallery {
     win: adw::window::State,
     /// The main window, and the preferences window while it is open (a separate OS window).
     main: window::Id,
-    prefs: Option<window::Id>,
+    prefs: Option<adw::window::Child<()>>,
+    /// The AppShell demo: its own window, with its own state.
+    shell: Option<adw::window::Child<appshell::AppShell>>,
     /// Screenshot harness: the window to capture instead of the main one.
     shot_window: Option<window::Id>,
     sheet: bool,
@@ -234,6 +237,11 @@ enum Message {
     EditorEmpty(w::TextAction),
     Picked(&'static str),
     OpenDialog(Dialog),
+    /// Opens the AppShell window (Layout > AppShell).
+    OpenShell,
+    Shell(appshell::Message),
+    /// A window was resized; the AppShell window's width drives its layout.
+    Resized(window::Id, f32),
     CloseDialog,
     Sheet(bool),
     Carousel(usize),
@@ -251,8 +259,8 @@ enum Message {
     DemoPlay,
     Noop,
     Drag,
-    DragWindow(window::Id),
-    ResizeWindow(window::Id, window::Direction),
+    /// Chrome of a secondary window (preferences, AppShell): performed on that window.
+    ChildAction(window::Id, adw::window::Action),
     /// Closes the preferences window.
     ClosePrefs,
     /// The window was closed (by the user or the compositor).
@@ -320,6 +328,7 @@ impl Gallery {
             Self {
                 main,
                 prefs: None,
+                shell: None,
                 shot_window: None,
                 page: start_detail
                     .map(Detail::page)
@@ -380,7 +389,7 @@ impl Gallery {
                 dialog: None,
                 show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
                 sidebar_mode: match std::env::var("GALLERY_SIDEBAR_MODE").as_deref() {
-                    Ok("first-page") => w::CollapsedSidebar::FirstPage,
+                    Ok("parent-page") => w::CollapsedSidebar::ParentPage,
                     _ => cfg.mobile_sidebar,
                 },
                 drawer_open: std::env::var_os("GALLERY_DRAWER").is_some(),
@@ -420,14 +429,16 @@ impl Gallery {
                     Some(iced::Size::new(w.parse().ok()?, h.parse().ok()?))
                 })
                 .unwrap_or(iced::Size::new(1040.0, 760.0)),
-            // Adwaita has no server-side decorations; opt back in with GALLERY_SSD=1.
-            ..adw::window::settings_with_ssd(!Self::csd())
+            // Client-side or system decorations: the toolkit's `[windows] decorations` setting.
+            ..adw::window::settings()
         }
     }
 
     fn title(&self, id: window::Id) -> String {
-        if Some(id) == self.prefs {
+        if self.prefs.as_ref().is_some_and(|c| c.is(id)) {
             "Preferences".into()
+        } else if self.shell.as_ref().is_some_and(|c| c.is(id)) {
+            "AppShell".into()
         } else {
             "iced-libadwaita gallery".into()
         }
@@ -435,12 +446,33 @@ impl Gallery {
 
     /// Opens the preferences dialog as its own window, or brings it forward if open.
     fn open_prefs(&mut self) -> Task<Message> {
-        if let Some(id) = self.prefs {
-            return window::gain_focus(id);
+        if let Some(c) = &self.prefs {
+            return c.focus();
         }
-        let (id, open) = window::open(adw::window::dialog_settings(iced::Size::new(620.0, 640.0)));
-        self.prefs = Some(id);
+        // A dialog: while it is open the parent is disabled (see `root`).
+        let (child, open) = adw::window::Child::dialog(iced::Size::new(620.0, 640.0), ());
+        self.prefs = Some(child);
         open.map(|_| Message::Noop)
+    }
+
+    /// Opens the AppShell demo as its own window (a width of its own drives its layout), or
+    /// brings it forward if open. `GALLERY_SHELL_SIZE=WxH` sets its size.
+    fn open_shell(&mut self) -> Task<Message> {
+        if let Some(c) = &self.shell {
+            return c.focus();
+        }
+        let size = std::env::var("GALLERY_SHELL_SIZE")
+            .ok()
+            .and_then(|v| {
+                let (w, h) = v.split_once('x')?;
+                Some(iced::Size::new(w.parse().ok()?, h.parse().ok()?))
+            })
+            .unwrap_or(iced::Size::new(1100.0, 720.0));
+        // An ordinary window: it does not disable this one.
+        let (shell, boot) = appshell::AppShell::new(size.width);
+        let (child, open) = adw::window::Child::window(size, shell);
+        self.shell = Some(child);
+        Task::batch([open.map(|_| Message::Noop), boot.map(Message::Shell)])
     }
 
     fn metrics(&self) -> Metrics {
@@ -557,6 +589,33 @@ impl Gallery {
             Message::EditorEmpty(a) => self.editor_empty.perform(a),
             Message::Picked(s) => self.picked = Some(s),
             // Preferences is a window of its own; the other dialogs stay in the window.
+            Message::OpenShell => return self.open_shell(),
+            // Chrome of the shell's window is its own message; everything else goes to the shell.
+            Message::Shell(appshell::Message::Window(action)) => {
+                if let Some(c) = &self.shell {
+                    return action.perform(c.id());
+                }
+            }
+            Message::Shell(m) => {
+                if let Some(c) = &mut self.shell {
+                    return c.state.update(m).map(Message::Shell);
+                }
+            }
+            Message::ChildAction(id, action) => return action.perform(id),
+            Message::Resized(id, width) => {
+                if let Some(c) = &mut self.shell
+                    && c.is(id)
+                {
+                    // The frame follows the window: edge to edge when maximized.
+                    return Task::batch([
+                        c.state
+                            .update(appshell::Message::Resized(width))
+                            .map(Message::Shell),
+                        window::is_maximized(id)
+                            .map(|m| Message::Shell(appshell::Message::Maximized(m))),
+                    ]);
+                }
+            }
             Message::OpenDialog(Dialog::Preferences) => return self.open_prefs(),
             Message::OpenDialog(d) => self.dialog = Some(d),
             Message::CloseDialog => self.dialog = None,
@@ -595,24 +654,25 @@ impl Gallery {
             }
             Message::Noop => {}
             Message::Drag => return window::drag(self.main),
-            Message::DragWindow(id) => return window::drag(id),
-            Message::ResizeWindow(id, d) => return window::drag_resize(id, d),
             Message::ClosePrefs => {
-                if let Some(id) = self.prefs.take() {
-                    return window::close(id);
+                if let Some(c) = &self.prefs {
+                    return c.close();
                 }
             }
             Message::FocusPrefs => {
-                if let Some(id) = self.prefs {
-                    return window::gain_focus(id);
+                if let Some(c) = &self.prefs {
+                    return c.focus();
                 }
             }
             Message::WindowClosed(id) => {
                 if id == self.main {
                     return iced::exit();
                 }
-                if Some(id) == self.prefs {
+                if self.prefs.as_ref().is_some_and(|c| c.is(id)) {
                     self.prefs = None;
+                }
+                if self.shell.as_ref().is_some_and(|c| c.is(id)) {
+                    self.shell = None;
                 }
             }
             Message::Escape => {
@@ -704,6 +764,26 @@ impl Gallery {
             };
             // GALLERY_ANIM=prefs: open the preferences window, capture the disabled parent, then
             // the preferences window itself.
+            // GALLERY_ANIM=appshell: open the AppShell window (GALLERY_SHELL_SIZE=WxH) and capture
+            // it.
+            if kind == "appshell" {
+                return match i {
+                    0 => {
+                        self.scheme = Scheme::Light;
+                        let open = self.open_shell();
+                        self.shot_tag = Some("parent");
+                        open.chain(Task::perform(
+                            tokio::time::sleep(Duration::from_millis(1500)),
+                            move |_| Message::Capture(i),
+                        ))
+                    }
+                    1 => {
+                        self.shot_window = self.shell.as_ref().map(|c| c.id());
+                        wait(300, "appshell", self)
+                    }
+                    _ => iced::exit(),
+                };
+            }
             if kind == "prefs" {
                 return match i {
                     0 => {
@@ -716,7 +796,7 @@ impl Gallery {
                         ))
                     }
                     1 => {
-                        self.shot_window = self.prefs;
+                        self.shot_window = self.prefs.as_ref().map(|c| c.id());
                         wait(300, "prefs", self)
                     }
                     _ => iced::exit(),
@@ -835,20 +915,28 @@ impl Gallery {
             frames,
             adw::window::changes().map(|_| Message::WindowChanged),
             window::close_events().map(Message::WindowClosed),
+            window::resize_events().map(|(id, size)| Message::Resized(id, size.width)),
+            self.shell.as_ref().map_or_else(Subscription::none, |c| {
+                c.state.subscription().map(Message::Shell)
+            }),
         ])
     }
 
     fn view(&self, id: window::Id) -> IcedElement<'_, Message, Theme> {
-        if Some(id) == self.prefs {
+        if self.prefs.as_ref().is_some_and(|c| c.is(id)) {
             return self.prefs_window(id);
+        }
+        if let Some(c) = &self.shell
+            && c.is(id)
+        {
+            return c.state.view().map(Message::Shell);
         }
         iced::widget::responsive(|size| self.root(size)).into()
     }
 
-    /// Whether the window draws its own decorations (the Adwaita default).
+    /// Whether the window draws its own decorations: the toolkit's setting, nothing of ours.
     fn csd() -> bool {
-        std::env::var_os("GALLERY_SSD").is_none()
-            && adw::config::current().decorations == adw::config::DecorationMode::Csd
+        adw::window::csd()
     }
 
     fn root(&self, size: iced::Size) -> IcedElement<'_, Message, Theme> {
@@ -985,9 +1073,9 @@ impl Gallery {
             }
         }
 
-        // Collapsed as the first page, the sidebar is a page of cards with descriptions;
+        // Collapsed as the parent page, the sidebar is a page of cards with descriptions;
         // otherwise (beside the content, or in the drawer) the compact list.
-        let sidebar_style = if collapsed && self.sidebar_mode == w::CollapsedSidebar::FirstPage {
+        let sidebar_style = if collapsed && self.sidebar_mode == w::CollapsedSidebar::ParentPage {
             w::SidebarStyle::Cards
         } else {
             w::SidebarStyle::List
@@ -1005,10 +1093,10 @@ impl Gallery {
 
         let page: Element = self.content_page();
 
-        // Switching pages fades the new one in (as a first page, the push slide does that job).
+        // Switching pages fades the new one in (as a parent page, the push slide does that job).
         let page = w::page_transition(
             page,
-            if collapsed && self.sidebar_mode == w::CollapsedSidebar::FirstPage {
+            if collapsed && self.sidebar_mode == w::CollapsedSidebar::ParentPage {
                 0
             } else {
                 self.view_key()
@@ -1134,13 +1222,12 @@ impl Gallery {
             .into_shortcuts()
             .bind("Esc", Message::Escape)
             .scope(result);
-        // While the preferences window is open the parent is disabled: a scrim that swallows
-        // input, and a click on it brings the preferences window forward. Both windows can still
-        // be moved on the screen independently.
-        let result = w::present_dialog(
+        // While the preferences window (a modal child) is open the parent is disabled: a scrim
+        // that swallows input, and a click on it brings the preferences window forward.
+        let result = adw::window::Child::disable_parent(
+            self.prefs.as_ref(),
             result,
-            self.prefs.map(|_| Element::from(iced::widget::space())),
-            Some(Message::FocusPrefs),
+            Message::FocusPrefs,
             corner,
         );
         if csd {
@@ -1154,19 +1241,11 @@ impl Gallery {
     /// page, rounded corners and resize grips like the main window.
     fn prefs_window(&self, id: window::Id) -> IcedElement<'_, Message, Theme> {
         let m = self.metrics();
-        let corner = Metrics::default().radius_window;
-        let close = w::WindowControls {
-            on_minimize: None,
-            on_maximize: None,
-            on_close: Some(Message::ClosePrefs),
-            maximized: false,
-            layout: None,
-        };
+        // A dialog: close button only, both side edges, like any window of the toolkit.
+        let chrome = adw::window::Chrome::new(adw::window::State::default()).close_only();
         let header = w::header_bar::<Message>()
             .title("Preferences")
-            .window_corners(corner, corner)
-            .window_controls(close)
-            .on_drag(Message::DragWindow(id))
+            .chrome(&chrome, move |a| Message::ChildAction(id, a))
             .metrics(m);
         // Esc closes it, like any dialog.
         let content = adw::shortcut::Shortcuts::new()
@@ -1174,13 +1253,7 @@ impl Gallery {
             .scope(Element::from(
                 w::toolbar_view(self.preferences_demo()).top_bar(header),
             ));
-        if Self::csd() {
-            adw::window::frame(content, adw::window::State::default(), move |d| {
-                Message::ResizeWindow(id, d)
-            })
-        } else {
-            content
-        }
+        chrome.frame(content, move |a| Message::ChildAction(id, a))
     }
 
     // --- pages ----------------------------------------------------------
@@ -1284,7 +1357,7 @@ fn main() -> iced::Result {
         // Opting out of desktop settings is highly discouraged; shown here only to demonstrate
         // that it is allowed, explicit and reported (a notice is printed on install).
         cfg = cfg.opt_out(|o| {
-            o.mobile_sidebar(w::CollapsedSidebar::FirstPage);
+            o.mobile_sidebar(w::CollapsedSidebar::ParentPage);
         });
     }
     adw::config::install(cfg);

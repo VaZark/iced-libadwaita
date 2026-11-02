@@ -740,7 +740,7 @@ impl<'a, M> PageTransition<'a, M> {
     }
 
     /// Identifies the page for its scroll position, when that differs from the fade's key (a
-    /// page that is not faded, like the first page of a collapsed split view, still scrolls on
+    /// page that is not faded, like the parent page of a collapsed split view, still scrolls on
     /// its own). Defaults to the fade's key.
     pub fn scroll_key(mut self, key: impl Into<u64>) -> Self {
         self.scroll_key = Some(key.into());

@@ -118,7 +118,10 @@ impl Page {
                 ("Groups", vec![n(PreferencesGroup)]),
             ],
             Page::Layout => vec![
-                ("Containers", vec![n(Card), i(I::Clamp), i(I::StatusPage)]),
+                (
+                    "Containers",
+                    vec![a(AppShell), n(Card), i(I::Clamp), i(I::StatusPage)],
+                ),
                 ("Flow", vec![i(I::WrapBox), i(I::Collapse)]),
             ],
             Page::Navigation => vec![
@@ -230,6 +233,8 @@ pub enum Action {
     ShortcutsDialog,
     PreferencesDialog,
     BottomSheet,
+    /// Opens the AppShell demo in a window of its own.
+    AppShell,
 }
 
 impl Action {
@@ -240,6 +245,7 @@ impl Action {
             Action::ShortcutsDialog => "Shortcuts dialog",
             Action::PreferencesDialog => "Preferences dialog",
             Action::BottomSheet => "Bottom sheet",
+            Action::AppShell => "AppShell",
         }
     }
     pub fn description(self) -> &'static str {
@@ -249,6 +255,7 @@ impl Action {
             Action::ShortcutsDialog => "Keyboard shortcuts in sections",
             Action::PreferencesDialog => "A page of preference rows in a dialog",
             Action::BottomSheet => "A panel sliding up from the bottom",
+            Action::AppShell => "A header, navbar and drawer that adapt to the window width",
         }
     }
     /// The label of the button on the row.
