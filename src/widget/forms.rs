@@ -33,7 +33,8 @@ impl From<crate::primitives::validation::Presentation> for EntryState {
         use crate::primitives::validation::Presentation as P;
         match p {
             P::Pristine => Self::Normal,
-            P::Valid => Self::Success,
+            // Nothing special for `:user-valid`; use `.state(EntryState::Success)` to opt in.
+            P::Valid => Self::Normal,
             P::Warning => Self::Warning,
             P::Invalid => Self::Error,
         }
@@ -394,4 +395,18 @@ pub fn accent_picker<'a, M: Clone + 'a>(
     .spacing(m.space_s)
     .wrap()
     .into()
+}
+
+#[cfg(test)]
+mod valid_tests {
+    use super::*;
+    use crate::primitives::validation::Presentation as P;
+
+    #[test]
+    fn only_invalid_and_warning_get_a_ring_by_default() {
+        assert_eq!(EntryState::from(P::Pristine), EntryState::Normal);
+        assert_eq!(EntryState::from(P::Valid), EntryState::Normal);
+        assert_eq!(EntryState::from(P::Warning), EntryState::Warning);
+        assert_eq!(EntryState::from(P::Invalid), EntryState::Error);
+    }
 }

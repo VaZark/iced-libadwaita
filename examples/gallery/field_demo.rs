@@ -332,7 +332,10 @@ impl State {
             cell("Pristine (invalid value, untouched)", "nope")
                 .validity(bad.clone())
                 .description("Nothing is shown until the field is touched."),
-            cell("Valid", "ada@example.com").touched(true),
+            cell("Valid (nothing special is drawn)", "ada@example.com").touched(true),
+            cell("Valid, opted in with show_valid", "ada@example.com")
+                .touched(true)
+                .show_valid(true),
             cell("Warning", "ada").validity(warn).touched(true),
             cell("Invalid", "nope").validity(bad.clone()).touched(true),
             cell("Required", "")

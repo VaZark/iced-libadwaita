@@ -35,6 +35,7 @@ pub struct Field<'a, M> {
     submitted: bool,
     disabled: bool,
     inline: bool,
+    show_valid: bool,
     layout: FieldLayout,
     metrics: Metrics,
 }
@@ -51,9 +52,16 @@ impl<'a, M: 'a> Field<'a, M> {
             submitted: false,
             disabled: false,
             inline: false,
+            show_valid: false,
             layout: FieldLayout::Stacked,
             metrics: Metrics::desktop(),
         }
+    }
+    /// Also draw the valid state (a success ring). Off by default: like CSS, only
+    /// `:user-invalid` (and a warning) is highlighted, and `:user-valid` adds nothing special.
+    pub fn show_valid(mut self, on: bool) -> Self {
+        self.show_valid = on;
+        self
     }
     /// Help text under the label (stacked) or the control; replaced by the message while one
     /// is shown.
@@ -166,7 +174,11 @@ fn outlined_width<'a, M: 'a>(
 impl<'a, M: 'a> From<Field<'a, M>> for Element<'a, M> {
     fn from(f: Field<'a, M>) -> Self {
         let m = f.metrics;
-        let p = f.presentation();
+        // Valid is a state the app can read, but by default nothing is drawn for it.
+        let p = match f.presentation() {
+            Presentation::Valid if !f.show_valid => Presentation::Pristine,
+            p => p,
+        };
         let msg = validation::message(&f.validity, f.revealed()).map(str::to_owned);
         let disabled = f.disabled;
         let control: Element<'a, M> = if f.inline {

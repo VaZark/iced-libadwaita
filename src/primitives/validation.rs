@@ -40,7 +40,8 @@ impl Validity {
     }
 }
 
-/// How a field looks. `Pristine` draws nothing special.
+/// How a field looks. `Pristine` draws nothing special, and neither does `Valid` by default
+/// (only invalid is highlighted, like CSS; a widget may opt in to show valid).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Presentation {
     #[default]

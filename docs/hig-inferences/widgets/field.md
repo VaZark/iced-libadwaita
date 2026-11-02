@@ -2,9 +2,9 @@
 
 libadwaita has no form-field widget: rows (`AdwEntryRow`, `AdwSpinRow`, ...) carry their own title and the error styling is a bare `.error` class on the entry. `Field` is the HTML `label + control + message` / Radix `Form.Field` pattern for everything else (entries, text views, dropdowns, check and radio buttons, scales, switches), so each form control gets the same layout and the same validation look.
 
-- **Pristine until touched.** Like CSS `:user-valid` / `:user-invalid`, nothing is shown while the user has not interacted; once the field is `touched` (edited or left) or a submit was attempted (`submitted`), it shows valid, warning or invalid. Disabled fields never show validation.
+- **Pristine until touched.** Like CSS `:user-valid` / `:user-invalid`, nothing is shown while the user has not interacted; once the field is `touched` (edited or left) or a submit was attempted (`submitted`), it shows warning or invalid. **Only `:user-invalid` (and a warning) is highlighted: `:user-valid` adds nothing special by default**; `Presentation::Valid` is still reported so the app can read it, and `.show_valid(true)` opts in to a success ring. Disabled fields never show validation.
 - **Required** is a marker (a red asterisk after the title); it does not validate by itself. `validation::required(value, msg)` produces the error.
-- **Message.** The description sits below the control; while a message is shown it replaces the description, in the semantic error (or warning) color with a leading icon. A valid field shows only the outline.
+- **Message.** The description sits below the control; while a message is shown it replaces the description, in the semantic error (or warning) color with a leading icon. A valid field shows nothing extra unless `.show_valid(true)`.
 - **Outline.** One ring (focus-ring width, `radius_m` plus the ring) around the control in the semantic error, warning or success color; transparent when pristine so nothing shifts. Layouts: `Stacked` (title above) and `Row` (title and description at the start, control at the end, message below).
 
 ## iced mapping
