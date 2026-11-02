@@ -32,6 +32,8 @@ GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push|breakpoint
 GALLERY_DARK=1          # dark scheme for GALLERY_ANIM captures
 GALLERY_ANIM=keys       # waits 6s, then captures: send keys meanwhile (`ydotool key 29:1 50:1 50:0 29:0`)
 GALLERY_ANIM=prefs      # opens the preferences window; captures the parent, then the window
+GALLERY_ANIM=appshell   # opens the AppShell window (GALLERY_SHELL_SIZE=WxH); same capture
+APPSHELL_PIN=mobile|tablet|desktop  APPSHELL_SIDEBAR_MODE=first-page  APPSHELL_CONTENT=1  # AppShell start-up
 ICED_LIBADWAITA_CONFIG=path.conf     # try a desktop config
 ```
 
@@ -41,7 +43,8 @@ Screenshots can be stale on slow debug builds; give them time before concluding 
 #### Layout of the repo
 
 - `src/`: the library (`widget/`, `style/`, `theme`, `config`, `animation`, …).
-- `examples/`: `gallery/` and `catalog.rs` (prints the component catalog).
+- `examples/`: `gallery/` (including `appshell.rs`, the adaptive-layout demo) and `catalog.rs`
+  (prints the component catalog).
 - `docs/lib/`: guidance on using the library. `docs/hig-inferences/`: what we target.
 
 #### Working on a component

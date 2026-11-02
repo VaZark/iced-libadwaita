@@ -4,7 +4,7 @@ use super::Element;
 use crate::style::button as sb;
 use crate::{Icon, Metrics, Theme};
 use iced::alignment::Vertical;
-use iced::widget::{Button, button, container, row};
+use iced::widget::{Button, button, container, row, space};
 use iced::{Length, Padding};
 
 /// `AdwButtonContent`: an optional icon next to a label.
@@ -44,15 +44,37 @@ impl<'a, M: 'a> From<ButtonContent<'a, M>> for Element<'a, M> {
     }
 }
 
+/// Width of the [`min_height`] strut. iced's flex layout drops a child of width exactly zero
+/// (it would not count towards the row's height), so the strut is one thousandth of a pixel.
+const STRUT_WIDTH: f32 = 0.001;
+
+/// `content` in a row at least `min` tall, vertically centered.
+pub(super) fn min_height<'a, M: 'a, R: iced::advanced::Renderer + 'a>(
+    content: impl Into<iced::Element<'a, M, Theme, R>>,
+    min: f32,
+) -> iced::widget::Row<'a, M, Theme, R> {
+    row![
+        space()
+            .width(Length::Fixed(STRUT_WIDTH))
+            .height(Length::Fixed(min)),
+        content.into(),
+    ]
+    .align_y(Vertical::Center)
+}
+
 pub(super) fn sized<'a, M: 'a>(
     content: impl Into<Element<'a, M>>,
     m: &Metrics,
 ) -> Button<'a, M, Theme> {
-    button(
-        container(content)
-            .center_y(Length::Fixed(m.button_min_height - m.button_padding.y()))
-            .center_x(Length::Shrink),
-    )
+    // A minimum height, not a fixed one: a strut of the minimum inner height beside the
+    // content, which is centered against it. A one-line label gets the standard height; taller
+    // content (an icon over a label) makes the button grow instead of spilling out of it, since
+    // iced does not clip. To cap the height, opt in with the button's own
+    // `.height(Length::Fixed(..))`.
+    button(min_height(
+        content,
+        m.button_min_height - m.button_padding.y(),
+    ))
     .padding(m.button_padding)
 }
 
@@ -261,5 +283,42 @@ impl<'a, T: Clone + PartialEq + 'a, M: 'a> From<ToggleGroup<'a, T, M>> for Eleme
             .compact(g.compact)
             .metrics(m)
             .into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iced::advanced::layout::Limits;
+    use iced::advanced::widget::Tree;
+    use iced::{Element, Size};
+
+    fn size_of(content: Size) -> Size {
+        let boxed: Element<'_, (), Theme, ()> = min_height(
+            Element::<'_, (), Theme, ()>::from(
+                space()
+                    .width(Length::Fixed(content.width))
+                    .height(Length::Fixed(content.height)),
+            ),
+            24.0,
+        )
+        .into();
+        let mut el = boxed;
+        let mut tree = Tree::new(&el);
+        el.as_widget_mut()
+            .layout(
+                &mut tree,
+                &(),
+                &Limits::new(Size::ZERO, Size::new(500.0, 500.0)),
+            )
+            .size()
+    }
+
+    #[test]
+    fn content_gets_a_minimum_height_and_may_exceed_it() {
+        // A one-line label (shorter than the minimum) is lifted to it...
+        assert_eq!(size_of(Size::new(40.0, 19.0)).height, 24.0);
+        // ...and taller content grows the box instead of overflowing it.
+        assert_eq!(size_of(Size::new(40.0, 32.0)).height, 32.0);
     }
 }

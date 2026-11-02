@@ -590,6 +590,61 @@ impl Gallery {
             ]
             .spacing(m.group_spacing)
             .into(),
+            Detail::AppShell => {
+                // Prose is the point of this page; each group is one idea, top to bottom.
+                let note = |title: &'static str, text: &'static str| -> Element<'_> {
+                    w::ActionRow::new(title).subtitle(text).metrics(m).into()
+                };
+                column![
+                    g("Try it").description("A header, navbar, aside and footer shell in a window of its own. Resize it across the breakpoints.")
+                        .push(
+                            w::ActionRow::new("AppShell window")
+                                .subtitle("Mobile below 768 px, Tablet to 992 px, Desktop beyond")
+                                .suffix(w::suggested_button(text("Open")).on_press(Message::OpenShell))
+                                .metrics(m),
+                        ),
+                    g("The shell: Adaptive")
+                        .description("The parent. It owns which layout is on screen.")
+                        .push(note(
+                            "Layouts",
+                            "Each layout is built alone and declares the width classes it supports (Layouts::layout). The width picks the first layout whose range holds it, and the layout in use stays while its range still does.",
+                        ))
+                        .push(note(
+                            "Triggers",
+                            "Breakpoints come from the width (resize). Manual triggers are Adaptive::pin, accepted only where the layout supports the width, so they choose among layouts with overlapping ranges. Hysteresis, in pixels or a delay, stops flipping near a threshold.",
+                        ))
+                        .push(note(
+                            "Transitions",
+                            "A change runs Close(old) then Open(new), each within a budget from [motion]. Commands name the layout being moved to (closing_for, opening_for), and a layout that never answers is hard-closed at its deadline.",
+                        ))
+                        .push(note(
+                            "State",
+                            "The current page and which panes are open belong to the application, never to a layout, so a layout change loses nothing.",
+                        )),
+                    g("The sidebar: SidebarList")
+                        .description("Downstream of the shell: not a special case.")
+                        .push(note(
+                            "Follows the layout",
+                            "SidebarList::follow(&adaptive, ..) maps the layout on screen to a style and a padding: roomy rows in a mobile drawer, dense rows on a desktop, and, as the first page ([navigation] mobile-sidebar, or the Mobile sidebar control in the window), a page of cards.",
+                        ))
+                        .push(note(
+                            "One component",
+                            "The navbar and the aside are the same SidebarList in every layout. Only the items and the presentation differ. The list is transparent: the pane around it supplies the sidebar color.",
+                        )),
+                    g("The item: SidebarItem")
+                        .description("What a destination is.")
+                        .push(note(
+                            "Describe it once",
+                            "An icon, a title, an optional subtitle (shown in cards), whether it is selected, and the message it sends. Optional: a padding of its own, and a divider above to start a section.",
+                        ))
+                        .push(note(
+                            "Reuse it everywhere",
+                            "Build the items once per update and hand the same list to every layout, including the aside. The item knows nothing about where it is drawn.",
+                        )),
+                ]
+                .spacing(m.group_spacing)
+                .into()
+            }
             Detail::Card => {
                 let plain = w::Card::new(ty::body("A card with the default padding."));
                 let chained = w::Card::new(w::ActionRow::new("First child").subtitle("padding(0): rows pad themselves").metrics(m))

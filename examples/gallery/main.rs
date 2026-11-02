@@ -16,6 +16,7 @@ use std::time::Duration;
 
 type Element<'a> = adw::Element<'a, Message>;
 
+mod appshell;
 mod details;
 mod nav;
 
@@ -155,6 +156,8 @@ struct Gallery {
     /// The main window, and the preferences window while it is open (a separate OS window).
     main: window::Id,
     prefs: Option<window::Id>,
+    /// The AppShell demo: its own window, with its own state.
+    shell: Option<(window::Id, appshell::AppShell)>,
     /// Screenshot harness: the window to capture instead of the main one.
     shot_window: Option<window::Id>,
     sheet: bool,
@@ -234,6 +237,11 @@ enum Message {
     EditorEmpty(w::TextAction),
     Picked(&'static str),
     OpenDialog(Dialog),
+    /// Opens the AppShell window (Layout > AppShell).
+    OpenShell,
+    Shell(appshell::Message),
+    /// A window was resized; the AppShell window's width drives its layout.
+    Resized(window::Id, f32),
     CloseDialog,
     Sheet(bool),
     Carousel(usize),
@@ -320,6 +328,7 @@ impl Gallery {
             Self {
                 main,
                 prefs: None,
+                shell: None,
                 shot_window: None,
                 page: start_detail
                     .map(Detail::page)
@@ -428,6 +437,8 @@ impl Gallery {
     fn title(&self, id: window::Id) -> String {
         if Some(id) == self.prefs {
             "Preferences".into()
+        } else if self.shell.as_ref().is_some_and(|(sid, _)| *sid == id) {
+            "AppShell".into()
         } else {
             "iced-libadwaita gallery".into()
         }
@@ -441,6 +452,28 @@ impl Gallery {
         let (id, open) = window::open(adw::window::dialog_settings(iced::Size::new(620.0, 640.0)));
         self.prefs = Some(id);
         open.map(|_| Message::Noop)
+    }
+
+    /// Opens the AppShell demo as its own window (a width of its own drives its layout), or
+    /// brings it forward if open. `GALLERY_SHELL_SIZE=WxH` sets its size.
+    fn open_shell(&mut self) -> Task<Message> {
+        if let Some((id, _)) = &self.shell {
+            return window::gain_focus(*id);
+        }
+        let size = std::env::var("GALLERY_SHELL_SIZE")
+            .ok()
+            .and_then(|v| {
+                let (w, h) = v.split_once('x')?;
+                Some(iced::Size::new(w.parse().ok()?, h.parse().ok()?))
+            })
+            .unwrap_or(iced::Size::new(1100.0, 720.0));
+        let (id, open) = window::open(window::Settings {
+            size,
+            ..adw::window::settings_with_ssd(true)
+        });
+        let (shell, boot) = appshell::AppShell::new(size.width);
+        self.shell = Some((id, shell));
+        Task::batch([open.map(|_| Message::Noop), boot.map(Message::Shell)])
     }
 
     fn metrics(&self) -> Metrics {
@@ -457,7 +490,11 @@ impl Gallery {
         }
     }
 
-    fn theme(&self, _window: window::Id) -> Theme {
+    fn theme(&self, window: window::Id) -> Theme {
+        // The AppShell window has system decorations: it is opaque.
+        if self.shell.as_ref().is_some_and(|(id, _)| *id == window) {
+            return self.build_theme().with_transparent_window(false);
+        }
         self.build_theme()
     }
 
@@ -557,6 +594,21 @@ impl Gallery {
             Message::EditorEmpty(a) => self.editor_empty.perform(a),
             Message::Picked(s) => self.picked = Some(s),
             // Preferences is a window of its own; the other dialogs stay in the window.
+            Message::OpenShell => return self.open_shell(),
+            Message::Shell(m) => {
+                if let Some((_, shell)) = &mut self.shell {
+                    return shell.update(m).map(Message::Shell);
+                }
+            }
+            Message::Resized(id, width) => {
+                if let Some((sid, shell)) = &mut self.shell
+                    && *sid == id
+                {
+                    return shell
+                        .update(appshell::Message::Resized(width))
+                        .map(Message::Shell);
+                }
+            }
             Message::OpenDialog(Dialog::Preferences) => return self.open_prefs(),
             Message::OpenDialog(d) => self.dialog = Some(d),
             Message::CloseDialog => self.dialog = None,
@@ -613,6 +665,9 @@ impl Gallery {
                 }
                 if Some(id) == self.prefs {
                     self.prefs = None;
+                }
+                if self.shell.as_ref().is_some_and(|(sid, _)| *sid == id) {
+                    self.shell = None;
                 }
             }
             Message::Escape => {
@@ -704,6 +759,26 @@ impl Gallery {
             };
             // GALLERY_ANIM=prefs: open the preferences window, capture the disabled parent, then
             // the preferences window itself.
+            // GALLERY_ANIM=appshell: open the AppShell window (GALLERY_SHELL_SIZE=WxH) and capture
+            // it.
+            if kind == "appshell" {
+                return match i {
+                    0 => {
+                        self.scheme = Scheme::Light;
+                        let open = self.open_shell();
+                        self.shot_tag = Some("parent");
+                        open.chain(Task::perform(
+                            tokio::time::sleep(Duration::from_millis(1500)),
+                            move |_| Message::Capture(i),
+                        ))
+                    }
+                    1 => {
+                        self.shot_window = self.shell.as_ref().map(|(id, _)| *id);
+                        wait(300, "appshell", self)
+                    }
+                    _ => iced::exit(),
+                };
+            }
             if kind == "prefs" {
                 return match i {
                     0 => {
@@ -835,12 +910,23 @@ impl Gallery {
             frames,
             adw::window::changes().map(|_| Message::WindowChanged),
             window::close_events().map(Message::WindowClosed),
+            window::resize_events().map(|(id, size)| Message::Resized(id, size.width)),
+            self.shell
+                .as_ref()
+                .map_or_else(Subscription::none, |(_, s)| {
+                    s.subscription().map(Message::Shell)
+                }),
         ])
     }
 
     fn view(&self, id: window::Id) -> IcedElement<'_, Message, Theme> {
         if Some(id) == self.prefs {
             return self.prefs_window(id);
+        }
+        if let Some((sid, shell)) = &self.shell
+            && *sid == id
+        {
+            return shell.view().map(Message::Shell);
         }
         iced::widget::responsive(|size| self.root(size)).into()
     }

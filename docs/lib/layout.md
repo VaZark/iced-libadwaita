@@ -58,7 +58,26 @@ let layouts = Layouts::new()
   navigate when the close or open command names the layout being moved to.
 - `NavigationSplitView::adapt` is still right for a sidebar that collapses; `adaptive` sits above
   it and picks whole layouts, one of which may contain a split view.
-- `Adaptive::force(key)` pins a layout for a gallery or a test.
+- Layouts declare the widths they support and that is respected. The width picks the first
+  layout whose range holds it (and keeps the one in use while its range still does). A manual
+  trigger, `Adaptive::pin(Some(key))`, is accepted only where `key`'s range holds the current
+  width (`Err(OutOfRange)` otherwise), so it chooses among layouts with overlapping ranges; a
+  layout that supports every class can be pinned anywhere. A resize that leaves the pinned
+  layout's range drops the pin. `pin(None)` releases it.
+- `SidebarList` is downstream of `adaptive`, not a special case: describe the destinations once
+  as `SidebarItem`s, use them in every layout (the navbar and the aside alike), and let the
+  presentation follow the layout with `SidebarList::follow(&adaptive, |layout| (style, padding))`,
+  for example roomy `Lg` rows in a mobile drawer and dense `Sm` rows on a desktop. It changes with
+  the layout that is shown, never ahead of it. The list is transparent: the pane around it
+  supplies the sidebar color.
+- `Adaptive::force(key)` shows a layout with no checks, for a gallery or a test.
+- The `Mobile` layout of the AppShell demo honours `[navigation] mobile-sidebar`
+  (`APPSHELL_SIDEBAR_MODE=drawer|first-page`, or the _Mobile sidebar_ control): as a first page the
+  same `SidebarItem`s become a page of cards (`SidebarStyle::Cards`, with their subtitles) and
+  choosing one pushes the content over it (`push_stack`) with a back button; the
+  app keeps the "content is shown" flag.
+- The gallery's _Layout > AppShell_ page explains this and opens a Mantine-style `AppShell` window (header, navbar, aside, footer)
+  with three layouts, burger buttons, a layout control and the transition knobs.
 
 #### Rows and content
 

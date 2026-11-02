@@ -62,3 +62,18 @@ GALLERY_PAGE=inputs GALLERY_DETAIL=textinput cargo run --example gallery
 Other environment switches: `GALLERY_SIZE=WxH`, `GALLERY_SIDEBAR_MODE=first-page`,
 `GALLERY_SIDEBAR=1` (start on the sidebar when collapsed), `GALLERY_MENU=page|dropdown`,
 `GALLERY_DIALOG=alert|about|shortcuts|preferences`, `GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push`.
+
+## AppShell
+
+_Layout > AppShell_ is a nested page of prose plus one trigger: its **Open** button opens
+`appshell.rs` in a window of its own, the way the preferences dialog is one. It is a window and
+not a page because what it demonstrates is the window's width: resize it across the breakpoints.
+It has its own state and messages (`appshell::Message`, wrapped as `Message::Shell`); the gallery
+only routes it that window's resizes and ticks.
+
+- The **parent** is `Adaptive`: layouts that differ in kind, each declaring the widths it
+  supports, changed by an ordered close-then-open transition.
+- The **downstream** is `SidebarList`: the navbar and the aside are the same component, and its
+  presentation follows the layout that is shown (`SidebarList::follow`).
+- The **item** is `SidebarItem`: a destination described once (icon, title, subtitle, selected,
+  message) and handed to every layout.

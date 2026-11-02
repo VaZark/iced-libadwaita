@@ -302,6 +302,28 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
         self.window_radius = r;
         self
     }
+    /// Makes the presentation follow the layout an [`Adaptive`](crate::adaptive::Adaptive) shows:
+    /// `present` maps the shown layout to a style and a padding. The items stay the same in
+    /// every layout (describe the destinations once); only how they are drawn changes, and it
+    /// changes together with the layout, never ahead of it. Until a layout is shown, the list
+    /// keeps its own [`style`](Self::style) and [`padding`](Self::padding).
+    ///
+    /// ```ignore
+    /// SidebarList::new(items).follow(&self.adaptive, |layout| match layout {
+    ///     Layout::Mobile => (SidebarStyle::List, SidebarPadding::Lg),
+    ///     Layout::Desktop => (SidebarStyle::List, SidebarPadding::Sm),
+    /// })
+    /// ```
+    pub fn follow<K: Clone + PartialEq>(
+        mut self,
+        state: &crate::adaptive::Adaptive<K>,
+        present: impl Fn(&K) -> (SidebarStyle, SidebarPadding),
+    ) -> Self {
+        if let Some(layout) = state.shown().last() {
+            (self.style, self.padding) = present(layout);
+        }
+        self
+    }
 }
 
 impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
@@ -720,6 +742,48 @@ pub fn navigation_view<'a, M: Clone + 'a>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_sidebar_list_follows_the_layout_that_is_shown() {
+        use crate::adaptive::{Adaptive, Layouts};
+        use crate::breakpoints::{Breakpoints, WidthClass};
+        use crate::transition::Budgets;
+        use std::time::Instant;
+
+        let scale = Breakpoints::default();
+        let mut a = Adaptive::new(
+            Layouts::new()
+                .layout(..WidthClass::Md, "narrow")
+                .layout(WidthClass::Md.., "wide"),
+        );
+        let present = |k: &&str| match *k {
+            "narrow" => (SidebarStyle::Cards, SidebarPadding::Lg),
+            _ => (SidebarStyle::List, SidebarPadding::Sm),
+        };
+        let list = || SidebarList::<()>::new([SidebarItem::new("One", ())]);
+
+        // Nothing shown yet: the list keeps its own presentation.
+        let l = list().follow(&a, present);
+        assert_eq!(
+            (l.style, l.padding),
+            (SidebarStyle::List, SidebarPadding::Md)
+        );
+
+        let t0 = Instant::now();
+        a.resize_with(&scale, Budgets::ZERO, 1000.0, t0);
+        let l = list().follow(&a, present);
+        assert_eq!(
+            (l.style, l.padding),
+            (SidebarStyle::List, SidebarPadding::Sm)
+        );
+
+        a.resize_with(&scale, Budgets::ZERO, 500.0, t0);
+        let l = list().follow(&a, present);
+        assert_eq!(
+            (l.style, l.padding),
+            (SidebarStyle::Cards, SidebarPadding::Lg)
+        );
+    }
+
     use super::*;
 
     #[test]

@@ -104,6 +104,28 @@ impl<K: Clone + PartialEq> Layouts<K> {
             .map(|e| &e.key)
     }
 
+
+
+    /// Whether `key` declares `class` in its range. A layout whose range is every class supports
+    /// everything.
+    pub fn allows(&self, key: &K, class: WidthClass) -> bool {
+        self.entries
+            .iter()
+            .any(|e| e.key == *key && e.min <= class && class <= e.max)
+    }
+
+    /// Every layout whose range includes `class`, in priority order: the first is what the
+    /// width picks, the others are what a manual trigger may choose instead.
+    pub fn allowed(&self, class: WidthClass) -> Vec<&K> {
+        let mut out: Vec<&K> = Vec::new();
+        for e in &self.entries {
+            if e.min <= class && class <= e.max && !out.contains(&&e.key) {
+                out.push(&e.key);
+            }
+        }
+        out
+    }
+
     /// The layout for `width` on `scale`. Without a layout for the class, the closest one.
     pub fn pick(&self, scale: &Breakpoints, width: f32) -> Option<&K> {
         let class = WidthClass::of_with(scale, width);
@@ -144,6 +166,18 @@ impl<K: Clone + PartialEq> Layouts<K> {
         self.pick(scale, width)
     }
 }
+
+/// A manual trigger asked for a layout the current width does not support.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OutOfRange;
+
+impl std::fmt::Display for OutOfRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the layout does not support this width")
+    }
+}
+
+impl std::error::Error for OutOfRange {}
 
 /// Pixels past a threshold before the layout changes (the default [`Hysteresis`]).
 pub const HYSTERESIS: f32 = 16.0;
@@ -208,6 +242,8 @@ pub struct Adaptive<K> {
     layouts: Layouts<K>,
     hysteresis: Hysteresis,
     pending: Option<Pending<K>>,
+    pinned: Option<K>,
+    last_width: Option<f32>,
     current: Option<K>,
     transitions: Transitions<K>,
 }
@@ -218,6 +254,8 @@ impl<K: Clone + PartialEq> Adaptive<K> {
             layouts,
             hysteresis: Hysteresis::default(),
             pending: None,
+            pinned: None,
+            last_width: None,
             current: None,
             transitions: Transitions::new(),
         }
@@ -238,6 +276,7 @@ impl<K: Clone + PartialEq> Adaptive<K> {
     pub fn force(&mut self, key: K) {
         self.transitions = Transitions::new();
         self.pending = None;
+        self.pinned = None;
         self.transitions.show(key.clone());
         self.current = Some(key);
     }
@@ -271,12 +310,24 @@ impl<K: Clone + PartialEq> Adaptive<K> {
         width: f32,
         now: Instant,
     ) -> Vec<Command<K>> {
+        self.last_width = Some(width);
+        if let Some(pin) = &self.pinned {
+            // A pin holds only while the layout still supports the width.
+            if self.layouts.allows(pin, WidthClass::of_with(scale, width)) {
+                return Vec::new();
+            }
+            self.pinned = None;
+        }
         let next = match self.hysteresis {
             Hysteresis::Pixels(margin) => {
                 self.layouts
                     .pick_sticky(scale, width, self.current.as_ref(), margin)
             }
-            Hysteresis::Delay(_) => self.layouts.pick(scale, width),
+            // The layout in use stays while its range holds the width, as with pixels.
+            Hysteresis::Delay(_) => {
+                self.layouts
+                    .pick_sticky(scale, width, self.current.as_ref(), 0.0)
+            }
         }
         .cloned();
         let Some(next) = next else {
@@ -338,6 +389,57 @@ impl<K: Clone + PartialEq> Adaptive<K> {
         }
     }
 
+    /// The layout a manual trigger has pinned, if any.
+    pub fn pinned(&self) -> Option<&K> {
+        self.pinned.as_ref()
+    }
+
+    /// A **manual trigger**: `Some(key)` moves to `key` by transition and keeps it while the
+    /// width stays in its range; `None` hands control back to the width (it re-evaluates the
+    /// last one fed to [`resize`](Self::resize)). Breakpoint triggers and manual triggers are the
+    /// same transition; only what starts it differs.
+    ///
+    /// The layouts' ranges are respected: a layout can be pinned only where its range includes
+    /// the current width class (one that supports every class, anywhere), else
+    /// [`OutOfRange`]. A resize that leaves the pinned layout's range drops the pin
+    /// ([`pinned`](Self::pinned) turns `None`).
+    pub fn pin(&mut self, key: Option<K>, now: Instant) -> Result<Vec<Command<K>>, OutOfRange> {
+        self.pin_with(&Breakpoints::current(), Budgets::current(), key, now)
+    }
+
+    /// [`pin`](Self::pin) on an explicit scale and budgets.
+    pub fn pin_with(
+        &mut self,
+        scale: &Breakpoints,
+        budgets: Budgets,
+        key: Option<K>,
+        now: Instant,
+    ) -> Result<Vec<Command<K>>, OutOfRange> {
+        let Some(k) = key else {
+            self.pending = None;
+            self.pinned = None;
+            return Ok(match self.last_width {
+                Some(w) => self.resize_with(scale, budgets, w, now),
+                None => Vec::new(),
+            });
+        };
+        let class = self
+            .last_width
+            .map(|w| WidthClass::of_with(scale, w))
+            .ok_or(OutOfRange)?;
+        if !self.layouts.allows(&k, class) {
+            return Err(OutOfRange);
+        }
+        self.pending = None;
+        self.pinned = Some(k.clone());
+        Ok(self.switch_to(k, budgets, now))
+    }
+
+    /// The layouts a manual trigger may choose at `width` (see [`Layouts::allowed`]).
+    pub fn allowed_at(&self, scale: &Breakpoints, width: f32) -> Vec<&K> {
+        self.layouts.allowed(WidthClass::of_with(scale, width))
+    }
+
     /// A layout reports it is done closing or opening.
     pub fn report(&mut self, event: Event<K>, now: Instant) -> Vec<Command<K>> {
         self.transitions.report(event, now)
@@ -356,8 +458,12 @@ impl<K: Clone + PartialEq> Adaptive<K> {
     }
 
     /// Ticks while a transition is running, so a deadline is enforced even if no layout reports.
-    /// Idle otherwise.
-    pub fn subscription<M: 'static>(&self, tick: fn(Instant) -> M) -> Subscription<M> {
+    /// Idle otherwise. `tick` must not capture anything (a message constructor like
+    /// `Message::Tick` is right).
+    pub fn subscription<M: 'static>(
+        &self,
+        tick: impl Fn(Instant) -> M + iced::advanced::graphics::futures::MaybeSend + Clone + 'static,
+    ) -> Subscription<M> {
         if self.transitions.deadline().is_some() || self.pending.is_some() {
             iced::time::every(FRAME).map(tick)
         } else {
@@ -512,6 +618,70 @@ mod tests {
             }]
         ));
         assert_eq!(a.current(), Some(&L::Narrow));
+    }
+
+    /// Mobile up to Sm, Tablet from Sm to Lg, Desktop from Lg; Everywhere supports all.
+    fn overlapping() -> Layouts<&'static str> {
+        Layouts::new()
+            .layout(..=WidthClass::Sm, "mobile")
+            .layout(WidthClass::Sm..=WidthClass::Md, "tablet")
+            .layout(WidthClass::Md.., "desktop")
+    }
+
+    #[test]
+    fn a_manual_trigger_respects_the_ranges() {
+        let t0 = Instant::now();
+        let mut a = Adaptive::new(overlapping());
+        a.resize_with(&B, Budgets::ZERO, 800.0, t0); // Md: tablet by priority
+        assert_eq!(a.shown(), ["tablet"]);
+        assert_eq!(a.allowed_at(&B, 800.0), [&"tablet", &"desktop"]);
+
+        // Desktop's range includes Md: accepted, and the width no longer decides while it holds.
+        assert!(a.pin_with(&B, Budgets::ZERO, Some("desktop"), t0).is_ok());
+        assert_eq!(a.shown(), ["desktop"]);
+        a.resize_with(&B, Budgets::ZERO, 1000.0, t0);
+        assert_eq!(a.shown(), ["desktop"]);
+
+        // Mobile does not support Md: refused, nothing changes.
+        assert_eq!(
+            a.pin_with(&B, Budgets::ZERO, Some("mobile"), t0),
+            Err(OutOfRange)
+        );
+        assert_eq!(a.pinned(), Some(&"desktop"));
+
+        // Leaving the pinned layout's range drops the pin and the width decides again.
+        a.resize_with(&B, Budgets::ZERO, 500.0, t0);
+        assert_eq!(a.pinned(), None);
+        assert_eq!(a.shown(), ["mobile"]);
+    }
+
+    #[test]
+    fn releasing_a_pin_returns_to_the_width() {
+        let t0 = Instant::now();
+        let mut a = Adaptive::new(overlapping());
+        a.resize_with(&B, Budgets::ZERO, 800.0, t0);
+        a.pin_with(&B, Budgets::ZERO, Some("desktop"), t0).unwrap();
+        // Released, the width decides again. Desktop still supports it, so nothing jumps...
+        a.pin_with(&B, Budgets::ZERO, None, t0).unwrap();
+        assert_eq!(a.pinned(), None);
+        assert_eq!(a.shown(), ["desktop"]);
+        // ...until the width leaves its range; then the first layout that supports it wins.
+        a.resize_with(&B, Budgets::ZERO, 600.0, t0);
+        assert_eq!(a.shown(), ["mobile"]);
+    }
+
+    #[test]
+    fn a_layout_that_supports_everything_can_be_pinned_anywhere() {
+        let t0 = Instant::now();
+        let mut a = Adaptive::new(
+            Layouts::new()
+                .layout(..WidthClass::Md, "compact")
+                .layout(.., "any"),
+        );
+        a.resize_with(&B, Budgets::ZERO, 300.0, t0);
+        assert!(a.pin_with(&B, Budgets::ZERO, Some("any"), t0).is_ok());
+        a.resize_with(&B, Budgets::ZERO, 1500.0, t0);
+        assert_eq!(a.shown(), ["any"], "the pin holds across every class");
     }
 
     #[test]

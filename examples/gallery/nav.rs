@@ -120,6 +120,7 @@ impl Page {
             Page::Layout => vec![
                 ("Containers", vec![n(Card), i(I::Clamp), i(I::StatusPage)]),
                 ("Flow", vec![i(I::WrapBox), i(I::Collapse)]),
+                ("Shell", vec![n(AppShell)]),
             ],
             Page::Navigation => vec![
                 (
@@ -185,6 +186,7 @@ pub enum Detail {
     PreferencesGroup,
     // Layout
     Card,
+    AppShell,
     // Feedback
     Toast,
     // Theming
@@ -294,6 +296,7 @@ impl Detail {
             Detail::EntryRow => "Entry row",
             Detail::PreferencesGroup => "Preferences group",
             Detail::Card => "Card",
+            Detail::AppShell => "AppShell",
             Detail::Toast => "Toast",
             Detail::ThemeColors => "Colors",
             Detail::ThemeShape => "Shape & shadows",
@@ -315,6 +318,7 @@ impl Detail {
             Detail::EntryRow => "Entry and password rows",
             Detail::PreferencesGroup => "Title, description and a header suffix",
             Detail::Card => "Padding, chained children, separators and size",
+            Detail::AppShell => "Adaptive layouts and transitions, with sidebars that follow them",
             Detail::Toast => "Call to action, status dot, radius, placement and colors",
             Detail::ThemeColors => "Scheme, accent, density and a card color override",
             Detail::ThemeShape => "Control, card and toast radii, shadows, with a live preview",

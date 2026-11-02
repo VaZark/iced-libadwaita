@@ -31,6 +31,7 @@ pub struct AdaptiveSplit<'a, M> {
     drawer_open: bool,
     on_close: Option<M>,
     window_radius: f32,
+    end: bool,
 }
 
 /// A sidebar and a content area. `wide`: the sidebar sits beside the content (`sidebar_width`);
@@ -50,6 +51,7 @@ pub fn adaptive_split<'a, M>(
         drawer_open: false,
         on_close: None,
         window_radius: 0.0,
+        end: false,
     }
 }
 
@@ -61,6 +63,12 @@ impl<'a, M> AdaptiveSplit<'a, M> {
     /// Sent when the scrim behind an open drawer is pressed.
     pub fn on_close(mut self, msg: M) -> Self {
         self.on_close = Some(msg);
+        self
+    }
+    /// Puts the sidebar at the end edge (an aside) instead of the start: it slides in from, and
+    /// the content gives way at, the right edge. Not mirrored for right-to-left text.
+    pub fn end(mut self, end: bool) -> Self {
+        self.end = end;
         self
     }
     /// Rounds the drawer scrim to the window's corners.
@@ -138,11 +146,12 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
         let content = self.children[1]
             .as_widget_mut()
             .layout(&mut b[0], renderer, &fixed(content_w))
-            .move_to(Point::new(taken, 0.0));
-        let side_x = if in_flow {
-            -self.sidebar_width * (1.0 - slot)
-        } else {
-            -side_w * (1.0 - drawer)
+            .move_to(Point::new(if self.end { 0.0 } else { taken }, 0.0));
+        let side_x = match (self.end, in_flow) {
+            (false, true) => -self.sidebar_width * (1.0 - slot),
+            (false, false) => -side_w * (1.0 - drawer),
+            (true, true) => max.width - self.sidebar_width * slot,
+            (true, false) => max.width - side_w * drawer,
         };
         layout::Node::with_children(max, vec![sidebar.move_to(Point::new(side_x, 0.0)), content])
     }
@@ -322,7 +331,11 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
         if slot > 0.001 {
             // In flow: the part of the sidebar that has slid in, clipped to its slot.
             let visible = Rectangle {
-                x: b.x,
+                x: if self.end {
+                    b.x + b.width - self.sidebar_width * slot
+                } else {
+                    b.x
+                },
                 y: b.y,
                 width: self.sidebar_width * slot,
                 height: b.height,
@@ -340,7 +353,11 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
                 r.fill_quad(
                     Quad {
                         bounds: Rectangle {
-                            x: visible.x + visible.width - 1.0,
+                            x: if self.end {
+                                visible.x
+                            } else {
+                                visible.x + visible.width - 1.0
+                            },
                             width: 1.0,
                             ..visible
                         },
@@ -369,11 +386,20 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
                 r.fill_quad(
                     Quad {
                         bounds: pane,
-                        border: Border::default().rounded(iced::border::Radius {
-                            top_left: self.window_radius,
-                            top_right: 0.0,
-                            bottom_right: 0.0,
-                            bottom_left: self.window_radius,
+                        border: Border::default().rounded(if self.end {
+                            iced::border::Radius {
+                                top_left: 0.0,
+                                top_right: self.window_radius,
+                                bottom_right: self.window_radius,
+                                bottom_left: 0.0,
+                            }
+                        } else {
+                            iced::border::Radius {
+                                top_left: self.window_radius,
+                                top_right: 0.0,
+                                bottom_right: 0.0,
+                                bottom_left: self.window_radius,
+                            }
                         }),
                         shadow: theme.shadows.dialog().shadow,
                         snap: false,
