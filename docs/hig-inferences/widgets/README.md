@@ -29,6 +29,7 @@ One file per libadwaita element. Each ends with an **iced mapping** section.
 - [ExpanderRow](expander-row.md)
 - [Field (form field and validation)](field.md)
 - [Form (submit, reset and multi-step wizard)](form.md)
+- [Stepper (steps, statuses, click-to-jump, content)](stepper.md)
 - [HeaderBar](header-bar.md)
 - [MenuButton and menus](menu-button.md)
 - [NavigationPage](navigation-page.md)

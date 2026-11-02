@@ -44,6 +44,7 @@ mod spinner;
 mod split;
 mod split_view;
 mod status_page;
+mod stepper;
 mod switch;
 mod toast;
 mod toolbar;
@@ -54,6 +55,7 @@ pub use crate::primitives::calendar::{CalendarView, Dir as NavDir, Level};
 pub use crate::primitives::date::{Date, days_in_month, is_leap_year, validate as validate_date};
 pub use crate::primitives::form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
 pub use crate::primitives::range::{Collide, DateRange, DayRole, Edge, Range, Thumb, Track};
+pub use crate::primitives::stepper::{Fill as StepperFill, Status as StepperStatus, StepperState};
 pub use crate::primitives::validation::{
     self, Interaction, Presentation as ValidationState, Validity,
 };
@@ -128,6 +130,7 @@ pub use spinner::{Spinner, spinner};
 pub use split::{SplitAction, SplitButton, SplitButtonAction, split_button};
 pub use split_view::{AdaptiveSplit, adaptive_split};
 pub use status_page::{Card, Page, StatusPage, bin, card, clamp, page, status_page};
+pub use stepper::{Stepper, StepperIconPosition, StepperOrientation, StepperSize, StepperStep};
 pub use switch::{Switch, switch};
 pub use toast::{Toast, ToastPosition, ToastTarget, toast_overlay, toast_stack, toast_target};
 pub use toolbar::{ActionBar, BarStyle, ToolbarView, action_bar, toolbar_view};
