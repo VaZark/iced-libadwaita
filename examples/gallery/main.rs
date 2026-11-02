@@ -12,13 +12,22 @@ use iced::widget::{column, container, text};
 use iced::{Element as IcedElement, Length, Subscription, Task, window};
 use iced_libadwaita as adw;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 type Element<'a> = adw::Element<'a, Message>;
 
 mod appshell;
+mod autocomplete_demo;
+mod data_demo;
+mod date_demo;
 mod details;
+mod field_demo;
+mod form_demo;
 mod nav;
+mod range_demo;
+mod resizable_demo;
+mod sections_demo;
+mod stepper_demo;
 
 use nav::{Action, Detail, Entry, Inline, Page};
 
@@ -145,6 +154,19 @@ struct Gallery {
     /// The selected action of the split-button-action demo.
     split_choice: &'static str,
     picked: Option<&'static str>,
+    multi: Vec<&'static str>,
+    date: date_demo::State,
+    field: field_demo::State,
+    form: form_demo::State,
+    autocomplete: autocomplete_demo::State,
+    sections: sections_demo::State,
+    range: range_demo::State,
+    stepper: stepper_demo::State,
+    data: data_demo::State,
+    resizable: resizable_demo::State,
+    chips: Vec<&'static str>,
+    acc_single: Vec<u8>,
+    acc_multi: Vec<u8>,
 
     dialog: Option<Dialog>,
     show_content: bool,
@@ -164,8 +186,10 @@ struct Gallery {
     carousel: usize,
     carousel_indicator: w::CarouselIndicator,
     /// The toasts on screen, oldest first, each with its id (stacked notifications).
-    toasts: Vec<(u32, ToastSpec)>,
+    toasts: adw::primitives::notifications::Queue<ToastSpec>,
     toast_seq: u32,
+    /// Whether toasts dismiss themselves after 4 s (the queue's timeout).
+    toast_auto: bool,
     /// Screenshot harness: behave as if the window were narrow.
     narrow: bool,
     toast_position: w::ToastPosition,
@@ -236,6 +260,19 @@ enum Message {
     Editor(w::TextAction),
     EditorEmpty(w::TextAction),
     Picked(&'static str),
+    MultiToggle(&'static str),
+    Date(date_demo::Msg),
+    Field(field_demo::Msg),
+    Form(form_demo::Msg),
+    Autocomplete(autocomplete_demo::Msg),
+    Sections(sections_demo::Msg),
+    Range(range_demo::Msg),
+    Stepper(stepper_demo::Msg),
+    Data(data_demo::Msg),
+    Resizable(resizable_demo::Msg),
+    ChipRemove(&'static str),
+    AccSingle(Vec<u8>),
+    AccMulti(Vec<u8>),
     OpenDialog(Dialog),
     /// Opens the AppShell window (Layout > AppShell).
     OpenShell,
@@ -250,8 +287,10 @@ enum Message {
     ShowToastSpec(ToastSpec),
     ToastPosition(w::ToastPosition),
     ToastTarget(w::ToastTarget),
-    ToastAction(u32),
-    DismissToast(u32),
+    ToastAction(adw::primitives::notifications::Id),
+    DismissToast(adw::primitives::notifications::Id),
+    ToastAuto(bool),
+    ToastTick(Instant),
     ClearToasts,
     Frame(std::time::Instant),
     Animations(bool),
@@ -293,6 +332,41 @@ static INDICATORS: [w::CarouselIndicator; 3] = w::CarouselIndicator::ALL;
 static TOAST_POSITIONS: [w::ToastPosition; 6] = w::ToastPosition::ALL;
 static MOTIONS: [DemoMotion; 8] = DemoMotion::ALL;
 const FRUITS: [&str; 3] = ["Apple", "Banana", "Cherry"];
+const FRUITS5: [&str; 5] = ["Apple", "Banana", "Cherry", "Damson", "Elderberry"];
+
+struct Person {
+    name: &'static str,
+    role: &'static str,
+    team: &'static str,
+    email: &'static str,
+}
+static PEOPLE: [Person; 4] = [
+    Person {
+        name: "Ada Lovelace",
+        role: "Engineer",
+        team: "Compilers",
+        email: "ada@example.org",
+    },
+    Person {
+        name: "Grace Hopper",
+        role: "Admiral",
+        team: "Languages",
+        email: "grace@example.org",
+    },
+    Person {
+        name: "Linus T.",
+        role: "Maintainer",
+        team: "Kernel",
+        email: "linus@example.org",
+    },
+    Person {
+        name: "Margaret H.",
+        role: "Director",
+        team: "Flight software",
+        email: "margaret@example.org",
+    },
+];
+
 const COMBO: [&str; 3] = ["Adwaita Sans", "Cantarell", "Inter"];
 
 impl Gallery {
@@ -323,7 +397,11 @@ impl Gallery {
         };
         // A daemon opens its windows itself: the main one now, the preferences window on demand.
         let (main, open_main) = window::open(Self::main_settings());
-        let boot = Task::batch([open_main.map(|_| Message::Noop), boot]);
+        let boot = Task::batch([
+            open_main.map(|_| Message::Noop),
+            boot,
+            autocomplete_demo::script().map(Message::Autocomplete),
+        ]);
         (
             Self {
                 main,
@@ -386,6 +464,25 @@ impl Gallery {
                 combo2: None,
                 split_choice: "merge",
                 picked: None,
+                multi: vec!["Banana", "Cherry"],
+                date: date_demo::State::default(),
+                sections: sections_demo::State::default(),
+                range: range_demo::State::default(),
+                stepper: stepper_demo::State::default(),
+                data: data_demo::State::default(),
+                resizable: resizable_demo::State::default(),
+                field: {
+                    let mut f = field_demo::State::default();
+                    if std::env::var_os("GALLERY_FIELD_SUBMIT").is_some() {
+                        f.submit();
+                    }
+                    f
+                },
+                form: form_demo::State::default(),
+                autocomplete: autocomplete_demo::State::default(),
+                chips: vec!["Rust", "iced", "GTK"],
+                acc_single: vec![0],
+                acc_multi: vec![0, 1],
                 dialog: None,
                 show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
                 sidebar_mode: match std::env::var("GALLERY_SIDEBAR_MODE").as_deref() {
@@ -406,8 +503,9 @@ impl Gallery {
                 sheet: false,
                 carousel: 0,
                 carousel_indicator: w::CarouselIndicator::default(),
-                toasts: Vec::new(),
+                toasts: adw::primitives::notifications::Queue::new(),
                 toast_seq: 0,
+                toast_auto: false,
                 narrow: false,
                 toast_position: cfg.toast_position,
                 toast_target: cfg.toast_target,
@@ -516,13 +614,10 @@ impl Gallery {
         t
     }
 
-    /// Adds a toast to the stack; at most four are kept, the oldest dropped first.
+    /// Adds a toast to the queue (at most four kept, the oldest dropped first).
     fn push_toast(&mut self, spec: ToastSpec) {
         self.toast_seq += 1;
-        self.toasts.push((self.toast_seq, spec));
-        if self.toasts.len() > 4 {
-            self.toasts.remove(0);
-        }
+        self.toasts.push(spec, Instant::now());
     }
 
     fn update(&mut self, msg: Message) -> Task<Message> {
@@ -588,6 +683,26 @@ impl Gallery {
             Message::Editor(a) => self.editor.perform(a),
             Message::EditorEmpty(a) => self.editor_empty.perform(a),
             Message::Picked(s) => self.picked = Some(s),
+            Message::MultiToggle(s) => match self.multi.iter().position(|x| *x == s) {
+                Some(i) => {
+                    self.multi.remove(i);
+                }
+                None => self.multi.push(s),
+            },
+            Message::Date(m) => self.date.update(m),
+            Message::Field(m) => self.field.update(m),
+            Message::Form(m) => self.form.update(m),
+            Message::Autocomplete(m) => {
+                return self.autocomplete.update(m).map(Message::Autocomplete);
+            }
+            Message::Sections(m) => self.sections.update(m),
+            Message::Range(m) => self.range.update(m),
+            Message::Stepper(m) => self.stepper.update(m),
+            Message::Data(m) => return self.data.update(m).map(Message::Data),
+            Message::Resizable(m) => return self.resizable.update(m).map(Message::Resizable),
+            Message::AccSingle(v) => self.acc_single = v,
+            Message::AccMulti(v) => self.acc_multi = v,
+            Message::ChipRemove(c) => self.chips.retain(|x| *x != c),
             // Preferences is a window of its own; the other dialogs stay in the window.
             Message::OpenShell => return self.open_shell(),
             // Chrome of the shell's window is its own message; everything else goes to the shell.
@@ -628,11 +743,20 @@ impl Gallery {
             Message::ToastTarget(t) => self.toast_target = t,
             // The action runs and the toast is replaced by a plain confirmation.
             Message::ToastAction(id) => {
-                if let Some((_, t)) = self.toasts.iter_mut().find(|(i, _)| *i == id) {
-                    *t = ToastSpec::plain("File restored");
-                }
+                self.toasts
+                    .replace(id, ToastSpec::plain("File restored"), Instant::now());
             }
-            Message::DismissToast(id) => self.toasts.retain(|(i, _)| *i != id),
+            Message::DismissToast(id) => {
+                self.toasts.dismiss(id);
+            }
+            Message::ToastAuto(on) => {
+                self.toast_auto = on;
+                self.toasts
+                    .set_timeout(on.then_some(Duration::from_secs(4)));
+            }
+            Message::ToastTick(now) => {
+                self.toasts.expire(now);
+            }
             Message::ClearToasts => self.toasts.clear(),
             Message::Frame(now) => {
                 self.angle += 0.12;
@@ -682,6 +806,9 @@ impl Gallery {
                     self.sheet = false;
                 } else if self.drawer_open {
                     self.drawer_open = false;
+                } else {
+                    // Leaves the search bar (the on-select trigger demo) back to the path bar.
+                    self.sections.leave_search();
                 }
             }
             Message::Narrow(n) => self.narrow = n,
@@ -769,7 +896,11 @@ impl Gallery {
             if kind == "appshell" {
                 return match i {
                     0 => {
-                        self.scheme = Scheme::Light;
+                        self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
+                            Scheme::Dark
+                        } else {
+                            Scheme::Light
+                        };
                         let open = self.open_shell();
                         self.shot_tag = Some("parent");
                         open.chain(Task::perform(
@@ -781,6 +912,60 @@ impl Gallery {
                         self.shot_window = self.shell.as_ref().map(|c| c.id());
                         wait(300, "appshell", self)
                     }
+                    _ => iced::exit(),
+                };
+            }
+            // GALLERY_ANIM=shell-back: the AppShell window with a page open (use APPSHELL_PIN=mobile
+            // APPSHELL_SIDEBAR_MODE=parent-page APPSHELL_CONTENT=1 GALLERY_SHELL_SIZE=420x640), then
+            // Back to the parent page, captured while the page slides out.
+            if kind == "shell-back" {
+                return match i {
+                    0 => {
+                        self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
+                            Scheme::Dark
+                        } else {
+                            Scheme::Light
+                        };
+                        let open = self.open_shell();
+                        self.shot_tag = Some("a0-child");
+                        open.chain(Task::perform(
+                            tokio::time::sleep(Duration::from_millis(1500)),
+                            move |_| Message::Capture(i),
+                        ))
+                    }
+                    1 => {
+                        self.shot_window = self.shell.as_ref().map(|c| c.id());
+                        let back = self.update(Message::Shell(appshell::Message::Back));
+                        Task::batch([back, wait(70, "a1-70ms", self)])
+                    }
+                    2 => wait(90, "a2-160ms", self),
+                    3 => wait(120, "a3-280ms", self),
+                    4 => wait(700, "a4-end", self),
+                    _ => iced::exit(),
+                };
+            }
+            // GALLERY_ANIM=embedded-back: the shell embedded in Layout > Resizable, with a page open
+            // (APPSHELL_PIN=mobile APPSHELL_SIDEBAR_MODE=parent-page APPSHELL_CONTENT=1
+            // GALLERY_PAGE=layout GALLERY_ONLY=resizable), then Back, captured mid-transition.
+            if kind == "embedded-back" {
+                return match i {
+                    0 => {
+                        self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
+                            Scheme::Dark
+                        } else {
+                            Scheme::Light
+                        };
+                        wait(900, "a0-child", self)
+                    }
+                    1 => {
+                        let back = self.update(Message::Resizable(resizable_demo::Msg::Shell(
+                            appshell::Message::Back,
+                        )));
+                        Task::batch([back, wait(70, "a1-70ms", self)])
+                    }
+                    2 => wait(90, "a2-160ms", self),
+                    3 => wait(120, "a3-280ms", self),
+                    4 => wait(700, "a4-end", self),
                     _ => iced::exit(),
                 };
             }
@@ -911,8 +1096,17 @@ impl Gallery {
         } else {
             Subscription::none()
         };
+        // Tick only while a toast can expire.
+        let toast_clock = if self.toasts.next_expiry().is_some() {
+            iced::time::every(Duration::from_millis(250)).map(Message::ToastTick)
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
             frames,
+            toast_clock,
+            self.autocomplete.subscription().map(Message::Autocomplete),
+            self.resizable.subscription().map(Message::Resizable),
             adw::window::changes().map(|_| Message::WindowChanged),
             window::close_events().map(Message::WindowClosed),
             window::resize_events().map(|(id, size)| Message::Resized(id, size.width)),
@@ -1105,31 +1299,31 @@ impl Gallery {
         .scroll_key(self.view_key());
         // The toast is placed in the whole window or only the content area (the shared
         // `[toasts] target` setting). Both layers stay mounted so the tree does not change.
-        let mut toasts: Vec<w::Toast<Message>> = self
-            .toasts
-            .iter()
-            .map(|&(id, spec)| {
-                let mut t = w::Toast::new(spec.title)
-                    .on_dismiss(Message::DismissToast(id))
-                    .position(self.toast_position);
-                if let Some(label) = spec.action {
-                    t = t.action(label, Message::ToastAction(id));
-                }
-                if let Some(status) = spec.status {
-                    t = t.status(status);
-                }
-                t
-            })
-            .collect();
+        let toast_for = |id, spec: &ToastSpec| {
+            let mut t = w::Toast::new(spec.title)
+                .on_dismiss(Message::DismissToast(id))
+                .position(self.toast_position);
+            if let Some(label) = spec.action {
+                t = t.action(label, Message::ToastAction(id));
+            }
+            if let Some(status) = spec.status {
+                t = t.status(status);
+            }
+            t
+        };
         let in_content = self.toast_target == w::ToastTarget::Content;
-        let content_pane = w::toast_stack(
-            Element::from(w::toolbar_view(page).top_bar(content_bar)),
-            if in_content {
-                std::mem::take(&mut toasts)
-            } else {
-                Vec::new()
-            },
-        );
+        let content_pane: Element = if in_content {
+            w::toast_stack_from(
+                Element::from(w::toolbar_view(page).top_bar(content_bar)),
+                &self.toasts,
+                toast_for,
+            )
+        } else {
+            w::toast_stack(
+                Element::from(w::toolbar_view(page).top_bar(content_bar)),
+                Vec::new(),
+            )
+        };
         let body = w::NavigationSplitView::new(sidebar_pane, content_pane)
             .adapt(width)
             .window_radius(corner)
@@ -1139,10 +1333,12 @@ impl Gallery {
             .show_content(self.show_content);
 
         // The window background comes from `adw::window::frame` (rounded when floating).
-        let base: Element = w::toast_stack(
-            container(body).width(Length::Fill).height(Length::Fill),
-            if in_content { Vec::new() } else { toasts },
-        );
+        let body = container(body).width(Length::Fill).height(Length::Fill);
+        let base: Element = if in_content {
+            w::toast_stack(body, Vec::new())
+        } else {
+            w::toast_stack_from(body, &self.toasts, toast_for)
+        };
 
         let base: Element = w::bottom_sheet_in_window(
             base,

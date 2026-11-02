@@ -5,6 +5,7 @@
 //! JSX-like) can use one vocabulary instead of raw iced widgets.
 
 use super::Element;
+use crate::primitives::sections::{slot_width, text_padding};
 use crate::style;
 use crate::{AccentColor, Icon, Metrics, Role, Surface, Swatch, Theme};
 use iced::widget::{Button, Checkbox, Radio, Slider};
@@ -26,6 +27,20 @@ pub enum EntryState {
     Success,
 }
 
+impl From<crate::primitives::validation::Presentation> for EntryState {
+    /// The shared validation presentation, as an entry's own ring.
+    fn from(p: crate::primitives::validation::Presentation) -> Self {
+        use crate::primitives::validation::Presentation as P;
+        match p {
+            P::Pristine => Self::Normal,
+            // Nothing special for `:user-valid`; use `.state(EntryState::Success)` to opt in.
+            P::Valid => Self::Normal,
+            P::Warning => Self::Warning,
+            P::Invalid => Self::Error,
+        }
+    }
+}
+
 /// `GtkEntry` / `GtkPasswordEntry`.
 ///
 /// Without [`on_input`](Entry::on_input) it is read-only and drawn disabled.
@@ -39,6 +54,10 @@ pub struct Entry<'a, M> {
     secure: bool,
     width: Length,
     metrics: Metrics,
+    left: Option<Element<'a, M>>,
+    right: Option<Element<'a, M>>,
+    left_width: Option<f32>,
+    right_width: Option<f32>,
 }
 
 /// `GtkEntry`.
@@ -66,6 +85,10 @@ impl<'a, M> Entry<'a, M> {
             secure: false,
             width: Length::Fill,
             metrics: Metrics::desktop(),
+            left: None,
+            right: None,
+            left_width: None,
+            right_width: None,
         }
     }
     pub fn on_input(mut self, f: impl Fn(String) -> M + 'a) -> Self {
@@ -81,6 +104,11 @@ impl<'a, M> Entry<'a, M> {
     pub fn state(mut self, s: EntryState) -> Self {
         self.state = s;
         self
+    }
+    /// The shared validation presentation (see [`Field`](super::Field)); same as
+    /// [`state`](Entry::state) with the matching ring.
+    pub fn presentation(self, p: crate::primitives::validation::Presentation) -> Self {
+        self.state(p.into())
     }
     /// Overrides the entry's color: its text and its focus/validation ring use `c`. For an
     /// app-specific tint; prefer [`state`](Entry::state) for validation.
@@ -101,12 +129,47 @@ impl<'a, M> Entry<'a, M> {
         self.metrics = m;
         self
     }
+    /// An element inside the entry's border, before the text (Mantine's `leftSection`): an
+    /// icon, spinner, unit label. See [`section_icon`](super::section_icon). It is centered
+    /// vertically in a slot of [`left_section_width`](Entry::left_section_width); the text
+    /// starts after the slot.
+    pub fn left_section(mut self, s: impl Into<Element<'a, M>>) -> Self {
+        self.left = Some(s.into());
+        self
+    }
+    /// An element inside the entry's border, after the text (`rightSection`): a clear or
+    /// filter button ([`section_button`](super::section_button)), a badge. The element stays
+    /// interactive when the entry is read-only.
+    pub fn right_section(mut self, s: impl Into<Element<'a, M>>) -> Self {
+        self.right = Some(s.into());
+        self
+    }
+    /// Slot width of the left section in px; default [`section_size`](super::section_size)
+    /// (an icon or round button). iced cannot measure a section before laying out the text, so
+    /// a wider section (a "kg" label) states its width.
+    pub fn left_section_width(mut self, px: f32) -> Self {
+        self.left_width = Some(px);
+        self
+    }
+    /// Slot width of the right section in px; see [`left_section_width`](Entry::left_section_width).
+    pub fn right_section_width(mut self, px: f32) -> Self {
+        self.right_width = Some(px);
+        self
+    }
 }
 
 impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
     fn from(e: Entry<'a, M>) -> Self {
+        let m = e.metrics;
+        let default_w = super::section_size(&m);
+        let lw = e.left.as_ref().map(|_| slot_width(e.left_width, default_w));
+        let rw = e
+            .right
+            .as_ref()
+            .map(|_| slot_width(e.right_width, default_w));
+        let padding = text_padding(m.entry_padding, m.space_xs, m.space_xs, lw, rw);
         let mut input = text_input(&e.placeholder, &e.value)
-            .padding(e.metrics.entry_padding)
+            .padding(padding)
             .secure(e.secure)
             .width(e.width);
         input = match e.state {
@@ -130,7 +193,30 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
         if let Some(m) = e.on_submit {
             input = input.on_submit(m);
         }
-        input.into()
+        if lw.is_none() && rw.is_none() {
+            return input.into();
+        }
+        // The sections sit in a transparent layer over the input, inside its border and ring;
+        // the input's padding keeps the text clear of them.
+        let slot = |el: Option<Element<'a, M>>, w: Option<f32>| -> Element<'a, M> {
+            match (el, w) {
+                (Some(el), Some(w)) => container(el)
+                    .center_y(Length::Fill)
+                    .width(Length::Fixed(w))
+                    .align_x(iced::alignment::Horizontal::Center)
+                    .into(),
+                _ => iced::widget::space().into(),
+            }
+        };
+        let layer = row![
+            slot(e.left, lw),
+            iced::widget::space().width(Length::Fill),
+            slot(e.right, rw)
+        ]
+        .padding([0.0, m.space_xs])
+        .height(Length::Fill)
+        .width(Length::Fill);
+        iced::widget::stack![input, layer].width(e.width).into()
     }
 }
 
@@ -309,4 +395,18 @@ pub fn accent_picker<'a, M: Clone + 'a>(
     .spacing(m.space_s)
     .wrap()
     .into()
+}
+
+#[cfg(test)]
+mod valid_tests {
+    use super::*;
+    use crate::primitives::validation::Presentation as P;
+
+    #[test]
+    fn only_invalid_and_warning_get_a_ring_by_default() {
+        assert_eq!(EntryState::from(P::Pristine), EntryState::Normal);
+        assert_eq!(EntryState::from(P::Valid), EntryState::Normal);
+        assert_eq!(EntryState::from(P::Warning), EntryState::Warning);
+        assert_eq!(EntryState::from(P::Invalid), EntryState::Error);
+    }
 }

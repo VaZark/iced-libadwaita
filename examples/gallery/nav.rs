@@ -97,12 +97,23 @@ impl Page {
                 ("Groups", vec![n(ToggleGroup)]),
             ],
             Page::Inputs => vec![
-                ("Text", vec![n(TextInput), n(TextView)]),
+                ("Text", vec![n(TextInput), n(TextView), n(Autocomplete)]),
+                ("Forms", vec![n(Field), n(Form), n(Stepper)]),
                 (
                     "Toggles",
                     vec![i(I::Switch), i(I::CheckButton), i(I::RadioButton)],
                 ),
-                ("Ranges & choosers", vec![i(I::Scale), n(Dropdown)]),
+                (
+                    "Ranges & choosers",
+                    vec![
+                        i(I::Scale),
+                        i(I::RangeSlider),
+                        n(Dropdown),
+                        i(I::MultiSelect),
+                        i(I::DateInput),
+                        i(I::DateRange),
+                    ],
+                ),
             ],
             Page::Lists => vec![
                 (
@@ -115,7 +126,8 @@ impl Page {
                         i(I::ButtonRow),
                     ],
                 ),
-                ("Groups", vec![n(PreferencesGroup)]),
+                ("Groups", vec![n(PreferencesGroup), i(I::Accordion)]),
+                ("Tables", vec![i(I::ResponsiveTable), n(Data)]),
             ],
             Page::Layout => vec![
                 (
@@ -123,6 +135,7 @@ impl Page {
                     vec![a(AppShell), n(Card), i(I::Clamp), i(I::StatusPage)],
                 ),
                 ("Flow", vec![i(I::WrapBox), i(I::Collapse)]),
+                ("Meta", vec![i(I::MetaComponent), i(I::Resizable)]),
             ],
             Page::Navigation => vec![
                 (
@@ -132,12 +145,22 @@ impl Page {
                 ("Paging", vec![i(I::Carousel)]),
                 (
                     "Menus & shortcuts",
-                    vec![i(I::MenuButton), i(I::ShortcutLabel)],
+                    vec![i(I::MenuButton), i(I::ShortcutLabel), i(I::AnchoredPopover)],
                 ),
             ],
             Page::Feedback => vec![
                 ("Messages", vec![i(I::Banner), n(Toast)]),
-                ("Status", vec![i(I::Progress), i(I::Avatar), i(I::Tag)]),
+                (
+                    "Status",
+                    vec![
+                        i(I::Progress),
+                        i(I::Avatar),
+                        i(I::Tag),
+                        i(I::BadgeChip),
+                        i(I::Indicator),
+                        i(I::Docked),
+                    ],
+                ),
             ],
             Page::Dialogs => vec![(
                 "Overlays",
@@ -180,6 +203,11 @@ pub enum Detail {
     // Inputs
     TextInput,
     TextView,
+    Field,
+    Form,
+    Stepper,
+    Data,
+    Autocomplete,
     Dropdown,
     // Lists
     ActionRow,
@@ -222,6 +250,18 @@ pub enum Inline {
     Progress,
     Avatar,
     Tag,
+    BadgeChip,
+    Indicator,
+    Docked,
+    MultiSelect,
+    DateInput,
+    RangeSlider,
+    DateRange,
+    AnchoredPopover,
+    ResponsiveTable,
+    MetaComponent,
+    Resizable,
+    Accordion,
     Surfaces,
 }
 
@@ -295,6 +335,11 @@ impl Detail {
             Detail::ToggleGroup => "Toggle group",
             Detail::TextInput => "Text input",
             Detail::TextView => "Multi-line text",
+            Detail::Field => "Form field",
+            Detail::Form => "Form",
+            Detail::Stepper => "Stepper",
+            Detail::Data => "Sorting and pagination",
+            Detail::Autocomplete => "Autocomplete",
             Detail::Dropdown => "Dropdown",
             Detail::ActionRow => "Action row",
             Detail::SwitchAndComboRows => "Switch & combo rows",
@@ -316,6 +361,11 @@ impl Detail {
             Detail::ToggleGroup => "Text, icons, crowded and as a row",
             Detail::TextInput => "Validation, password, color override and width",
             Detail::TextView => "Editable, placeholder and read-only",
+            Detail::Field => "Label, control and message with shared validation",
+            Detail::Form => "Submit, reset and a multi-step wizard with gated Next",
+            Detail::Stepper => "Steps with statuses, click-to-jump, icons, vertical, narrow",
+            Detail::Data => "Sortable table and cards, pager, infinite scroll, load more",
+            Detail::Autocomplete => "Async suggestions: loading, results, empty, error, in a field",
             Detail::Dropdown => "Selected, empty and disabled; combo rows with disabled options",
             Detail::ActionRow => "Subtitle, prefix, suffix and chevron",
             Detail::SwitchAndComboRows => "Switch, combo, spin and slider rows, with disabled",

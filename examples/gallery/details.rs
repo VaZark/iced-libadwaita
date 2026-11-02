@@ -20,16 +20,6 @@ fn flush<'a>(
     }
 }
 
-/// A label on the start edge and a control on the end edge.
-fn labeled<'a>(label: &'static str, control: impl Into<Element<'a>>) -> Element<'a> {
-    row![
-        container(ty::body(label)).width(Length::Fill),
-        control.into()
-    ]
-    .align_y(iced::Alignment::Center)
-    .into()
-}
-
 impl Gallery {
     /// Identifies the page being shown, so switching it fades the new one in.
     pub(super) fn view_key(&self) -> u64 {
@@ -60,7 +50,17 @@ impl Gallery {
         for (title, entries) in page.sections() {
             // Consecutive rows (nested / action) share one list; inline demos are their own groups.
             let mut list: Option<w::PreferencesGroup<'_, Message>> = None;
+            // GALLERY_ONLY=<inline name>: show only that demo (screenshots of long pages).
+            let only = std::env::var("GALLERY_ONLY").ok();
             for entry in entries {
+                if let (Some(o), Entry::Inline(i)) = (&only, entry)
+                    && !format!("{i:?}").eq_ignore_ascii_case(o)
+                {
+                    continue;
+                }
+                if only.is_some() && !matches!(entry, Entry::Inline(_)) {
+                    continue;
+                }
                 match entry {
                     Entry::Nested(d) => {
                         let row = w::ActionRow::new(d.title())
@@ -285,11 +285,16 @@ impl Gallery {
                     w::entry("Fixed width", "200px").on_input(noop).width(Length::Fixed(200.0)).metrics(m).into(),
                     w::entry("Fills", "fills the card").on_input(noop).metrics(m).into(),
                 ]);
+                // GALLERY_ONLY=sections: only the sections demo (a screenshot is one window tall).
+                if std::env::var("GALLERY_ONLY").as_deref() == Ok("sections") {
+                    return self.sections.view(m).map(Message::Sections);
+                }
                 column![
                     g("States").push(w::card(states)),
                     g("Password").push(w::card(password)),
                     g("Color override").push(w::card(color)),
                     g("Width").push(w::card(width)),
+                    self.sections.view(m).map(Message::Sections),
                 ]
                 .spacing(m.group_spacing)
                 .into()
@@ -309,11 +314,16 @@ impl Gallery {
                 .spacing(m.group_spacing)
                 .into()
             }
+            Detail::Field => self.field.view(m).map(Message::Field),
+            Detail::Form => self.form.view(m).map(Message::Form),
+            Detail::Stepper => self.stepper.view(m).map(Message::Stepper),
+            Detail::Data => self.data.view(m).map(Message::Data),
+            Detail::Autocomplete => self.autocomplete.view(m).map(Message::Autocomplete),
             Detail::Dropdown => {
                 let plain = stack(sp, vec![
-                    labeled("Choose a fruit", Element::from(w::dropdown(&FRUITS, self.picked, Message::Picked))),
-                    labeled("Selected", Element::from(w::dropdown(&FRUITS, Some("Banana"), Message::Picked))),
-                    labeled("Disabled", Element::from(w::dropdown_disabled::<&str, Message>(Some(&"Apple")))),
+                    w::Field::new("Choose a fruit", Element::from(w::dropdown(&FRUITS, self.picked, Message::Picked))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Selected", Element::from(w::dropdown(&FRUITS, Some("Banana"), Message::Picked))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Disabled", Element::from(w::dropdown_disabled::<&str, Message>(Some(&"Apple")))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
                 ]);
                 column![
                     g("Dropdown").push(w::card(plain)),
@@ -420,6 +430,9 @@ impl Gallery {
                             .spacing(sp)
                             .wrap(),
                         )),
+                    g("Auto-dismiss")
+                        .description("The queue's timeout: each toast leaves on its own clock, restarted when its content is replaced (try Undo). Off, they stay until dismissed.")
+                        .push(w::SwitchRow::new("Dismiss after 4 s", self.toast_auto, Message::ToastAuto).metrics(m)),
                     g("Radius")
                         .description("A toast's corner radius is its own theme token (default: a full pill).")
                         .push(
@@ -624,10 +637,10 @@ impl Gallery {
         match i {
             Inline::Switch => {
                 let bare = stack(sp, vec![
-                    labeled("Enabled", w::switch(self.sw).on_toggle(Message::Sw)),
-                    labeled("Off", w::switch(false).on_toggle(|_| Message::Noop)),
-                    labeled("Disabled, on", w::switch(true)),
-                    labeled("Disabled, off", w::switch(false)),
+                    w::Field::new("Enabled", w::switch(self.sw).on_toggle(Message::Sw)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Off", w::switch(false).on_toggle(|_| Message::Noop)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Disabled, on", w::switch(true)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Disabled, off", w::switch(false)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
                 ]);
                 column![g("Switch").push(w::card(bare))].into()
             }
@@ -892,6 +905,215 @@ impl Gallery {
                 .spacing(m.space_s)
                 .wrap();
                 column![g("Tag").push(w::card(tags))].into()
+            }
+
+            Inline::BadgeChip => {
+                let badges = row![
+                    w::Badge::new("New").role(Role::Accent),
+                    w::Badge::new("Stable").role(Role::Success),
+                    w::Badge::new("Beta").role(Role::Warning),
+                    w::Badge::new("Broken").role(Role::Error),
+                    w::Badge::count(7, 99).role(Role::Error).solid(true),
+                    w::Badge::count(120, 99).role(Role::Accent).solid(true),
+                    w::Badge::new("Neutral"),
+                ]
+                .spacing(m.space_s)
+                .wrap();
+                let chips = row(self.chips.iter().map(|c| {
+                    Element::from(
+                        w::Chip::new(*c).role(Role::Accent).on_press(Message::Noop).on_remove(Message::ChipRemove(c)),
+                    )
+                }))
+                .spacing(m.space_s)
+                .wrap();
+                let states = row![
+                    w::Chip::new("Plain").on_press(Message::Noop),
+                    w::Chip::new("Icon").icon(Icon::Check).role(Role::Success).on_press(Message::Noop),
+                    w::Chip::new("Selected").role(Role::Accent).selected(true).on_press(Message::Noop),
+                    w::Chip::new("Disabled").on_press(Message::Noop).disabled(true),
+                    w::Chip::new("Disabled ✕").role(Role::Accent).on_remove(Message::Noop).disabled(true),
+                ]
+                .spacing(m.space_s)
+                .wrap();
+                column![
+                    g("Badge").push(w::card(badges)),
+                    g("Chip").description("Press the ✕ to remove one.").push(w::card(chips)).push(w::card(states)),
+                ]
+                .spacing(m.group_spacing)
+                .into()
+            }
+            Inline::Indicator => {
+                let dot = |c: fn(&adw::Semantic) -> iced::Color| -> Element<'static> {
+                    container(iced::widget::space().width(12).height(12))
+                        .style(move |t: &adw::Theme| iced::widget::container::Style {
+                            background: Some(iced::Background::Color(c(&t.semantic))),
+                            border: iced::Border::default().rounded(6).width(2).color(t.semantic.window.bg),
+                            ..Default::default()
+                        })
+                        .into()
+                };
+                let ok = |s: &adw::Semantic| s.success.color;
+                let bad = |s: &adw::Semantic| s.error.color;
+                let av = |n: &str| Element::from(w::avatar(48.0, n.to_string()));
+                use adw::primitives::anchor::{Align, Side};
+                let ind = |child: Element<'static>, badge: Element<'static>| w::Indicator::new(child, badge);
+                let corners = row![
+                    ind(av("Ada Lovelace"), w::Badge::count(3, 99).role(Role::Error).solid(true).into()),
+                    ind(av("Grace Hopper"), dot(ok)).corner(Side::Bottom, Align::End).offset(4.0),
+                    ind(av("Linus T"), dot(bad)).corner(Side::Top, Align::Start).offset(4.0),
+                    ind(av("Margaret H"), w::Badge::new("Pro").role(Role::Accent).solid(true).into()).corner(Side::Bottom, Align::Center),
+                    ind(av("Alan Turing"), w::Badge::count(120, 99).role(Role::Accent).solid(true).into()),
+                    ind(av("Hidden"), dot(bad)).show(false),
+                ]
+                .spacing(m.space_l)
+                .wrap();
+                let on_buttons = row![
+                    ind(w::raised_button(ty::label("Inbox")).on_press(Message::Noop).into(), w::Badge::count(12, 99).role(Role::Error).solid(true).into()),
+                    ind(w::icon_button(Icon::Search).on_press(Message::Noop).into(), dot(bad)),
+                    ind(w::flat_button(ty::label("Updates")).on_press(Message::Noop).into(), w::Badge::new("new").role(Role::Success).solid(true).into()).offset(2.0),
+                ]
+                .spacing(m.space_l)
+                .align_y(iced::Alignment::Center)
+                .wrap();
+                column![
+                    g("Indicator").description("A badge centered on a corner, whatever its shape (round dot, count, pill). `offset` moves it in; `show(false)` removes it.").push(w::card(container(corners).padding(sp))),
+                    g("On buttons").push(w::card(container(on_buttons).padding(sp))),
+                ]
+                .spacing(m.group_spacing)
+                .into()
+            }
+            Inline::Docked => {
+                use adw::primitives::anchor::{Dim, Side};
+                let stage = |lines: &'static str| -> Element<'static> {
+                    container(column![ty::heading("Content"), ty::body(lines).style(adw::style::text::dim)].spacing(4))
+                        .padding(12)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .style(|t: &adw::Theme| iced::widget::container::Style {
+                            background: Some(iced::Background::Color(t.semantic.card.bg)),
+                            border: iced::Border::default().rounded(8),
+                            ..Default::default()
+                        })
+                        .into()
+                };
+                let bar = |label: &'static str| -> Element<'static> {
+                    container(row![ty::label(label), iced::widget::space().width(Length::Fill), w::suggested_button(ty::label("Save")).on_press(Message::Noop)].align_y(iced::Alignment::Center))
+                        .padding(8)
+                        .width(Length::Fill)
+                        .style(|t: &adw::Theme| iced::widget::container::Style {
+                            background: Some(iced::Background::Color(t.semantic.window.bg)),
+                            border: iced::Border::default().width(1).color(t.semantic.card.fg.scale_alpha(0.12)),
+                            ..Default::default()
+                        })
+                        .into()
+                };
+                let pane = || -> Element<'static> {
+                    container(column![ty::heading("Drawer"), ty::body("Docked left, full height").style(adw::style::text::dim)].spacing(4))
+                        .padding(12)
+                        .style(|t: &adw::Theme| iced::widget::container::Style {
+                            background: Some(iced::Background::Color(t.semantic.window.bg)),
+                            border: iced::Border::default().width(1).color(t.semantic.card.fg.scale_alpha(0.12)),
+                            ..Default::default()
+                        })
+                        .into()
+                };
+                let frame = |e: Element<'static>| -> Element<'static> {
+                    container(e).width(Length::Fixed(300.0)).height(Length::Fixed(190.0)).into()
+                };
+                let demos = row![
+                    frame(w::dock_footer(stage("Footer: inside the bottom edge, as wide as the content."), bar("Unsaved changes"))),
+                    frame(w::dock_banner(stage("Banner: inside the top edge, over the content."), bar("Offline: changes are kept"))),
+                    frame(w::dock_drawer(stage("Drawer: left edge, 120 wide, full height."), pane(), Side::Left, Dim::Fixed(120.0))),
+                    frame(w::dock_drawer(stage("Drawer: right edge, 60% of the width."), pane(), Side::Right, Dim::Fraction(0.6))),
+                    frame(w::dock_center(stage("Centered over the content."), bar("Centered"))),
+                ]
+                .spacing(m.space_m)
+                .wrap();
+                column![g("Docked").description("One placement primitive: an edge, an alignment along it, an inset and a size rule (`anchor::place_sized`).").push(demos)]
+                    .into()
+            }
+            Inline::MultiSelect => {
+                let open = std::env::var("GALLERY_OPEN").as_deref() == Ok("multiselect");
+                let controls = stack(sp, vec![
+                    w::Field::new("Fruits", Element::from(w::MultiSelect::new(&FRUITS5, &self.multi, Message::MultiToggle).width(Length::Fixed(260.0)).open_initially(open))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Empty", Element::from(w::MultiSelect::new(&FRUITS5, &[], Message::MultiToggle).placeholder("Pick fruits").width(Length::Fixed(260.0)))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Crowded (+n)", Element::from(w::MultiSelect::new(&FRUITS5, &FRUITS5, Message::MultiToggle).max_chips(2).width(Length::Fixed(260.0)))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Disabled", Element::from(w::MultiSelect::new(&FRUITS5, &self.multi, Message::MultiToggle).disabled(true).width(Length::Fixed(260.0)))).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                ]);
+                column![g("Multi select").description("The popover stays open while options are toggled.").push(w::card(controls))].into()
+            }
+            Inline::DateInput => self.date.view(m).map(Message::Date),
+            Inline::RangeSlider => self.range.slider_view(m).map(Message::Range),
+            Inline::DateRange => self.range.date_view(m).map(Message::Range),
+            Inline::AnchoredPopover => {
+                let open = std::env::var("GALLERY_OPEN").as_deref() == Ok("anchor");
+                let menu = |t: &'static str| {
+                    w::popover([w::menu_item(t, false, Message::Noop), w::menu_item("Second", true, Message::Noop)], 160.0)
+                };
+                let pop = |label: &'static str, side: w::Side, o: bool| {
+                    Element::from(
+                        w::Dropdown::custom(text(label), menu(label))
+                            .side(side)
+                            .offset(8.0)
+                            .popover_width(140.0)
+                            .open_initially(o),
+                    )
+                };
+                let sides = row![
+                    pop("Bottom", w::Side::Bottom, false),
+                    pop("Top", w::Side::Top, false),
+                    pop("Right", w::Side::Right, open),
+                    pop("Left", w::Side::Left, false),
+                ]
+                .spacing(m.space_m);
+                column![g("Anchored popover").description("Side and offset against the trigger; it flips to the other side and shifts to stay inside the window.").push(w::card(sides))].into()
+            }
+            Inline::MetaComponent => self.sections.meta_view(m).map(Message::Sections),
+            Inline::Resizable => self.resizable.view(m).map(Message::Resizable),
+            Inline::ResponsiveTable => {
+                let table = |mode: w::TableMode| {
+                    w::ResponsiveTable::<Person, Message>::new(&PEOPLE)
+                        .column(w::Column::new("Name", |p: &Person| ty::heading(p.name).into()).min_width(110.0))
+                        .column(w::Column::new("Role", |p: &Person| ty::body(p.role).into()).min_width(90.0))
+                        .column(w::Column::new("Team", |p: &Person| ty::body(p.team).into()).min_width(100.0))
+                        .column(w::Column::new("Email", |p: &Person| ty::body(p.email).into()).width(Length::FillPortion(2)).min_width(150.0))
+                        .card(|p: &Person| {
+                            column![
+                                row![ty::heading(p.name), w::Badge::new(p.role).role(Role::Accent)].spacing(8).align_y(iced::Alignment::Center),
+                                ty::caption(p.email),
+                                ty::body(p.team),
+                            ]
+                            .spacing(4)
+                            .into()
+                        })
+                        .mode(mode)
+                        .height(Length::Fixed(300.0))
+                };
+                let wide = container(Element::from(table(w::TableMode::Auto))).width(Length::Fixed(600.0)).height(Length::Fixed(300.0));
+                let narrow = container(Element::from(table(w::TableMode::Auto))).width(Length::Fixed(340.0)).height(Length::Fixed(300.0));
+                column![
+                    g("Wide container").description("The columns fit: a table.").push(wide),
+                    g("Narrow container").description("They do not: every row is a card with a custom layout.").push(narrow),
+                ]
+                .spacing(m.group_spacing)
+                .into()
+            }
+
+            Inline::Accordion => {
+                let body = |t: &'static str| Element::from(container(ty::body(t)).padding(m.space_m));
+                let items = |acc: w::Accordion<'static, u8, Message>| {
+                    acc.item(w::AccordionItem::new(0u8, "Shipping", body("Two to four working days.")).subtitle("2-4 days"))
+                        .item(w::AccordionItem::new(1u8, "Returns", body("Thirty days, unused.")).subtitle("30 days"))
+                        .item(w::AccordionItem::new(2u8, "Warranty", body("Two years.")))
+                };
+                column![
+                    g("Accordion, single").description("One item open at a time; opening another closes it, and the open one can be closed.")
+                        .push(Element::from(items(w::Accordion::new(&self.acc_single, Message::AccSingle).selection(w::Selection::SINGLE)))),
+                    g("Accordion, multiple").description("Any number open.")
+                        .push(Element::from(items(w::Accordion::new(&self.acc_multi, Message::AccMulti).selection(w::Selection::Multiple)))),
+                ]
+                .spacing(m.group_spacing)
+                .into()
             }
 
             Inline::LinkButton => column![g("Link button").push(w::card(

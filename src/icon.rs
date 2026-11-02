@@ -13,6 +13,12 @@ pub enum Icon {
     GoPrevious,
     GoDown,
     GoUp,
+    /// Two chevrons, one up and one down: a column that can be sorted but is not.
+    GoUpDown,
+    /// A chevron against a bar, pointing left: the first page.
+    GoFirst,
+    /// A chevron against a bar, pointing right: the last page.
+    GoLast,
     Check,
     WindowClose,
     WindowMinimize,
@@ -34,6 +40,8 @@ pub enum Icon {
     Delete,
     Settings,
     Home,
+    /// A funnel: filter a list (`funnel-symbolic` / `view-filter`).
+    Filter,
 }
 
 const HEAD: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">"#;
@@ -45,6 +53,9 @@ impl Icon {
             Icon::GoPrevious => r#"<path d="M10 3L5 8l5 5"/>"#,
             Icon::GoDown => r#"<path d="M3 6l5 5 5-5"/>"#,
             Icon::GoUp => r#"<path d="M3 10l5-5 5 5"/>"#,
+            Icon::GoUpDown => r#"<path d="M4 6.5l4-4 4 4M4 9.5l4 4 4-4"/>"#,
+            Icon::GoFirst => r#"<path d="M3.5 3v10M11 3L6 8l5 5"/>"#,
+            Icon::GoLast => r#"<path d="M12.5 3v10M5 3l5 5-5 5"/>"#,
             Icon::Check => r#"<path d="M3 8.5l3.5 3.5L13 4.5"/>"#,
             Icon::WindowClose => r#"<path d="M4 4l8 8M12 4l-8 8"/>"#,
             Icon::WindowMinimize => r#"<path d="M3 12h10"/>"#,
@@ -79,6 +90,7 @@ impl Icon {
             Icon::Settings => {
                 r#"<circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6L5 5M11 11l1.4 1.4M12.4 3.6L11 5M5 11l-1.4 1.4"/>"#
             }
+            Icon::Filter => r#"<path d="M2 3h12l-4.5 5.5V13l-3-1.5V8.5z"/>"#,
             Icon::Home => r#"<path d="M2 8l6-5.5L14 8M3.5 7v6.5h3.2V10h2.6v3.5h3.2V7"/>"#,
         }
     }

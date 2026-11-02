@@ -387,6 +387,17 @@ pub fn toast_stack<'a, M: Clone + 'a>(
     )
 }
 
+/// [`toast_stack`] over a [`notifications::Queue`](crate::primitives::notifications::Queue):
+/// `toast` turns each live item (with its id, for the dismiss and action messages) into a
+/// [`Toast`]. The queue owns the limit, the ids and the auto-dismiss; this only draws it.
+pub fn toast_stack_from<'a, M: Clone + 'a, T>(
+    content: impl Into<Element<'a, M>>,
+    queue: &crate::primitives::notifications::Queue<T>,
+    toast: impl Fn(crate::primitives::notifications::Id, &T) -> Toast<M>,
+) -> Element<'a, M> {
+    toast_stack(content, queue.iter().map(|(id, t)| toast(id, t)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

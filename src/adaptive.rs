@@ -43,7 +43,9 @@
 
 use crate::Element;
 use crate::breakpoints::{Breakpoints, WidthClass};
-use crate::transition::{Budgets, Command, Event, FRAME, Phase, Record, Sequence, Transitions};
+use crate::transition::{
+    Action, Budgets, Command, Event, FRAME, Phase, Record, Sequence, Transitions,
+};
 use iced::Subscription;
 use std::ops::{Bound, RangeBounds};
 use std::time::{Duration, Instant};
@@ -239,6 +241,7 @@ struct Pending<K> {
 pub struct Adaptive<K> {
     layouts: Layouts<K>,
     hysteresis: Hysteresis,
+    overlap: bool,
     pending: Option<Pending<K>>,
     pinned: Option<K>,
     last_width: Option<f32>,
@@ -251,6 +254,7 @@ impl<K: Clone + PartialEq> Adaptive<K> {
         Self {
             layouts,
             hysteresis: Hysteresis::default(),
+            overlap: false,
             pending: None,
             pinned: None,
             last_width: None,
@@ -267,6 +271,27 @@ impl<K: Clone + PartialEq> Adaptive<K> {
             d => d,
         };
         self
+    }
+
+    /// **Overlap** the layouts of a change instead of closing the old one before opening the new:
+    /// the incoming layout is shown at once, one layer *below* the outgoing one, which closes on
+    /// top of it. The old layout is never replaced by a blank frame, and what the old layout
+    /// uncovers when it goes is the new layout. [`adaptive`] draws them in that order. Default
+    /// off: close, then open (a layout that cannot show the page the other one holds needs
+    /// that order, see [`Sequence::towards`]).
+    pub fn overlap(mut self, overlap: bool) -> Self {
+        self.overlap = overlap;
+        self
+    }
+
+    /// [`overlap`](Self::overlap) on an existing coordinator (a settings switch).
+    pub fn set_overlap(&mut self, overlap: bool) {
+        self.overlap = overlap;
+    }
+
+    /// Whether changes overlap (see [`overlap`](Self::overlap)).
+    pub fn overlaps(&self) -> bool {
+        self.overlap
     }
 
     /// Forces a layout regardless of the width, with no transition: for a gallery or a test.
@@ -358,6 +383,17 @@ impl<K: Clone + PartialEq> Adaptive<K> {
                 Vec::new()
             }
             Some(old) if old == next => Vec::new(),
+            Some(_) if self.overlap => {
+                // The new layout opens (and is drawn) below; what is shown closes above it.
+                let mut actions = vec![Action::open(next.clone(), budgets.open)];
+                for shown in self.transitions.shown() {
+                    if *shown != next {
+                        actions.push(Action::close(shown.clone(), budgets.close));
+                    }
+                }
+                let seq = Sequence::new().towards(next).together(actions);
+                self.transitions.start(seq, now)
+            }
             Some(_) => {
                 // Close what is shown (a layout still closing from an earlier change finishes
                 // first). A layout that never opened has nothing to close.
@@ -470,35 +506,68 @@ impl<K: Clone + PartialEq> Adaptive<K> {
     }
 }
 
-/// The view of an [`Adaptive`]: the shown layout, built from the closure registered for it.
+/// The view of an [`Adaptive`]: the shown layouts, each built from the closure registered for
+/// it. Usually that is one; during an [overlapping](Adaptive::overlap) change it is two, the
+/// outgoing layout above the incoming one.
 pub struct AdaptiveView<'a, K, M> {
-    shown: Option<K>,
-    chosen: Option<Element<'a, M>>,
+    shown: Vec<K>,
+    /// The layout the width calls for: drawn below any other shown layout.
+    current: Option<K>,
+    built: Vec<(K, Element<'a, M>)>,
 }
 
-/// Renders the layout `state` shows. Register every layout with
-/// [`layout`](AdaptiveView::layout); only the shown one is built. Between a close and an open
-/// nothing is shown (a blank frame at most).
+/// Renders the layouts `state` shows. Register every layout with
+/// [`layout`](AdaptiveView::layout); only the shown ones are built. Between a close and an open
+/// nothing is shown (a blank frame at most); with [`Adaptive::overlap`] there is no such gap.
 pub fn adaptive<'a, K: Clone + PartialEq, M>(state: &Adaptive<K>) -> AdaptiveView<'a, K, M> {
     AdaptiveView {
-        // With two shown (a group opening beside one closing) the newest is on top.
-        shown: state.shown().last().cloned(),
-        chosen: None,
+        shown: state.shown().to_vec(),
+        current: state.current().cloned(),
+        built: Vec::new(),
     }
 }
 
 impl<'a, K: PartialEq, M> AdaptiveView<'a, K, M> {
     pub fn layout(mut self, key: K, build: impl FnOnce() -> Element<'a, M>) -> Self {
-        if self.chosen.is_none() && self.shown.as_ref() == Some(&key) {
-            self.chosen = Some(build());
+        if self.shown.contains(&key) && self.built.iter().all(|(k, _)| *k != key) {
+            let element = build();
+            self.built.push((key, element));
         }
         self
     }
 }
 
-impl<'a, K, M: 'a> From<AdaptiveView<'a, K, M>> for Element<'a, M> {
+/// The order to draw layouts in, bottom first, as indexes into `keys`: the layout the width
+/// wants (`current`) at the bottom (z-1), any other shown layout (one that is closing) above it,
+/// and among those the one shown last on top.
+fn z_order<K: PartialEq>(keys: &[&K], current: Option<&K>, shown: &[K]) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..keys.len()).collect();
+    order.sort_by_key(|&i| {
+        (
+            current != Some(keys[i]),
+            shown
+                .iter()
+                .position(|s| s == keys[i])
+                .unwrap_or(usize::MAX),
+        )
+    });
+    order
+}
+
+impl<'a, K: PartialEq, M: 'a> From<AdaptiveView<'a, K, M>> for Element<'a, M> {
     fn from(v: AdaptiveView<'a, K, M>) -> Self {
-        v.chosen.unwrap_or_else(|| iced::widget::space().into())
+        let mut layers: Vec<Option<(K, Element<'a, M>)>> = v.built.into_iter().map(Some).collect();
+        let keys: Vec<&K> = layers.iter().flatten().map(|(k, _)| k).collect();
+        let order = z_order(&keys, v.current.as_ref(), &v.shown);
+        let mut layers: Vec<Element<'a, M>> = order
+            .into_iter()
+            .filter_map(|i| layers[i].take().map(|(_, e)| e))
+            .collect();
+        match layers.len() {
+            0 => iced::widget::space().into(),
+            1 => layers.pop().expect("one layer"),
+            _ => iced::widget::stack(layers).into(),
+        }
     }
 }
 
@@ -797,5 +866,84 @@ mod tests {
             })
             .into();
         assert_eq!(built, ["wide"]);
+    }
+
+    #[test]
+    fn overlap_shows_the_new_layout_at_once_below_the_old_one() {
+        let t0 = Instant::now();
+        let mut a = Adaptive::new(layouts()).overlap(true);
+        a.resize_with(&B, BUDGETS, 1000.0, t0);
+        let cmds = a.resize_with(&B, BUDGETS, 600.0, t0);
+        // Both are shown from the start: no gap, no blank frame between a close and an open.
+        assert_eq!(a.shown(), [L::Wide, L::Narrow]);
+        assert_eq!(a.current(), Some(&L::Narrow));
+        // The old one is told to close and the new one to open, together.
+        assert!(cmds.iter().any(|c| matches!(
+            c,
+            Command::Close {
+                target: L::Wide,
+                ..
+            }
+        )));
+        assert!(cmds.iter().any(|c| matches!(
+            c,
+            Command::Open {
+                target: L::Narrow,
+                ..
+            }
+        )));
+        // When the old one is gone only the new one remains.
+        for c in &cmds {
+            a.report(c.done(), t0 + Duration::from_millis(5));
+        }
+        assert_eq!(a.shown(), [L::Narrow]);
+        assert_eq!(a.phase(), Phase::Idle);
+    }
+
+    #[test]
+    fn overlap_off_keeps_close_then_open() {
+        let t0 = Instant::now();
+        let mut a = Adaptive::new(layouts());
+        a.resize_with(&B, BUDGETS, 1000.0, t0);
+        a.resize_with(&B, BUDGETS, 600.0, t0);
+        assert_eq!(
+            a.shown(),
+            [L::Wide],
+            "the new layout is not shown until the old one closed"
+        );
+    }
+
+    #[test]
+    fn the_incoming_layout_is_drawn_below_the_closing_one() {
+        // Shown: old first, new last; `current` is the new one.
+        let shown = [L::Wide, L::Narrow];
+        let keys = [&L::Wide, &L::Narrow];
+        assert_eq!(z_order(&keys, Some(&L::Narrow), &shown), [1, 0]);
+        // The order the layouts were registered in does not matter.
+        let keys = [&L::Narrow, &L::Wide];
+        assert_eq!(z_order(&keys, Some(&L::Narrow), &shown), [0, 1]);
+        // One shown: one layer.
+        assert_eq!(z_order(&[&L::Narrow], Some(&L::Narrow), &[L::Narrow]), [0]);
+    }
+
+    #[test]
+    fn the_view_builds_both_layouts_while_they_overlap() {
+        let t0 = Instant::now();
+        let mut a = Adaptive::new(layouts()).overlap(true);
+        a.resize_with(&B, BUDGETS, 1000.0, t0);
+        a.resize_with(&B, BUDGETS, 600.0, t0);
+        let mut built = Vec::new();
+        let _: Element<'_, ()> = adaptive(&a)
+            .layout(L::Narrow, || {
+                built.push("narrow");
+                iced::widget::space().into()
+            })
+            .layout(L::Wide, || {
+                built.push("wide");
+                iced::widget::space().into()
+            })
+            .into();
+        built.sort();
+        assert_eq!(built, ["narrow", "wide"]);
     }
 }

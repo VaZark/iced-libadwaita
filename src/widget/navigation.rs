@@ -206,7 +206,9 @@ pub fn navigation_sidebar<'a, M: 'a>(
     .into()
 }
 
-/// One entry of a [`SidebarList`].
+/// One entry of a [`SidebarList`]: one description with two forms, a compact row
+/// ([`SidebarStyle::List`]) and a card row ([`SidebarStyle::Cards`]).
+#[derive(Clone)]
 pub struct SidebarItem<M> {
     icon: Option<Icon>,
     title: String,
@@ -274,6 +276,7 @@ pub struct SidebarList<'a, M> {
     style: SidebarStyle,
     window_radius: f32,
     padding: SidebarPadding,
+    cards_below: Option<crate::breakpoints::WidthClass>,
     _p: std::marker::PhantomData<&'a ()>,
 }
 
@@ -284,6 +287,7 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
             style: SidebarStyle::List,
             window_radius: 0.0,
             padding: SidebarPadding::Md,
+            cards_below: None,
             _p: Default::default(),
         }
     }
@@ -295,6 +299,14 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
     /// (default), `Lg` like GNOME Settings. An item's own [`SidebarItem::padding`] wins.
     pub fn padding(mut self, padding: SidebarPadding) -> Self {
         self.padding = padding;
+        self
+    }
+    /// Chooses the style by the width of the list's own container, with the same rule as
+    /// [`MetaComponent`](super::MetaComponent) (as [`ResponsiveTable`](super::ResponsiveTable)
+    /// does): cards below this width class, the compact list from it. Overrides
+    /// [`style`](Self::style) and [`follow`](Self::follow). The list then fills its container.
+    pub fn cards_below(mut self, class: crate::breakpoints::WidthClass) -> Self {
+        self.cards_below = Some(class);
         self
     }
     /// Window radius for the [`SidebarStyle::List`] bottom corners.
@@ -326,50 +338,69 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
     }
 }
 
+fn list_view<'a, M: Clone + 'a>(
+    items: Vec<SidebarItem<M>>,
+    level: SidebarPadding,
+    radius: f32,
+) -> Element<'a, M> {
+    navigation_sidebar_rounded_padded(
+        items.into_iter().flat_map(|i| {
+            let m = Metrics::desktop();
+            let line = i.divider_above.then(|| {
+                Element::from(super::divider().spacing((level.inset(&m) - level.gap(&m)).max(0.0)))
+            });
+            let row = sidebar_row_padded(
+                i.icon,
+                i.title,
+                i.selected,
+                i.on_press,
+                i.padding.unwrap_or(level),
+            );
+            line.into_iter().chain(std::iter::once(row))
+        }),
+        radius,
+        level,
+    )
+}
+
+fn cards_view<'a, M: Clone + 'a>(items: Vec<SidebarItem<M>>) -> Element<'a, M> {
+    let m = Metrics::desktop();
+    let rows = items.into_iter().map(|i| {
+        let mut r = super::ActionRow::new(i.title)
+            .chevron(true)
+            .on_activate(i.on_press)
+            .metrics(m);
+        if let Some(icon) = i.icon {
+            r = r.prefix(icon.view(m.icon_size));
+        }
+        if let Some(s) = i.subtitle {
+            r = r.subtitle(s);
+        }
+        Element::from(r)
+    });
+    super::page(super::boxed_list(rows)).metrics(m).into()
+}
+
 impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
     fn from(l: SidebarList<'a, M>) -> Self {
+        use super::meta_component::MetaComponent;
+        use crate::primitives::When;
+        if let Some(class) = l.cards_below {
+            let (items, level, radius) = (l.items, l.padding, l.window_radius);
+            let cards = items.clone();
+            return MetaComponent::new()
+                .width(Length::Fill)
+                .variant(SidebarStyle::List, When::from_class(class), move |_| {
+                    list_view(items.clone(), level, radius)
+                })
+                .variant(SidebarStyle::Cards, When::always(), move |_| {
+                    cards_view(cards.clone())
+                })
+                .into();
+        }
         match l.style {
-            SidebarStyle::List => {
-                let level = l.padding;
-                navigation_sidebar_rounded_padded(
-                    l.items.into_iter().flat_map(|i| {
-                        let m = Metrics::desktop();
-                        let line = i.divider_above.then(|| {
-                            Element::from(
-                                super::divider()
-                                    .spacing((level.inset(&m) - level.gap(&m)).max(0.0)),
-                            )
-                        });
-                        let row = sidebar_row_padded(
-                            i.icon,
-                            i.title,
-                            i.selected,
-                            i.on_press,
-                            i.padding.unwrap_or(level),
-                        );
-                        line.into_iter().chain(std::iter::once(row))
-                    }),
-                    l.window_radius,
-                    level,
-                )
-            }
-            SidebarStyle::Cards => {
-                let m = Metrics::desktop();
-                let rows = l.items.into_iter().map(|i| {
-                    let mut r = super::ActionRow::new(i.title)
-                        .chevron(true)
-                        .on_activate(i.on_press)
-                        .metrics(m);
-                    if let Some(icon) = i.icon {
-                        r = r.prefix(icon.view(m.icon_size));
-                    }
-                    if let Some(s) = i.subtitle {
-                        r = r.subtitle(s);
-                    }
-                    Element::from(r)
-                });
-                super::page(super::boxed_list(rows)).metrics(m).into()
-            }
+            SidebarStyle::List => list_view(l.items, l.padding, l.window_radius),
+            SidebarStyle::Cards => cards_view(l.items),
         }
     }
 }
@@ -742,6 +773,14 @@ pub fn navigation_view<'a, M: Clone + 'a>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_sidebar_list_can_pick_its_style_by_its_own_width() {
+        let l = SidebarList::<()>::new([SidebarItem::new("One", ())])
+            .cards_below(crate::breakpoints::WidthClass::Md);
+        assert_eq!(l.cards_below, Some(crate::breakpoints::WidthClass::Md));
+        let _: Element<'_, ()> = l.into();
+    }
+
     #[test]
     fn a_sidebar_list_follows_the_layout_that_is_shown() {
         use crate::adaptive::{Adaptive, Layouts};

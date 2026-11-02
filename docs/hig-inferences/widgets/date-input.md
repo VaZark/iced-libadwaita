@@ -1,0 +1,16 @@
+# DateInput
+
+libadwaita and GTK 4 have no date picker (`GtkCalendar` is a bare month grid, with no entry). `DateInput` combines an entry with a calendar popover, in the manner of GNOME apps that add a `GtkCalendar` to a `GtkPopover`.
+
+- Text is `YYYY-MM-DD` (also `/` or `.` as separators); an unparsable date, or one outside `min`/`max`, draws the entry in its error state.
+- The calendar is a Monday-first month grid with previous/next buttons. Days outside `min`/`max` are disabled. The chosen day is accent-colored like a selected menu item.
+- The calendar navigates by **level**, after Mantine's `DatePicker`/`Calendar` (`level`, `minLevel`, `maxLevel`, `onLevelChange`) and Firefox's native picker (month and year selectors, a Today action): the title button zooms out (month, year, decade; inert at `max_level`), the arrows step one month, one year or ten years, and picking a month or year drills back down. At `min_level` a pick selects instead of drilling (`min_level(Level::Year)` is a month picker, `Level::Decade` a year picker; `on_pick` gets the first day of the period). Months and years entirely outside `min`/`max` are disabled, and an arrow whose period would be outside them is dimmed and inert. The selected and the current month or year are highlighted (filled, outlined). "Today" returns to the current month (or year, for a year picker) and is dimmed when already there or outside the bounds. Stepping clamps the day (31 Jan, one month on: 28 or 29 Feb); the decade grid shows the year before and after in the dimmed "outside" role.
+- State is controlled: the app owns the text, the calendar position and the chosen date.
+
+## iced mapping
+
+`widget::DateInput`: an `Entry` plus a `Dropdown` (with `keep_open(true)`, so paging months and picking a day do not close the calendar; click outside or Escape closes it). Date arithmetic is the dependency-free `Date` type (no `chrono`): validation, weekday (Sakamoto), month navigation and the grid are unit tested. The navigation is the headless [`primitives::calendar`](../../lib/primitives.md): `CalendarView { date, level }`, one value the app keeps and passes back with `.calendar(view)`; `on_nav(CalendarView)` reports every move (arrow, title, cell, Today) in one message, so date and level never go out of step. The older `view`/`on_view(first-of-month)` API still works and is the month-level path (the title is then plain text and Today is absent). Locale is not modeled: English month names, Monday first, ISO format.
+
+For an interval, use [`DateRangeInput`](date-range.md), which shares this calendar.
+
+Deviations: no keyboard stepping of the typed text (arrow keys in the entry do not change the date) and no keyboard navigation of the calendar cells; no two-month view; the current day is the UTC date (`.today(date)` overrides it); English month names, Monday first. Mantine's `numberOfColumns`, `getDayProps` and `presets` are not modeled. Firefox's year and month dropdowns are replaced by the zoom levels, which also reach any year in a few clicks.

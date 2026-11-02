@@ -13,6 +13,64 @@ iced-libadwaita is a **component library**: every UI element is a reusable compo
 7. **Theme-driven.** Colors, radii, shadows and motion come from the `Theme` and the desktop [config](desktop-config.md), never from the component call site.
 8. **No raw widgets in app code.** Entries, check/radio buttons, scales, text views, tags, swatches, cards, pages, rows with sliders and so on all have components; only layout primitives (`row`, `column`, `container`, `text`, `space`, `responsive`) remain, re-exported by the prelude.
 
+## How to use forms
+
+The app owns the values and one `FormState<Key>`; a `FormSpec` lists the keys (one step is a single-page form). The state only remembers what the user touched or submitted, and answers, per key, whether the field may show its validity. `Field` draws the label, the control and the message; `Form` (optional) adds the Submit and Reset bar and, with several steps, Back and Next. See [Form](../hig-inferences/widgets/form.md) and [Field](../hig-inferences/widgets/field.md).
+
+```rust
+use iced_libadwaita::prelude::*;
+use iced_libadwaita::primitives::form::{FormSpec, FormState, Outcome};
+
+struct App { name: String, form: FormState<&'static str> }
+
+fn spec() -> FormSpec<&'static str> { FormSpec::single(["name"]) }
+
+impl App {
+    // Validity by key: the one thing the form needs from the values.
+    fn validity(&self, key: &&'static str) -> Validity {
+        match *key {
+            "name" => required(&self.name, "Enter your name."),
+            _ => Validity::Ok,
+        }
+    }
+
+    fn update(&mut self, msg: Msg) {
+        match msg {
+            Msg::Name(v) => { self.name = v; self.form.touch("name"); }
+            Msg::Submit => {
+                let mut form = std::mem::take(&mut self.form);
+                match form.submit(&spec(), &|k| self.validity(k)) {
+                    Outcome::Submitted => { /* send the values */ }
+                    Outcome::Blocked { key, .. } => { /* focus `key` */ }
+                    _ => {}
+                }
+                self.form = form;
+            }
+            Msg::Reset => { self.form.reset(); self.name.clear(); }
+        }
+    }
+
+    fn view(&self) -> Element<'_, Msg> {
+        let spec = spec();
+        Form::new()
+            .step(Step::new("Profile", move || {
+                Field::new("Name", entry("Ada", &self.name).on_input(Msg::Name))
+                    .required(true)
+                    .validity(self.validity(&"name"))
+                    .interaction(self.form.interaction(&spec, &"name"))
+                    .into()
+            }))
+            .on_submit(Msg::Submit)
+            .on_reset(Msg::Reset)
+            .into()
+    }
+}
+```
+
+Do not keep a `touched` list or a `submitted` flag of your own; `touch`, `interaction`, `submit` and `reset` are those. The gallery's Field and Range slider pages are the live examples.
+
+**Labels.** `Field` is also the label idiom outside forms. `FieldLayout::Stacked` puts the label above the control (Mantine's `Input.Wrapper`); `FieldLayout::Row` puts the label (and description) at the start and the control at the end, the message below, like a libadwaita row; add `.plain_label(true)` for the body-size label of a settings-like list. For a row that is a title with a subtitle and a suffix, use `ActionRow`. Mantine's `leftSection` / `rightSection` are sections inside an input (an icon or a unit in the entry), which are `Entry` sections here, not a label layout.
+
 ## A layout, in code
 
 ```rust

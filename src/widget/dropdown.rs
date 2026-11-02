@@ -53,6 +53,7 @@ pub const PAGE_BACK_WIDTH: f32 = 64.0;
 pub enum Align {
     #[default]
     Start,
+    Center,
     End,
 }
 
@@ -67,13 +68,15 @@ pub struct Dropdown<'a, M> {
     open_initially: bool,
     presentation: Presentation,
     disabled: bool,
+    side: crate::primitives::anchor::Side,
+    offset: f32,
+    keep_open: bool,
 }
 
 struct State {
     open: bool,
     /// 0 → 1 while the popover opens; restarted each time it opens.
-    appear: crate::animation::Tween,
-    shown: f32,
+    appear: crate::animation::Progress,
 }
 
 impl State {
@@ -85,8 +88,7 @@ impl State {
         };
         Self {
             open,
-            appear: crate::animation::Tween::new(start),
-            shown: start,
+            appear: crate::animation::Progress::new(start),
         }
     }
     fn toggle(&mut self) {
@@ -97,8 +99,7 @@ impl State {
             } else {
                 1.0
             };
-            self.appear = crate::animation::Tween::new(start);
-            self.shown = start;
+            self.appear = crate::animation::Progress::new(start);
         }
     }
 }
@@ -118,7 +119,27 @@ impl<'a, M: 'a> Dropdown<'a, M> {
             open_initially: false,
             presentation: Presentation::Popover,
             disabled: false,
+            side: crate::primitives::anchor::Side::Bottom,
+            offset: GAP,
+            keep_open: false,
         }
+    }
+    /// The side of the trigger the popover opens on (default below). It flips to the opposite
+    /// side when it does not fit; see [`anchor`](crate::primitives::anchor).
+    pub fn side(mut self, side: crate::primitives::anchor::Side) -> Self {
+        self.side = side;
+        self
+    }
+    /// Gap between the trigger and the popover (default 4).
+    pub fn offset(mut self, px: f32) -> Self {
+        self.offset = px;
+        self
+    }
+    /// Keeps the popover open when something inside it is activated (multi-selection,
+    /// calendar navigation). Click outside or Escape still close it.
+    pub fn keep_open(mut self, keep: bool) -> Self {
+        self.keep_open = keep;
+        self
     }
     /// A disabled dropdown cannot be opened. Build its trigger dimmed (see
     /// [`dropdown_disabled`]); this only blocks the interaction.
@@ -268,6 +289,23 @@ where
     Dropdown::custom(trigger, popover(Vec::<Element<'a, M>>::new(), 0.0)).disabled(true)
 }
 
+/// The shared core of [`dropdown`] and [`MultiSelect`](super::MultiSelect): one
+/// [`menu_item`] per option, checked by `is_selected`, sending `on_press(option)`.
+pub(super) fn option_items<'a, T, M>(
+    options: &'a [T],
+    is_selected: impl Fn(&T) -> bool,
+    on_press: impl Fn(T) -> M,
+) -> Vec<Element<'a, M>>
+where
+    T: ToString + Clone + 'a,
+    M: Clone + 'a,
+{
+    options
+        .iter()
+        .map(|o| menu_item(o.to_string(), is_selected(o), on_press(o.clone())))
+        .collect()
+}
+
 /// `GtkDropDown` over a slice of options.
 pub fn dropdown<'a, T, M>(
     options: &'a [T],
@@ -289,13 +327,7 @@ where
         .align_y(Vertical::Center),
     )
     .center_y(Length::Fixed(m.button_min_height - m.button_padding.y()));
-    let items = options.iter().map(|o| {
-        menu_item(
-            o.to_string(),
-            selected.as_ref() == Some(o),
-            on_select(o.clone()),
-        )
-    });
+    let items = option_items(options, |o| selected.as_ref() == Some(o), on_select);
     Dropdown::custom(trigger, popover(items, 280.0))
 }
 
@@ -450,11 +482,13 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Dropdown<'a, M> {
             tree: &mut children[1],
             open: &mut state.open,
             appear: &mut state.appear,
-            shown: &mut state.shown,
             anchor,
             align: self.align,
             min_width: self.popover_width,
             presentation: self.presentation,
+            side: self.side,
+            offset: self.offset,
+            keep_open: self.keep_open,
         })))
     }
 }
@@ -463,12 +497,14 @@ struct Popover<'a, 'b, M> {
     content: &'b mut Element<'a, M>,
     tree: &'b mut Tree,
     open: &'b mut bool,
-    appear: &'b mut crate::animation::Tween,
-    shown: &'b mut f32,
+    appear: &'b mut crate::animation::Progress,
     anchor: Rectangle,
     align: Align,
     min_width: Option<f32>,
     presentation: Presentation,
+    side: crate::primitives::anchor::Side,
+    offset: f32,
+    keep_open: bool,
 }
 
 const MARGIN: f32 = 6.0;
@@ -485,34 +521,51 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for Popover<'a, 'b, M
                 .layout(self.tree, renderer, &limits);
             return layout::Node::with_children(bounds, vec![node]);
         }
-        let below = self.anchor.y + self.anchor.height + GAP;
-        let space_below = bounds.height - below - MARGIN;
-        let space_above = self.anchor.y - GAP - MARGIN;
-        let max_h = space_below.max(space_above).max(80.0);
+        use crate::primitives::anchor::{self, Side};
+        let placement = anchor::Placement {
+            side: self.side,
+            align: match self.align {
+                Align::Start => anchor::Align::Start,
+                Align::Center => anchor::Align::Center,
+                Align::End => anchor::Align::End,
+            },
+            offset: self.offset,
+            margin: MARGIN,
+            ..anchor::Placement::default()
+        };
+        // Size the popover to the larger side: the preferred one, or the one it may flip to.
+        let (above, below) = (
+            self.anchor.y - self.offset - MARGIN,
+            bounds.height - (self.anchor.y + self.anchor.height) - self.offset - MARGIN,
+        );
+        let (left, right) = (
+            self.anchor.x - self.offset - MARGIN,
+            bounds.width - (self.anchor.x + self.anchor.width) - self.offset - MARGIN,
+        );
+        let sideways = matches!(self.side, Side::Left | Side::Right);
+        let max_h = if sideways {
+            bounds.height - 2.0 * MARGIN
+        } else {
+            below.max(above).max(80.0)
+        };
         // Items fill their container, so the popover needs a defined width:
         // the trigger's width unless the dropdown asks for another.
         let w = self
             .min_width
             .unwrap_or(self.anchor.width)
             .clamp(120.0, bounds.width - 2.0 * MARGIN);
+        let w = if sideways {
+            w.min(left.max(right).max(120.0))
+        } else {
+            w
+        };
         let limits = layout::Limits::new(Size::new(w, 0.0), Size::new(w, max_h));
         let node = self
             .content
             .as_widget_mut()
             .layout(self.tree, renderer, &limits);
         let size = node.size();
-
-        let x = match self.align {
-            Align::Start => self.anchor.x,
-            Align::End => self.anchor.x + self.anchor.width - size.width,
-        }
-        .min(bounds.width - size.width - MARGIN)
-        .max(MARGIN);
-        let y = if size.height <= space_below {
-            below
-        } else {
-            (self.anchor.y - GAP - size.height).max(MARGIN)
-        };
+        let Point { x, y } = anchor::place(self.anchor, size, bounds, placement).position;
         layout::Node::with_children(size, vec![node]).move_to(Point::new(x, y))
     }
 
@@ -526,7 +579,7 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for Popover<'a, 'b, M
     ) {
         // Opening: a popover rises 8px into place (a page slides in from the end edge),
         // 200ms ease-out-quad.
-        let p = (*self.shown).clamp(0.0, 1.0);
+        let p = self.appear.shown.clamp(0.0, 1.0);
         let d = if self.presentation == Presentation::Page {
             iced::Vector::new(layout.bounds().width * (1.0 - p), 0.0)
         } else {
@@ -554,17 +607,14 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for Popover<'a, 'b, M
         clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, M>,
     ) {
-        if let Event::Window(iced::window::Event::RedrawRequested(now)) = event {
-            self.appear.set_target(
-                1.0,
-                *now,
-                crate::animation::Trigger::Popover.spec(crate::animation::Spec::STYLE),
-            );
-            *self.shown = self.appear.tick(*now);
-            if self.appear.is_animating() {
-                shell.request_redraw();
-            }
-        }
+        super::motion::advance(
+            self.appear,
+            event,
+            1.0,
+            crate::animation::Trigger::Popover.spec(crate::animation::Spec::STYLE),
+            shell,
+            false,
+        );
         let bounds = layout.bounds();
         let close = |open: &mut bool, shell: &mut Shell<'_, M>| {
             *open = false;
@@ -622,6 +672,7 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for Popover<'a, 'b, M
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
         ) && cursor.is_over(bounds)
             && shell.is_event_captured()
+            && !self.keep_open
         {
             close(self.open, shell);
         }

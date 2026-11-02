@@ -190,11 +190,14 @@ pub enum Message {
     Trigger(Trigger),
     Hysteresis(Hyst),
     Answer(bool),
+    Overlap(bool),
     CloseMs(f32),
     OpenMs(f32),
 }
 
 pub struct AppShell {
+    /// Drawn inside another window (a resizable frame): no window buttons or frame of its own.
+    embedded: bool,
     maximized: bool,
     adaptive: Adaptive<Shell>,
     width: f32,
@@ -222,10 +225,22 @@ pub struct AppShell {
 impl AppShell {
     /// The shell for a window `width` px wide. Its decorations follow the toolkit config, like
     /// every window.
+    /// A shell to draw inside another window, `width` px wide (a resizable frame): it has no
+    /// window buttons or frame of its own, and the owner feeds it the width with
+    /// [`Message::Resized`].
+    pub fn embedded(width: f32) -> (Self, Task<Message>) {
+        let (mut app, boot) = Self::new(width);
+        app.embedded = true;
+        (app, boot)
+    }
+
     pub fn new(width: f32) -> (Self, Task<Message>) {
         let mut app = Self {
+            embedded: false,
             maximized: false,
-            adaptive: Adaptive::new(layouts()),
+            // The incoming layout is drawn below the outgoing one while that closes: no blank
+            // frame, and what the old layout uncovers is the new one.
+            adaptive: Adaptive::new(layouts()).overlap(true),
             width,
             hyst: Hyst::Pixels,
             page: Page::Dashboard,
@@ -404,6 +419,10 @@ impl AppShell {
                 self.answer = a;
                 Vec::new()
             }
+            Message::Overlap(o) => {
+                self.adaptive.set_overlap(o);
+                Vec::new()
+            }
             Message::CloseMs(v) => {
                 self.close_ms = v;
                 Vec::new()
@@ -430,11 +449,17 @@ impl AppShell {
 
     /// The window's decorations, for the part of it that touches `edges`.
     fn chrome(&self, edges: Touches) -> adw::window::Chrome {
-        adw::window::Chrome::new(adw::window::State {
+        let chrome = adw::window::Chrome::new(adw::window::State {
             maximized: self.maximized,
             fullscreen: false,
         })
-        .edges(edges.left, edges.right)
+        .edges(edges.left, edges.right);
+        // Embedded: server-side look, so no window buttons and no frame.
+        if self.embedded {
+            chrome.csd_override(false)
+        } else {
+            chrome
+        }
     }
 
     /// A header bar for a piece of the shell touching `edges`: the window buttons, drag area
@@ -469,7 +494,10 @@ impl AppShell {
         end: Option<Message>,
         edges: Touches,
     ) -> Element<'_> {
-        let mut bar = self.bar(edges);
+        // The size readout is the header's title: centered in the content's header (between the
+        // pane toggles), so it follows the layout's hierarchy instead of floating over the
+        // window.
+        let mut bar = self.bar(edges).title_widget(self.readout());
         if let Some((icon, m)) = start {
             bar = bar.pack_start(w::icon_button(icon).on_press(m));
         }
@@ -713,6 +741,10 @@ impl AppShell {
             w::preferences_group()
                 .title("Transition")
                 .push(
+                    w::SwitchRow::new("Overlap layouts", self.adaptive.overlaps(), Message::Overlap)
+                        .subtitle("On: the new layout is drawn below the old one while it closes. Off: close, then open"),
+                )
+                .push(
                     w::SwitchRow::new("Layouts answer", self.answer, Message::Answer)
                         .subtitle("Off: the coordinator times every step out"),
                 )
@@ -898,37 +930,32 @@ impl AppShell {
             .layout(Shell::Desktop, || self.desktop());
         // The frame draws the window background, rounded corners, outline and resize edges (with
         // client-side decorations), or just the background.
-        let window = self
-            .chrome(Touches {
-                left: true,
-                right: true,
-            })
-            .frame(body, Message::Window);
-        iced::widget::stack![window, self.readout()].into()
+        self.chrome(Touches {
+            left: true,
+            right: true,
+        })
+        .frame(body, Message::Window)
     }
 
-    /// The window's size, always visible at the center of the top edge, whatever the layout:
-    /// the width class large and bold, the width in pixels small under it. It follows every
-    /// resize. It is drawn over the header bars and lets presses through to them.
+    /// The size of the shell: the width class large and bold, the width in pixels small under
+    /// it. It is the title of the content header, so it is centered on the content page and
+    /// follows every resize.
     fn readout(&self) -> Element<'_> {
         let bold = iced::Font {
             weight: iced::font::Weight::Bold,
             ..iced::Font::DEFAULT
         };
-        let height = adw::Metrics::default().headerbar_height;
-        container(
-            column![
-                text(format!("{:?}", WidthClass::of(self.width)).to_uppercase())
-                    .size(20)
-                    .font(bold),
-                text(format!("{}px", self.width.round() as u32))
-                    .size(11)
-                    .style(style::text::dim),
-            ]
-            .align_x(iced::Alignment::Center),
-        )
-        .center_x(Length::Fill)
-        .center_y(Length::Fixed(height))
+        // Shrink-wrapped (no `Fill` container): the header bar centers a title on the bar when
+        // it fits, but a title that fills would be centered in the gap between the buttons.
+        column![
+            text(format!("{:?}", WidthClass::of(self.width)).to_uppercase())
+                .size(20)
+                .font(bold),
+            text(format!("{}px", self.width.round() as u32))
+                .size(11)
+                .style(style::text::dim),
+        ]
+        .align_x(iced::Alignment::Center)
         .into()
     }
 }
