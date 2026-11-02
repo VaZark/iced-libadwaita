@@ -259,7 +259,7 @@ impl<'a, M: Clone + 'a> From<Form<'a, M>> for Element<'a, M> {
                     .map(|i| i != f.current && f.reachable.get(i).copied().unwrap_or(false))
                     .collect();
                 ind = ind.clickable(clickable);
-                let msgs: Vec<M> = (0..f.steps.len()).map(|i| on(i)).collect();
+                let msgs: Vec<M> = (0..f.steps.len()).map(&**on).collect();
                 body = body.push(ind.on_step_messages(msgs));
             } else {
                 body = body.push(ind);
