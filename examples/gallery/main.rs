@@ -24,6 +24,7 @@ mod form_demo;
 mod nav;
 mod range_demo;
 mod sections_demo;
+mod stepper_demo;
 
 use nav::{Action, Detail, Entry, Inline, Page};
 
@@ -158,6 +159,7 @@ struct Gallery {
     autocomplete: autocomplete_demo::State,
     sections: sections_demo::State,
     range: range_demo::State,
+    stepper: stepper_demo::State,
     date_pick: Option<w::Date>,
     chips: Vec<&'static str>,
     acc_single: Vec<u8>,
@@ -262,6 +264,7 @@ enum Message {
     Autocomplete(autocomplete_demo::Msg),
     Sections(sections_demo::Msg),
     Range(range_demo::Msg),
+    Stepper(stepper_demo::Msg),
     ChipRemove(&'static str),
     AccSingle(Vec<u8>),
     AccMulti(Vec<u8>),
@@ -459,6 +462,7 @@ impl Gallery {
                 date_view: w::Date::new(2026, 11, 1).unwrap(),
                 sections: sections_demo::State::default(),
                 range: range_demo::State::default(),
+                stepper: stepper_demo::State::default(),
                 field: {
                     let mut f = field_demo::State::default();
                     if std::env::var_os("GALLERY_FIELD_SUBMIT").is_some() {
@@ -699,6 +703,7 @@ impl Gallery {
             }
             Message::Sections(m) => self.sections.update(m),
             Message::Range(m) => self.range.update(m),
+            Message::Stepper(m) => self.stepper.update(m),
             Message::AccSingle(v) => self.acc_single = v,
             Message::AccMulti(v) => self.acc_multi = v,
             Message::ChipRemove(c) => self.chips.retain(|x| *x != c),

@@ -98,7 +98,7 @@ impl Page {
             ],
             Page::Inputs => vec![
                 ("Text", vec![n(TextInput), n(TextView), n(Autocomplete)]),
-                ("Forms", vec![n(Field), n(Form)]),
+                ("Forms", vec![n(Field), n(Form), n(Stepper)]),
                 (
                     "Toggles",
                     vec![i(I::Switch), i(I::CheckButton), i(I::RadioButton)],
@@ -198,6 +198,7 @@ pub enum Detail {
     TextView,
     Field,
     Form,
+    Stepper,
     Autocomplete,
     Dropdown,
     // Lists
@@ -325,6 +326,7 @@ impl Detail {
             Detail::TextView => "Multi-line text",
             Detail::Field => "Form field",
             Detail::Form => "Form",
+            Detail::Stepper => "Stepper",
             Detail::Autocomplete => "Autocomplete",
             Detail::Dropdown => "Dropdown",
             Detail::ActionRow => "Action row",
@@ -349,6 +351,7 @@ impl Detail {
             Detail::TextView => "Editable, placeholder and read-only",
             Detail::Field => "Label, control and message with shared validation",
             Detail::Form => "Submit, reset and a multi-step wizard with gated Next",
+            Detail::Stepper => "Steps with statuses, click-to-jump, icons, vertical, narrow",
             Detail::Autocomplete => "Async suggestions: loading, results, empty, error, in a field",
             Detail::Dropdown => "Selected, empty and disabled; combo rows with disabled options",
             Detail::ActionRow => "Subtitle, prefix, suffix and chevron",
