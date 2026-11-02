@@ -132,7 +132,9 @@ pub use split_view::{AdaptiveSplit, adaptive_split};
 pub use status_page::{Card, Page, StatusPage, bin, card, clamp, page, status_page};
 pub use stepper::{Stepper, StepperIconPosition, StepperOrientation, StepperSize, StepperStep};
 pub use switch::{Switch, switch};
-pub use toast::{Toast, ToastPosition, ToastTarget, toast_overlay, toast_stack, toast_target};
+pub use toast::{
+    Toast, ToastPosition, ToastTarget, toast_overlay, toast_stack, toast_stack_from, toast_target,
+};
 pub use toolbar::{ActionBar, BarStyle, ToolbarView, action_bar, toolbar_view};
 
 /// Shorthand for an iced element using this crate's [`Theme`](crate::Theme).

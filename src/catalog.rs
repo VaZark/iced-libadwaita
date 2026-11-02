@@ -856,6 +856,14 @@ pub static COMPONENTS: &[Component] = &[
         &["action", "on_dismiss"],
     ),
     c(
+        "toast_stack_from",
+        "AdwToastOverlay (queue)",
+        "toast_stack_from(content, &queue, |id, item| toast)",
+        &["limit", "timeout"],
+        &["content"],
+        &["on_dismiss"],
+    ),
+    c(
         "status_page",
         "AdwStatusPage",
         "status_page()",
