@@ -353,6 +353,10 @@ impl Highlight {
     pub fn index(&self) -> Option<usize> {
         self.index
     }
+    /// The first row of the window from the last [`window`](Self::window) call.
+    pub fn start(&self) -> usize {
+        self.start
+    }
     pub fn set(&mut self, index: Option<usize>) {
         self.index = index;
     }

@@ -628,7 +628,6 @@ impl<'a, T: Clone + 'a, M: 'a> Widget<M, Theme, iced::Renderer> for Widgeted<'a,
             anchor,
             max_rows: self.max_rows,
             metrics: self.metrics,
-            window: 0..0,
         })))
     }
 }
@@ -646,8 +645,6 @@ struct Popover<'a, 'b, T, M> {
     anchor: Rectangle,
     max_rows: usize,
     metrics: Metrics,
-    /// The rows laid out (indices into `items`), set by `layout`.
-    window: std::ops::Range<usize>,
 }
 
 const MARGIN: f32 = 6.0;
@@ -657,6 +654,16 @@ const ROW_GAP: f32 = 2.0;
 impl<'a, 'b, T: Clone + 'a, M: 'a> Popover<'a, 'b, T, M> {
     fn selectable(&self) -> bool {
         matches!(self.body, Body::Rows(_))
+    }
+
+    /// Index (into `items`) of the first row laid out: the window start, which `layout` keeps
+    /// in the highlight.
+    fn first(&self) -> usize {
+        if self.selectable() {
+            self.highlight.start()
+        } else {
+            0
+        }
     }
 
     fn close(&mut self, shell: &mut Shell<'_, M>) {
@@ -680,7 +687,7 @@ impl<'a, 'b, T: Clone + 'a, M: 'a> Popover<'a, 'b, T, M> {
     fn row_at(&self, layout: Layout<'_>, cursor: mouse::Cursor) -> Option<usize> {
         layout
             .children()
-            .zip(self.window.clone())
+            .zip(self.first()..)
             .find(|(l, _)| cursor.is_over(l.bounds()))
             .map(|(_, i)| i)
     }
@@ -696,13 +703,13 @@ impl<'a, 'b, T: Clone + 'a, M: 'a> overlay::Overlay<M, Theme, iced::Renderer>
             .width
             .clamp(120.0, (bounds.width - 2.0 * MARGIN).max(120.0));
         let inner = Size::new(w - 2.0 * pad, f32::INFINITY);
-        self.window = match self.body {
+        let window = match self.body {
             Body::Rows(n) => self.highlight.window(n, self.max_rows),
             _ => 0..self.items.len(),
         };
         let mut y = pad;
         let mut nodes = Vec::new();
-        for i in self.window.clone() {
+        for i in window {
             let node = self.items[i].as_widget_mut().layout(
                 &mut self.trees[i],
                 renderer,
@@ -750,7 +757,7 @@ impl<'a, 'b, T: Clone + 'a, M: 'a> overlay::Overlay<M, Theme, iced::Renderer>
             );
         }
         let hl = self.highlight.index().filter(|_| self.selectable());
-        for (child, i) in layout.children().zip(self.window.clone()) {
+        for (child, i) in layout.children().zip(self.first()..) {
             if hl == Some(i) {
                 let st = sb::menu_item(false)(theme, button::Status::Hovered);
                 if let Some(bg) = st.background {
@@ -848,7 +855,7 @@ impl<'a, 'b, T: Clone + 'a, M: 'a> overlay::Overlay<M, Theme, iced::Renderer>
         }
         // The notice (its Retry button) takes the rest.
         if !self.selectable() {
-            for (child, i) in layout.children().zip(self.window.clone()) {
+            for (child, i) in layout.children().zip(self.first()..) {
                 self.items[i].as_widget_mut().update(
                     &mut self.trees[i],
                     event,
@@ -883,7 +890,7 @@ impl<'a, 'b, T: Clone + 'a, M: 'a> overlay::Overlay<M, Theme, iced::Renderer>
         }
         layout
             .children()
-            .zip(self.window.clone())
+            .zip(self.first()..)
             .map(|(child, i)| {
                 self.items[i].as_widget().mouse_interaction(
                     &self.trees[i],
