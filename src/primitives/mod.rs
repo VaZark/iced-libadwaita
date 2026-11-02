@@ -12,12 +12,14 @@
 //! * [`sections`]: text padding around an input's left / right sections;
 //! * [`selection`]: which keys are on (single, required single, multiple);
 //! * [`validation`]: when a field shows valid / invalid, and chaining validators;
+//! * [`lookup`]: a query answered asynchronously: debounce, stale-response discarding, cache;
 //! * [`meta`]: which variant of a meta component shows, and its [`Trigger`] (breakpoint or select);
 //! * [`responsive`]: which presentation a width gets ([`When`](responsive::When)).
 
 pub mod anchor;
 pub mod date;
 pub mod form;
+pub mod lookup;
 pub mod meta;
 pub mod range;
 pub mod responsive;
@@ -26,6 +28,7 @@ pub mod selection;
 pub mod validation;
 
 pub use form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
+pub use lookup::{Highlight, Lookup, Query, Request, RequestId, Status as LookupStatus};
 pub use meta::Trigger;
 pub use responsive::When;
 pub use selection::Selection;
