@@ -56,7 +56,7 @@ pub fn move_item<T>(items: &mut Vec<T>, from: usize, to: usize) -> bool {
 /// The committed order and, while editing, a draft of it.
 ///
 /// ```
-/// use iced_libadwaita::primitives::reorder::ReorderState;
+/// use iced_adaptive_design::primitives::reorder::ReorderState;
 ///
 /// let mut s = ReorderState::new(vec!["a", "b", "c"]);
 /// s.edit();

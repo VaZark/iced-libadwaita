@@ -6,7 +6,7 @@
 //! without touching every named color:
 //!
 //! ```
-//! # use iced_libadwaita::Theme;
+//! # use iced_adaptive_design::Theme;
 //! # use iced::Color;
 //! let theme = Theme::dark().with_semantic(|s| {
 //!     s.card.bg = Color::from_rgb8(0x2b, 0x2b, 0x35);

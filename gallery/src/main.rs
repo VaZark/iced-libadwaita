@@ -5,16 +5,16 @@
 //! cargo run --example gallery -- --screenshot target/shots   # renders every page, light + dark
 //! ```
 
-use adw::style;
-use adw::widget::{self as w, typography as ty};
-use adw::{AccentColor, Icon, Metrics, Role, Scheme, Theme};
+use iad::style;
+use iad::widget::{self as w, typography as ty};
+use iad::{AccentColor, Icon, Metrics, Role, Scheme, Theme};
 use iced::widget::{column, container, text};
 use iced::{Element as IcedElement, Length, Subscription, Task, window};
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-type Element<'a> = adw::Element<'a, Message>;
+type Element<'a> = iad::Element<'a, Message>;
 
 mod appshell;
 mod autocomplete_demo;
@@ -81,8 +81,8 @@ impl DemoMotion {
         }
     }
 
-    fn spec(self) -> adw::animation::Spec {
-        use adw::animation::{Easing, Spec, presets};
+    fn spec(self) -> iad::animation::Spec {
+        use iad::animation::{Easing, Spec, presets};
         let ms = std::time::Duration::from_millis(600);
         match self {
             DemoMotion::Linear => Spec::Timed(ms, Easing::Linear),
@@ -160,7 +160,7 @@ struct Gallery {
     search: String,
     anim_enabled: bool,
     demo: DemoMotion,
-    demo_tween: adw::animation::Tween,
+    demo_tween: iad::animation::Tween,
     demo_value: f32,
 
     wifi: bool,
@@ -209,17 +209,17 @@ struct Gallery {
     sidebar_mode: w::CollapsedSidebar,
     sidebar_padding: w::SidebarPadding,
     drawer_open: bool,
-    win: adw::window::State,
+    win: iad::window::State,
     main: window::Id,
     /// The AppShell demo: its own window, with its own state.
-    shell: Option<adw::window::Child<appshell::AppShell>>,
+    shell: Option<iad::window::Child<appshell::AppShell>>,
     /// Screenshot harness: the window to capture instead of the main one.
     shot_window: Option<window::Id>,
     sheet: bool,
     carousel: usize,
     carousel_indicator: w::CarouselIndicator,
     /// The toasts on screen, oldest first, each with its id (stacked notifications).
-    toasts: adw::primitives::notifications::Queue<ToastSpec>,
+    toasts: iad::primitives::notifications::Queue<ToastSpec>,
     toast_seq: u32,
     /// Whether toasts dismiss themselves after 4 s (the queue's timeout).
     toast_auto: bool,
@@ -272,7 +272,7 @@ enum Message {
     Accent(AccentColor),
     AccentText(String),
     Transparency(String),
-    Tint(adw::widget::Hsva),
+    Tint(iad::widget::Hsva),
     TintOn(bool),
     TintText(String),
     Compact(bool),
@@ -336,8 +336,8 @@ enum Message {
     ShowToastSpec(ToastSpec),
     ToastPosition(w::ToastPosition),
     ToastTarget(w::ToastTarget),
-    ToastAction(adw::primitives::notifications::Id),
-    DismissToast(adw::primitives::notifications::Id),
+    ToastAction(iad::primitives::notifications::Id),
+    DismissToast(iad::primitives::notifications::Id),
     ToastAuto(bool),
     ToastTick(Instant),
     ClearToasts,
@@ -366,7 +366,7 @@ enum Message {
     Drawer(bool),
     ToggleFullscreen,
     WindowChanged,
-    WindowState(adw::window::State),
+    WindowState(iad::window::State),
     // screenshot mode
     Shot(usize),
     Capture(usize),
@@ -419,7 +419,7 @@ impl Gallery {
     fn new() -> (Self, Task<Message>) {
         // Desktop-level behavior comes from the shared config; the gallery's own switches
         // below are demos layered on top of it.
-        let cfg = adw::config::current();
+        let cfg = iad::config::current();
         let from_cfg = Theme::from_config(&cfg);
         let args: Vec<String> = std::env::args().collect();
         let shots = args
@@ -460,8 +460,8 @@ impl Gallery {
         let mut widgets_demo = widgets_demo::State::default();
         widgets_demo.sync(plays.get(&Detail::Splitter), plays.get(&Detail::Spoiler));
         let accent = match cfg.accent {
-            adw::config::Pick::Fixed(a) => a,
-            adw::config::Pick::System => adw::system::accent_color().unwrap_or(AccentColor::Blue),
+            iad::config::Pick::Fixed(a) => a,
+            iad::config::Pick::System => iad::system::accent_color().unwrap_or(AccentColor::Blue),
         };
         let tint_color = cfg
             .tint
@@ -490,17 +490,17 @@ impl Gallery {
             scheme: from_cfg.scheme,
             accent,
             accent_text: accent.key(),
-            compact: cfg.density == adw::config::Density::Compact,
+            compact: cfg.density == iad::config::Density::Compact,
             transparency: (cfg.transparency * 100.0).round() as u32,
             tint_on: cfg.tint.is_some(),
             tint: tint_color,
-            tint_text: adw::widget::Hsva::from_rgba(
+            tint_text: iad::widget::Hsva::from_rgba(
                 tint_color.r,
                 tint_color.g,
                 tint_color.b,
                 tint_color.a,
             )
-            .format(adw::widget::ColorFormat::Hexa),
+            .format(iad::widget::ColorFormat::Hexa),
             transparency_text: ((cfg.transparency * 100.0).round() as u32).to_string(),
             radius_m: std::env::var("GALLERY_RM")
                 .ok()
@@ -520,9 +520,9 @@ impl Gallery {
             // GALLERY_SEARCH=<text> starts with the search open (screenshots).
             searching: std::env::var_os("GALLERY_SEARCH").is_some(),
             search: std::env::var("GALLERY_SEARCH").unwrap_or_default(),
-            anim_enabled: adw::animation::enabled(),
+            anim_enabled: iad::animation::enabled(),
             demo: DemoMotion::EaseOutCubic,
-            demo_tween: adw::animation::Tween::new(0.0),
+            demo_tween: iad::animation::Tween::new(0.0),
             demo_value: 0.0,
             wifi: true,
             notifications: false,
@@ -580,14 +580,14 @@ impl Gallery {
                 Ok("dropdown") => MenuMode::Dropdown,
                 _ => MenuMode::Auto,
             },
-            win: adw::window::State {
+            win: iad::window::State {
                 maximized: std::env::var_os("GALLERY_FULL").is_some(),
                 fullscreen: false,
             },
             sheet: false,
             carousel: 0,
             carousel_indicator: w::CarouselIndicator::default(),
-            toasts: adw::primitives::notifications::Queue::new(),
+            toasts: iad::primitives::notifications::Queue::new(),
             toast_seq: 0,
             toast_auto: false,
             narrow: false,
@@ -623,7 +623,7 @@ impl Gallery {
                 })
                 .unwrap_or(iced::Size::new(1040.0, 760.0)),
             // Client-side or system decorations: the toolkit's `[windows] decorations` setting.
-            ..adw::window::settings()
+            ..iad::window::settings()
         }
     }
 
@@ -631,7 +631,7 @@ impl Gallery {
         if self.shell.as_ref().is_some_and(|c| c.is(id)) {
             "AppShell".into()
         } else {
-            "iced-libadwaita gallery".into()
+            "iced-adaptive-design gallery".into()
         }
     }
 
@@ -650,7 +650,7 @@ impl Gallery {
             .unwrap_or(iced::Size::new(1100.0, 720.0));
         // An ordinary window: it does not disable this one.
         let (shell, boot) = appshell::AppShell::new(size.width);
-        let (child, open) = adw::window::Child::window(size, shell);
+        let (child, open) = iad::window::Child::window(size, shell);
         self.shell = Some(child);
         Task::batch([open.map(|_| Message::Noop), boot.map(Message::Shell)])
     }
@@ -675,23 +675,23 @@ impl Gallery {
 
     fn build_theme(&self) -> Theme {
         let shadows = if self.shadows_on {
-            adw::Shadows::default()
+            iad::Shadows::default()
                 .with_scale(self.shadow_scale)
                 .with_intensity(self.shadow_intensity)
         } else {
-            adw::Shadows::none()
+            iad::Shadows::none()
         };
         let mut t = Theme::new(self.scheme)
             .accent(self.accent)
             .with_metrics(self.metrics())
             .with_shadows(shadows)
-            .with_auto_contrast(adw::config::current().auto_contrast)
+            .with_auto_contrast(iad::config::current().auto_contrast)
             .with_transparency(self.transparency as f32 / 100.0)
             .with_tint(self.tint_on.then_some(self.tint))
             .with_transparent_window(Self::csd());
         if self.card_override {
             t = t.with_semantic(|s| {
-                s.card.bg = adw::color::hex(0x3d2c5a);
+                s.card.bg = iad::color::hex(0x3d2c5a);
                 s.card.fg = iced::Color::WHITE;
             });
         }
@@ -762,17 +762,17 @@ impl Gallery {
                     c.to_rgb8()[2] as f32 / 255.0,
                     c.a,
                 );
-                self.tint_text = c.format(adw::widget::ColorFormat::Hexa);
+                self.tint_text = c.format(iad::widget::ColorFormat::Hexa);
             }
             Message::TintText(t) => {
-                if let Some(c) = adw::widget::Hsva::parse(&t) {
+                if let Some(c) = iad::widget::Hsva::parse(&t) {
                     let [r, g, b] = c.to_rgb8();
                     self.tint = iced::Color::from_rgba8(r, g, b, c.a);
                 }
                 self.tint_text = t;
             }
             Message::Transparency(t) => {
-                if let Some(p) = adw::widget::Numeric::integer().min(0).max(90).parse(&t) {
+                if let Some(p) = iad::widget::Numeric::integer().min(0).max(90).parse(&t) {
                     self.transparency = p.units as u32;
                 }
                 self.transparency_text = t;
@@ -795,7 +795,7 @@ impl Gallery {
                     Metrics::MAX_RADIUS_L,
                     Metrics::MAX_RADIUS_TOAST,
                 ][i];
-                let rule = adw::widget::Numeric::integer().min(0).max(max as i32);
+                let rule = iad::widget::Numeric::integer().min(0).max(max as i32);
                 if rule.validate(&t).is_ok()
                     && let Some(d) = rule.parse(&t)
                 {
@@ -869,7 +869,7 @@ impl Gallery {
             // this window is closed.
             Message::OpenShell => {
                 let size = std::env::var("GALLERY_SHELL_SIZE").ok();
-                let mut d = adw::window::Detached::this_exe().map(|d| d.arg("--appshell"));
+                let mut d = iad::window::Detached::this_exe().map(|d| d.arg("--appshell"));
                 if let (Ok(d), Some(size)) = (&mut d, size) {
                     *d = d.clone().env("GALLERY_SHELL_SIZE", size);
                 }
@@ -935,7 +935,7 @@ impl Gallery {
             }
             Message::Animations(on) => {
                 self.anim_enabled = on;
-                adw::animation::set_enabled(Some(on));
+                iad::animation::set_enabled(Some(on));
             }
             Message::DemoMotion(m) => self.demo = m,
             Message::DemoPlay => {
@@ -1001,7 +1001,7 @@ impl Gallery {
                     })
                 });
             }
-            Message::WindowChanged => return adw::window::refresh().map(Message::WindowState),
+            Message::WindowChanged => return iad::window::refresh().map(Message::WindowState),
             // GALLERY_FULL forces the edge-to-edge look for screenshots.
             Message::WindowState(st) => {
                 if std::env::var_os("GALLERY_FULL").is_none() {
@@ -1278,7 +1278,7 @@ impl Gallery {
             toast_clock,
             self.autocomplete.subscription().map(Message::Autocomplete),
             self.resizable.subscription().map(Message::Resizable),
-            adw::window::changes().map(|_| Message::WindowChanged),
+            iad::window::changes().map(|_| Message::WindowChanged),
             window::close_events().map(Message::WindowClosed),
             window::resize_events().map(|(id, size)| Message::Resized(id, size.width)),
             self.shell.as_ref().map_or_else(Subscription::none, |c| {
@@ -1298,7 +1298,7 @@ impl Gallery {
 
     /// Whether the window draws its own decorations: the toolkit's setting, nothing of ours.
     fn csd() -> bool {
-        adw::window::csd()
+        iad::window::csd()
     }
 
     fn root(&self, size: iced::Size) -> IcedElement<'_, Message, Theme> {
@@ -1317,10 +1317,10 @@ impl Gallery {
         // Mobile mode (narrow): no window decorations at all. Corners still follow the
         // real window state: rounded while floating, edge to edge only when the window
         // is actually maximized or fullscreen.
-        let mobile = adw::window::is_mobile(width);
+        let mobile = iad::window::is_mobile(width);
         let win_state = self.win;
         let corner = if csd {
-            win_state.radius(&adw::Metrics::default())
+            win_state.radius(&iad::Metrics::default())
         } else {
             0.0
         };
@@ -1349,7 +1349,7 @@ impl Gallery {
                     .accel("Ctrl+?"),
                     w::MenuItem::action("Help", Message::ShowToast("Opening Help…")).accel("F1"),
                     w::MenuItem::action(
-                        "About iced-libadwaita",
+                        "About iced-adaptive-design",
                         Message::OpenDialog(Dialog::About),
                     ),
                 ]),
@@ -1375,7 +1375,7 @@ impl Gallery {
         // One header bar per pane, as in libadwaita split views. Window controls
         // appear only at the window edge (the end pane); the collapsed single pane has both.
         let mut sidebar_bar = w::header_bar::<Message>()
-            .title("iced-libadwaita")
+            .title("iced-adaptive-design")
             .pack_end(primary)
             .window_corners(corner, if show_sidebar_only { corner } else { 0.0 })
             .metrics(m);
@@ -1426,7 +1426,11 @@ impl Gallery {
                     .variant(HeaderTitle::Title, w::When::always(), move |_| {
                         let shown: Element<'_> = if path {
                             w::path_bar(
-                                vec!["Home".into(), "Projects".into(), "iced-libadwaita".into()],
+                                vec![
+                                    "Home".into(),
+                                    "Projects".into(),
+                                    "iced-adaptive-design".into(),
+                                ],
                                 2,
                                 |_| Message::Noop,
                             )
@@ -1545,7 +1549,7 @@ impl Gallery {
             .on_close_drawer(Message::Drawer(false))
             .show_content(self.show_content);
 
-        // The window background comes from `adw::window::frame` (rounded when floating).
+        // The window background comes from `iad::window::frame` (rounded when floating).
         let body = container(body).width(Length::Fill).height(Length::Fill);
         let base: Element = if in_content {
             w::toast_stack(body, Vec::new())
@@ -1619,9 +1623,9 @@ impl Gallery {
             )),
             Some(Dialog::About) => Some(Element::from(
                 w::AboutDialog::new("Gallery")
-                    .developer_name("The iced-libadwaita authors")
+                    .developer_name("The iced-adaptive-design authors")
                     .version("0.1.0")
-                    .comments("Widget gallery for iced-libadwaita.")
+                    .comments("Widget gallery for iced-adaptive-design.")
                     .website("https://iced.rs")
                     .license("MIT OR Apache-2.0")
                     .application_icon(
@@ -1633,7 +1637,7 @@ impl Gallery {
         let result = w::present_dialog(base, dialog, Some(Message::CloseDialog), corner);
         // The toolkit listens: no subscription or update arm. The primary menu registers its own
         // accelerators (Ctrl+, Ctrl+? F1); these are the standard ones the app supports.
-        let result = adw::shortcut::Standard::new()
+        let result = iad::shortcut::Standard::new()
             .quit(Message::Close)
             .fullscreen(Message::ToggleFullscreen)
             .into_shortcuts()
@@ -1641,7 +1645,7 @@ impl Gallery {
             .bind("Ctrl+F", Message::ToggleSearch)
             .scope(result);
         if csd {
-            adw::window::frame(result, win_state, Message::Resize)
+            iad::window::frame(result, win_state, Message::Resize)
         } else {
             result
         }
@@ -1745,8 +1749,8 @@ impl Gallery {
 }
 
 fn main() -> iced::Result {
-    // Shared desktop behavior: ~/.config/iced-libadwaita/desktop.conf (+ system files).
-    let mut cfg = adw::config::Config::load();
+    // Shared desktop behavior: ~/.config/iced-adaptive-design/desktop.conf (+ system files).
+    let mut cfg = iad::config::Config::load();
     if std::env::var_os("GALLERY_OPT_OUT").is_some() {
         // Opting out of desktop settings is highly discouraged; shown here only to demonstrate
         // that it is allowed, explicit and reported (a notice is printed on install).
@@ -1754,7 +1758,7 @@ fn main() -> iced::Result {
             o.mobile_sidebar(w::CollapsedSidebar::ParentPage);
         });
     }
-    adw::config::install(cfg);
+    iad::config::install(cfg);
     // A daemon, so the preferences dialog can be a window of its own.
     iced::daemon(Gallery::new, Gallery::update, Gallery::view)
         .title(Gallery::title)

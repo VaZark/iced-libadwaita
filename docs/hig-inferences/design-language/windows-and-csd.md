@@ -3,7 +3,7 @@
 Source: [`AdwWindow`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/class.Window.html), [`AdwHeaderBar`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/class.HeaderBar.html), [CSS variables](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/css-variables.html).
 
 - **Adwaita dislikes server-side decorations (SSD).** `AdwWindow` has _no_ titlebar area; the app supplies an `AdwHeaderBar` in an `AdwToolbarView`, and that bar carries the title, the window controls (min/max/close per the system `decoration-layout`) and acts as the drag handle.
-- **Project decision: SSD is disabled by default.** Use `iced_libadwaita::window::settings()`; it sets `decorations: false`, `transparent: true` and the 360×200 minimum size. `settings_with_ssd(true)` is the explicit opt-out.
+- **Project decision: SSD is disabled by default.** Use `iced_adaptive_design::window::settings()`; it sets `decorations: false`, `transparent: true` and the 360×200 minimum size. `settings_with_ssd(true)` is the explicit opt-out.
 - Window corners use `--window-radius` = 15px for **floating** windows; maximized, tiled and fullscreen windows go **edge to edge** (square corners, no border, no resize edges).
 - `AdwHeaderBar` in a dialog shows the dialog title and only a close button.
 - In split views, only the bars at the window edge show window controls.
@@ -27,6 +27,14 @@ iced can only clip to rectangles, so a rounded window is kept clean by construct
 - Every full-window layer takes it too: dialog scrim (`dialog_in_window`), a window-scope `Dock` (scrim and panel).
 - The 1px window outline is drawn **above** the content so content can't paint over it.
 - Maximized/fullscreen: radius 0 everywhere, no outline, no grips.
+
+## Dialogs and other windows
+
+- A dialog is a modal layer over its parent window, never an OS window. The parent is faded and disabled. See [dialog](../widgets/dialog.md).
+- iced has no transient-parent or system-modal window, so a second window cannot be kept above the first. The compositor decides.
+- `window::Child::window` is a second window of the same process. It closes with the process.
+- A window that must outlive the main window is a separate process: `window::Detached`.
+- With `[appearance] transparency` above 0 the window must be transparent. `window::settings()` handles it.
 
 ## iced mapping
 

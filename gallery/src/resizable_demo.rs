@@ -10,13 +10,13 @@
 //! `GALLERY_RESIZABLE=WxH` starts the first frame at that size, `GALLERY_RESIZABLE_SHELL=WxH` the
 //! app shell's (screenshots).
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
 use crate::appshell::{self, AppShell};
-use adw::breakpoints::{Breakpoints, WidthClass};
-use adw::primitives::resize::{Constraints, Grip};
-use adw::widget::{self as w, MetaComponent, Resizable, When, typography as ty};
-use adw::{Element, Metrics, Role};
+use iad::breakpoints::{Breakpoints, WidthClass};
+use iad::primitives::resize::{Constraints, Grip};
+use iad::widget::{self as w, MetaComponent, Resizable, When, typography as ty};
+use iad::{Element, Metrics, Role};
 use iced::widget::{column, container, row};
 use iced::{Length, Size, Subscription, Task};
 
@@ -99,7 +99,7 @@ fn readout<'a>(size: Size) -> Element<'a, Msg> {
         size.height,
         WidthClass::of(size.width)
     ))
-    .style(adw::style::text::dim)
+    .style(iad::style::text::dim)
     .into()
 }
 
@@ -112,7 +112,7 @@ fn group<'a>(
 ) -> Element<'a, Msg> {
     column![
         ty::heading(t),
-        ty::body(d).style(adw::style::text::dim),
+        ty::body(d).style(iad::style::text::dim),
         readout(size),
         body,
     ]
@@ -151,14 +151,14 @@ impl State {
             container(
                 column![
                     ty::heading(title),
-                    ty::caption(note).style(adw::style::text::dim)
+                    ty::caption(note).style(iad::style::text::dim)
                 ]
                 .spacing(4),
             )
             .padding(sp)
             .width(Length::Fill)
-            .style(move |t: &adw::Theme| container::Style {
-                background: Some(iced::Background::Color(adw::color::alpha(
+            .style(move |t: &iad::Theme| container::Style {
+                background: Some(iced::Background::Color(iad::color::alpha(
                     t.semantic.swatch(role).color,
                     0.18,
                 ))),

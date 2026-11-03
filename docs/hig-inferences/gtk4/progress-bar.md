@@ -29,4 +29,4 @@ Thickness ≈8px ‡; fully rounded.
 
 ## iced mapping
 
-`adw::widget::progress_bar` (8px), `style::progress_bar::{default,success,warning,error}`.
+`iad::widget::progress_bar` (8px), `style::progress_bar::{default,success,warning,error}`.

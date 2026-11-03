@@ -28,7 +28,7 @@ Not in the sources I could read (so not asserted): the `GtkRevealer` settings be
 
 ## iced mapping
 
-`iced_libadwaita::animation` mirrors the model above in pure, unit-tested code: `Easing` (all 35 + `CubicBezier`), `TimedAnimation`, `SpringParams` / `SpringAnimation` (damped-spring solver, initial velocity, epsilon, clamp, estimated duration), `Tween` (the animated value a widget keeps; retargeting continues from the current value and velocity), `presets` (the table above), and `animation::enabled()` / `set_enabled(..)` (follows the desktop's `enable-animations`; disabled animations jump to the end value).
+`iced_adaptive_design::animation` mirrors the model above in pure, unit-tested code: `Easing` (all 35 + `CubicBezier`), `TimedAnimation`, `SpringParams` / `SpringAnimation` (damped-spring solver, initial velocity, epsilon, clamp, estimated duration), `Tween` (the animated value a widget keeps; retargeting continues from the current value and velocity), `presets` (the table above), and `animation::enabled()` / `set_enabled(..)` (follows the desktop's `enable-animations`; disabled animations jump to the end value).
 
 Widgets animate themselves from iced's `RedrawRequested` events, so the app needs no subscription or messages:
 
@@ -36,7 +36,7 @@ Widgets animate themselves from iced's `RedrawRequested` events, so the app need
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `Switch`                                                  | knob slides and track cross-fades, 200ms `$ease-out-quad`                                |
 | `ExpanderRow`, `Banner` (`reveal`)                        | slide open/closed, 250ms `ADW_EASE`                                                      |
-| Collapsed-sidebar drawer (`drawer_layer`)                 | sidebar spring (1, 0.5, 500) slide + scrim fade, **open and closed**                     |
+| Collapsed-sidebar drawer (`AdaptiveSplit`)               | sidebar spring (1, 0.5, 500) slide + scrim fade, **open and closed**                     |
 | `dialog_in_window`, a modal `Dock` (`entrance`) | sheet spring (0.8, 1, 400) slide-in + scrim fade                                         |
 | `toast_overlay`                                           | slide up, 300ms `ADW_EASE`                                                               |
 | `carousel`                                                | scroll spring (1, 0.5, 500), drag with velocity hand-off, indicator follows the position |

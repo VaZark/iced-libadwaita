@@ -1,6 +1,6 @@
 # Build-time XML UI code generation
 
-XML uses HTML-style kebab-case tags, attributes and slot names, mapped to Rust snake_case. Names follow `iced_libadwaita::catalog::COMPONENTS` (the same vocabulary documented in `docs/components.md`).
+XML uses HTML-style kebab-case tags, attributes and slot names, mapped to Rust snake_case. Names follow `iced_adaptive_design::catalog::COMPONENTS` (the same vocabulary documented in `docs/components.md`).
 
 ```xml
 <toolbar-view>
@@ -21,14 +21,14 @@ In the application's `Cargo.toml`:
 
 ```toml
 [build-dependencies]
-iced-libadwaita-codegen = { path = "../iced-libadwaita/codegen" }
+iced-adaptive-design-codegen = { path = "../iced-adaptive-design/codegen" }
 ```
 
 In `build.rs`:
 
 ```rust
 fn main() {
-    iced_libadwaita_codegen::compile_file(
+    iced_adaptive_design_codegen::compile_file(
         "ui/main.xml",
         std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("ui.rs"),
     ).unwrap();
@@ -43,4 +43,4 @@ mod ui {
 }
 ```
 
-The generated `view` function returns an iced-libadwaita element with the application's `crate::Message` type. No runtime XML parser or dynamic linking is needed.
+The generated `view` function returns an iced-adaptive-design element with the application's `crate::Message` type. No runtime XML parser or dynamic linking is needed.

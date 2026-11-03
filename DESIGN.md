@@ -1,97 +1,122 @@
 # Design
 
-#### Target
+## Target
 
-We target the [GNOME HIG](https://developer.gnome.org/hig/), using libadwaita for reference. The reference is where we look first for sizes, colors, motion and behavior; it is not something we stay compatible with. Where the HIG, iced's limits or our own judgment call for something different, we do the different thing. Deviations are _usually_ recorded in the **iced mapping** section of the relevant file under [docs/hig-inferences/](docs/hig-inferences/README.md).
+The [GNOME HIG](https://developer.gnome.org/hig/), with libadwaita as the reference. Look there first for sizes, colors, motion and behavior. Where the HIG, iced's limits or our judgment say otherwise, do the other thing. Deviations go in the **iced mapping** section of the page under [docs/hig-inferences/](docs/hig-inferences/README.md).
 
-Components are named after their libadwaita counterparts only so they are easy to recognize. **Responsive behavior** has a second reference: Mantine (notably its AppShell) and Bootstrap are alternative references for breakpoints, collapsing and shell layout, used to fill gaps Adwaita leaves or where its choices are not optimal (libadwaita collapses a sidebar at 400sp, for example). The HIG still decides; these inform. See [adaptive layouts](docs/hig-inferences/design-language/adaptive-layouts.md#other-references).
+Components carry their libadwaita names only so they are easy to find.
 
-#### Principles
+Responsive behavior has a second reference: Mantine (AppShell) and Bootstrap, for breakpoints, collapsing and shell layout. The HIG decides; these fill gaps. See [adaptive layouts](docs/hig-inferences/design-language/adaptive-layouts.md#other-references).
 
-- Follow the HIG: Adwaita-style appearance, adaptive layouts, client-side decorations that follow the desktop, accessible contrast, calm motion that respects reduced motion.
-- A small set of components with one shape, usable from code or a declarative layer.
-- Desktop behavior is shared through one config file, so apps behave like each other.
+## Principles
+
+- Adwaita appearance, adaptive layouts, client-side decorations that follow the desktop, accessible contrast, calm motion that respects reduced motion.
+- A small set of components with one shape.
+- Desktop behavior comes from one shared config file, so apps behave alike.
 - Not goals: API, behavior or pixel compatibility with libadwaita or GTK; porting every widget.
 
 ## Structure
 
-#### Theme
-
-Three overridable layers (see [theming](docs/lib/theming.md)):
-
-| Layer        | Type                    | Holds                                                                  |
-| ------------ | ----------------------- | ---------------------------------------------------------------------- |
-| Named colors | `Palette`               | libadwaita-style variable names, light and dark                        |
-| Semantic     | `Semantic`              | Surfaces, status swatches, opacities; text on fills chosen by contrast |
-| Metrics      | `Metrics`, `Typography` | Spacing, radii (capped at HIG maxima), sizes, text scale               |
-
 ```mermaid
-flowchart LR
-    Config["Desktop config"] --> Theme
-    Palette --> Semantic
-    Semantic --> Theme
+flowchart TD
+    Config["desktop.conf"] --> Theme
+    Palette --> Semantic --> Theme
     Metrics --> Theme
-    Typography --> Theme
     Shadows --> Theme
-    Theme --> Components["Components and stock iced widgets"]
+    Theme --> Components
+    Primitives["primitives (headless logic)"] --> Components
+    Components --> App
+    Theme --> App
 ```
 
-`Theme` implements iced's `theme::Base` and every widget `Catalog`, so stock widgets are restyled. Colors, radii and opacities resolve at draw time; layout tokens at view-build time.
+### Theme
 
-#### Components
+Three layers, each overridable ([theming](docs/lib/theming.md)):
 
-Each is a builder with `new(..)`, properties, slots, `on_*` events, controlled state and `Into<Element>`. `catalog::COMPONENTS` lists them and `prelude` imports them. See [components](docs/lib/components.md).
+| Layer        | Type                    | Holds                                                           |
+| ------------ | ----------------------- | --------------------------------------------------------------- |
+| Named colors | `Palette`               | libadwaita variable names, light and dark                       |
+| Semantic     | `Semantic`              | surfaces, status swatches, opacities; text on fills by contrast |
+| Metrics      | `Metrics`, `Typography` | spacing, radii (capped at HIG maxima), sizes, text scale        |
 
-Some behavior is deliberately different from a stock widget:
+`Theme` implements iced's `theme::Base` and every widget `Catalog`, so stock widgets are restyled. Colors, radii and opacities resolve at draw time, layout tokens at view-build time.
+
+Surfaces can be translucent (`with_transparency`) and tinted (`with_tint`, off by default). Tints derived from a surface keep its alpha.
+
+### Components
+
+Each is a builder: `new(..)`, properties, slots, `on_*` events, controlled state, `Into<Element>`. The API of each is its man page, generated from its doc comments. See [components](docs/lib/components.md).
+
+Differences from a stock widget:
 
 - `Card` is one chainable surface; each shadow layer is its own rounded shape.
-- Wrapper widgets forward overlays and keep their content's tree position stable.
-- Text color on colored fills follows CSS `color-contrast()`.
+- Wrappers forward overlays and keep their content's tree position stable.
+- Text on colored fills follows CSS `color-contrast()`.
 
-#### Desktop config
+### Primitives
 
-`~/.config/iced-libadwaita/desktop.conf` (and system files) sets shared behavior: scheme, accent, density, shadows, motion per trigger, decorations, breakpoints, menus, sidebar, rows, toasts. Apps opt out per setting with `Config::opt_out` (discouraged, reported at startup, can be forbidden by `[policy]`). See [desktop-config](docs/lib/desktop-config.md).
+`src/primitives/` holds behavior with no widgets and no look: pure, controlled, unit-tested. A component is a primitive plus a look. List: [primitives](docs/lib/primitives.md).
 
-#### Configuration registry
+### Dialogs and overlays
 
-The desktop configuration has a versioned, read-only registry (types, defaults, `since`, deprecation) so applications of different toolkit versions share one file safely: unknown properties are ignored, never deleted, and deprecation only stops _new builds_. See [config registry](docs/lib/config-registry.md).
+A dialog is a modal layer over its parent window. The parent is faded and disabled. The library opens no OS window for a dialog.
 
-#### Shortcuts
+- `Overlay`: a layer over a base. Rules in `primitives::overlay`.
+- `Dock`: a surface on an edge. Modes: `Push` (makes room) and `Overlay` (floats over a faded base).
+- `FocusScope`, `focus_return`: Tab trap, initial focus, focus return. Every `Overlay` is one.
+- A window that must outlive the main window is a separate process: `window::Detached`.
 
-The toolkit listens for them: a wrapper widget publishes the bound message, menus register the accelerators they show, and a standard set covers GNOME's usual ones. A widget exposes a shortcut only when it is available (item enabled, shortcuts on, keyboard likely). See [windows and menus](docs/lib/windows-and-menus.md).
+See [windows and menus](docs/lib/windows-and-menus.md).
 
-#### Windows
+### Desktop config
 
-No server-side decorations by default. Header bars are continuous, window buttons follow the desktop's `button-layout` and icon theme, rounded corners follow the real window state, and surfaces touching a corner take the window radius.
+`~/.config/iced-adaptive-design/desktop.conf` (and system files) sets shared behavior: scheme, accent, density, transparency, tint, shadows, motion per trigger, decorations, breakpoints, menus, sidebar, rows, toasts. Apps opt out per setting with `Config::opt_out` (discouraged, reported at startup, forbidden by `[policy]`). See [desktop config](docs/lib/desktop-config.md).
 
-#### Adaptive layout
+A versioned registry (types, defaults, `since`, deprecation) lets apps of different toolkit versions share one file: unknown keys are ignored, never deleted. See [config registry](docs/lib/config-registry.md).
 
-Breakpoints follow the scale of popular UI kits (Bootstrap, Mantine): 576, 768, 992, 1200, 1400 (`breakpoints`). Content must never feel squeezed, so a split view collapses below 768px _or_ whenever the content beside the sidebar would be under 520px; the collapsed sidebar is a drawer or the parent page of a stack. Mobile mode (no window buttons, full-page menus) is below 576px. Crossing a breakpoint slides the sidebar out of (or into) the layout on the drawer's spring, displacing the content rather than covering it. Every layout number is a named fallback constant that the desktop config can override. Rows wrap their control when they cannot share a line.
+### Shortcuts
 
-#### Motion
+A wrapper publishes the bound message. Menus register the accelerators they show. A standard set covers GNOME's usual ones. A widget shows a shortcut only when it is available. See [windows and menus](docs/lib/windows-and-menus.md).
 
-Libadwaita's easings and springs with its parameters. Every animation is a trigger with its own animation and a `None` fallback; reduced motion disables all of them.
+### Windows
+
+No server-side decorations by default. Header bars are continuous. Window buttons follow the desktop's `button-layout` and icon theme. Corners follow the real window state; surfaces on a corner take the window radius.
+
+### Adaptive layout
+
+Breakpoints: 576, 768, 992, 1200, 1400 (`breakpoints`). A split view collapses below 768 px, or when the content beside the sidebar would be under 520 px. The collapsed sidebar is a drawer or the parent page of a stack. Mobile mode (no window buttons, full-page menus) is below 576 px.
+
+Crossing a breakpoint slides the sidebar out of (or into) the layout on the drawer's spring, and the content gives way instead of being covered. The in-flow sidebar, the drawer and a pushed `Dock` share one geometry (`primitives::dock`). Every layout number is a named fallback that the config can override.
+
+### Motion
+
+Libadwaita's easings and springs. Every animation is a trigger with its own setting and a `none` fallback. Reduced motion disables all of them.
 
 ## Coverage
 
-| libadwaita (reference)                                                    | here                                                                                        |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| StatusPage, Banner, Avatar, Spinner, ToastOverlay                         | `status_page`, `banner`, `avatar`, `spinner`, `Toast` + `toast_stack`                       |
-| Dialog, AlertDialog, AboutDialog, ShortcutsDialog                         | `dialog_in_window`, `AlertDialog`, `AboutDialog`, `shortcuts_dialog`                        |
-| ActionRow, SwitchRow, ComboRow, ExpanderRow, EntryRow, SpinRow, ButtonRow | the same names; `boxed_list`, `Card`                                                        |
-| PreferencesGroup / Page / Dialog                                          | `PreferencesGroup`, `PreferencesPage`, `preferences_dialog`                                 |
-| NavigationView, NavigationSplitView, OverlaySplitView, Sidebar            | `navigation_view`, `NavigationSplitView`, `OverlaySplitView`, `SidebarList`                 |
-| ViewSwitcher, TabBar, Carousel, BottomSheet                               | `view_switcher`, `tab_bar`, `carousel`, `bottom_sheet_in_window`                            |
-| ToolbarView, HeaderBar, Window, SplitButton, ToggleGroup                  | `toolbar_view`, `HeaderBar`, `window`, `split_button` / `SplitButtonAction`, `toggle_group` |
-| Clamp, WrapBox, Bin, Breakpoint                                           | `clamp`, `wrap_box`, `bin`, `Breakpoint`                                                    |
-| Entry, CheckButton, Scale, TextView                                       | `entry`, `check_button`, `scale`, `text_view` (GTK4 equivalents)                            |
+| libadwaita                                                                 | here                                                                        |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| StatusPage, Banner, Avatar, Spinner, ToastOverlay                          | `status_page`, `banner`, `avatar`, `spinner`, `Toast` + `toast_stack`       |
+| Dialog, AlertDialog, AboutDialog, ShortcutsDialog                          | `dialog_in_window`, `AlertDialog`, `AboutDialog`, `shortcuts_dialog`        |
+| ActionRow, SwitchRow, ComboRow, ExpanderRow, EntryRow, SpinRow, ButtonRow  | same names; `boxed_list`, `Card`                                            |
+| PreferencesGroup / Page / Dialog                                           | `PreferencesGroup`, `PreferencesPage`, `preferences_dialog`                 |
+| NavigationView, NavigationSplitView, OverlaySplitView, Sidebar             | `navigation_view`, `NavigationSplitView`, `OverlaySplitView`, `SidebarList` |
+| ViewSwitcher, TabBar, Carousel                                             | `view_switcher`, `Tabs`, `carousel`                                         |
+| BottomSheet                                                                | `Dock` (`DockMode::Overlay`, bottom)                                        |
+| ToolbarView, HeaderBar, Window, SplitButton, ToggleGroup                   | `toolbar_view`, `HeaderBar`, `window`, `split_button`, `toggle_group`       |
+| Clamp, WrapBox, Bin, Breakpoint                                            | `clamp`, `wrap_box`, `bin`, `Breakpoint`                                    |
+| Entry, CheckButton, Scale, TextView                                        | `entry`, `check_button`, `scale`, `text_view`                               |
+
+Beyond libadwaita: `NumberInput`, `DateInput`, `DateRangeInput`, `ColorInput`, `ColorPicker`, `Autocomplete`, `MultiSelect`, `Tree`, `Timeline`, `Splitter`, `Spoiler`, `Dock`, `FocusScope`, tables with virtualization and async loading.
 
 Not implemented: TabOverview, dynamic breakpoint setters, a full symbolic icon theme (a small built-in set plus the desktop's window-control icons).
 
 ## Known limitations
 
-- iced cannot ellipsize text; overflowing text is clipped at its container.
-- No exit animations for dialogs and toasts (the app unmounts them); no navigation-page transition inside a stack beyond the push/pop slide.
-- The carousel takes mouse drag only; the bottom sheet has no drag gesture.
-- Quads draw before text within one iced layer, so overlapping surfaces need separate layers.
-- `iced::window::screenshot` does not capture `text_editor` text, so the editor cannot be confirmed by screenshot.
+- iced cannot ellipsize text. Overflow is clipped at its container.
+- No exit animations for dialogs and toasts (the app unmounts them).
+- The carousel takes mouse drag only. A `Dock` has no drag gesture.
+- Quads draw before text within one iced layer. Overlapping surfaces need separate layers.
+- `iced::window::screenshot` does not capture `text_editor` text.
+- iced buttons are not focusable, so focus handling covers entries and editors only.
+- A window cannot be made a true child of another; use a modal dialog or a separate process.

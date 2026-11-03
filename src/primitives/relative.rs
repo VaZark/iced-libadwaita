@@ -10,7 +10,7 @@
 //! * [`Relative`] implements `Display` for the text.
 //!
 //! ```
-//! use iced_libadwaita::primitives::{date::Date, relative::Relative};
+//! use iced_adaptive_design::primitives::{date::Date, relative::Relative};
 //! let today = Date::new(2026, 11, 2).unwrap();
 //! assert_eq!(Relative::from_dates(today.add_days(-12), today).to_string(), "1 week ago");
 //! assert_eq!(Relative::from_seconds(-90).to_string(), "2 minutes ago");

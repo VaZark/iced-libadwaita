@@ -42,7 +42,7 @@ struct Entry<Id, K> {
 /// last switched to.
 ///
 /// ```
-/// use iced_libadwaita::primitives::meta_parent::Registry;
+/// use iced_adaptive_design::primitives::meta_parent::Registry;
 ///
 /// let mut r = Registry::new();
 /// r.register("list", ["edit", "preview"]);

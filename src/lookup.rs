@@ -6,8 +6,8 @@
 //! anything), and it runs on whatever executor your iced application uses.
 //!
 //! ```ignore
-//! use iced_libadwaita::lookup;
-//! use iced_libadwaita::primitives::{Lookup, RequestId};
+//! use iced_adaptive_design::lookup;
+//! use iced_adaptive_design::primitives::{Lookup, RequestId};
 //!
 //! struct App { text: String, cities: Lookup<String, City> }
 //!
@@ -116,7 +116,7 @@ use crate::primitives::infinite::{Infinite, Page};
 /// `to_string()`. A stale answer is harmless: `complete` discards it.
 ///
 /// ```ignore
-/// use iced_libadwaita::{lookup, primitives::infinite::{Infinite, Page}};
+/// use iced_adaptive_design::{lookup, primitives::infinite::{Infinite, Page}};
 ///
 /// enum Msg { Scrolled(ScrollMetrics), More, Loaded(RequestId, Result<Page<Row>, String>), Retry, Sort(Key) }
 ///

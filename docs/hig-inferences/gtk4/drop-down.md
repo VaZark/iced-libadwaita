@@ -28,4 +28,4 @@ Adwaita's popover surface, 12px radius, selected item marked with a trailing che
 
 ## iced mapping
 
-`adw::widget::dropdown` / `Dropdown`.
+`iad::widget::dropdown` / `Dropdown`.

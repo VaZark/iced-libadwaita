@@ -1,12 +1,12 @@
 [package]
-name = "iced-libadwaita-gallery"
+name = "iced-adaptive-design-gallery"
 version = "0.1.0"
 edition = "2024"
-description = "A tour of the iced-libadwaita components"
+description = "A tour of the iced-adaptive-design components"
 publish = false
 
 [dependencies]
-iced-libadwaita = { path = ".." }
+iced-adaptive-design = { path = ".." }
 iced = { version = "0.14", features = ["advanced", "svg", "image", "tokio", "canvas"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 tokio = { version = "1", features = ["time"] }

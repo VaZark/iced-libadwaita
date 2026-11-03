@@ -1,7 +1,7 @@
-# iced-libadwaita desktop configuration (GLib key-file format)
+# iced-adaptive-design desktop configuration (GLib key-file format)
 #
-# Install as  ~/.config/iced-libadwaita/desktop.conf   (user)
-#       or    /etc/xdg/iced-libadwaita/desktop.conf    (system; $XDG_CONFIG_DIRS)
+# Install as  ~/.config/iced-adaptive-design/desktop.conf   (user)
+#       or    /etc/xdg/iced-adaptive-design/desktop.conf    (system; $XDG_CONFIG_DIRS)
 # Precedence: built-in defaults < system files < user file < an app's explicit opt-outs.
 # Every setting is optional. Shown values are the defaults.
 
@@ -30,7 +30,7 @@ popover=default          # menus and dropdowns rise into place
 selection=default        # selection highlight fades
 drawer=default           # collapsed sidebar slides in over a scrim
 dialog=default           # dialog scrim + slide
-sheet=default            # bottom sheet scrim + slide
+sheet=default            # a docked overlay (sheet, drawer) fades its base and slides in
 toast=default            # toast slides up
 reveal=default           # expanders and banners slide open
 switch=default           # switch knob slides

@@ -320,9 +320,9 @@ impl Gallery {
                     w::password_entry("Disabled", "hunter2").metrics(m).into(),
                 ]);
                 let color = stack(sp, vec![
-                    w::entry("Purple", "text and ring override").on_input(noop).color(adw::color::hex(0x9141ac)).metrics(m).into(),
-                    w::entry("Teal", "any color").on_input(noop).color(adw::color::hex(0x2190a4)).metrics(m).into(),
-                    w::entry("Orange", "disabled keeps it dim").color(adw::color::hex(0xe66100)).metrics(m).into(),
+                    w::entry("Purple", "text and ring override").on_input(noop).color(iad::color::hex(0x9141ac)).metrics(m).into(),
+                    w::entry("Teal", "any color").on_input(noop).color(iad::color::hex(0x2190a4)).metrics(m).into(),
+                    w::entry("Orange", "disabled keeps it dim").color(iad::color::hex(0xe66100)).metrics(m).into(),
                 ]);
                 let width = stack(sp, vec![
                     w::entry("Fixed width", "200px").on_input(noop).width(Length::Fixed(200.0)).metrics(m).into(),
@@ -860,14 +860,14 @@ impl Gallery {
                         w::SliderRow::new("Stacked (default)", self.slider, 0.0..=100.0, Message::Slider)
                             .subtitle("collapse = Stacked")
                             .basis(260.0)
-                            .collapse(adw::CollapseBehavior::Stacked)
+                            .collapse(iad::CollapseBehavior::Stacked)
                             .metrics(m),
                     )
                     .push(
                         w::SliderRow::new("Flex", self.slider, 0.0..=100.0, Message::Slider)
                             .subtitle("collapse = Flex")
                             .basis(260.0)
-                            .collapse(adw::CollapseBehavior::Flex)
+                            .collapse(iad::CollapseBehavior::Flex)
                             .metrics(m),
                     ),
             ]
@@ -888,7 +888,7 @@ impl Gallery {
             }
             Inline::PathBar => column![
                 g("Path bar").push(w::card(w::path_bar(
-                    vec!["Home".into(), "Projects".into(), "iced-libadwaita".into()],
+                    vec!["Home".into(), "Projects".into(), "iced-adaptive-design".into()],
                     2,
                     |_| Message::Noop,
                 ))),
@@ -908,7 +908,7 @@ impl Gallery {
                         .map(|(t, role)| -> Element {
                             container(ty::title_2(t))
                                 .center(Length::Fill)
-                                .style(move |t: &adw::Theme| iced::widget::container::Style {
+                                .style(move |t: &iad::Theme| iced::widget::container::Style {
                                     border: iced::Border::default(),
                                     ..style::container::tinted(role)(t)
                                 })
@@ -1072,19 +1072,19 @@ impl Gallery {
                 .into()
             }
             Inline::Indicator => {
-                let dot = |c: fn(&adw::Semantic) -> iced::Color| -> Element<'static> {
+                let dot = |c: fn(&iad::Semantic) -> iced::Color| -> Element<'static> {
                     container(iced::widget::space().width(12).height(12))
-                        .style(move |t: &adw::Theme| iced::widget::container::Style {
+                        .style(move |t: &iad::Theme| iced::widget::container::Style {
                             background: Some(iced::Background::Color(c(&t.semantic))),
                             border: iced::Border::default().rounded(6).width(2).color(t.semantic.window.bg),
                             ..Default::default()
                         })
                         .into()
                 };
-                let ok = |s: &adw::Semantic| s.success.color;
-                let bad = |s: &adw::Semantic| s.error.color;
+                let ok = |s: &iad::Semantic| s.success.color;
+                let bad = |s: &iad::Semantic| s.error.color;
                 let av = |n: &str| Element::from(w::avatar(48.0, n.to_string()));
-                use adw::primitives::anchor::{Align, Side};
+                use iad::primitives::anchor::{Align, Side};
                 let ind = |child: Element<'static>, badge: Element<'static>| w::Indicator::new(child, badge);
                 let corners = row![
                     ind(av("Ada Lovelace"), w::Badge::count(3, 99).role(Role::Error).solid(true).into()),

@@ -1,7 +1,7 @@
 //! The gallery's two-level navigation: functional **groups** in the sidebar, and one nested
 //! page per component inside a group showing all of its properties and states.
 
-use iced_libadwaita::Icon;
+use iced_adaptive_design::Icon;
 
 /// A level-1 page (a sidebar entry). Groups with details list their components; the others
 /// (`Typography`, `Theming`) are a single page.

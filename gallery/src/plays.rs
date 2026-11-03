@@ -347,7 +347,7 @@ pub fn specs(d: Detail) -> Vec<Spec> {
         Detail::PathBar => vec![S::choice(
             "current",
             "Current segment",
-            &["Home", "Projects", "iced-libadwaita"],
+            &["Home", "Projects", "iced-adaptive-design"],
             2,
         )],
         Detail::ShortcutLabel => vec![S::text("keys", "Keys", "Ctrl+Shift+P")],
@@ -517,7 +517,7 @@ pub fn build<'a>(
                 if let Some(c) =
                     [None, Some(0x9141ac), Some(0x2190a4), Some(0xe66100)][p.choice("color")]
                 {
-                    e = e.color(adw::color::hex(c));
+                    e = e.color(iad::color::hex(c));
                 }
                 e.into()
             };
@@ -828,9 +828,9 @@ pub fn build<'a>(
         }
         Detail::Collapse => {
             let behavior = if p.choice("behavior") == 0 {
-                adw::CollapseBehavior::Stacked
+                iad::CollapseBehavior::Stacked
             } else {
-                adw::CollapseBehavior::Flex
+                iad::CollapseBehavior::Flex
             };
             let r = w::SliderRow::new("Volume", p.number("value"), 0.0..=100.0, on_num(d, "value"))
                 .subtitle("Narrow the window: the control wraps")
@@ -957,7 +957,7 @@ pub fn build<'a>(
                 column![
                     ty::heading("Content"),
                     ty::body("What the surface is docked to. An overlay dock fades and disables it; a push dock makes room.")
-                        .style(adw::style::text::dim),
+                        .style(iad::style::text::dim),
                     w::raised_button(ty::label("A button")).on_press(Message::Noop),
                 ]
                 .spacing(m.space_s),
@@ -969,7 +969,7 @@ pub fn build<'a>(
                 column![
                     ty::title_3("Docked"),
                     ty::body("A footer, a banner, a drawer or a sheet.")
-                        .style(adw::style::text::dim),
+                        .style(iad::style::text::dim),
                 ]
                 .spacing(m.space_s),
             )
@@ -990,7 +990,7 @@ pub fn build<'a>(
             let preview = container(Element::from(el))
                 .width(Length::Fill)
                 .height(Length::Fixed(260.0))
-                .style(|t: &adw::Theme| iced::widget::container::Style {
+                .style(|t: &iad::Theme| iced::widget::container::Style {
                     background: Some(iced::Background::Color(t.semantic.view.bg)),
                     border: iced::Border::default().rounded(t.metrics.radius_m),
                     ..Default::default()
@@ -1063,7 +1063,7 @@ pub fn build<'a>(
                 let mut item = w::TimelineItem::new(*title)
                     .body(
                         ty::caption(format!("{} min ago", (n - i) * 12))
-                            .style(adw::style::text::dim),
+                            .style(iad::style::text::dim),
                     )
                     .line(variant);
                 if p.bool("loading") && i + 1 == n {
@@ -1111,7 +1111,7 @@ pub fn build<'a>(
         }
         Detail::Spoiler => {
             if p.choice("mode") == 1 {
-                let el: adw::Element<'a, crate::widgets_demo::Msg> = column![
+                let el: iad::Element<'a, crate::widgets_demo::Msg> = column![
                     ty::caption(g.widgets_demo.spoiler_caption()),
                     g.widgets_demo.spoiler_items(m)
                 ]
@@ -1263,7 +1263,11 @@ pub fn build<'a>(
         }
         Detail::PathBar => {
             let el = w::path_bar(
-                vec!["Home".into(), "Projects".into(), "iced-libadwaita".into()],
+                vec![
+                    "Home".into(),
+                    "Projects".into(),
+                    "iced-adaptive-design".into(),
+                ],
                 p.choice("current"),
                 on_pick(d, "current"),
             );

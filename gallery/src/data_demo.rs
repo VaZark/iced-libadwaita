@@ -12,17 +12,17 @@
 //! one demo only; the infinite ones are seeded without waiting (`-error` stops at the failed
 //! page, `-end` at the end of the data).
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
-use adw::primitives::infinite::{Infinite, Page, Request};
-use adw::primitives::lookup::RequestId;
-use adw::primitives::pagination::Pagination as Paging;
-use adw::primitives::sorting::{Direction, SortState, cmp_f64, cmp_natural};
-use adw::widget::{
+use iad::primitives::infinite::{Infinite, Page, Request};
+use iad::primitives::lookup::RequestId;
+use iad::primitives::pagination::Pagination as Paging;
+use iad::primitives::sorting::{Direction, SortState, cmp_f64, cmp_natural};
+use iad::widget::{
     self as w, Column, InfiniteList, LoadTrigger, PageSize, Pagination, PaginationSize,
     ResponsiveTable, typography as ty,
 };
-use adw::{Element, Metrics};
+use iad::{Element, Metrics};
 use iced::widget::{column, container, row, space};
 use iced::{Length, Task};
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
@@ -163,7 +163,7 @@ fn bare<'a>(
 ) -> Element<'a, Msg> {
     column![
         ty::heading(t),
-        ty::body(d).style(adw::style::text::dim),
+        ty::body(d).style(iad::style::text::dim),
         body
     ]
     .spacing(m.space_s)
@@ -348,7 +348,7 @@ impl State {
         if show(&["pagination"]) {
             let p = |total: usize, page: usize| Paging::new(total * 10, 10).at(page);
             let line = |label: &'static str, e: Element<'static, Msg>| -> Element<'static, Msg> {
-                column![ty::caption(label).style(adw::style::text::dim), e]
+                column![ty::caption(label).style(iad::style::text::dim), e]
                     .spacing(m.space_s)
                     .into()
             };
@@ -418,7 +418,7 @@ impl State {
                     s.applied,
                     s.discarded
                 ))
-                .style(adw::style::text::dim)
+                .style(iad::style::text::dim)
                 .into()
             };
             if show(&["infinite", "infinite-error", "infinite-end"]) {

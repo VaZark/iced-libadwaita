@@ -1,16 +1,52 @@
 # DateInput
 
-libadwaita and GTK 4 have no date picker (`GtkCalendar` is a bare month grid, with no entry). `DateInput` is an entry with the calendar button in its left section, opening a calendar popover (or, with `dialog(true)`, a dialog centered in the window over a faded, disabled window (`scrim(false)` keeps it clear; a press outside closes it unless `close_on_outside(false)`)), in the manner of GNOME apps that add a `GtkCalendar` to a `GtkPopover`.
+libadwaita and GTK 4 have no date picker. `GtkCalendar` is a bare month grid with no entry.
 
-- Text is `YYYY-MM-DD` (also `/` or `.` as separators); an unparsable date, or one outside `min`/`max`, draws the entry in its error state.
-- The calendar is a Monday-first month grid with previous/next buttons. Days outside `min`/`max` are disabled. The chosen day is accent-colored like a selected menu item.
-- The calendar navigates by **level**, after Mantine's `DatePicker`/`Calendar` (`level`, `minLevel`, `maxLevel`, `onLevelChange`) and Firefox's native picker (month and year selectors, a Today action): the title button zooms out (month, year, decade; inert at `max_level`), the arrows step one month, one year or ten years, and picking a month or year drills back down. At `min_level` a pick selects instead of drilling (`min_level(Level::Year)` is a month picker, `Level::Decade` a year picker; `on_pick` gets the first day of the period). Months and years entirely outside `min`/`max` are disabled, and an arrow whose period would be outside them is dimmed and inert. The selected and the current month or year are highlighted (filled, outlined). "Today" returns to the current month (or year, for a year picker) and is dimmed when already there or outside the bounds. Stepping clamps the day (31 Jan, one month on: 28 or 29 Feb); the decade grid shows the year before and after in the dimmed "outside" role.
-- State is controlled: the app owns the text, the calendar position and the chosen date.
+## What it is
+
+An entry with the calendar button in its left section. The button opens a calendar in a popover, or a dialog with `dialog(true)`.
+
+## Parameters
+
+| Param               | Meaning                                                        | Default     |
+| ------------------- | -------------------------------------------------------------- | ----------- |
+| `selected`, `min`, `max` | chosen date, bounds                                       | none        |
+| `level`, `calendar`, `min_level`, `max_level` | calendar level (month, year, decade) | month, month, decade |
+| `today`             | the date "Today" jumps to                                      | system date (UTC) |
+| `dialog(bool)`      | open as a dialog                                               | popover     |
+| `scrim`             | fade the window (dialog)                                       | on          |
+| `close_on_outside`  | a press outside closes the dialog                              | on          |
+| `revealed`, `disabled`, `width`, `open_initially` |                                  |             |
+
+Events: `on_input(text)`, `on_pick(date)`, `on_view(first-of-month)`, `on_nav(CalendarView)`.
+
+## Behavior
+
+- Text is `YYYY-MM-DD` (also `/` or `.`). An unparsable date, or one outside `min`/`max`, is the error state (once `revealed`).
+- The calendar is a Monday-first month grid. Days outside `min`/`max` are disabled. The chosen day is accent-colored.
+- **Levels** (after Mantine's `DatePicker` and Firefox's picker):
+  - The title zooms out: month, year, decade. It is inert at `max_level`.
+  - The arrows step one month, year or ten years.
+  - A month or year cell drills back down. At `min_level` a pick selects instead: `min_level(Year)` is a month picker, `Decade` a year picker. `on_pick` gets the first day of the period.
+  - "Today" returns to the current month (or year). It is dimmed when already there or outside the bounds.
+  - Months and years entirely outside `min`/`max` are disabled.
+  - Stepping clamps the day (31 Jan plus a month is 28 or 29 Feb).
+- The popover stays open while you page or pick. A press outside or Escape closes it.
+- Controlled: the app owns the text, the calendar position (`CalendarView`) and the chosen date.
+
+```mermaid
+flowchart LR
+    Decade -- "pick" --> Year -- "pick" --> Month -- "pick" --> Day
+    Day -- "title" --> Month
+    Month -- "title" --> Year -- "title" --> Decade
+```
+
+For an interval use [`DateRangeInput`](date-range.md).
 
 ## iced mapping
 
-`widget::DateInput`: an `Entry` plus a `Popover` (with `keep_open(true)`, so paging months and picking a day do not close the calendar; click outside or Escape closes it). Date arithmetic is the dependency-free `Date` type (no `chrono`): validation, weekday (Sakamoto), month navigation and the grid are unit tested. The navigation is the headless [`primitives::calendar`](../../lib/primitives.md): `CalendarView { date, level }`, one value the app keeps and passes back with `.calendar(view)`; `on_nav(CalendarView)` reports every move (arrow, title, cell, Today) in one message, so date and level never go out of step. The older `view`/`on_view(first-of-month)` API still works and is the month-level path (the title is then plain text and Today is absent). Locale is not modeled: English month names, Monday first, ISO format.
+An `Entry` with a `Popover` (`keep_open(true)`) in its left section. Date arithmetic is the dependency-free `Date` type. Navigation is the headless `primitives::calendar`.
 
-For an interval, use [`DateRangeInput`](date-range.md), which shares this calendar.
+## Deviations
 
-Deviations: no keyboard stepping of the typed text (arrow keys in the entry do not change the date) and no keyboard navigation of the calendar cells; no two-month view; the current day is the UTC date (`.today(date)` overrides it); English month names, Monday first. Mantine's `numberOfColumns`, `getDayProps` and `presets` are not modeled. Firefox's year and month dropdowns are replaced by the zoom levels, which also reach any year in a few clicks.
+No arrow-key stepping of the text. No keyboard navigation of the cells. No two-month view. The current day is the UTC date. English month names, Monday first. Mantine's `numberOfColumns`, `getDayProps`, `presets` are not modeled.

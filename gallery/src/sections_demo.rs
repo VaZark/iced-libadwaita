@@ -1,15 +1,15 @@
 //! Entry sections: left and right slots inside an entry, and a Nautilus-style search with a
 //! filter popover whose button is the right section.
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
-use adw::widget::{self as w, typography as ty};
-use adw::{Element, Icon, Metrics, Role};
+use iad::widget::{self as w, typography as ty};
+use iad::{Element, Icon, Metrics, Role};
 use iced::widget::{column, container, row, text};
 use iced::{Length, Padding};
 
-fn dim<'a>(c: impl iced::widget::text::IntoFragment<'a>) -> iced::widget::Text<'a, adw::Theme> {
-    ty::caption(c).style(adw::style::text::dim)
+fn dim<'a>(c: impl iced::widget::text::IntoFragment<'a>) -> iced::widget::Text<'a, iad::Theme> {
+    ty::caption(c).style(iad::style::text::dim)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -186,7 +186,7 @@ impl State {
                 iced::widget::button(text("Reset").width(Length::Fill).center())
                     .padding(m.space_s)
                     .width(Length::Fill)
-                    .style(adw::style::button::default)
+                    .style(iad::style::button::default)
                     .on_press_maybe(self.filtered().then_some(Msg::Reset)),
             )
             .padding(Padding::new(m.space_xs).top(m.space_s))
@@ -239,8 +239,8 @@ impl State {
             list = list.push(dim("No files match."));
         }
         for (name, kind, age) in results {
-            let today = adw::primitives::date::Date::today();
-            let when = adw::primitives::Relative::from_dates(today.add_days(-(age as i64)), today);
+            let today = iad::primitives::date::Date::today();
+            let when = iad::primitives::Relative::from_dates(today.add_days(-(age as i64)), today);
             list = list.push(
                 row![
                     text(name).width(Length::Fill),
@@ -332,14 +332,14 @@ fn radio_row<'a, V: Copy + Eq + 'a>(
 ) -> Element<'a, Msg> {
     container(w::radio_button(label, value, selected, f))
         .padding([
-            adw::Metrics::desktop().space_xs,
-            adw::Metrics::desktop().space_s,
+            iad::Metrics::desktop().space_xs,
+            iad::Metrics::desktop().space_s,
         ])
         .width(Length::Fill)
         .into()
 }
 
-fn padded<'a>(c: iced::widget::Column<'a, Msg, adw::Theme>, _sp: f32) -> Element<'a, Msg> {
+fn padded<'a>(c: iced::widget::Column<'a, Msg, iad::Theme>, _sp: f32) -> Element<'a, Msg> {
     w::card(c)
 }
 
@@ -425,7 +425,7 @@ impl State {
             })
             .variant(Bar::Path, w::When::always(), |_| {
                 container(w::path_bar(
-                    ["Home", "Projects", "iced-libadwaita", "docs"]
+                    ["Home", "Projects", "iced-adaptive-design", "docs"]
                         .map(String::from)
                         .to_vec(),
                     3,

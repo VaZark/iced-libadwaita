@@ -16,4 +16,4 @@ Track accent when on, translucent when off, circular knob that slides; drag or c
 
 ## iced mapping
 
-`adw::widget::Switch` (custom widget) with these proportions; `style::toggler` remains for stock iced `toggler`.
+`iad::widget::Switch` (custom widget) with these proportions; `style::toggler` remains for stock iced `toggler`.

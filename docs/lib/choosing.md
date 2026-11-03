@@ -1,16 +1,16 @@
 # Choosing components
 
-Pick by the job, then read the component's man page for its API (`iced-libadwaita-<alias>(3)`, see the [README](README.md)) and run the gallery (a separate crate: `cargo run -p iced-libadwaita-gallery`) to see its states.
+Pick by the job. The API of a component is its man page, `iad-<alias>(3)` (see the [README](README.md)). The gallery shows its states: `cargo run -p iced-adaptive-design-gallery`.
 
-#### Telling the user something
+## Telling the user something
 
-| Need                                  | Use                             | Why                                    |
-| ------------------------------------- | ------------------------------- | -------------------------------------- |
-| A persistent problem on the page      | `banner`                        | Stays until fixed; one action          |
-| A brief result of something they did  | `toast` (add `action` for Undo) | Self-dismissing; never the only record |
-| Several results at once               | `toast_stack`                   | One column, newest nearest the edge    |
-| A question needing an answer          | `AlertDialog`                   | Blocks, with 2-3 responses             |
-| Nothing to show yet or an error state | `status_page`                   | Explain and offer one action           |
+| Need                                  | Use                             | Why                                   |
+| ------------------------------------- | ------------------------------- | ------------------------------------- |
+| A problem that stays                  | `banner`                        | Stays until fixed. One action.        |
+| A short result of their action        | `toast` (add `action` for Undo) | Dismisses itself. Never the only record. |
+| Several results at once               | `toast_stack`                   | One column, newest nearest the edge.  |
+| A question that needs an answer       | `AlertDialog`                   | Blocks. 2–3 responses.                |
+| Nothing to show, or an error state    | `status_page`                   | Explain. Offer one action.            |
 
 ```mermaid
 flowchart TD
@@ -18,49 +18,74 @@ flowchart TD
     Q -- no --> P{"Still true later?"}
     P -- yes --> B["banner"]
     P -- no --> R{"Result of their action?"}
-    R -- yes --> T["toast, with an action for Undo"]
-    R -- no --> S["status_page, if there is nothing to show"]
+    R -- yes --> T["toast (action for Undo)"]
+    R -- no --> S["status_page, if nothing to show"]
 ```
 
-A toast must not be the only way to learn something important; use a banner or dialog for that.
+A toast is never the only way to learn something important. Use a banner or a dialog.
 
-#### Overlays
+## Overlays
 
-- **Dialog** (`dialog_in_window`): blocks the window for a decision or short task.
-- **Dock** (`Dock`): a surface attached to an edge. As an overlay it is a dialog on an edge: a bottom sheet for a task that belongs to the current page (mostly on narrow windows), a drawer on the side. Pushing, it is a pane that makes room for itself, as a sidebar does.
-- **Popover / menu**: a choice that does not interrupt; use `Menu` for commands, `dropdown` or `ComboRow` for choosing a value.
+| Need                                          | Use                                              |
+| --------------------------------------------- | ------------------------------------------------ |
+| Block the window for a decision or short task | a dialog: `dialog_in_window`, `AlertDialog`, …   |
+| A task that belongs to the current page       | `Dock`, `DockMode::Overlay`, bottom (a sheet)    |
+| A drawer on a side                            | `Dock`, `DockMode::Overlay`, left or right       |
+| A pane that makes room for itself             | `Dock`, `DockMode::Push`                         |
+| A choice that does not interrupt              | popover or menu                                  |
+| Pick a date or a color                        | `DateInput`, `ColorInput` (popover, or `dialog(true)`) |
 
-#### Choosing a value
+- Commands go in a `Menu`. Values go in a `dropdown` or `ComboRow`.
+- Dialogs and overlay docks fade and disable what is behind them. A press outside closes them (`close_on_outside`, default on).
+- A dialog is not an OS window. See [windows and menus](windows-and-menus.md).
 
-- One on/off setting: `Switch` (in a `SwitchRow` for settings, applies immediately).
-- One choice in a form that is submitted later: `check_button`; one of a few: `radio_button`.
-- One of 2-4 short options, always visible: `toggle_group`; more or longer: `dropdown` / `ComboRow`.
-- A number: `scale` for approximate, `SpinRow` for exact.
-- An action with alternatives: `split_button`; where the alternative _changes what the button does_ (merge, squash, rebase): `SplitButtonAction`.
-- Disable what is unavailable instead of hiding it, and show why in a subtitle when it is not obvious.
+## Choosing a value
 
-#### Text
+| Need                                   | Use                                                  |
+| -------------------------------------- | ---------------------------------------------------- |
+| One on/off setting                     | `Switch`, in a `SwitchRow` in settings (applies at once) |
+| One choice in a form submitted later   | `check_button`; one of a few: `radio_button`        |
+| One of 2–4 short options, always shown | `toggle_group`                                       |
+| One of more or longer options          | `dropdown`, `ComboRow`                               |
+| An exact number                        | `NumberInput`, `SpinRow`                             |
+| An approximate number                  | `scale`, `SliderRow`                                 |
+| A range                                | `range_slider`; add two `NumberInput`s for exact ends |
+| A date, a date range                   | `DateInput`, `DateRangeInput`                        |
+| A color                                | `ColorInput`; an accent: `accent_picker`             |
+| An action with alternatives            | `split_button`; if the alternative changes what the button does: `SplitButtonAction` |
 
-`entry` for one line, `password_entry`, `text_view` for paragraphs. Mark validation with `EntryState`, not a custom color. In settings use `EntryRow`.
+Disable what is unavailable. Do not hide it. Say why in a subtitle when it is not obvious.
 
-#### Settings and lists
+`NumberInput` takes `decimals(n)` (fixed point, never float), `min`, `max`, `step`. Dragging on it changes the value: up raises it. Shift is ten times, Alt is the last digit. `drag(NumberDrag::Select)` makes dragging select text instead.
 
-- Preferences: `PreferencesPage` > `PreferencesGroup` > rows. One group per topic, a title on each.
-- A row that opens something has a chevron; a row that toggles has the control on the row.
-- More rows that belong to one: `ExpanderRow`.
-- `boxed_list` for any list of rows; put anything else in a `Card`.
+## Text
 
-#### Buttons
+`entry` for one line. `password_entry`. `text_view` for paragraphs. `EntryRow` in settings. Mark validation with `EntryState`, not a custom color.
 
-- `suggested` for the one main action per view, `destructive` only for data loss, flat in toolbars, `pill` for a standalone call to action, `link_button` for navigation to a place.
-- Text buttons use verbs; icon buttons need a tooltip.
+## Settings and lists
 
-#### Navigation
+- `PreferencesPage` > `PreferencesGroup` > rows. One group per topic, each with a title.
+- A row that opens something has a chevron. A row that toggles has the control on it.
+- Rows that belong to one row: `ExpanderRow`.
+- `boxed_list` for any list of rows. Anything else goes in a `Card`.
 
-- Top-level destinations: sidebar (`SidebarList`) in a `NavigationSplitView`.
-- Peer views of the same content: `view_switcher`; many open documents: `tab_bar`.
-- A location you can move up: `path_bar`. A few steps: `carousel`.
+## Buttons
 
-#### Colors
+- `suggested`: the one main action of a view.
+- `destructive`: only for data loss.
+- Flat in toolbars. `pill` for a standalone call to action. `link_button` for going to a place.
+- Text buttons use verbs. Icon buttons need a tooltip.
 
-State and status come from `Role` (accent, success, warning, error, destructive), never from fixed hues; see [theming.md](theming.md).
+## Navigation
+
+| Need                              | Use                                           |
+| --------------------------------- | --------------------------------------------- |
+| Top-level destinations            | `SidebarList` in a `NavigationSplitView`      |
+| Peer views of the same content    | `view_switcher`                               |
+| Many open documents               | `Tabs`                                        |
+| A location you can go up from     | `path_bar`                                    |
+| A few steps                       | `carousel`                                    |
+
+## Colors
+
+State and status come from `Role` (accent, success, warning, error, destructive), never from fixed hues. See [theming](theming.md).

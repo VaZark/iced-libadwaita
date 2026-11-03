@@ -3,12 +3,12 @@
 //! submit button. The touched / submitted bookkeeping is one `FormState` and one `FormSpec`:
 //! the way to use forms (see docs/lib/components.md, "How to use forms").
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
-use adw::primitives::form::{FormSpec, FormState, Outcome};
-use adw::widget::validation::{chain, required};
-use adw::widget::{self as w, Field, FieldLayout, Validity, typography as ty};
-use adw::{Element, Metrics};
+use iad::primitives::form::{FormSpec, FormState, Outcome};
+use iad::widget::validation::{chain, required};
+use iad::widget::{self as w, Field, FieldLayout, Validity, typography as ty};
+use iad::{Element, Metrics};
 use iced::Length;
 use iced::widget::{column, container, row};
 

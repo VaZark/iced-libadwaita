@@ -4,18 +4,36 @@ No libadwaita widget (`GtkColorDialog` opens a system dialog). After Mantine's [
 
 ## What it is
 
-`ColorPicker` is a saturation / value square, a hue slider and an optional alpha slider, with swatches and a readout. `ColorInput` is the form input built on it: the color in a box (like `GtkColorDialogButton`) that opens the picker with an entry for the color code, in a [Popover](popover.md) or, with `dialog(true)`, a dialog over a faded, disabled window (`scrim(false)` keeps it clear; `close_on_outside(false)` keeps a press outside from closing it).
+- `ColorPicker`: a saturation/value square, a hue slider, an optional alpha slider, swatches and a readout.
+- `ColorInput`: the form input. The color in a box (like `GtkColorDialogButton`) that opens a `ColorPicker` with an entry for the color code. The picker is a pure picker. The input builds on it.
 
-## Anatomy and behavior
+## Parameters
 
-- **Color** ([`primitives::color_picker`](../../lib/primitives.md)). `Hsva` (hue in degrees, saturation, value, alpha): what the controls edit, so a gray or a black keeps its hue while you drag across it. Conversions to and from 8-bit RGB and HSL.
-- **Text forms.** `format(ColorFormat::..)`: hex, hex with alpha, rgb, rgba, hsl, hsla, hsv, hsva. `Hsva::parse` reads any of them and the short hex forms, with or without the `#`.
-- **Controls.** Press or drag the square for saturation and value, the sliders for hue and alpha; a drag keeps working outside the control.
-- **Swatches.** `swatches([..])` are one-press choices; ones `parse` cannot read are left out.
-- **ColorInput.** The app keeps the text and the color: `on_input` gets what was typed (parse it with `Hsva::parse`), `on_change` a color picked with the controls (format it with `Hsva::format`). Text that does not parse shows the error state. `trigger(..)` replaces the box.
-- **AccentPicker.** `accent_picker(selected, on_select).custom(text, on_text)` adds a last swatch that opens a `ColorInput` with the nine accents as swatches; the choice is an `AccentColor::Custom`. It takes `dialog` and `scrim` too.
-- Controlled: the app owns the color.
+| Component     | Param               | Meaning                                         | Default    |
+| ------------- | ------------------- | ----------------------------------------------- | ---------- |
+| `ColorPicker` | `alpha`             | alpha slider                                    | off        |
+|               | `swatches([..])`    | one-press colors (hex or any form `parse` reads) | none      |
+|               | `format`, `readout` | readout form, show it                           | hex, on    |
+|               | `width`             |                                                 | 240        |
+| `ColorInput`  | `alpha`, `swatches` | passed to the picker                            |            |
+|               | `trigger(..)`       | replaces the color box                          | box        |
+|               | `dialog(bool)`      | open as a dialog                                | popover    |
+|               | `scrim`             | fade the window (dialog)                        | on         |
+|               | `close_on_outside`  | a press outside closes the dialog               | on         |
+|               | `window_radius`, `disabled`, `open_initially` |                              |            |
+
+## Behavior
+
+- **Color.** `Hsva` (hue in degrees, S, V, A) is what the controls edit, so a gray keeps its hue while you drag across it. Conversions to 8-bit RGB and HSL are lossless.
+- **Text forms.** hex, hexa, rgb, rgba, hsl, hsla, hsv, hsva. `Hsva::parse` reads all of them and the short hex forms, with or without `#`.
+- **Controls.** Press or drag the square (S, V) and the sliders (hue, alpha). A drag keeps working outside the control.
+- **ColorInput.** The app keeps the text and the color. `on_input` gets typed text (parse it with `Hsva::parse`). `on_change` gets a picked color (format it with `Hsva::format`). Text that does not parse is the error state. The code entry takes focus when it opens (`initial_focus`).
+- **AccentPicker.** `accent_picker(selected, on_select).custom(text, on_text)` adds a last swatch that opens a `ColorInput` with the nine accents as swatches. The choice is an `AccentColor::Custom`. It takes `dialog`, `scrim`, `close_on_outside`.
 
 ## iced mapping
 
-`widget::ColorPicker` draws its three controls in one widget (the square and the hue slider with iced gradients, a checkerboard under the alpha slider). Not included: nudging with the keyboard (iced has no focus model), and an eyedropper.
+`ColorPicker` draws its controls in one widget: iced gradients for the square and the hue slider, a checkerboard under the alpha slider. `ColorInput` is a `Popover` (or `Presentation::Dialog`) around a `ColorPicker` and an `Entry`.
+
+## Deviations
+
+No keyboard nudging (no focus model for the controls). No eyedropper.

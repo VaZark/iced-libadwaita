@@ -6,16 +6,16 @@
 //! The playground's controls live in `playground.rs`; [`State::sync`] applies the ones that
 //! belong to the tree's state (selection mode, strict checking, the search).
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
 use crate::playground::Playground;
-use adw::primitives::tree as t;
-use adw::primitives::virtualize::Viewport;
-use adw::widget::{
+use iad::primitives::tree as t;
+use iad::primitives::virtualize::Viewport;
+use iad::widget::{
     self as w, DragMode, TREE_ROW_HEIGHT, Tree, TreeEffect, TreeEvent, TreeNode, TreeState,
     typography as ty,
 };
-use adw::{Element, Icon, Metrics};
+use iad::{Element, Icon, Metrics};
 use iced::widget::{column, row, scrollable};
 use iced::{Length, Task};
 use std::time::Duration;

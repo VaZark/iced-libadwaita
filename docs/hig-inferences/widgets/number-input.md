@@ -1,21 +1,51 @@
 # NumberInput
 
-No libadwaita widget (`GtkSpinButton` is the closest, with float values). After Mantine's [NumberInput](https://mantine.dev/core/number-input/).
+No libadwaita widget. `GtkSpinButton` is the closest, with float values. After Mantine's [NumberInput](https://mantine.dev/core/number-input/).
 
 ## What it is
 
-An entry for a number with two small handles (up and down) in its right section that step it.
+An entry for a number, with two handles (up, down) in its right section that step it. Dragging on it changes the value.
 
-## Anatomy and behavior
+## Parameters
 
-- **Fixed point, not float.** The number is a `Decimal` (`units` of `10^-digits`): `decimals(n)` is how many fraction digits it keeps, 0 (the default) an integer. A step is exact (`0.1 + 0.2` is `0.3`) and the text always has exactly the digits (`12.50`). Typed text with more digits is rounded to them. The rules are `primitives::numeric` (`Numeric`: digits, `min`, `max`, `step`).
-- **Limits.** `min` / `max` clamp what a handle gives; typed text outside them is the error state ("Must be 0.00 or more."). A handle is dimmed at its limit.
-- **Step.** `step(..)` is what a handle adds or takes (default 1; `Decimal::new(25, 2)` is 0.25). From an empty or invalid entry a handle starts at the limit nearest zero.
-- **Dragging.** `drag(NumberDrag)`: `Vertical` (default) and `Horizontal` change the value continuously while the pointer is dragged on the input (up or right raises it, down or left lowers it); `Select` selects text as in any entry. A scrub moves by the step, so it keeps the digits and the limits (`primitives::numeric::Scrub`: 4 px per step, and a drag only begins after 4 px of travel along the axis, so a click still places the caret). **Shift** makes each step ten steps (`Precision::Coarse`) and **Alt** one unit of the last digit (`Precision::Fine`); a modifier pressed mid-drag changes only the steps still to come. The handles keep their own presses.
-- **Handles.** `handles(false)` hides them.
-- **One message.** The app keeps the text; `on_input(text)` is sent for typing and for a handle (the stepped number as text). Read the number with `Numeric::parse`.
-- Controlled: the app owns the text.
+| Param         | Meaning                                                  | Default            |
+| ------------- | -------------------------------------------------------- | ------------------ |
+| `decimals(n)` | fraction digits kept and shown; 0 is an integer          | `0`                |
+| `min`, `max`  | limits                                                   | none               |
+| `step`        | what a handle or a drag step adds                        | `1`                |
+| `drag`        | `Vertical`, `Horizontal`, `Select`                       | `Vertical`         |
+| `handles`     | show the up and down handles                             | on                 |
+| `placeholder`, `width`, `disabled`, `revealed` | as in an entry               |                    |
+
+## Behavior
+
+- **Fixed point, never float.** The value is a `Decimal` (`units` of `10^-digits`). A step is exact: `0.1 + 0.2` is `0.3`. The text always has exactly the digits: `12.50`. More typed digits are rounded. Rules: `primitives::numeric` (`Numeric`).
+- **Limits.** `min` and `max` clamp handles and drags. Typed text outside them, or not a number, is the error state. A handle is dimmed at its limit. From an empty entry a handle starts at the limit nearest zero.
+- **Handles.** Press to step. `handles(false)` hides them.
+- **Dragging.** On the input:
+
+  | Mode         | Drag                                   |
+  | ------------ | -------------------------------------- |
+  | `Vertical`   | up raises, down lowers                 |
+  | `Horizontal` | right raises, left lowers              |
+  | `Select`     | selects text, as in any entry          |
+
+  - 4 px of travel is one step (`Scrub`). Nothing counts as a drag until 4 px along the axis, so a click still places the caret.
+  - **Shift:** each step is ten steps. **Alt:** each step is one unit of the last digit (`Precision`).
+  - A modifier pressed mid-drag changes only the steps still to come.
+  - The handles keep their own presses.
+- **One message.** `on_input(text)`, for typing, handles and dragging. The app keeps the text. Read the number with `Numeric::parse`.
+
+```rust
+NumberInput::new(&self.text, Msg::Text)
+    .decimals(2).min(0).max(100)
+    .step(Decimal::new(25, 2))   // 0.25
+```
 
 ## iced mapping
 
-`widget::NumberInput` is an `Entry` whose `right_section` is two stacked flat buttons. `NumberInput` wraps the entry in a widget that turns a press-and-move into `on_input` messages and keeps the entry from extending a selection while it scrubs. Not included: arrow keys and the wheel (iced has no focus model for them) and hold-to-repeat.
+An `Entry` whose `right_section` is two stacked flat buttons, wrapped in a widget that turns press-and-move into `on_input` messages and keeps the entry from extending a selection while it scrubs.
+
+## Deviations
+
+No arrow keys, no mouse wheel, no hold-to-repeat on the handles (iced has no focus model for them).

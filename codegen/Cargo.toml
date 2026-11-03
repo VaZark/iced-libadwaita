@@ -1,8 +1,8 @@
 [package]
-name = "iced-libadwaita-codegen"
+name = "iced-adaptive-design-codegen"
 version = "0.1.0"
 edition = "2024"
-description = "Build-time XML to Rust UI generation for iced-libadwaita"
+description = "Build-time XML to Rust UI generation for iced-adaptive-design"
 
 [dependencies]
 roxmltree = "0.20"

@@ -6,7 +6,7 @@
 //! from `on_change(page)` (1-based).
 //!
 //! ```ignore
-//! use iced_libadwaita::primitives::pagination::Pagination as Paging;
+//! use iced_adaptive_design::primitives::pagination::Pagination as Paging;
 //! Pagination::new(&self.paging, Msg::Page)      // self.paging.goto(page) in update
 //!     .with_edges(true)                         // first / last
 //!     .siblings(1).boundaries(1)

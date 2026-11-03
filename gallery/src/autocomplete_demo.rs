@@ -12,13 +12,13 @@
 //! (`type:san>sant` shows a stale response being discarded; pair it with `GALLERY_ANIM=keys`,
 //! which captures after 6 s).
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
-use adw::lookup as glue;
-use adw::primitives::lookup::{Lookup, RequestId, Status, validate_pick};
-use adw::widget::validation::required;
-use adw::widget::{self as w, Autocomplete, Field, Validity, typography as ty};
-use adw::{Element, Metrics};
+use iad::lookup as glue;
+use iad::primitives::lookup::{Lookup, RequestId, Status, validate_pick};
+use iad::widget::validation::required;
+use iad::widget::{self as w, Autocomplete, Field, Validity, typography as ty};
+use iad::{Element, Metrics};
 use iced::widget::{column, container, row, space, text};
 use iced::{Length, Subscription, Task};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -535,7 +535,7 @@ impl State {
                 row![
                     text(p.name).wrapping(text::Wrapping::None),
                     space().width(Length::Fill),
-                    ty::caption(p.country).style(adw::style::text::dim),
+                    ty::caption(p.country).style(iad::style::text::dim),
                 ]
                 .spacing(12.0)
                 .into()
@@ -559,7 +559,7 @@ impl State {
         let stats = l.stats();
         let line = |k: &'static str, v: String| {
             row![
-                container(ty::caption(k).style(adw::style::text::dim)).width(Length::Fixed(150.0)),
+                container(ty::caption(k).style(iad::style::text::dim)).width(Length::Fixed(150.0)),
                 ty::caption(v)
             ]
         };
@@ -594,7 +594,7 @@ impl State {
                  (2.5 s): type it, wait for the spinner, then add a letter; the late answer is \
                  discarded."
             )
-            .style(adw::style::text::dim),
+            .style(iad::style::text::dim),
         ]
         .spacing(m.space_s);
 
@@ -609,7 +609,7 @@ impl State {
                     .open_initially(open)
                     .metrics(m);
                 column![
-                    ty::caption(*name).style(adw::style::text::dim),
+                    ty::caption(*name).style(iad::style::text::dim),
                     Element::from(a)
                 ]
                 .spacing(m.space_xs)
@@ -634,7 +634,7 @@ impl State {
             )
         };
 
-        let interaction = adw::primitives::validation::Interaction {
+        let interaction = iad::primitives::validation::Interaction {
             touched: self.touched,
             submitted: self.submitted,
         };

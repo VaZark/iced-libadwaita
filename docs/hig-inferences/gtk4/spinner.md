@@ -22,4 +22,4 @@ None.
 
 ## iced mapping
 
-`adw::widget::spinner`.
+`iad::widget::spinner`.

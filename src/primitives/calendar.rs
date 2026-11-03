@@ -19,8 +19,8 @@
 //! full 3 x 4 like the year grid.
 //!
 //! ```
-//! use iced_libadwaita::primitives::calendar::{CalendarView, Level};
-//! use iced_libadwaita::primitives::date::Date;
+//! use iced_adaptive_design::primitives::calendar::{CalendarView, Level};
+//! use iced_adaptive_design::primitives::date::Date;
 //!
 //! let nov = CalendarView::month(Date::new(2026, 11, 20).unwrap());
 //! assert_eq!(nov.header_label(), "November 2026");

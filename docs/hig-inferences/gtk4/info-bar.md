@@ -22,4 +22,4 @@ Use `AdwBanner` (accent bar, optional gray/suggested button, `revealed`).
 
 ## iced mapping
 
-`adw::widget::banner`.
+`iad::widget::banner`.

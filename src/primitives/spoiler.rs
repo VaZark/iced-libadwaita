@@ -13,7 +13,7 @@
 //! Pure and controlled: the app owns the state and applies [`Event`]s.
 //!
 //! ```
-//! use iced_libadwaita::primitives::spoiler::SpoilerState;
+//! use iced_adaptive_design::primitives::spoiler::SpoilerState;
 //!
 //! let mut s = SpoilerState::new(100, 5).step(20);
 //! assert_eq!(s.visible(), 0..5);

@@ -604,7 +604,7 @@ impl<'a, M: Clone + 'a> ColorInput<'a, M> {
 }
 
 /// The id of the color code entry in the picker, its initial focus.
-const ENTRY_ID: &str = "iced-libadwaita.color-input.code";
+const ENTRY_ID: &str = "iced-adaptive-design.color-input.code";
 
 /// Width of the picker's popover, as the date input's calendar.
 const PICKER_WIDTH: f32 = super::date_input::POPOVER_WIDTH;

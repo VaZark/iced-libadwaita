@@ -44,7 +44,7 @@
 //! flight finish within its own budget, so nothing is left half-closed.
 //!
 //! ```
-//! use iced_libadwaita::transition::{Event, Sequence, Transitions};
+//! use iced_adaptive_design::transition::{Event, Sequence, Transitions};
 //! use std::time::{Duration, Instant};
 //!
 //! #[derive(Clone, PartialEq, Debug)]

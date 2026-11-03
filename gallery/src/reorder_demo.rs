@@ -7,14 +7,14 @@
 //!
 //! `GALLERY_REORDER=edit` starts the meta parent's list in edit mode.
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
 use crate::playground::{self, Playground, Spec};
-use adw::widget::{
+use iad::widget::{
     self as w, ChildEvent, MetaComponent, MetaParentComponent, MetaRegistry, Mode, ReorderEvent,
     ReorderState, ReorderableList, When, typography as ty,
 };
-use adw::{Element, Metrics};
+use iad::{Element, Metrics};
 use iced::Length;
 use iced::widget::column;
 

@@ -1,16 +1,18 @@
-# iced-libadwaita
+# iced-adaptive-design (`iad`)
 
-A theme and component library for [iced](https://iced.rs) 0.14 that follows the [GNOME Human Interface Guidelines](https://developer.gnome.org/hig/), so an iced app can look and behave like a GNOME app.
+An adaptive design system for [iced](https://iced.rs) 0.14: a theme, components and behavior primitives that follow the [GNOME HIG](https://developer.gnome.org/hig/). An iced app looks and behaves like a GNOME app.
 
-We target the HIG, with libadwaita as a reference. It is not a port of libadwaita and not a drop-in replacement.
+Import it as `iad`: `use iced_adaptive_design as iad;`.
 
-> **Note.** Built for the author's personal project and managed primarily by AI (Claude). It is independent, contains no libadwaita code, and is not affiliated with GNOME. Expect rough edges and API churn.
+The HIG is the target and libadwaita the reference. It is not a port of libadwaita and not a drop-in replacement.
+
+> Built for the author's own project and managed mostly by AI (Claude). Independent, no libadwaita code, not affiliated with GNOME. Expect rough edges and API changes.
 
 ```rust
-use iced_libadwaita as adw;
-use adw::widget as w;
+use iced_adaptive_design as iad;
+use iad::widget as w;
 
-fn view(&self) -> iced::Element<'_, Message, adw::Theme> {
+fn view(&self) -> iced::Element<'_, Message, iad::Theme> {
     w::toolbar_view(
         w::PreferencesPage::new().push(
             w::PreferencesGroup::new()
@@ -24,14 +26,32 @@ fn view(&self) -> iced::Element<'_, Message, adw::Theme> {
 }
 ```
 
-Use `adw::Theme` as the application theme. The gallery is a separate crate that depends on this one: `cargo run -p iced-libadwaita-gallery`.
+Use `iad::Theme` as the application theme: `iad::Theme::from_config(&iad::config::Config::load())`.
 
-#### Parameters belong to the library
+## What is where
 
-Every component property (a builder method, a desktop-config key behind its default, an override of that default) is added **to the library itself**, never only to an example or an app. The gallery is a client of the library: it shows what exists, and a parameter that cannot be reached through the library's own API does not exist. So whenever a new parameter is added, the same change adds it to the library's component, its doc comment (the man page is generated from it: `cargo xtask man`), its docs, and its gallery playground, so it works end to end. The checklist is in [CONTRIBUTING.md](CONTRIBUTING.md#working-on-a-component).
+| Path                | Holds                                                                           |
+| ------------------- | ------------------------------------------------------------------------------- |
+| `src/`              | the library: `widget/`, `primitives/` (headless logic), `window/`, `style/`, theme, config |
+| `man/`              | man pages: overview, desktop config, one per component                          |
+| `docs/lib/`         | the user guide (published with the crate)                                       |
+| `docs/hig-inferences/` | design rationale for contributors (not published)                            |
+| `gallery/`          | the gallery: a separate crate that depends on the library                       |
+| `xtask/`            | repository tasks (`cargo xtask man`)                                            |
 
-#### Where to go next
+`cargo build` builds only the library.
 
-- [DESIGN.md](DESIGN.md): how it is put together and what it targets.
-- [docs/lib/](docs/lib/README.md): how and when to use each component.
-- [CONTRIBUTING.md](CONTRIBUTING.md): building, testing and working on it.
+## Reference
+
+- API: man pages. `man -l man/iad.7` (overview), `man -l man/iad-dock.3` (one component), `man -l man/iad-desktop.conf.5` (config).
+- Usage: [docs/lib/](docs/lib/README.md).
+- Gallery: `cargo run -p iced-adaptive-design-gallery`.
+
+## Parameters belong to the library
+
+Every new property goes into the library first: the component, its doc comment, its docs and its gallery playground, in the same change. A parameter the library's own API cannot reach does not exist. The man page is generated from the doc comment: `cargo xtask man`. Checklist: [CONTRIBUTING.md](CONTRIBUTING.md#working-on-a-component).
+
+## More
+
+- [DESIGN.md](DESIGN.md): structure and targets.
+- [CONTRIBUTING.md](CONTRIBUTING.md): build, test, work on it.

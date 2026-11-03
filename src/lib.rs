@@ -1,12 +1,13 @@
-//! # iced-libadwaita
+//! # iced-adaptive-design (`iad`)
 //!
-//! libadwaita-style theming and widgets for [iced](https://iced.rs).
+//! An adaptive design system for [iced](https://iced.rs): a theme, components and behavior
+//! primitives that follow the GNOME HIG. Import it as `use iced_adaptive_design as iad;`.
 //!
 //! * [`Theme`]: one theme type implementing every iced widget catalog, with a
 //!   named [`Palette`], a [`Semantic`] color layer, [`Metrics`] and
 //!   [`Typography`] tokens.
 //! * [`style`]: style functions mirroring libadwaita's CSS classes.
-//! * [`widget`]: Adw-named widgets (`HeaderBar`, `ActionRow`, `PreferencesGroup`,
+//! * [`widget`]: components named after their libadwaita counterparts (`HeaderBar`, `ActionRow`, `PreferencesGroup`,
 //!   `StatusPage`, `AlertDialog`, …).
 
 pub mod adaptive;

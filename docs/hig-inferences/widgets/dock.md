@@ -1,26 +1,61 @@
 # Dock
 
-libadwaita: [`BottomSheet`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/class.BottomSheet.html) is the bottom case of it; a footer, a banner and a drawer are the others.
+libadwaita: [`BottomSheet`](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/class.BottomSheet.html) is the bottom case. A footer, a banner and a drawer are the others.
 
 ## What it is
 
-A surface docked against an edge of a base. One widget for what GNOME and Mantine call a bottom sheet, a drawer, a footer bar and a banner. It belongs with the dialogs: a modal dock is a dialog attached to an edge.
+A surface docked to an edge of a base. One widget for a bottom sheet, a drawer, a footer bar and a banner. An overlay dock is a dialog attached to an edge.
 
-## Anatomy and behavior
+## Parameters
 
-- **Side.** `side(Side)` is the edge (default the bottom).
-- **Size and length.** You define them: `size(DockSize)` is how far it reaches across the edge and `length(DockSize)` how long it is along it (default the whole edge); each is `Auto` (its own), `Fixed(px)`, a `Fraction` of the base or `FullScreen`. `align(Align)` places a shorter dock along the edge: the start, the center or the end. `FullScreen` as the size covers the base, every border flush (margin ignored, no border, square corners or the window's radius).
-- **Margin.** `margin(px)` stands the surface off the edge it is docked to, and off that edge only (not on the other sides). `0` (the default) is **flush** with the edge; a margin lifts it and rounds its corners on that edge.
-- **Border.** A hairline border (the gallery previews' kind, `border(false)` removes it) outlines the surface on the sides that are **not** flush with the base: the docked edge (once it stands off), the opposite side (when `size` does not reach it) and the ends along the edge (when it is shorter and not aligned to them). Flush sides have none.
-- **Mode.** `Push` (default) puts it in flow: it slides in and the base gives up exactly the room it takes, like a sidebar beside the content; it shares its geometry with `NavigationSplitView` and its drawer (`primitives::dock`, through `AdaptiveSplit`), and takes the whole edge (length, align, margin and border are the overlay's). `Overlay` floats it over the base on an [Overlay](dialog.md): the base is faded (`scrim(false)` keeps it clear) and disabled, the surface slides in from its edge on the sheet spring, and a press outside sends `on_outside`.
-- **Scope.** `Content` docks to the base as given (a pane, the content area); `Window` docks to the whole window and the corners on the window's corners take its radius (`window_radius`). The base is what you wrap: the window's root for a window dock.
-- **Open.** `open(bool)` shows or hides it without moving the base in the widget tree.
-- Controlled: the app owns `open` and closes an overlay dock on `on_outside`.
+| Param        | Values                                                      | Default      |
+| ------------ | ----------------------------------------------------------- | ------------ |
+| `side`       | `Bottom`, `Top`, `Left`, `Right`                            | `Bottom`     |
+| `size`       | across the edge: `Auto`, `Fixed(px)`, `Fraction(f)`, `FullScreen` | `Auto` |
+| `length`     | along the edge: same values                                 | `FullScreen` |
+| `align`      | position of a shorter dock: `Start`, `Center`, `End`        | `Start`      |
+| `margin`     | px off the docked edge, that edge only                      | `0` (flush)  |
+| `mode`       | `Push`, `Overlay`                                           | `Push`       |
+| `scope`      | `Content`, `Window`                                         | `Content`    |
+| `border`     | hairline on non-flush sides                                 | on           |
+| `scrim`      | fade the base (`Overlay`)                                   | on           |
+| `open`       | show it                                                     | `true`       |
+| `on_outside` | message for a press outside (`Overlay`)                     | none         |
+| `initial_focus` | child that takes focus on opening (`Overlay`)            | first        |
+
+## Behavior
+
+- **Flush.** `margin` 0: the surface sits on the edge, edge to edge along it. A margin lifts it off that edge only. Its corners on that edge round.
+- **FullScreen.** `size(FullScreen)` covers the base. Every border is flush: no margin, no border, square corners (the window radius for a window dock).
+- **Border.** One pixel, in the border color, on the sides that are not flush:
+  - the docked edge, once it stands off;
+  - the opposite side, when `size` does not reach it;
+  - the ends along the edge, when the dock is shorter and not aligned to that end.
+- **Push.** In flow. It slides in and the base gives up exactly the room it takes. It takes the whole edge; `length`, `align`, `margin` and `border` do not apply. Same geometry as the split-view sidebar.
+- **Overlay.** Over a faded, disabled base, on an [Overlay](dialog.md#overlay). It slides in from its edge on the sheet spring. A press outside sends `on_outside`.
+- **Scope.** `Window` docks to the window: corners on the window's corners take `window_radius`. Wrap the window's root for it. `Content` docks to the base as given.
+- **Open.** `open(bool)` shows or hides it. The base keeps its place in the tree.
+
+```mermaid
+flowchart LR
+    Dock --> M{"mode"}
+    M -- Push --> AS["AdaptiveSplit<br/>primitives::dock: Flow::Push"]
+    M -- Overlay --> OV["Overlay::docked + along + margin"]
+    OV --> FS["FocusScope + focus_return"]
+```
+
+```rust
+Dock::new(root, sheet)
+    .open(self.open)
+    .mode(DockMode::Overlay)
+    .scope(DockScope::Window)
+    .on_outside(Msg::Close)
+```
 
 ## iced mapping
 
-`widget::Dock` is `AdaptiveSplit` (with `side` and `extent`, the pure geometry in `primitives::dock`: `arrange`, `Flow::Push` / `Flow::Overlay`) for a pushing dock and `widget::Overlay::docked(side, size)` with `along(length, align)` and `margin` for an overlay; the border is drawn around the surface's bounds grown past the flush sides and clipped, so those sides stay open; the panel's inner corners take the theme radius.
+`Push` is `AdaptiveSplit` with `side` and `extent`. The geometry is `primitives::dock` (`arrange`, `Flow`). `Overlay` is `widget::Overlay::docked(side, size).along(length, align).margin(px)`. The panel's inner corners take the theme radius. The border is drawn around the surface's bounds grown past the flush sides and clipped, so those sides stay open.
 
-## Deviations / gaps
+## Deviations
 
-No drag handle or drag to dismiss, no bottom bar, and it animates in only (no slide out).
+No drag handle, no drag to dismiss, no bottom bar. It animates in only.

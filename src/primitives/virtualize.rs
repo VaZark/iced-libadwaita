@@ -15,7 +15,7 @@
 //! the [`window`](Viewport::window):
 //!
 //! ```
-//! use iced_libadwaita::primitives::virtualize::Viewport;
+//! use iced_adaptive_design::primitives::virtualize::Viewport;
 //!
 //! let mut vp = Viewport::default();
 //! vp.set(400.0, 100.0);                       // scrolled 400 px, 100 px tall

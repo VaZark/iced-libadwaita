@@ -1,6 +1,6 @@
 # Style classes
 
-Source: [style classes](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/style-classes.html). All of these have a style function in `iced_libadwaita::style` (see mapping column).
+Source: [style classes](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/style-classes.html). All of these have a style function in `iced_adaptive_design::style` (see mapping column).
 
 | Class                                                                               | Meaning                                                                                                                         | Combines with                                      | iced                                     |
 | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------- |

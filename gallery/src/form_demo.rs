@@ -5,14 +5,14 @@
 //! `GALLERY_FORM_STEP=n` opens the wizard on step n (earlier steps pre-filled), and
 //! `GALLERY_FORM_ATTEMPT=1` starts with the current step attempted (its errors showing).
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
-use adw::widget::validation::{chain, required};
-use adw::widget::{
+use iad::widget::validation::{chain, required};
+use iad::widget::{
     self as w, Field, Form, FormOutcome, FormSpec, FormState, Step, StepIndicator, StepStatus,
     Validity, typography as ty,
 };
-use adw::{Element, Metrics};
+use iad::{Element, Metrics};
 use iced::Length;
 use iced::widget::{column, container, text};
 

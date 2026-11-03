@@ -3,14 +3,14 @@
 //! Desktop-level behavior (color scheme, accent, density, shadows, animations, window
 //! decorations and buttons, the mobile breakpoint, menu presentation, the mobile sidebar,
 //! row wrapping, the icon theme) is defined **once per desktop**, not per app, so every
-//! iced-libadwaita app behaves the same way. It lives in a GLib key-file:
+//! iced-adaptive-design app behaves the same way. It lives in a GLib key-file:
 //!
 //! 1. built-in defaults (libadwaita's own behavior),
-//! 2. system files: `$XDG_CONFIG_DIRS/iced-libadwaita/desktop.conf` (default `/etc/xdg`),
-//! 3. the user file: `$XDG_CONFIG_HOME/iced-libadwaita/desktop.conf`,
+//! 2. system files: `$XDG_CONFIG_DIRS/iced-adaptive-design/desktop.conf` (default `/etc/xdg`),
+//! 3. the user file: `$XDG_CONFIG_HOME/iced-adaptive-design/desktop.conf`,
 //! 4. the app's **opt-outs** (see below), if the desktop allows them.
 //!
-//! `ICED_LIBADWAITA_CONFIG=/path/file.conf` replaces 2 and 3 with a single file (testing).
+//! `ICED_ADAPTIVE_DESIGN_CONFIG=/path/file.conf` replaces 2 and 3 with a single file (testing).
 //!
 //! # Opting out
 //!
@@ -19,7 +19,7 @@
 //! desktop, ignoring what the user configured. It is allowed, deliberate and reported:
 //!
 //! ```
-//! # use iced_libadwaita::config::{Config, Setting};
+//! # use iced_adaptive_design::config::{Config, Setting};
 //! let cfg = Config::default().opt_out(|o| {
 //!     o.animations(false); // fixed behavior for this app; the user's setting is ignored
 //! });
@@ -650,7 +650,7 @@ impl Config {
 
     /// The config directories searched, lowest priority first (system, then user).
     pub fn search_paths() -> Vec<PathBuf> {
-        if let Some(p) = std::env::var_os("ICED_LIBADWAITA_CONFIG") {
+        if let Some(p) = std::env::var_os("ICED_ADAPTIVE_DESIGN_CONFIG") {
             return vec![PathBuf::from(p)];
         }
         let mut out = Vec::new();
@@ -663,13 +663,13 @@ impl Config {
             .into_iter()
             .rev()
         {
-            out.push(PathBuf::from(d).join("iced-libadwaita/desktop.conf"));
+            out.push(PathBuf::from(d).join("iced-adaptive-design/desktop.conf"));
         }
         let user = std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")));
         if let Some(u) = user {
-            out.push(u.join("iced-libadwaita/desktop.conf"));
+            out.push(u.join("iced-adaptive-design/desktop.conf"));
         }
         out
     }
@@ -1030,18 +1030,18 @@ static CURRENT: RwLock<Option<Arc<Config>>> = RwLock::new(None);
 pub fn install(config: Config) {
     if !config.overridden.is_empty() {
         eprintln!(
-            "iced-libadwaita: this app overrides desktop settings {:?} (opt-out; discouraged)",
+            "iced-adaptive-design: this app overrides desktop settings {:?} (opt-out; discouraged)",
             config.overridden
         );
     }
     if !config.denied.is_empty() {
         eprintln!(
-            "iced-libadwaita: the desktop policy forbids app overrides; ignored {:?}",
+            "iced-adaptive-design: the desktop policy forbids app overrides; ignored {:?}",
             config.denied
         );
     }
     for w in &config.warnings {
-        eprintln!("iced-libadwaita: config: {w}");
+        eprintln!("iced-adaptive-design: config: {w}");
     }
     *CURRENT.write().unwrap() = Some(Arc::new(config));
 }
@@ -1158,7 +1158,7 @@ thing=1
 
     #[test]
     fn later_files_win_per_key() {
-        let dir = std::env::temp_dir().join(format!("iced-adw-cfg-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("iad-cfg-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let sys = dir.join("system.conf");
         let user = dir.join("user.conf");

@@ -1,17 +1,37 @@
 # DateRangeInput
 
-libadwaita and GTK 4 have no date-range picker (`GtkCalendar` selects one day). `DateRangeInput` is the multi-value sibling of [`DateInput`](date-input.md): one entry (`YYYY-MM-DD – YYYY-MM-DD`, read by `DateRange::parse`) with the calendar button in its left section, and a calendar popover (or a dialog, `dialog(true)`, centered in the window over a faded, disabled window (`scrim(false)` keeps it clear; `close_on_outside(false)` keeps a press outside from closing it)) that selects the interval, in the manner of the range calendars of Mantine and Material.
+libadwaita and GTK 4 have no date-range picker. `DateRangeInput` is the interval sibling of [`DateInput`](date-input.md).
 
-- Selection rule (`primitives::range::DateRange::pick`): the first click sets the start; the second sets the end (the two swap if it is earlier; the same day is a range of one day); a third click starts over. Days outside `min`/`max` are disabled and ignored.
-- The range reads as one accent band: the start and end days are filled and rounded on the outer side, the days between are tinted. While only the start is chosen, the band previews up to the day under the pointer (`on_hover`).
-- Validity: an unparsable or out-of-range date, or an end before the start, marks the entry ("End must not be before start."; with `strict(true)` the same day is an error too: "End must be after start."). Errors show once `revealed`, so a `Field` can keep a pristine field quiet and draw the one ring.
-- The calendar has the same levels as [`DateInput`](date-input.md) (title zooms out to year and decade, arrows step by the level, bounds disable months and years). Days are picked, and the range rule applies, **only at the month level**: the month and year cells always drill down (the range calendar has no `min_level`, as in Mantine's `DatePicker type="range"`), so a range is never made from months. The range stays highlighted across levels: a month or year that holds the start or end is filled, one strictly between them is tinted.
-- The app owns the text (set it from `DateRange::text` on a pick), the `DateRange`, the calendar position (`.calendar(CalendarView)` with `on_nav`) and the hovered day.
+## What it is
+
+One entry holding `YYYY-MM-DD – YYYY-MM-DD` (read by `DateRange::parse`, written by `DateRange::text`), with the calendar button in its left section. The calendar opens in a popover, or a dialog with `dialog(true)`.
+
+## Parameters
+
+Those of `DateInput` (`dialog`, `scrim`, `close_on_outside`, `min`, `max`, `level`, `calendar`, `max_level`, `today`, `revealed`, `disabled`, `width`), plus:
+
+| Param      | Meaning                                              | Default |
+| ---------- | ---------------------------------------------------- | ------- |
+| `selected` | the `DateRange`                                      | empty   |
+| `hover`    | day under the pointer, for the preview               | none    |
+| `strict`   | the end must be a later day than the start           | off     |
+
+There is no `min_level`: a range is always picked in days.
+
+Events: `on_input(text)`, `on_pick(range)`, `on_view`, `on_nav`, `on_hover`.
+
+## Behavior
+
+- **Picking** (`DateRange::pick`): the first click sets the start. The second sets the end (swapped if earlier; the same day is a range of one day). A third starts over. Days outside `min`/`max` are ignored.
+- **Band.** The range is one accent band: start and end filled and rounded on the outer side, the days between tinted. With only a start, the band previews up to the hovered day.
+- **Validity.** A date that does not parse or is out of range, or an end before the start, is the error state ("End must not be before start."). With `strict`, the same day is an error too. Errors show once `revealed`.
+- **Levels** as in `DateInput`. Days are picked only at the month level. Month and year cells always drill down.
+- Controlled: the app owns the text (set it from `DateRange::text` on a pick), the range, the calendar position and the hovered day.
 
 ## iced mapping
 
-`widget::DateRangeInput`: an `Entry` (calendar button as its left section) and a `Popover` with `keep_open(true)`. The month grid is shared with `DateInput` (`date_input::calendar`); only the day cells differ. The pointer preview is app state (`on_hover`/`hover`, sent only while a start is chosen without an end) because iced buttons do not expose hover; without `on_hover` the range just has no preview. `.revealed(bool)` and `validity()` follow `DateInput`, so it works inside `Field`: pass `Field::validity(input.validity())` and `revealed(touched || submitted)`.
+An `Entry` with a `Popover` (`keep_open(true)`) in its left section. The month grid is shared with `DateInput`. The hover preview is app state (`on_hover`, `hover`) because iced buttons do not expose hover.
 
-Navigation is the shared `primitives::calendar` (see `DateInput`); `on_view` remains the month-level compatibility path.
+## Deviations
 
-Deviations: one month on show (no two-month range view); no presets ("last 7 days"); English month names and ISO dates as in `DateInput`.
+One month on show. No presets. English month names, ISO dates.

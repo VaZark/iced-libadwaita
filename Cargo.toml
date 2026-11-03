@@ -1,10 +1,10 @@
 [package]
-name = "iced-libadwaita"
+name = "iced-adaptive-design"
 version = "0.1.0"
 categories = ["gui"]
 edition = "2024"
-keywords = ["iced", "gui", "gnome", "libadwaita", "theme"]
-description = "libadwaita-style theme and widgets for iced"
+keywords = ["iced", "gui", "gnome", "design-system", "theme"]
+description = "Adaptive design system for iced: theme, components and behavior primitives after the GNOME HIG"
 # What the published crate contains: the library, its user docs and its man pages. The HIG
 # reference notes (docs/hig-inferences/) are for contributors and are not bundled; the gallery and
 # xtask are separate crates.

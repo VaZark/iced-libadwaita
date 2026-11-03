@@ -1,12 +1,12 @@
 //! Multi-value inputs: the two-thumb `RangeSlider` (and its row) and the `DateRangeInput`, each
 //! alone and wrapped in a `Field` with shared validation.
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
-use adw::primitives::form::{FormSpec, FormState, Outcome};
-use adw::primitives::range::{DateRange, Range, Track};
-use adw::widget::{self as w, CalendarView, Date, Decimal, Field, Level, Numeric, Validity};
-use adw::{Element, Metrics};
+use iad::primitives::form::{FormSpec, FormState, Outcome};
+use iad::primitives::range::{DateRange, Range, Track};
+use iad::widget::{self as w, CalendarView, Date, Decimal, Field, Level, Numeric, Validity};
+use iad::{Element, Metrics};
 use iced::Length;
 use iced::widget::{column, container, row};
 

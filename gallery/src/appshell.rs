@@ -27,19 +27,19 @@
 //! `APPSHELL_SIDEBAR_MODE=drawer|parent-page`, `APPSHELL_CONTENT=1`, `APPSHELL_NAV_DRAWER=1`,
 //! `APPSHELL_DRAWER=1`, `APPSHELL_EDGE=right|bottom`, `APPSHELL_NAVBAR=0`.
 
-use adw::Icon;
-use adw::style;
-use adw::transition::{Budgets, Command, Event, Outcome};
-use adw::widget::{self as w, typography as ty};
+use iad::Icon;
+use iad::style;
+use iad::transition::{Budgets, Command, Event, Outcome};
+use iad::widget::{self as w, typography as ty};
 use iced::widget::{column, container, row, scrollable, text};
 use iced::{Length, Subscription, Task};
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 use std::time::{Duration, Instant};
 
-use adw::adaptive::{Adaptive, Hysteresis, Layouts, adaptive};
-use adw::breakpoints::{Breakpoints, WidthClass};
+use iad::adaptive::{Adaptive, Hysteresis, Layouts, adaptive};
+use iad::breakpoints::{Breakpoints, WidthClass};
 
-type Element<'a> = adw::Element<'a, Message>;
+type Element<'a> = iad::Element<'a, Message>;
 
 const NAVBAR_WIDTH: f32 = 240.0;
 const DRAWER_WIDTH: f32 = 260.0;
@@ -175,7 +175,7 @@ pub enum Message {
     Back,
     MobileSidebar(w::CollapsedSidebar),
     /// Window chrome with client-side decorations; the parent app performs it on this window.
-    Window(adw::window::Action),
+    Window(iad::window::Action),
     /// The window's maximized state, to draw the frame (the gallery queries it on resize).
     Maximized(bool),
     // Manual triggers owned by the app.
@@ -251,7 +251,7 @@ impl AppShell {
             mobile_sidebar: match std::env::var("APPSHELL_SIDEBAR_MODE").as_deref() {
                 Ok("parent-page") => w::CollapsedSidebar::ParentPage,
                 Ok("drawer") => w::CollapsedSidebar::Drawer,
-                _ => adw::config::current().mobile_sidebar,
+                _ => iad::config::current().mobile_sidebar,
             },
             show_content: std::env::var_os("APPSHELL_CONTENT").is_some(),
             nav_drawer_open: std::env::var_os("APPSHELL_NAV_DRAWER").is_some(),
@@ -414,7 +414,7 @@ impl AppShell {
                 self.hyst = h;
                 let setting = match h {
                     Hyst::Pixels => Hysteresis::default(),
-                    Hyst::Delay => Hysteresis::Delay(adw::adaptive::DELAY),
+                    Hyst::Delay => Hysteresis::Delay(iad::adaptive::DELAY),
                 };
                 self.adaptive = std::mem::replace(&mut self.adaptive, Adaptive::new(layouts()))
                     .hysteresis(setting);
@@ -459,8 +459,8 @@ impl AppShell {
     // both ride the content area's edges as the panes slide in and out.
 
     /// The window's decorations, for the part of it that touches `edges`.
-    fn chrome(&self, edges: Touches) -> adw::window::Chrome {
-        let chrome = adw::window::Chrome::new(adw::window::State {
+    fn chrome(&self, edges: Touches) -> iad::window::Chrome {
+        let chrome = iad::window::Chrome::new(iad::window::State {
             maximized: self.maximized,
             fullscreen: false,
         })
@@ -482,9 +482,9 @@ impl AppShell {
     /// `base` with the bottom corners at `edges` rounded to the window frame.
     fn rounded_bottom(
         &self,
-        base: fn(&adw::Theme) -> iced::widget::container::Style,
+        base: fn(&iad::Theme) -> iced::widget::container::Style,
         edges: Touches,
-    ) -> impl Fn(&adw::Theme) -> iced::widget::container::Style + 'static {
+    ) -> impl Fn(&iad::Theme) -> iced::widget::container::Style + 'static {
         let r = self.chrome(edges).radius();
         move |t| iced::widget::container::Style {
             border: iced::Border::default().rounded(iced::border::Radius {
@@ -629,7 +629,7 @@ impl AppShell {
             .copied()
             .unwrap_or(Shell::Mobile);
         let (_, pad) = presentation(&layout);
-        let m = adw::Metrics::default();
+        let m = iad::Metrics::default();
         let height =
             rows * pad.row_height(&m) + (rows - 1.0) * pad.gap(&m) + 2.0 * pad.inset(&m) + 8.0;
         let list = w::SidebarList::new(items).follow(&self.adaptive, presentation);

@@ -3,15 +3,15 @@
 //! shown count. The playgrounds' controls reach them through [`State::sync`] when the shape of
 //! a demo changes.
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
 use crate::playground::Playground;
-use adw::widget::{
+use iad::widget::{
     self as w, ColorFormat, ColorInput, ColorPicker, Decimal, Hsva, NumberDrag, NumberInput,
     Numeric, Redistribute, Splitter, SplitterEvent, SplitterLimit, SplitterOrientation,
     SplitterPane, SplitterState, Spoiler, SpoilerEvent, SpoilerState, typography as ty,
 };
-use adw::{Element, Metrics};
+use iad::{Element, Metrics};
 use iced::widget::{column, container};
 use iced::{Length, Task};
 
@@ -145,7 +145,7 @@ impl State {
         let frame = container(s)
             .width(Length::Fill)
             .height(260)
-            .style(|t: &adw::Theme| iced::widget::container::Style {
+            .style(|t: &iad::Theme| iced::widget::container::Style {
                 border: iced::Border {
                     color: t.semantic.border,
                     width: 1.0,
@@ -400,7 +400,7 @@ fn pane_box<'a>(label: &str, i: usize) -> Element<'a, Msg> {
     ][i % 3];
     container(ty::body(label.to_string()))
         .center(Length::Fill)
-        .style(move |_: &adw::Theme| iced::widget::container::Style {
+        .style(move |_: &iad::Theme| iced::widget::container::Style {
             background: Some(iced::Background::Color(iced::Color { a: 0.14, ..tint })),
             ..Default::default()
         })

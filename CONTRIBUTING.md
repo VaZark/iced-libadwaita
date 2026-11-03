@@ -1,76 +1,110 @@
 # Contributing
 
-#### Setup
+## Setup
 
-Stable Rust (edition 2024) and the system libraries iced needs on Linux (Wayland or X11, Vulkan or OpenGL). Then:
+Stable Rust (edition 2024) and the system libraries iced needs on Linux (Wayland or X11, Vulkan or OpenGL).
 
 ```text
-cargo build --all-targets
-cargo run --example gallery
+cargo build                       # the library only
+cargo build --workspace           # library, gallery, xtask
 cargo test
-cargo clippy --all-targets
+cargo clippy --all-targets --workspace
+cargo xtask man --check           # man pages are current
 ```
 
-Both `cargo test` and `cargo clippy` should be clean before committing.
+`cargo test` and `cargo clippy` must be clean before you commit.
 
-#### Formatting
+## Formatting
 
-Formatting is handled by the local pre-commit hooks: dprint formats configured JSON, Markdown, and TOML files, while `cargo fmt --all` formats Rust. Install the hooks with `pre-commit install`; run them across the repository with `pre-commit run --all-files`.
+Local pre-commit hooks: dprint formats JSON, Markdown and TOML; `cargo fmt --all` formats Rust. Install with `pre-commit install`. Run everything with `pre-commit run --all-files`.
 
-#### The gallery
+## Repo layout
 
-`cargo run --example gallery` is the visual test. Render every page in light and dark with `-- --screenshot DIR`, and inspect the images; useful switches:
+| Path                   | Holds                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------- |
+| `src/`                 | the library: `widget/`, `primitives/`, `window/` (window logic, dialogs), `style/`, theme, config, animation |
+| `gallery/`             | the gallery, a separate crate                                                                  |
+| `xtask/`               | repository tasks                                                                               |
+| `man/`                 | man pages. `iad(7)` and `iad-desktop.conf(5)` are written by hand. `iad-<alias>(3)` and the index `iad-components(3)` are generated |
+| `docs/lib/`            | user guide. Published with the crate and `man/`                                                |
+| `docs/hig-inferences/` | design rationale. Not published (`include` in `Cargo.toml`)                                    |
+
+## Man pages
+
+`cargo xtask man` reads the `///` and `//!` comments and the public API of `src/widget` and the dialogs, and writes one page per component. `--check` fails when a page is stale.
+
+A component is an item exported from `src/widget/mod.rs`:
+
+- a public struct that becomes an `Element`, or
+- a function that returns an element.
+
+Builder methods on `self` are its properties. A method that takes an element is a slot. `on_*` is an event.
+
+Write the doc comment. The page follows.
+
+## The gallery
+
+`cargo run -p iced-adaptive-design-gallery` is the visual test. Render every page in light and dark with `-- --screenshot DIR` and look at the images.
 
 ```text
-GALLERY_SIZE=WxH        GALLERY_DETAIL=textinput     GALLERY_PAGE=inputs
-GALLERY_SHOT_ONLY=treegrouped   # with --screenshot: that one page only
-GALLERY_SHOT_DELAY_MS=2500      # with --screenshot: wait longer per page (slow debug builds)
-GALLERY_SIDEBAR_MODE=parent-page   GALLERY_MENU=page|dropdown
+GALLERY_SIZE=WxH                  window size
+GALLERY_DETAIL=textinput          open a nested page
+GALLERY_PAGE=inputs               open a group
+GALLERY_SEARCH=text               open the search with this text
+GALLERY_SHOT_ONLY=Docked          with --screenshot: that page only (the `Detail` name)
+GALLERY_SHOT_DELAY_MS=2500        with --screenshot: wait per page (slow debug builds)
+GALLERY_DARK=1                    dark scheme for GALLERY_ANIM captures
+GALLERY_SIDEBAR_MODE=parent-page
+GALLERY_MENU=page|dropdown
 GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push|breakpoint
-GALLERY_DARK=1          # dark scheme for GALLERY_ANIM captures
-GALLERY_ANIM=keys       # waits 6s, then captures: send keys meanwhile (`ydotool key 29:1 50:1 50:0 29:0`)
-GALLERY_ANIM=prefs      # opens the preferences window; captures the parent, then the window
-GALLERY_ANIM=appshell   # opens the AppShell window (GALLERY_SHELL_SIZE=WxH); same capture
-GALLERY_ANIM=shell-back|embedded-back  # a page open in the mobile shell (window or embedded in Layout > Resizable), then Back, captured while it slides out
-APPSHELL_PIN=mobile|tablet|desktop  APPSHELL_SIDEBAR_MODE=parent-page  APPSHELL_CONTENT=1  APPSHELL_DRAWER=1  APPSHELL_EDGE=right|bottom  # AppShell start-up
-ICED_LIBADWAITA_CONFIG=path.conf     # try a desktop config
+GALLERY_ANIM=keys                 wait 6 s, then capture: send keys meanwhile
+GALLERY_ANIM=appshell             open the AppShell window (GALLERY_SHELL_SIZE=WxH)
+GALLERY_ANIM=shell-back|embedded-back
+APPSHELL_PIN=mobile|tablet|desktop
+APPSHELL_SIDEBAR_MODE=parent-page
+APPSHELL_CONTENT=1  APPSHELL_DRAWER=1  APPSHELL_EDGE=right|bottom
+ICED_ADAPTIVE_DESIGN_CONFIG=path.conf  try a desktop config
 ```
 
-How the gallery is organized, and when a component gets a nested page: [examples/gallery/README.md](examples/gallery/README.md). Screenshots can be stale on slow debug builds; give them time before concluding a page is broken.
+`gallery --appshell` runs only the AppShell, in its own process. The gallery's "Open" on that page starts it that way.
 
-#### Layout of the repo
+Screenshots can be stale on slow debug builds. Wait before calling a page broken. Gallery organization: [gallery/README.md](gallery/README.md).
 
-- `src/`: the library (`widget/`, `primitives/` headless logic, `window/` window logic and the dialogs, `style/`, `theme`, `config`, `animation`, …).
-- `examples/`: the gallery is a separate crate, `gallery/` (including `appshell.rs`, the adaptive-layout demo).
-- `man/`: the man pages. `iced-libadwaita(7)` and `iced-libadwaita-desktop.conf(5)` are written by hand; `iced-libadwaita-<alias>(3)`, one per component, and the index `iced-libadwaita-components(3)` are **generated** from the source by `cargo xtask man` (`cargo xtask man --check` fails when they are stale).
-- `xtask/`: the repository's own tasks.
-- `docs/lib/` is the user guide and is published with the crate together with `man/`; `docs/hig-inferences/` is the contributors' design rationale and is not (see `include` in `Cargo.toml`).
-- `docs/lib/`: guidance on using the library. `docs/hig-inferences/`: what we target.
+## Working on a component
 
-#### Working on a component
+1. Read its page in `docs/hig-inferences/widgets/` and its **iced mapping**.
+2. Give it the shape in [docs/lib/components.md](docs/lib/components.md).
+3. Write its doc comments, then `cargo xtask man`.
+4. Show its states, including disabled, in the gallery.
+5. Record deviations from the reference in its **iced mapping**.
+6. A wrapper must forward `overlay()`. Test popovers inside it.
 
-1. Read its file in `docs/hig-inferences/widgets/` and its _iced mapping_.
-2. Give it the shape in [docs/lib/components.md](docs/lib/components.md); write its doc comments (`///` on the struct and on every public builder method, and `//!` on the file): `cargo xtask man` turns them into its man page. A component is a public struct exported from `src/widget/mod.rs` that becomes an `Element`, or an exported function returning an element.
-3. Show its states (including disabled) in the gallery.
-4. Record deviations from the reference in its _iced mapping_ section.
-5. Anything that wraps a child widget must forward `overlay()`; test popovers inside it.
+### Adding a property
 
-**Adding a property to an existing component** is not done until it works end to end. The property is added **to the library** (never only to an example or an app; the gallery is a client of it), and every new builder method gets, in the same change:
+Not done until it works end to end. Add it to the library, never only to an example. In the same change:
 
-- a `///` doc comment on the method, then `cargo xtask man` (its man page lists it under PROPERTIES, SLOTS or EVENTS);
-- a **control in the component's gallery playground** (`gallery/src/plays.rs`: the `specs` control, its use in `build`, and its line in the generated code), so the property can be tried and its code read. A property whose default comes from the toolkit or the desktop config is a **plain value that starts at that default** and is overridden by its builder method, not an `Option` with a `None` case; its control shows the default, and the generated code only mentions it once it is changed;
-- a line in its `docs/hig-inferences/widgets/` page, and in `docs/lib/desktop-config.md` plus `desktop.conf.example` if a desktop config key backs the default (also `man/iced-libadwaita-desktop.conf.5`).
+- A `///` comment on the method, then `cargo xtask man`.
+- A control in the component's playground (`gallery/src/plays.rs`): the `specs` entry, its use in `build`, its line in the generated code.
+- A line in its `docs/hig-inferences/widgets/` page.
+- If a desktop config key backs the default: `docs/lib/desktop-config.md`, `docs/lib/desktop.conf.example`, `man/iad-desktop.conf.5`.
 
-A property that has no doc comment (so is missing from the man page) or no playground control is invisible to everyone using the gallery or a declarative layer, so treat that as unfinished work.
+A property whose default comes from the toolkit or the config is a plain value that starts at that default. The builder overrides it. No `Option` with a `None` case. The playground control shows the default, and the generated code mentions the call only once it changes.
 
-#### Docs
+A setting that is not on by default is opted into explicitly (surface tint, for example).
 
-Diagrams and charts are [Mermaid](https://mermaid.js.org/) fenced blocks (` ```mermaid `), not ASCII art or images. The GTK CSS-node listings under `docs/hig-inferences/gtk4/` are verbatim text from the GTK documentation and stay as they are.
+Use one parameter when two booleans exclude each other. `NumberInput::drag(NumberDrag)`, not two flags.
 
-#### Commits
+## Docs
 
-Small, logical groups; each commit should build. This project is managed primarily by AI; review changes before depending on them.
+- Diagrams are [Mermaid](https://mermaid.js.org/) blocks. No ASCII art, no images.
+- The GTK CSS-node listings in `docs/hig-inferences/gtk4/` are verbatim from GTK and stay as they are.
+- `docs/lib/` is the user guide. It says when and how to use things and points to the man pages for the API. Do not duplicate API lists there.
+- State the current design. Do not write notes about what replaced what.
 
-#### Status
+## Commits
 
-No license has been chosen yet.
+Small logical groups. Each commit builds. The project is managed mostly by AI: review changes before relying on them.
+
+## Status
+
+No license chosen yet.

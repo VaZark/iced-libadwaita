@@ -30,4 +30,4 @@ Use `AdwTabBar` + `AdwTabView` / `AdwViewSwitcher`.
 
 ## iced mapping
 
-`tab_bar`.
+`Tabs`.

@@ -9,12 +9,12 @@
 //!   chunk is not asked for again until retried (`primitives::loading::Chunks`). Every seventh
 //!   chunk fails once.
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
-use adw::primitives::loading::{Chunks, Slot};
-use adw::primitives::virtualize::Viewport;
-use adw::widget::{self as w, Column, ResponsiveTable, typography as ty};
-use adw::{Element, Metrics};
+use iad::primitives::loading::{Chunks, Slot};
+use iad::primitives::virtualize::Viewport;
+use iad::widget::{self as w, Column, ResponsiveTable, typography as ty};
+use iad::{Element, Metrics};
 use iced::widget::{column, container};
 use iced::{Length, Task};
 use std::collections::{HashMap, HashSet};
@@ -231,9 +231,9 @@ impl State {
             move |r: &Slotted| -> Element<'_, Msg> {
                 match r {
                     Slotted::Ready(p) => ty::body(text(p)).into(),
-                    Slotted::Loading => ty::body("·····").style(adw::style::text::dim).into(),
+                    Slotted::Loading => ty::body("·····").style(iad::style::text::dim).into(),
                     Slotted::Failed { chunk, reason, .. } if first => iced::widget::row![
-                        ty::body(format!("Failed: {reason}")).style(adw::style::text::error),
+                        ty::body(format!("Failed: {reason}")).style(iad::style::text::error),
                         w::flat_button(ty::label("Retry")).on_press(Msg::Retry(*chunk)),
                     ]
                     .spacing(8)

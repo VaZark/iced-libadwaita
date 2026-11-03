@@ -1440,18 +1440,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "iced-libadwaita"
+name = "iced-adaptive-design"
 version = "0.1.0"
 dependencies = [
  "iced",
 ]
 
 [[package]]
-name = "iced-libadwaita-gallery"
+name = "iced-adaptive-design-gallery"
 version = "0.1.0"
 dependencies = [
  "iced",
- "iced-libadwaita",
+ "iced-adaptive-design",
  "image",
  "tokio",
 ]

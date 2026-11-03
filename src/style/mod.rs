@@ -5,10 +5,10 @@
 //! `.style(..)`:
 //!
 //! ```ignore
-//! button("Save").style(adw::style::button::suggested)      // .suggested-action
-//! button("Delete").style(adw::style::button::destructive)  // .destructive-action
-//! container(x).style(adw::style::container::card)          // .card
-//! text("Hint").style(adw::style::text::dim)                // .dim-label
+//! button("Save").style(iad::style::button::suggested)      // .suggested-action
+//! button("Delete").style(iad::style::button::destructive)  // .destructive-action
+//! container(x).style(iad::style::container::card)          // .card
+//! text("Hint").style(iad::style::text::dim)                // .dim-label
 //! ```
 
 pub mod button;

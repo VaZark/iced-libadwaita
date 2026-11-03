@@ -2,7 +2,7 @@
 //! primitives (`row`, `column`, `container`, `text`, `space`, `responsive`).
 //!
 //! ```ignore
-//! use iced_libadwaita::prelude::*;
+//! use iced_adaptive_design::prelude::*;
 //!
 //! fn view(&self) -> Element<'_, Msg> {
 //!     toolbar_view(

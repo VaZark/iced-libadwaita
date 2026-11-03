@@ -14,10 +14,10 @@
 //! // view:    self.play.view(metrics, preview, code, Msg::Play)
 //! ```
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
-use adw::widget::{self as w, ToggleItem, typography as ty};
-use adw::{Element, Metrics};
+use iad::widget::{self as w, ToggleItem, typography as ty};
+use iad::{Element, Metrics};
 use iced::Length;
 use iced::widget::{column, container};
 use std::ops::RangeInclusive;
@@ -308,7 +308,7 @@ fn tab_row<'a, M: Clone + 'a>(
 
 /// The preview's frame: just a hairline border around the page's own background, so the
 /// component sits as it would in an app. No fill, no card, no shadow.
-fn frame(theme: &adw::Theme) -> iced::widget::container::Style {
+fn frame(theme: &iad::Theme) -> iced::widget::container::Style {
     iced::widget::container::Style {
         border: iced::Border {
             color: theme.semantic.border,

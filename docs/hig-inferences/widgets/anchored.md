@@ -1,6 +1,6 @@
 # Indicator and docked surfaces
 
-`Indicator` and the `dock_*` helpers are the widgets of the anchor primitive (`primitives::anchor`) for _inline_ layout: a base widget keeps its own size, and a second surface is placed against its bounds, over it.
+`Indicator` and `Anchored` apply the anchor primitive (`primitives::anchor`) to inline layout: the base widget keeps its size, and a second surface is placed against its bounds, over it. `Dock` is the widget for surfaces on an edge ([dock](dock.md)).
 
 - **Indicator** is Mantine's [`Indicator`](https://mantine.dev/core/indicator/): a badge, dot or count centered on a corner of an avatar, button or icon (`Relation::Straddle`). `corner(side, align)` picks the corner (default top right), `offset` moves it in from the corner on both axes, `cross_offset` slides it along the edge, `show(false)` removes it (Mantine `disabled`). The badge's own size is accounted for, so a round dot and a "99+" pill both sit exactly on the corner.
 - **Docked** surfaces use `Relation::Inside`: `Anchored` with `Placement::inside(side)` plus `.sizing(..)` is the general form. The surface is drawn over the base, in its own layer, and gets events first.

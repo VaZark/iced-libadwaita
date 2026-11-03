@@ -19,7 +19,7 @@
 //! ([`cmp_f64`], [`cmp_str`], [`cmp_natural`], [`cmp_option`], ...) cover the usual column types.
 //!
 //! ```
-//! use iced_libadwaita::primitives::sorting::{Direction, SortState, cmp_natural};
+//! use iced_adaptive_design::primitives::sorting::{Direction, SortState, cmp_natural};
 //!
 //! #[derive(Clone, Copy, PartialEq, Debug)]
 //! enum Col { Name }

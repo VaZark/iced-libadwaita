@@ -1,6 +1,6 @@
 # Motion
 
-Motion explains change; it should be quick and never required to understand the interface.
+Motion explains change. It is quick and never needed to understand the interface.
 
 ```mermaid
 flowchart TD
@@ -11,16 +11,16 @@ flowchart TD
     C -- no --> An["Its own animation"]
 ```
 
-- Components animate themselves (switch, reveal, drawer, dialogs, sheets, toasts, popovers, page changes, navigation push, carousel). The app needs no subscription or timers.
-- Every animation is a **trigger** with its own animation and a `None` fallback. Under reduced motion (`enable-animations` off, or `[motion] reduced-motion=true`) all triggers are `None` and changes are instant. Individual triggers can be set to `none` in the desktop config.
-- Do not add animation in the app for things components already do. If you must animate something yourself, use `animation::Tween` with a `Spec`, and gate it with `Trigger::…::spec(..)` or `animation::enabled()` so reduced motion is respected.
-- Use springs for things the user moves (drawer, sheet, carousel), short eased transitions for state changes.
+- Components animate themselves: switch, reveal, drawer, dialogs, docks, toasts, popovers, page changes, navigation push, carousel. The app needs no subscription or timers.
+- Every animation is a trigger with its own animation and a `None` fallback. Under reduced motion (`enable-animations` off, or `[motion] reduced-motion=true`) all triggers are `None`: changes are instant. Set one trigger to `none` in the config to turn off only that one.
+- Do not animate in the app what a component already animates. To animate something yourself, use `animation::Tween` with a `Spec`. Gate it with `Trigger::…::spec(..)` or `animation::enabled()`, so reduced motion is respected.
+- Springs for things the user moves (drawer, dock, carousel). Short eased transitions for state changes.
 
-Every trigger is a key of the `[motion]` section: see `iced-libadwaita-desktop.conf(5)`.
+Every trigger is a key of the `[motion]` section: see `iad-desktop.conf(5)`.
 
 #### Ordered transitions
 
-Components report nothing when their animation ends, so "the old layout leaves, then the new one arrives" cannot be done with fixed delays. `transition` is a small protocol and a state machine (`transition::Transitions`) that keeps the order and the time. It is plain data in your application state: every call takes the current `Instant`, so it needs no window to test.
+Components do not report when their animation ends, so "the old layout leaves, then the new one arrives" cannot use fixed delays. `transition` is a protocol and a state machine (`transition::Transitions`) that keeps the order and the time. It is plain data in your state. Every call takes the current `Instant`, so it needs no window to test.
 
 | Direction             | Message                                     | Meaning                                                            |
 | --------------------- | ------------------------------------------- | ------------------------------------------------------------------ |
@@ -42,5 +42,5 @@ stateDiagram-v2
 - A zero budget (animations disabled, reduced motion, `layout=none`) settles in the same call.
 - A sequence is steps, each one action or a group run together; its longest duration is known up front (`Sequence::budget`). A new sequence replaces steps that have not started but never interrupts the one in flight.
 - Budgets are `[motion] transition-close` and `transition-open` (milliseconds, default 30).
-- Use it for **layouts** (global ideas). Popovers, sheets and panels are components a layout implements and animate themselves.
-- **State is the application's.** The protocol moves layouts, not data. If a page cannot exist in the layout being moved to, the application navigates itself when it sees `closing_for` / `opening_for`; conflicts are the developer's to resolve.
+- Use it for layouts. Popovers, docks and panels are components a layout uses. They animate themselves.
+- State is the app's. The protocol moves layouts, not data. If a page cannot exist in the layout being moved to, the app navigates when it sees `closing_for` or `opening_for`.

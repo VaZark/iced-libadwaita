@@ -7,14 +7,14 @@
 //! demos on step n (3 is the completed screen), `GALLERY_STEPPER_SIZE=xs|sm|md|lg|xl` sets the
 //! size of the "horizontal" demo.
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
-use adw::Icon;
-use adw::widget::{
+use iad::Icon;
+use iad::widget::{
     self as w, Stepper, StepperIconPosition as Pos, StepperOrientation as Orient, StepperSize,
     StepperState, StepperStatus, StepperStep as S, typography as ty,
 };
-use adw::{Element, Metrics};
+use iad::{Element, Metrics};
 use iced::Length;
 use iced::widget::{column, container, row};
 
@@ -120,7 +120,7 @@ impl State {
             row![back, next, reset].spacing(m.space_s).into()
         };
         let body = |t: &'static str| -> Element<'static, Msg> {
-            ty::body(t).style(adw::style::text::dim).into()
+            ty::body(t).style(iad::style::text::dim).into()
         };
         let done = || -> Element<'static, Msg> { ty::heading("All steps completed").into() };
         let wrap =
@@ -304,7 +304,7 @@ impl State {
             .step(S::new("Account").description("Who you are"))
             .step(S::new("Profile").description("What you like").content(|| {
                 ty::body("Content stays on the label's side.")
-                    .style(adw::style::text::dim)
+                    .style(iad::style::text::dim)
                     .into()
             }))
             .step(S::new("Review"));

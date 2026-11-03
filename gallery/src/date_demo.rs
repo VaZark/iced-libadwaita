@@ -5,10 +5,10 @@
 //! `date-decade`, `month-picker`, `year-picker`, `date-bounded`, `date-bounded-year`,
 //! `date-bounded-decade`.
 
-use iced_libadwaita as adw;
+use iced_adaptive_design as iad;
 
-use adw::widget::{self as w, CalendarView, Date, Field, FieldLayout, Level, typography as ty};
-use adw::{Element, Metrics};
+use iad::widget::{self as w, CalendarView, Date, Field, FieldLayout, Level, typography as ty};
+use iad::{Element, Metrics};
 use iced::widget::column;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -215,7 +215,7 @@ impl State {
         // Relative time wording, from an explicit `now` (today here; the instants are offsets).
         // A name and its read-only value: a row field whose control is dimmed text.
         let value_row = |label: String, value: String| -> Element<'_, Msg> {
-            Field::new(label, ty::body(value).style(adw::style::text::dim))
+            Field::new(label, ty::body(value).style(iad::style::text::dim))
                 .layout(FieldLayout::Row)
                 .plain_label(true)
                 .metrics(m)
@@ -223,11 +223,11 @@ impl State {
         };
         let today = Date::today();
         let day_rows = [0i64, -1, 1, -3, -12, -45, -400, 9].into_iter().map(|n| {
-            let r = adw::primitives::Relative::from_dates(today.add_days(n), today);
+            let r = iad::primitives::Relative::from_dates(today.add_days(n), today);
             value_row(format!("{n:+} days"), r.to_string())
         });
         let second_rows = [-20i64, -300, -3 * 3600, 2 * 3600].into_iter().map(|n| {
-            let r = adw::primitives::Relative::from_seconds(n);
+            let r = iad::primitives::Relative::from_seconds(n);
             value_row(format!("{n:+} seconds"), r.to_string())
         });
         let relative = column(day_rows.chain(second_rows)).spacing(sp);

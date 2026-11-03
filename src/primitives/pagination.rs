@@ -22,7 +22,7 @@
 //! app calls [`set_total`](Pagination::set_total).
 //!
 //! ```
-//! use iced_libadwaita::primitives::pagination::{PageItem::*, Pagination};
+//! use iced_adaptive_design::primitives::pagination::{PageItem::*, Pagination};
 //! let mut p = Pagination::new(187, 20);
 //! assert_eq!(p.page_count(), Some(10));
 //! p.goto(2);

@@ -20,4 +20,4 @@ Floating when room, bottom sheet when narrow.
 
 ## iced mapping
 
-`preferences_dialog(title, page, on_close)`. No search or subpages.
+`preferences_dialog(title, page, on_close)`, shown with `dialog_in_window` as a modal layer in the parent window (not an OS window). No search or subpages.

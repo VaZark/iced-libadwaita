@@ -21,7 +21,7 @@ pub enum Dir {
 /// The tabs of one list: how many, and which are disabled.
 ///
 /// ```
-/// use iced_libadwaita::primitives::tabs::{Dir, TabList};
+/// use iced_adaptive_design::primitives::tabs::{Dir, TabList};
 ///
 /// let tabs = TabList::with_disabled(3, vec![false, true, false]);
 /// assert_eq!(tabs.activate(1), None);                    // disabled

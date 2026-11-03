@@ -1,25 +1,50 @@
 # Components
 
-iced-libadwaita is a **component library**: every UI element is a reusable component with a uniform shape, so layouts can be written in code, or generated from a declarative description (XML/Blueprint, JSX-like, a macro) that maps tags to components. This page is the guide to how components fit together. The API of each one (constructors, properties, slots, events) is its man page, `iced-libadwaita-<alias>(3)` in `man/` (for example `man -l man/iced-libadwaita-dock.3`), generated from the doc comments; `iced-libadwaita-components(3)` indexes them; `iced_libadwaita::prelude::*` imports everything needed.
+Every UI element is a component with the same shape. Layouts can be written in code, or generated from a description (XML, JSX-like, a macro) that maps tags to components.
+
+This page is the guide. The API of each component (constructors, properties, slots, events) is its man page: `iad-<alias>(3)`, for example `man -l man/iad-dock.3`. `iad-components(3)` is the index. `iced_adaptive_design::prelude::*` imports everything.
 
 ## Conventions
 
-1. **Construction.** `Component::new(required…)` and/or a free function of the same name (`action_row(title)`). Required arguments are the minimum to render meaningfully.
-2. **Properties** are chained builder methods named after libadwaita's properties (`.subtitle(..)`, `.revealed(..)`, `.sidebar_width(..)`, `.homogeneous(..)`). Booleans take a value (`.flat(true)`). `.metrics(Metrics)` is accepted wherever sizes matter.
-3. **Slots** (children) are builder methods: `.push(child)` (lists), `.child(..)`, `.prefix(..)` / `.suffix(..)`, `.pack_start(..)` / `.pack_end(..)`, `.top_bar(..)`, `.content(..)`.
-4. **Events** are `on_*` callbacks returning the app's message: `on_press`, `on_toggle(bool)`, `on_select(T)`, `on_input(String)`, `on_navigate(usize)`, `on_close`, `on_drag`.
-5. **Controlled state.** Components don't own application state: the app passes `active`, `expanded`, `value`, `index`, `revealed`, … and updates it from the events. (Purely visual state, such as animation progress, hover or an open popover, lives inside the component.)
-6. **Conversion.** Every component implements `Into<Element<'a, Message>>`; nest freely.
-7. **Theme-driven.** Colors, radii, shadows and motion come from the `Theme` and the desktop [config](desktop-config.md), never from the component call site.
-8. **No raw widgets in app code.** Entries, check/radio buttons, scales, text views, tags, swatches, cards, pages, rows with sliders and so on all have components; only layout primitives (`row`, `column`, `container`, `text`, `space`, `responsive`) remain, re-exported by the prelude.
+1. **Construction.** `Component::new(required…)` and/or a free function of the same name: `action_row(title)`. Required arguments are the minimum to render.
+2. **Properties** are chained builder methods named after libadwaita's: `.subtitle(..)`, `.revealed(..)`, `.sidebar_width(..)`. Booleans take a value: `.flat(true)`. `.metrics(Metrics)` is accepted wherever sizes matter.
+3. **Slots** are builder methods that take children: `.push(child)`, `.child(..)`, `.prefix(..)`, `.suffix(..)`, `.pack_start(..)`, `.top_bar(..)`, `.content(..)`.
+4. **Events** are `on_*` callbacks that return the app's message: `on_press`, `on_toggle(bool)`, `on_select(T)`, `on_input(String)`, `on_close`, `on_outside`.
+5. **Controlled state.** The app owns `active`, `expanded`, `value`, `text`, `open`, … and updates it from the events. Visual state (animation progress, hover, an open popover) lives in the component.
+6. **Conversion.** Every component implements `Into<Element<'a, Message>>`.
+7. **Theme-driven.** Colors, radii, shadows and motion come from the `Theme` and the desktop [config](desktop-config.md), never from the call site.
+8. **No raw widgets in app code.** Entries, check and radio buttons, scales, text views, tags, swatches, cards, pages, rows all have components. Only layout primitives remain (`row`, `column`, `container`, `text`, `space`, `responsive`), re-exported by the prelude.
 
-## How to use forms
+### Parameters
 
-The app owns the values and one `FormState<Key>`; a `FormSpec` lists the keys (one step is a single-page form). The state only remembers what the user touched or submitted, and answers, per key, whether the field may show its validity. `Field` draws the label, the control and the message; `Form` (optional) adds the Submit and Reset bar and, with several steps, Back and Next. See `Form` (`iced-libadwaita-form(3)`) and `Field` (`iced-libadwaita-field(3)`).
+- A parameter whose default comes from the toolkit or the config is a plain value that starts at the default. The builder overrides it. It is not an `Option`.
+- A setting that is not on by default is opted into: surface tint, for example.
+- Two booleans that exclude each other are one parameter with an enum: `NumberInput::drag(NumberDrag)`, `Dock::mode(DockMode)`.
+- Overlays have the fade on and `close_on_outside` true by default.
+
+### Number input
 
 ```rust
-use iced_libadwaita::prelude::*;
-use iced_libadwaita::primitives::form::{FormSpec, FormState, Outcome};
+NumberInput::new(&self.text, Msg::Text)   // the app keeps only the text
+    .decimals(2)                           // fixed point, never float
+    .min(0).max(100)
+    .step(Decimal::new(25, 2))             // 0.25
+```
+
+- One message: `on_input(text)`, for typing, the handles and dragging.
+- Read the number with `Numeric::parse(&text)`.
+- Dragging on the input changes the value: up raises it (`NumberDrag::Vertical`, default). `Horizontal` uses left and right. `Select` selects text. Shift is ten steps, Alt is the last digit.
+
+## Forms
+
+The app owns the values and one `FormState<Key>`. A `FormSpec` lists the keys (one step is a single-page form). The state remembers what the user touched or submitted, and says per key whether the field may show its validity.
+
+- `Field` draws label, control and message.
+- `Form` (optional) adds Submit and Reset, and Back and Next with several steps.
+
+```rust
+use iced_adaptive_design::prelude::*;
+use iced_adaptive_design::primitives::form::{FormSpec, FormState, Outcome};
 
 struct App { name: String, form: FormState<&'static str> }
 
@@ -67,14 +92,21 @@ impl App {
 }
 ```
 
-Do not keep a `touched` list or a `submitted` flag of your own; `touch`, `interaction`, `submit` and `reset` are those. The gallery's Field and Range slider pages are the live examples.
+Do not keep your own `touched` list or `submitted` flag. `touch`, `interaction`, `submit` and `reset` are those. Live examples: the gallery's Field and Range slider pages.
 
-**Labels.** `Field` is also the label idiom outside forms. `FieldLayout::Stacked` puts the label above the control (Mantine's `Input.Wrapper`); `FieldLayout::Row` puts the label (and description) at the start and the control at the end, the message below, like a libadwaita row; add `.plain_label(true)` for the body-size label of a settings-like list. For a row that is a title with a subtitle and a suffix, use `ActionRow`. Mantine's `leftSection` / `rightSection` are sections inside an input (an icon or a unit in the entry), which are `Entry` sections here, not a label layout.
+**Labels.** `Field` is the label idiom outside forms too.
+
+- `FieldLayout::Stacked`: label above the control.
+- `FieldLayout::Row`: label and description at the start, control at the end, message below. Add `.plain_label(true)` for a body-size label in a settings-like list.
+- A row that is a title, a subtitle and a suffix: `ActionRow`.
+- An icon or unit inside an input is an `Entry` section (`left_section`, `right_section`), not a label layout.
+
+**Pickers.** `DateInput` has its calendar button in the entry's left section. `DateRangeInput` is one entry (`2026-11-02 – 2026-11-09`). Both, and `ColorInput`, open a popover, or a dialog with `dialog(true)`. `ColorInput` is a color box that opens a `ColorPicker` with an entry for the code.
 
 ## A layout, in code
 
 ```rust
-use iced_libadwaita::prelude::*;
+use iced_adaptive_design::prelude::*;
 
 toolbar_view(page(
     preferences_group()
@@ -101,4 +133,4 @@ toolbar_view(page(
 </toolbar_view>
 ```
 
-Tag names are the snake_case constructors; attribute names are the properties; child elements go to the slot named in the component's man page (its SLOTS section) (`push` by default); `on_*` attributes name messages.
+Tag names are the snake_case constructors. Attribute names are the properties. Child elements go to the slot named in the component's man page (SLOTS), `push` by default. `on_*` attributes name messages.

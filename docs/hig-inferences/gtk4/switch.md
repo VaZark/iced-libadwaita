@@ -29,4 +29,4 @@ Accent track when on, translucent foreground track when off, white knob with a f
 
 ## iced mapping
 
-`adw::widget::Switch` (custom widget, 46×26). `style::toggler` styles stock iced `toggler`.
+`iad::widget::Switch` (custom widget, 46×26). `style::toggler` styles stock iced `toggler`.

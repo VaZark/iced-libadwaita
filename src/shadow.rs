@@ -9,7 +9,7 @@
 //! intensity, or replace any elevation.
 //!
 //! ```
-//! # use iced_libadwaita::{Theme, Shadows};
+//! # use iced_adaptive_design::{Theme, Shadows};
 //! let flat = Theme::light().with_shadows(Shadows::none());
 //! let soft = Theme::light().with_shadows(Shadows::default().with_intensity(0.5));
 //! ```

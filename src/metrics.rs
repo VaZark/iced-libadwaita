@@ -6,7 +6,7 @@
 //! changing one value.
 //!
 //! ```
-//! # use iced_libadwaita::{Theme, Metrics};
+//! # use iced_adaptive_design::{Theme, Metrics};
 //! let theme = Theme::light().with_metrics(Metrics::compact());
 //! ```
 

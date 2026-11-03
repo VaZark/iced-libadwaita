@@ -93,7 +93,7 @@ pub enum Slot<'a> {
 /// A list of `total` rows fetched `size` at a time.
 ///
 /// ```
-/// use iced_libadwaita::primitives::loading::{Chunks, Slot};
+/// use iced_adaptive_design::primitives::loading::{Chunks, Slot};
 ///
 /// let mut c = Chunks::new(1000, 50);
 /// assert_eq!(c.request(0..120), vec![0, 1, 2]);  // fetch chunks 0, 1, 2

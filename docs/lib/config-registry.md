@@ -1,6 +1,6 @@
 # Configuration registry
 
-The shared desktop configuration ([desktop-config.md](desktop-config.md)) is read by many applications at once, each linked statically against its own toolkit version. The **versioned registry** (`config_history`, `PROPERTIES`) is what keeps that safe. It is read-only and bundled with the toolkit.
+Many applications read the shared [desktop config](desktop-config.md) at once, each built against its own toolkit version. The versioned registry (`config_history`, `PROPERTIES`) keeps that safe. It is read-only and bundled with the toolkit.
 
 #### What it records
 
