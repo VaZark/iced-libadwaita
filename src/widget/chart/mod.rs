@@ -10,6 +10,9 @@
 //! | [`Funnel`] | stages that narrow |
 //! | [`Sankey`] | flows between nodes |
 //! | [`Sunburst`] | a tree as rings |
+//! | [`BubbleChart`] | points on two axes with a size (area) for a third value |
+//! | [`DonutChart`] | parts of a whole as one or more rings, with the total in the middle |
+//! | [`ComboChart`] | bars, lines and areas on one canvas and one scale |
 //!
 //! Every chart is built from its data and draws itself. The application owns the data; nothing is
 //! kept between views except which mark the pointer is over, so a tooltip can follow it.
@@ -17,6 +20,9 @@
 //! Charts take their width from the container (`Length::Fill`) and a fixed height.
 
 mod bar;
+mod bubble;
+mod combo;
+mod donut;
 mod funnel;
 mod line;
 mod pie;
@@ -24,6 +30,9 @@ mod sankey;
 mod sunburst;
 
 pub use bar::{BarChart, BarLayout};
+pub use bubble::{BubbleChart, BubblePoint, BubbleSeries};
+pub use combo::ComboChart;
+pub use donut::DonutChart;
 pub use funnel::{Funnel, FunnelShape};
 pub use line::LineChart;
 pub use pie::PieChart;

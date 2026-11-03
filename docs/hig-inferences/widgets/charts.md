@@ -16,6 +16,7 @@ No libadwaita counterpart. After d3 (scales, shape generators, layouts), Chart.j
 
 - Charts own their data and have no events. They remember only which mark the pointer is over, for the tooltip and highlight.
 - Colors are categorical, eight GNOME hues (lighter in dark schemes), by series index; a sunburst colors by branch and fades by depth.
+- Bubble: area-proportional radii. Donut: rings of a thickness in px, the total in the middle. Combo: bars, lines and areas on one scale, painted in the order added.
 - Line: straight, step or monotone curves, area, stacked, 100%. Bar: grouped, stacked, 100%, horizontal, histogram (`BarChart::histogram`, with `.selected(..)` to highlight bins and `.on_pick(..)` to press one). Pie: donut with `.donut(hole)`. Funnel: continuous or blocks. Sankey: nodes made as links name them.
 - Missing or non-finite values count as zero.
 

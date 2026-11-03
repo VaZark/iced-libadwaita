@@ -34,6 +34,9 @@ Builder methods, chained after the constructor.
 .B \&.search(query: &'a str, on_query: impl Fn(String) \-> M + 'a)
 An entry above the chips that filters them by label as you type. \fBquery\fR is what it holds (controlled); \fBon_query\fR gets each edit.
 .TP
+.B \&.query(query: &'a str)
+Filters the chips by \fBquery\fR \fBwithout drawing an entry\fR: the application owns the field (shared by several groups, in a dialog's own layout). \fBsearch\fR is this plus the entry.
+.TP
 .B \&.placeholder(text: impl Into<String>)
 The entry's placeholder (default "Search").
 .TP
@@ -41,6 +44,9 @@ The entry's placeholder (default "Search").
 What shows when no chip matches (default "No matches").
 .TP
 .B \&.size(size: ChipSize)
+.TP
+.B \&.min_contrast(ratio: f32)
+The least contrast of unselected chips' own\-colored text against the page (default 4.5; \fB0.0\fR keeps the colors as given). See \fBChip::min_contrast\fR.
 .TP
 .B \&.metrics(m: Metrics)
 .SH EVENTS

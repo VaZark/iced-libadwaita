@@ -452,7 +452,6 @@ impl Gallery {
             | Detail::BarChart
             | Detail::PieChart
             | Detail::DonutChart
-            | Detail::RadarChart
             | Detail::BubbleChart
             | Detail::ComboChart
             | Detail::Funnel

@@ -11,10 +11,12 @@
 //! * [`shape`]: path commands, lines and areas with a [`Curve`](shape::Curve);
 //! * [`stack`]: stacked series (zero baseline or normalized to 100%);
 //! * [`pie`]: slices as angles, annular sectors, hit testing;
+//! * [`bubble`]: points with a size, radii with area proportional to it, hit testing;
 //! * [`funnel`]: stages as trapezoids;
 //! * [`sankey`]: nodes in layers, links as bands between them;
 //! * [`hierarchy`]: a tree partitioned into rings (sunburst).
 
+pub mod bubble;
 pub mod funnel;
 pub mod hierarchy;
 pub mod pie;

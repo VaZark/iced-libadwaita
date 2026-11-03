@@ -80,18 +80,6 @@ pub fn disk() -> TreeValue {
     )
 }
 
-/// Two characters over five abilities, for the radar.
-pub fn abilities() -> ([&'static str; 5], [Series; 3]) {
-    (
-        ["Speed", "Power", "Range", "Defense", "Stamina"],
-        [
-            Series::new("Scout", [9.0, 3.0, 8.0, 2.0, 6.0]),
-            Series::new("Guard", [3.0, 6.0, 2.0, 9.0, 7.0]),
-            Series::new("Mage", [5.0, 9.0, 7.0, 3.0, 4.0]),
-        ],
-    )
-}
-
 /// Spend, sales and market size by region, for the bubble chart.
 pub fn markets() -> [BubbleSeries; 3] {
     let b = BubblePoint::new;

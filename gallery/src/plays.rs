@@ -309,22 +309,6 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::bool("tooltip", "Tooltip", true),
             S::number("height", "Height (px)", 160.0..=420.0, 280.0),
         ],
-        Detail::RadarChart => vec![
-            S::number("axes", "Axes", 3.0..=5.0, 5.0),
-            S::number("series", "Series", 1.0..=3.0, 2.0),
-            S::bool("stacked", "Stacked", false),
-            S::bool("filled", "Filled", true),
-            S::bool("points", "Points", true),
-            S::number("rings", "Rings", 2.0..=8.0, 4.0),
-            S::bool("legend", "Legend", true),
-            S::bool("value_axis", "Ring values", true),
-            S::bool("category_axis", "Axis labels", true),
-            S::bool("grid", "Rings and spokes", true),
-            S::bool("tooltip", "Tooltip", true),
-            S::bool("hover", "Hover highlight", true),
-            S::choice("color", "Color", &["Series colors", "Accent"], 0),
-            S::number("height", "Height (px)", 200.0..=480.0, 300.0),
-        ],
         Detail::BubbleChart => vec![
             S::number("series", "Series", 1.0..=3.0, 3.0),
             S::number("rmin", "Smallest radius (px)", 2.0..=20.0, 5.0),
@@ -1338,58 +1322,6 @@ pub fn build<'a>(
                 .add(!p.bool("tooltip"), ".tooltip(false)")
                 .add(
                     p.number("height") != 280.0,
-                    &format!(".height({:.0}.0)", p.number("height")),
-                )
-                .done();
-            (c.into(), code)
-        }
-        Detail::RadarChart => {
-            let (names, series) = crate::chart_demo::abilities();
-            let axes = p.number("axes") as usize;
-            let n = p.number("series") as usize;
-            let series: Vec<_> = series
-                .into_iter()
-                .take(n)
-                .map(|s| iad::primitives::chart::Series::new(s.name, s.values[..axes].to_vec()))
-                .collect();
-            let mut c = w::RadarChart::new(names.into_iter().take(axes), series)
-                .stacked(p.bool("stacked"))
-                .filled(p.bool("filled"))
-                .points(p.bool("points"))
-                .rings(p.number("rings") as usize)
-                .legend(p.bool("legend"))
-                .value_axis(p.bool("value_axis"))
-                .category_axis(p.bool("category_axis"))
-                .grid(p.bool("grid"))
-                .tooltip(p.bool("tooltip"))
-                .hover(p.bool("hover"))
-                .height(p.number("height"));
-            if p.choice("color") == 1 {
-                c = c.colors(|t, _| t.palette.accent_bg_color);
-            }
-            let code = Code::new("RadarChart::new(axes, series)   // three or more axes")
-                .add(
-                    p.bool("stacked"),
-                    ".stacked(true)          // each series a band on the last",
-                )
-                .add(!p.bool("filled"), ".filled(false)")
-                .add(!p.bool("points"), ".points(false)")
-                .add(
-                    p.number("rings") != 4.0,
-                    &format!(".rings({})", p.number("rings") as usize),
-                )
-                .add(!p.bool("legend"), ".legend(false)")
-                .add(!p.bool("value_axis"), ".value_axis(false)")
-                .add(!p.bool("category_axis"), ".category_axis(false)")
-                .add(!p.bool("grid"), ".grid(false)")
-                .add(!p.bool("tooltip"), ".tooltip(false)")
-                .add(!p.bool("hover"), ".hover(false)")
-                .add(
-                    p.choice("color") == 1,
-                    ".colors(|theme, _| theme.palette.accent_bg_color)",
-                )
-                .add(
-                    p.number("height") != 300.0,
                     &format!(".height({:.0}.0)", p.number("height")),
                 )
                 .done();

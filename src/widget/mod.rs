@@ -134,7 +134,7 @@ pub use carousel::{Carousel, CarouselIndicator, carousel};
 pub use chart::{
     BarChart, BarLayout, Funnel, FunnelShape, LineChart, PieChart, Sankey, Sunburst, format_value,
 };
-pub use chart::{BubbleChart, BubblePoint, BubbleSeries, ComboChart, DonutChart, RadarChart};
+pub use chart::{BubbleChart, BubblePoint, BubbleSeries, ComboChart, DonutChart};
 pub use chip_group::{ChipGroup, ChipOption};
 pub use collapsible::Collapsible;
 pub use color_picker::{ColorInput, ColorPicker};
