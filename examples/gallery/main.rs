@@ -25,6 +25,7 @@ mod field_demo;
 mod form_demo;
 mod nav;
 mod range_demo;
+mod reorder_demo;
 mod resizable_demo;
 mod sections_demo;
 mod stepper_demo;
@@ -164,6 +165,7 @@ struct Gallery {
     stepper: stepper_demo::State,
     data: data_demo::State,
     resizable: resizable_demo::State,
+    reorder: reorder_demo::State,
     chips: Vec<&'static str>,
     acc_single: Vec<u8>,
     acc_multi: Vec<u8>,
@@ -270,6 +272,7 @@ enum Message {
     Stepper(stepper_demo::Msg),
     Data(data_demo::Msg),
     Resizable(resizable_demo::Msg),
+    Reorder(reorder_demo::Msg),
     ChipRemove(&'static str),
     AccSingle(Vec<u8>),
     AccMulti(Vec<u8>),
@@ -471,6 +474,7 @@ impl Gallery {
                 stepper: stepper_demo::State::default(),
                 data: data_demo::State::default(),
                 resizable: resizable_demo::State::default(),
+                reorder: reorder_demo::State::default(),
                 field: {
                     let mut f = field_demo::State::default();
                     if std::env::var_os("GALLERY_FIELD_SUBMIT").is_some() {
@@ -700,6 +704,7 @@ impl Gallery {
             Message::Stepper(m) => self.stepper.update(m),
             Message::Data(m) => return self.data.update(m).map(Message::Data),
             Message::Resizable(m) => return self.resizable.update(m).map(Message::Resizable),
+            Message::Reorder(m) => self.reorder.update(m),
             Message::AccSingle(v) => self.acc_single = v,
             Message::AccMulti(v) => self.acc_multi = v,
             Message::ChipRemove(c) => self.chips.retain(|x| *x != c),

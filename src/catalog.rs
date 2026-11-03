@@ -285,6 +285,24 @@ pub static COMPONENTS: &[Component] = &[
         &[],
     ),
     c(
+        "meta_parent_component",
+        "-",
+        "MetaParentComponent::new(registry)",
+        &["spacing", "horizontal", "width", "height"],
+        &["meta", "listener", "child"],
+        &[],
+    ),
+    c(
+        "reorderable_list",
+        "AdwActionRow (drag source)",
+        "ReorderableList::new(items, row)",
+        &[
+            "title", "editing", "disabled", "controls", "labels", "metrics",
+        ],
+        &[],
+        &["on_edit", "on_submit", "on_cancel", "on_reorder"],
+    ),
+    c(
         "badge",
         "-",
         "Badge::new(label)",

@@ -1069,6 +1069,7 @@ impl Gallery {
                 column![g("Anchored popover").description("Side and offset against the trigger; it flips to the other side and shifts to stay inside the window.").push(w::card(sides))].into()
             }
             Inline::MetaComponent => self.sections.meta_view(m).map(Message::Sections),
+            Inline::Reorderable => self.reorder.view(m).map(Message::Reorder),
             Inline::Resizable => self.resizable.view(m).map(Message::Resizable),
             Inline::ResponsiveTable => {
                 let table = |mode: w::TableMode| {

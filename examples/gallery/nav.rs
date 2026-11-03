@@ -135,7 +135,10 @@ impl Page {
                     vec![a(AppShell), n(Card), i(I::Clamp), i(I::StatusPage)],
                 ),
                 ("Flow", vec![i(I::WrapBox), i(I::Collapse)]),
-                ("Meta", vec![i(I::MetaComponent), i(I::Resizable)]),
+                (
+                    "Meta",
+                    vec![i(I::MetaComponent), i(I::Reorderable), i(I::Resizable)],
+                ),
             ],
             Page::Navigation => vec![
                 (
@@ -260,6 +263,7 @@ pub enum Inline {
     AnchoredPopover,
     ResponsiveTable,
     MetaComponent,
+    Reorderable,
     Resizable,
     Accordion,
     Surfaces,
