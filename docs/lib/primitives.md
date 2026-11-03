@@ -31,6 +31,8 @@ flowchart LR
 | `responsive`    | which presentation a width gets (`When`)                                                          | `MetaComponent`, adaptive layout                 |
 | `meta`          | which variant shows; breakpoint or selection triggers                                             | `MetaComponent`                                  |
 | `meta_parent`   | what each child announced; who a notification reaches                                             | `MetaParentComponent`                            |
+| `synced`        | lines that carry a time: the one active at a position, where to scroll                            | `SyncedText`                                     |
+| `histogram`     | values counted into bins over a range; which bins a selection covers                              | `HistogramRange`                                 |
 | `anchor`        | where a surface sits against an anchor: side, align, offset, flip, shift, size                    | `Popover`, `Menu`, `Anchored`                    |
 | `dock`          | a panel on an edge: push or overlay, slide-in geometry on all four sides, extent                  | `AdaptiveSplit` (split view, drawer), `Dock`     |
 | `overlay`       | a layer over another: scrim, modality, close on outside or Escape, a stack of layers, centering   | `Overlay`, `Dock`, `Popover` as dialog, dialogs  |

@@ -210,6 +210,18 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             ),
             S::bool("locked", "Lock the “locked” folder", false),
         ],
+        Detail::Container => vec![
+            S::choice(
+                "size",
+                "Size",
+                &["Xs 540", "Sm 720", "Md 960", "Lg 1140", "Xl 1320", "Custom"],
+                2,
+            ),
+            S::number("custom", "Custom width (px)", 200.0..=1400.0, 800.0),
+            S::bool("fluid", "Fluid (no maximum)", false),
+            S::number("padding", "Horizontal padding (px)", 0.0..=48.0, 12.0),
+            S::number("parent", "Parent width (px)", 300.0..=1500.0, 1400.0),
+        ],
         Detail::Divider => vec![
             S::choice("orientation", "Orientation", &["Horizontal", "Vertical"], 0),
             S::text("label", "Label", "Label"),
@@ -853,6 +865,82 @@ pub fn build<'a>(
             let (el, code) = g.tree_demo.play(p, m);
             (el.map(Message::Tree), code)
         }
+        Detail::Container => {
+            // The page is narrower than a Lg container, so the preview is drawn at 40%: the
+            // parent, the maximum width and the padding are all scaled, the proportions are real.
+            const SCALE: f32 = 0.4;
+            let sizes = [
+                w::ContainerSize::Xs,
+                w::ContainerSize::Sm,
+                w::ContainerSize::Md,
+                w::ContainerSize::Lg,
+                w::ContainerSize::Xl,
+            ];
+            let size = sizes
+                .get(p.choice("size"))
+                .copied()
+                .unwrap_or(w::ContainerSize::Px(p.number("custom")));
+            let (fluid, pad, parent) = (p.bool("fluid"), p.number("padding"), p.number("parent"));
+            let content_px = if fluid {
+                parent
+            } else {
+                parent.min(size.width())
+            };
+            let tint = |a: f32| {
+                move |t: &iad::Theme| iced::widget::container::Style {
+                    background: Some(iad::color::alpha(t.semantic.accent.bg, a).into()),
+                    border: iced::Border::default().rounded(4),
+                    ..Default::default()
+                }
+            };
+            let content = container(ty::caption(format!(
+                "{:.0} px",
+                (content_px - 2.0 * pad).max(0.0)
+            )))
+            .center_x(Length::Fill)
+            .padding(m.space_m)
+            .style(tint(0.6));
+            let inner = w::Container::new(content)
+                .size(w::ContainerSize::Px(size.width() * SCALE))
+                .fluid(fluid)
+                .padding(pad * SCALE);
+            let parent_box = container(inner)
+                .width(Length::Fixed(parent * SCALE))
+                .padding([m.space_s, 0.0])
+                .style(|t: &iad::Theme| iced::widget::container::Style {
+                    border: iced::Border::default()
+                        .rounded(4)
+                        .width(1)
+                        .color(t.semantic.border),
+                    ..Default::default()
+                });
+            let note = ty::caption(format!(
+                "Parent {parent:.0} px; the container is {content_px:.0} px wide, the content {:.0} px. Drawn at 40%.",
+                (content_px - 2.0 * pad).max(0.0)
+            ));
+            let size_code = match p.choice("size") {
+                0 => "ContainerSize::Xs".to_string(),
+                1 => "ContainerSize::Sm".to_string(),
+                2 => "ContainerSize::Md".to_string(),
+                3 => "ContainerSize::Lg".to_string(),
+                4 => "ContainerSize::Xl".to_string(),
+                _ => format!("ContainerSize::Px({:.0}.0)", p.number("custom")),
+            };
+            let code = Code::new("Container::new(content)")
+                .add(
+                    !fluid && p.choice("size") != 2,
+                    &format!(".size({size_code})   // the default is Md (960)"),
+                )
+                .add(fluid, ".fluid(true)   // no maximum: fills its parent")
+                .add(
+                    pad != 12.0,
+                    &format!(
+                        ".padding({pad:.0}.0)   // the default is the page padding, sides only"
+                    ),
+                )
+                .done();
+            (column![note, parent_box].spacing(m.space_s).into(), code)
+        }
         Detail::Divider => {
             let variant = [
                 w::DividerVariant::Solid,
@@ -1447,6 +1535,30 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
         }
         Detail::RangeSlider => {
             "range_slider(0.0..=100.0, self.value, Msg::Range)\n\nRangeSliderRow::new(\"Volume\", self.value, 0.0..=100.0, Msg::Range)"
+        }
+        Detail::LineChart => {
+            "let series = [Series::new(\"Web\", [12.0, 19.0, 15.0]), Series::new(\"Store\", [8.0, 11.0, 14.0])];\n\nLineChart::new([\"Jan\", \"Feb\", \"Mar\"], series)\n    .curve(Curve::Monotone)   // Linear, Step or Monotone\n    .area(true)               // fill under the lines\n    .stacked(true)            // on each other; .normalized(true) for 100%\n    .format(|v| format!(\"{v} k\"))"
+        }
+        Detail::BarChart => {
+            "BarChart::new([\"Jan\", \"Feb\", \"Mar\"], series)\n    .layout(BarLayout::Stacked)   // Grouped, Stacked or Normalized\n    .horizontal(true)\n    .gap(0.2)\n\n// counts per bin, bars touching\nBarChart::histogram(&Histogram::from_values(values, 0.0, 100.0, 12))"
+        }
+        Detail::PieChart => {
+            "PieChart::new([(\"Chrome\", 62.0), (\"Firefox\", 21.0), (\"Safari\", 9.0)])\n    .donut(0.6)            // the hole, as a fraction of the radius\n    .center(\"Browsers\")\n    .pad(0.01)             // radians between slices\n    .labels(true)"
+        }
+        Detail::Funnel => {
+            "Funnel::new([(\"Visits\", 5000.0), (\"Sign-ups\", 2400.0), (\"Paid\", 420.0)])\n    .shape(FunnelShape::Continuous)   // or Blocks\n    .gap(2.0)"
+        }
+        Detail::Sankey => {
+            "Sankey::new()                       // nodes are made as links name them\n    .link(\"Salary\", \"Income\", 5000.0)\n    .link(\"Income\", \"Housing\", 1800.0)\n    .link(\"Income\", \"Savings\", 2400.0)"
+        }
+        Detail::Sunburst => {
+            "Sunburst::new(TreeValue::branch(\"Disk\", [\n    TreeValue::branch(\"Media\", [TreeValue::leaf(\"Photos\", 40.0), TreeValue::leaf(\"Video\", 90.0)]),\n    TreeValue::leaf(\"System\", 35.0),\n]))\n.hole(0.25)"
+        }
+        Detail::Composed => {
+            "// one range, edited by both parts\nComposedComponent::new(self.range, Msg::Range)\n    .part(|r| HistogramRange::new(&self.histogram, *r, |picked| picked).into())\n    .part(|r| range_slider(0.0..=100.0, *r, |moved| moved).into())\n    .normalize(|(lo, hi)| (lo.min(hi), lo.max(hi)))   // the rule, in one place"
+        }
+        Detail::SyncedText => {
+            "SyncedText::new(LYRICS, &self.lines, Msg::Seek).position(self.pos)\n\n// update: when the current line changes, scroll to it\nif synced::current(&self.lines, self.pos) != before {\n    return follow_synced_text(LYRICS, now, self.lines.len());\n}"
         }
         Detail::MultiSelect => {
             "MultiSelect::new(&FRUITS, &self.chosen, Msg::Toggle)\n    .placeholder(\"Pick fruits\")\n    .max_chips(2)\n    .width(Length::Fixed(260.0))"

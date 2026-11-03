@@ -18,6 +18,8 @@ type Element<'a> = iad::Element<'a, Message>;
 
 mod appshell;
 mod autocomplete_demo;
+mod chart_demo;
+mod composed_demo;
 mod data_demo;
 mod date_demo;
 mod details;
@@ -31,6 +33,7 @@ mod reorder_demo;
 mod resizable_demo;
 mod sections_demo;
 mod stepper_demo;
+mod synced_demo;
 mod tree_demo;
 mod virtual_demo;
 mod widgets_demo;
@@ -190,6 +193,8 @@ struct Gallery {
     autocomplete: autocomplete_demo::State,
     sections: sections_demo::State,
     range: range_demo::State,
+    composed: composed_demo::State,
+    synced: synced_demo::State,
     stepper: stepper_demo::State,
     data: data_demo::State,
     resizable: resizable_demo::State,
@@ -310,6 +315,8 @@ enum Message {
     Autocomplete(autocomplete_demo::Msg),
     Sections(sections_demo::Msg),
     Range(range_demo::Msg),
+    Composed(composed_demo::Msg),
+    Synced(synced_demo::Msg),
     Stepper(stepper_demo::Msg),
     Data(data_demo::Msg),
     Resizable(resizable_demo::Msg),
@@ -547,6 +554,8 @@ impl Gallery {
             date: date_demo::State::default(),
             sections: sections_demo::State::default(),
             range: range_demo::State::default(),
+            composed: composed_demo::State::default(),
+            synced: synced_demo::State::default(),
             stepper: stepper_demo::State::default(),
             data: data_demo::State::default(),
             resizable: resizable_demo::State::default(),
@@ -841,6 +850,8 @@ impl Gallery {
             }
             Message::Sections(m) => self.sections.update(m),
             Message::Range(m) => self.range.update(m),
+            Message::Composed(m) => self.composed.update(m),
+            Message::Synced(m) => return self.synced.update(m).map(Message::Synced),
             Message::Stepper(m) => self.stepper.update(m),
             Message::Data(m) => return self.data.update(m).map(Message::Data),
             Message::Resizable(m) => return self.resizable.update(m).map(Message::Resizable),
@@ -1654,11 +1665,26 @@ impl Gallery {
     // --- pages ----------------------------------------------------------
 
     fn page_frame<'a>(&self, content: impl Into<Element<'a>>) -> Element<'a> {
+        self.page_frame_sized(content, w::ContainerSize::Sm)
+    }
+
+    /// A content page: a scrolled [`w::Container`] of the given size. Every page of the gallery
+    /// is one.
+    fn page_frame_sized<'a>(
+        &self,
+        content: impl Into<Element<'a>>,
+        size: w::ContainerSize,
+    ) -> Element<'a> {
         let m = self.metrics();
-        w::page(content)
-            .maximum_size(m.clamp_maximum + 120.0)
-            .metrics(m)
-            .into()
+        w::scrolled_window(
+            w::Container::new(content)
+                .size(size)
+                .padding(m.page_padding)
+                .metrics(m),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     }
 
     fn preferences_demo(&self) -> Element<'_> {

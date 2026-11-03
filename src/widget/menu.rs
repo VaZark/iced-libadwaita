@@ -63,6 +63,16 @@ impl MenuPresentation {
     }
 }
 
+/// Which edge of a menu item holds its icon or check mark.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum MenuIconSide {
+    /// After the label (and the accelerator): the default.
+    #[default]
+    End,
+    /// Before the label.
+    Start,
+}
+
 enum Kind<M> {
     Action { on_press: M },
     Check { checked: bool, on_press: M },
@@ -73,6 +83,7 @@ pub struct MenuItem<M> {
     label: String,
     accel: Option<String>,
     icon: Option<Icon>,
+    icon_side: Option<MenuIconSide>,
     destructive: bool,
     disabled: bool,
     kind: Kind<M>,
@@ -85,6 +96,7 @@ impl<M> MenuItem<M> {
             label: label.into(),
             accel: None,
             icon: None,
+            icon_side: None,
             destructive: false,
             disabled: false,
             kind: Kind::Action { on_press },
@@ -96,6 +108,7 @@ impl<M> MenuItem<M> {
             label: label.into(),
             accel: None,
             icon: None,
+            icon_side: None,
             destructive: false,
             disabled: false,
             kind: Kind::Check { checked, on_press },
@@ -106,8 +119,15 @@ impl<M> MenuItem<M> {
         self.accel = Some(accel.into());
         self
     }
+    /// An icon, at the end of the item unless [`Menu::icon_side`] or
+    /// [`icon_side`](Self::icon_side) says otherwise.
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
+        self
+    }
+    /// Puts this item's icon on `side`, whatever the menu says.
+    pub fn icon_side(mut self, side: MenuIconSide) -> Self {
+        self.icon_side = Some(side);
         self
     }
     /// Not available right now: dimmed text, no hover or press effect, cannot be activated.
@@ -127,6 +147,7 @@ impl<M> MenuItem<M> {
 pub struct Menu<M> {
     title: String,
     sections: Vec<Vec<MenuItem<M>>>,
+    icon_side: MenuIconSide,
 }
 
 impl<M> Menu<M> {
@@ -134,7 +155,15 @@ impl<M> Menu<M> {
         Self {
             title: title.into(),
             sections: Vec::new(),
+            icon_side: MenuIconSide::End,
         }
+    }
+    /// The edge that holds the items' icons and check marks: [`MenuIconSide::End`] by default,
+    /// [`MenuIconSide::Start`] to opt in to the leading position. An item can override its
+    /// icon with [`MenuItem::icon_side`].
+    pub fn icon_side(mut self, side: MenuIconSide) -> Self {
+        self.icon_side = side;
+        self
     }
     /// Adds a group of items.
     pub fn section(mut self, items: impl IntoIterator<Item = MenuItem<M>>) -> Self {
@@ -220,45 +249,61 @@ impl<M> MenuButton<M> {
     }
 }
 
-/// Builds one row's content: `[leading] label … [accel]`.
-fn row_content<'a, M: 'a>(item: &MenuItem<M>, any_check: bool, touch: bool) -> Element<'a, M> {
+/// Builds one row's content: `label … [accel] [mark]` (or `[mark] label … [accel]` for the
+/// start side). The mark is the check and the icon.
+fn row_content<'a, M: 'a>(
+    item: &MenuItem<M>,
+    any_check: bool,
+    side: MenuIconSide,
+    touch: bool,
+) -> Element<'a, M> {
     let m = Metrics::desktop();
     let t = Typography::default();
     // The accelerator is shown only when it is available (see `shortcut::hint`).
     let accel = crate::shortcut::hint(item.accel.as_deref(), !item.disabled, touch);
-    let (text_label, destructive, icon) = (item.label.clone(), item.destructive, item.icon);
-    let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
-    if any_check {
-        let checked = matches!(item.kind, Kind::Check { checked: true, .. });
-        let disabled = item.disabled;
-        r = r.push(if checked {
-            Element::from(Icon::Check.view(m.icon_size).style(move |t: &Theme, _| {
-                iced::widget::svg::Style {
+    let disabled = item.disabled;
+
+    // The check slot is reserved on every row of a menu with check items, so labels line up.
+    let check: Option<Element<'a, M>> = any_check.then(|| {
+        if matches!(item.kind, Kind::Check { checked: true, .. }) {
+            Icon::Check
+                .view(m.icon_size)
+                .style(move |t: &Theme, _| iced::widget::svg::Style {
                     color: Some(if disabled {
                         t.semantic.dim_solid()
                     } else {
                         t.semantic.popover.fg
                     }),
-                }
-            }))
+                })
+                .into()
         } else {
             space().width(m.icon_size).into()
-        });
-    }
-    if let Some(i) = icon {
-        r = r.push(i.view(m.icon_size));
-    }
-    let mut lbl = super::typography::label(text_label).width(Length::Fill);
-    if destructive {
+        }
+    });
+    let icon: Option<Element<'a, M>> = item.icon.map(|i| i.view(m.icon_size).into());
+    let icon_side = item.icon_side.unwrap_or(side);
+
+    let mut lbl = super::typography::label(item.label.clone()).width(Length::Fill);
+    if item.destructive {
         lbl = lbl.style(st::destructive);
     }
     if item.disabled {
         lbl = lbl.style(st::dim);
     }
-    r = r.push(lbl);
-    if let Some(a) = accel {
-        r = r.push(t.caption(a).wrapping(text::Wrapping::None).style(st::dim));
+    let accel = accel.map(|a| t.caption(a).wrapping(text::Wrapping::None).style(st::dim));
+
+    // Check marks follow the menu's side; an icon may be moved by its item.
+    let (mut lead, mut trail) = (Vec::new(), Vec::new());
+    let (check_to, icon_to) = (side, icon_side);
+    for (el, to) in [(check, check_to), (icon, icon_to)] {
+        match to {
+            MenuIconSide::Start => lead.extend(el),
+            MenuIconSide::End => trail.extend(el),
+        }
     }
+    let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
+    r = r.extend(lead).push(lbl).extend(accel.map(Element::from));
+    r = r.extend(trail);
     r.into()
 }
 
@@ -299,7 +344,7 @@ fn dropdown_items<'a, M: Clone + 'a>(menu: &Menu<M>) -> Vec<Element<'a, M>> {
         for item in section {
             out.push(
                 button(
-                    container(row_content(item, any_check, false))
+                    container(row_content(item, any_check, menu.icon_side, false))
                         .padding([0.0, m.space_m])
                         .center_y(Length::Fixed(32.0)),
                 )
@@ -348,7 +393,7 @@ fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M>
     for section in &menu.sections {
         let rows = section.iter().map(|item| -> Element<'a, M> {
             button(
-                container(row_content(item, any_check, true))
+                container(row_content(item, any_check, menu.icon_side, true))
                     .padding(m.row_padding)
                     .center_y(Length::Fixed(m.row_min_height)),
             )
@@ -437,6 +482,20 @@ mod tests {
             MenuPresentation::Dropdown
         );
         assert_eq!(MenuPresentation::default(), MenuPresentation::Dropdown);
+    }
+
+    #[test]
+    fn icons_are_at_the_end_unless_asked() {
+        let m: Menu<()> = Menu::new("Menu");
+        assert_eq!(m.icon_side, MenuIconSide::End);
+        let m = m.icon_side(MenuIconSide::Start);
+        assert_eq!(m.icon_side, MenuIconSide::Start);
+        let item = MenuItem::action("Edit", ()).icon(Icon::Check);
+        assert_eq!(item.icon_side, None);
+        assert_eq!(
+            item.icon_side(MenuIconSide::Start).icon_side,
+            Some(MenuIconSide::Start)
+        );
     }
 
     #[test]

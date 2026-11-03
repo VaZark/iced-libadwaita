@@ -374,6 +374,14 @@ impl Gallery {
             Detail::DateRange => self.inline(Inline::DateRange),
             Detail::MetaComponent => self.sections.meta_view(m).map(Message::Sections),
             Detail::MetaParent => self.reorder.parent_view(m).map(Message::Reorder),
+            Detail::Composed => self.composed.view(m).map(Message::Composed),
+            Detail::LineChart => chart_demo::line(m),
+            Detail::BarChart => chart_demo::bar(m),
+            Detail::PieChart => chart_demo::pie(m),
+            Detail::Funnel => chart_demo::funnel(m),
+            Detail::Sankey => chart_demo::sankey(m),
+            Detail::Sunburst => chart_demo::sunburst(m),
+            Detail::SyncedText => self.synced.view(m).map(Message::Synced),
             Detail::Reorderable => self.reorder.view(m).map(Message::Reorder),
             Detail::Resizable => self.resizable.view(m).map(Message::Resizable),
             Detail::LinkButton => self.inline(Inline::LinkButton),
@@ -407,6 +415,7 @@ impl Gallery {
             .into(),
             // Shown by its playground (see `plays.rs`).
             Detail::Tabs
+            | Detail::Container
             | Detail::Docked
             | Detail::Tree
             | Detail::TreeRow
@@ -772,7 +781,7 @@ impl Gallery {
             }
             _ => body,
         };
-        self.page_frame(body)
+        self.page_frame_sized(body, d.container_size())
     }
 
     /// A component with one demo, shown directly on its group page.
@@ -944,8 +953,25 @@ impl Gallery {
                         ]),
                 )
                 .presentation(presentation);
+                let icons = |side| {
+                    w::menu_button(
+                        Icon::OpenMenu,
+                        w::Menu::new("Item")
+                            .icon_side(side)
+                            .section([
+                                w::MenuItem::action("Edit tags", Message::Noop).icon(Icon::Edit),
+                                w::MenuItem::action("Add to list", Message::Noop).icon(Icon::ListAdd),
+                            ])
+                            .section([w::MenuItem::check("Compact", true, Message::Noop)]),
+                    )
+                    .presentation(presentation)
+                    .open_initially(self.shots.is_some() && side == w::MenuIconSide::End)
+                };
                 column![
                     g("Menu button").description("The menu includes a disabled item.").push(w::card(row![menu])),
+                    g("Icon side").description("Icons and check marks sit at the end by default. MenuIconSide::Start puts them before the label.").push(w::card(
+                        row![icons(w::MenuIconSide::End), icons(w::MenuIconSide::Start)].spacing(m.space_m),
+                    )),
                     g("Presentation").push(
                         w::ToggleGroupRow::new(
                             "Menu presentation",

@@ -7,11 +7,13 @@
 //!
 //! * [`anchor`]: where a floating surface sits against an anchor (flip, shift);
 //! * [`calendar`]: calendar navigation by level (month, year, decade);
+//! * [`chart`]: charts, headless: scales and ticks, line and area shapes, stacks, pie, funnel, sankey and sunburst layouts (d3, Chart.js, TanStack Charts);
 //! * [`color_picker`]: a color as hue / saturation / value / alpha, its conversions and text forms (hex, rgb, hsl, hsv), parsing (Mantine's ColorPicker);
 //! * [`dock`]: how a panel docked against an edge shares the space with the content: pushing it aside or floating over it, its slide-in geometry on every side (shared by `AdaptiveSplit` and `Dock`);
 //! * [`date`]: calendar dates and month math;
 //! * [`focus`]: keyboard focus rules: a Tab trap that wraps and its initial focus, returning focus when a scope closes, whether focus is within a scope (Mantine's use-focus-trap, use-focus-return, use-focus-within);
 //! * [`form`]: submit / reset / next / back gating and when a form's fields reveal errors (steps);
+//! * [`histogram`]: values counted into bins over a range, and which bins a selection covers;
 //! * [`infinite`]: a list that grows page by page (offset or cursor): one request in flight, stale responses discarded, the scroll rule;
 //! * [`lookup`]: a query answered asynchronously: debounce, stale-response discarding, cache;
 //! * [`notifications`]: the queue behind stacked toasts: ids, a limit, in-place update, auto-dismiss from an explicit `now`;
@@ -32,6 +34,7 @@
 //! * [`virtualize`]: which rows of a long fixed-height list to build for a scroll offset, and the spacers around them (shared by `Tree` and `ResponsiveTable`);
 //! * [`loading`]: keys being loaded (with their errors and retry), and a list fetched in chunks with placeholders for what has not arrived (shared by `Tree` and the tables);
 //! * [`tree`]: nodes, open branches, selection, checking, search / filter and keyboard navigation (Mantine's `useTree`, GTK's tree expander keys);
+//! * [`synced`]: lines that carry a time (lyrics, subtitles), the one active at a position, where to scroll;
 //! * [`stepper`]: step statuses from an `active` index, click rules, next / back, connector fill;
 //! * [`validation`]: when a field shows valid / invalid, and chaining validators;
 //! * [`meta`]: which variant of a meta component shows, and its [`Trigger`] (breakpoint or select);
@@ -42,11 +45,13 @@
 pub mod anchor;
 pub mod animation;
 pub mod calendar;
+pub mod chart;
 pub mod color_picker;
 pub mod date;
 pub mod dock;
 pub mod focus;
 pub mod form;
+pub mod histogram;
 pub mod infinite;
 pub mod loading;
 pub mod lookup;
@@ -67,6 +72,7 @@ pub mod sorting;
 pub mod splitter;
 pub mod spoiler;
 pub mod stepper;
+pub mod synced;
 pub mod tabs;
 pub mod transition;
 pub mod tree;

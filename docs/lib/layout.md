@@ -85,7 +85,7 @@ The gallery's Layout page has an AppShell (header, navbar, drawer, footer) with 
 ## Rows and content
 
 - Rows wrap their control below the title when they cannot share a line. The control goes full width (`Stacked`, default) or keeps its size (`Flex`). Opt out per row: `wrap_suffix(false)`. Text wraps. It is never shrunk.
-- `clamp(content, max)` keeps lines readable on wide windows. `wrap_box` flows chips and buttons onto new lines.
+- `Container::new(content).size(ContainerSize::Sm)` centers content at a named maximum width (Xs 540, Sm 720, Md 960, Lg 1140, Xl 1320; `.fluid(true)` for none), the base of a content page. `clamp(content, max)` is the same in pixels, for lines readable on wide windows. `wrap_box` flows chips and buttons onto new lines.
 - `Card` is one surface for any number of children. `Card::push` shares one border and shadow with hairlines between children. Do not stack cards to make a group.
 
 ## Nested pages

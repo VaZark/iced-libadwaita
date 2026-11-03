@@ -13,6 +13,7 @@
 pub mod adaptive;
 pub mod breakpoints;
 pub mod color;
+pub mod components;
 pub mod config;
 pub mod config_history;
 pub mod icon;

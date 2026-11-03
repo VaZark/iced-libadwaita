@@ -135,12 +135,12 @@ impl<'a, M: 'a> Page<'a, M> {
 
 impl<'a, M: 'a> From<Page<'a, M>> for Element<'a, M> {
     fn from(p: Page<'a, M>) -> Self {
-        super::scrolled_window(clamp(
-            container(p.content)
+        super::scrolled_window(
+            super::Container::new(p.content)
+                .size(super::ContainerSize::Px(p.maximum))
                 .padding(p.metrics.page_padding)
-                .width(Length::Fill),
-            p.maximum,
-        ))
+                .metrics(p.metrics),
+        )
         .width(Length::Fill)
         .height(Length::Fill)
         .into()

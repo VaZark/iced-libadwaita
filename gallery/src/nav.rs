@@ -2,6 +2,7 @@
 //! page per component inside a group showing all of its properties and states.
 
 use iced_adaptive_design::Icon;
+use iced_adaptive_design::widget as w;
 
 /// A level-1 page (a sidebar entry). Groups with details list their components; the others
 /// (`Typography`, `Theming`) are a single page.
@@ -145,11 +146,30 @@ impl Page {
                         n(TreeDocs),
                     ],
                 ),
+                ("Timed", vec![n(SyncedText)]),
+                (
+                    "Charts",
+                    vec![
+                        n(LineChart),
+                        n(BarChart),
+                        n(PieChart),
+                        n(Funnel),
+                        n(Sankey),
+                        n(Sunburst),
+                    ],
+                ),
             ],
             Page::Layout => vec![
                 (
                     "Containers",
-                    vec![n(AppShell), n(Card), n(Clamp), n(StatusPage), n(Splitter)],
+                    vec![
+                        n(AppShell),
+                        n(Container),
+                        n(Card),
+                        n(Clamp),
+                        n(StatusPage),
+                        n(Splitter),
+                    ],
                 ),
                 (
                     "Flow",
@@ -160,6 +180,7 @@ impl Page {
                     vec![
                         n(MetaComponent),
                         n(MetaParent),
+                        n(Composed),
                         n(Reorderable),
                         n(Resizable),
                     ],
@@ -298,6 +319,15 @@ pub enum Detail {
     RangeSlider,
     DateRange,
     MetaParent,
+    Container,
+    Composed,
+    SyncedText,
+    LineChart,
+    BarChart,
+    PieChart,
+    Funnel,
+    Sankey,
+    Sunburst,
     // (the last ones moved from inline demos: two or more properties)
     // Theming
     ThemeColors,
@@ -351,6 +381,21 @@ impl Detail {
                 Entry::Nested(d) => d,
             })
             .collect()
+    }
+
+    /// How wide the page of this component reads: charts and wide demos get more room.
+    pub fn container_size(self) -> w::ContainerSize {
+        use w::ContainerSize::{Md, Sm};
+        match self {
+            Detail::LineChart
+            | Detail::BarChart
+            | Detail::PieChart
+            | Detail::Funnel
+            | Detail::Sankey
+            | Detail::Sunburst
+            | Detail::Composed => Md,
+            _ => Sm,
+        }
     }
 
     pub fn page(self) -> Page {
@@ -438,6 +483,15 @@ impl Detail {
             Detail::Resizable => "Resizable",
             Detail::Reorderable => "Reorderable list",
             Detail::MetaParent => "Meta parent",
+            Detail::Container => "Container",
+            Detail::Composed => "Composed component",
+            Detail::LineChart => "Line chart",
+            Detail::BarChart => "Bar chart",
+            Detail::PieChart => "Pie chart",
+            Detail::Funnel => "Funnel",
+            Detail::Sankey => "Sankey",
+            Detail::Sunburst => "Sunburst",
+            Detail::SyncedText => "Synced text",
             Detail::ThemeColors => "Colors",
             Detail::ThemeShape => "Shape & shadows",
             Detail::ThemeMotion => "Motion",
@@ -525,6 +579,15 @@ impl Detail {
                 "Edit and preview, edit row, labels, own controls, disabled, lift"
             }
             Detail::MetaParent => "Notifies the children that announced an action",
+            Detail::LineChart => "Lines and areas: smooth, stepped, stacked, 100%",
+            Detail::BarChart => "Grouped, stacked, 100%, horizontal, histogram",
+            Detail::PieChart => "Parts of a whole, as a pie or a donut",
+            Detail::Funnel => "Stages that narrow",
+            Detail::Sankey => "Flows between nodes",
+            Detail::Sunburst => "A tree as rings",
+            Detail::Container => "Centered content at a named maximum width",
+            Detail::Composed => "Several components editing one shared state, as one widget",
+            Detail::SyncedText => "Timed lines with the current one highlighted",
             Detail::ThemeColors => "Scheme, accent, density and a card color override",
             Detail::ThemeShape => "Control, card and toast radii, shadows, with a live preview",
             Detail::ThemeMotion => "Animations on or off, easings and springs",

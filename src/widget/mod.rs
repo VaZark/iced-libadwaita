@@ -14,8 +14,11 @@ mod badge;
 mod banner;
 mod button;
 mod carousel;
+mod chart;
 mod collapsible;
 mod color_picker;
+mod composed_component;
+mod container;
 mod content_area;
 mod date_input;
 mod date_range_input;
@@ -31,6 +34,7 @@ mod focus;
 mod form;
 mod forms;
 mod header_bar;
+mod histogram_range;
 mod infinite;
 mod menu;
 mod meta_component;
@@ -61,6 +65,7 @@ mod spoiler;
 mod status_page;
 mod stepper;
 mod switch;
+mod synced_text;
 mod tabs;
 mod timeline;
 mod toast;
@@ -73,9 +78,14 @@ pub use crate::primitives::anchor::{
     self, Align as AnchorAlign, Dim, Placed, Placement, Side, place,
 };
 pub use crate::primitives::calendar::{CalendarView, Dir as NavDir, Level};
+pub use crate::primitives::chart::{
+    Series, hierarchy::Node as TreeValue, sankey::Link as SankeyLink, shape::Curve,
+    stack::Offset as StackOffset,
+};
 pub use crate::primitives::color_picker::{Format as ColorFormat, Hsva};
 pub use crate::primitives::date::{Date, days_in_month, is_leap_year, validate as validate_date};
 pub use crate::primitives::form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
+pub use crate::primitives::histogram::Histogram;
 pub use crate::primitives::meta_parent::Registry as MetaRegistry;
 pub use crate::primitives::meta_parent::{ChildEvent, Emitted};
 pub use crate::primitives::numeric::{Axis as DragAxis, Decimal, Numeric, Scrub};
@@ -87,6 +97,7 @@ pub use crate::primitives::splitter::{
 };
 pub use crate::primitives::spoiler::{Event as SpoilerEvent, SpoilerState};
 pub use crate::primitives::stepper::{Fill as StepperFill, Status as StepperStatus, StepperState};
+pub use crate::primitives::synced::{self, Line as SyncedLine};
 pub use crate::primitives::tree::{
     Effect as TreeEffect, Event as TreeEvent, Position as DropPosition, TreeNode, TreeState,
 };
@@ -110,8 +121,13 @@ pub use button::{
     toggle_group,
 };
 pub use carousel::{Carousel, CarouselIndicator, carousel};
+pub use chart::{
+    BarChart, BarLayout, Funnel, FunnelShape, LineChart, PieChart, Sankey, Sunburst, format_value,
+};
 pub use collapsible::Collapsible;
 pub use color_picker::{ColorInput, ColorPicker};
+pub use composed_component::{ComposeAxis, ComposedComponent};
+pub use container::{Container, ContainerSize};
 pub use content_area::{ContentArea, content_area};
 pub use date_input::DateInput;
 pub use date_range_input::DateRangeInput;
@@ -135,9 +151,12 @@ pub use forms::{
     text_view,
 };
 pub use header_bar::{HeaderBar, WindowControls, header_bar, window_title};
+pub use histogram_range::HistogramRange;
 pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent};
 pub use infinite::{InfiniteList, LoadTrigger};
-pub use menu::{Menu, MenuButton, MenuItem, MenuPresentation, menu_button, primary_menu};
+pub use menu::{
+    Menu, MenuButton, MenuIconSide, MenuItem, MenuPresentation, menu_button, primary_menu,
+};
 pub use meta_component::MetaComponent;
 pub use meta_parent_component::{MetaParentComponent, Reporter};
 pub use motion::{
@@ -185,6 +204,7 @@ pub use spoiler::{Spoiler, SpoilerList};
 pub use status_page::{Card, Page, StatusPage, bin, card, clamp, page, status_page};
 pub use stepper::{Stepper, StepperIconPosition, StepperOrientation, StepperSize, StepperStep};
 pub use switch::{Switch, switch};
+pub use synced_text::{SyncedText, follow_synced_text};
 pub use tabs::{TabItem, Tabs, TabsVariant};
 pub use timeline::{Timeline, TimelineAlign, TimelineItem};
 pub use toast::{
