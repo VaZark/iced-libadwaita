@@ -19,13 +19,14 @@ use super::{Element, flat_button, typography as ty};
 use crate::primitives::sorting::{Direction, SortState};
 use crate::style::text as st;
 use crate::{Icon, Metrics};
+use iced::alignment::Horizontal;
 use iced::widget::{container, row, space};
 use iced::{Alignment, Length, Padding};
 
 enum Cell<K> {
     Space(Length),
-    Plain(String, Length),
-    Sortable(K, String, Length),
+    Plain(String, Length, Horizontal),
+    Sortable(K, String, Length, Horizontal),
 }
 
 /// See the [module](self).
@@ -56,19 +57,37 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> SortHeader<'a, K, M> {
     }
     /// A sortable column: its `key`, label and width.
     pub fn column(mut self, key: K, label: impl Into<String>, width: impl Into<Length>) -> Self {
-        self.cells
-            .push(Cell::Sortable(key, label.into(), width.into()));
+        self.cells.push(Cell::Sortable(
+            key,
+            label.into(),
+            width.into(),
+            Horizontal::Left,
+        ));
         self
     }
     /// A label that does not sort.
     pub fn label(mut self, label: impl Into<String>, width: impl Into<Length>) -> Self {
-        self.cells.push(Cell::Plain(label.into(), width.into()));
+        self.cells
+            .push(Cell::Plain(label.into(), width.into(), Horizontal::Left));
+        self
+    }
+    /// Aligns the label of the column or label just added: `Right` over right-aligned cells (a
+    /// time, a count).
+    pub fn align(mut self, align: Horizontal) -> Self {
+        if let Some(Cell::Plain(_, _, a) | Cell::Sortable(_, _, _, a)) = self.cells.last_mut() {
+            *a = align;
+        }
         self
     }
     /// An empty cell, over a picture or a menu.
     pub fn space(mut self, width: impl Into<Length>) -> Self {
         self.cells.push(Cell::Space(width.into()));
         self
+    }
+    /// How many cells the header has.
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.cells.len()
     }
     /// The padding around the header; match the rows'.
     pub fn padding(mut self, padding: impl Into<Padding>) -> Self {
@@ -97,10 +116,12 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<SortHeader<'a, K, M>> fo
         for cell in h.cells {
             line = match cell {
                 Cell::Space(w) => line.push(space().width(w)),
-                Cell::Plain(label, w) => {
-                    line.push(container(ty::caption(label).style(st::dim)).width(w))
-                }
-                Cell::Sortable(key, label, w) => {
+                Cell::Plain(label, w, align) => line.push(
+                    container(ty::caption(label).style(st::dim))
+                        .width(w)
+                        .align_x(align),
+                ),
+                Cell::Sortable(key, label, w, align) => {
                     let active = h.state.direction(&key).is_some();
                     let icon = arrow(h.state.direction(&key));
                     let label = if active {
@@ -119,7 +140,8 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<SortHeader<'a, K, M>> fo
                             .padding(0)
                             .on_press(msg),
                         )
-                        .width(w),
+                        .width(w)
+                        .align_x(align),
                     )
                 }
             };
@@ -147,6 +169,6 @@ mod tests {
             .column(1, "Title", Length::Fill)
             .label("Plain", Length::Fixed(40.0));
         assert_eq!(h.cells.len(), 3);
-        assert!(matches!(h.cells[1], Cell::Sortable(1, _, _)));
+        assert!(matches!(h.cells[1], Cell::Sortable(1, _, _, _)));
     }
 }

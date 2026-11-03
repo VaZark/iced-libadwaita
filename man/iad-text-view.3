@@ -9,6 +9,8 @@ text_view(content: &'a text_editor::Content)
 .SH DESCRIPTION
 .PP
 \fBGtkTextView\fR: a multi\-line editor over a \fBtext_editor::Content\fR. Without \fBon_action\fR it is read\-only and drawn disabled.
+.PP
+\fBFixed or growing.\fR By default it is a fixed \fBheight\fR and scrolls. Give it a maximum, \fBmax_lines\fR or \fBmax_height\fR, and it becomes a textarea that \fBgrows with its text\fR from \fBmin_lines\fR (default one line) up to that maximum, then scrolls. Without a maximum it never grows: an unbounded textarea would push the rest of the page away without limit.
 .SH FUNCTIONS
 .TP
 .B text_view(content: &'a text_editor::Content)
@@ -18,6 +20,16 @@ Builder methods, chained after the constructor.
 .B \&.placeholder(p: impl Into<String>)
 .TP
 .B \&.height(h: impl Into<Length>)
+The fixed height of a view that does not grow (default 90). Ignored once a maximum is set.
+.TP
+.B \&.min_lines(lines: usize)
+The fewest lines a growing view shows, however short its text (default 1). Only applies with a maximum.
+.TP
+.B \&.max_lines(lines: usize)
+Makes the view grow with its text up to this many lines, then scroll.
+.TP
+.B \&.max_height(px: f32)
+Makes the view grow with its text up to this height in px, then scroll. With \fBmax_lines\fR too, the smaller of the two applies.
 .SH EVENTS
 Callbacks that produce the application's message.
 .TP

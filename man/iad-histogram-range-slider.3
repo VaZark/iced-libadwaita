@@ -4,7 +4,7 @@
 histogram_range_slider \- See the module
 .SH SYNOPSIS
 .nf
-HistogramRangeSlider::new(histogram: &'a Histogram, range: (f32, f32), on_change: impl Fn((f32, f32)) \-> M + 'a)
+HistogramRangeSlider::new(histogram: impl Into<Cow<'a, Histogram>>, range: (f32, f32), on_change: impl Fn((f32, f32)) \-> M + 'a)
 .fi
 .SH DESCRIPTION
 .PP
@@ -21,8 +21,8 @@ HistogramRangeSlider::new(&self.bpm, self.range, Msg::Range).step(1.0)
 .fi
 .SH CONSTRUCTORS
 .TP
-.B HistogramRangeSlider::new(histogram: &'a Histogram, range: (f32, f32), on_change: impl Fn((f32, f32)) \-> M + 'a)
-\fBrange\fR is the chosen \fB(lo, hi)\fR within the histogram's \fBmin..max\fR; \fBon_change\fR gets the next range from whichever part the user touched.
+.B HistogramRangeSlider::new(histogram: impl Into<Cow<'a, Histogram>>, range: (f32, f32), on_change: impl Fn((f32, f32)) \-> M + 'a)
+\fBhistogram\fR is borrowed (\fB&hist\fR) or owned (\fBHistogram::from_counts(..)\fR built in the view, for one that depends on a filter). \fBrange\fR is the chosen \fB(lo, hi)\fR within its \fBmin..max\fR; \fBon_change\fR gets the next range from whichever part the user touched.
 .SH PROPERTIES
 Builder methods, chained after the constructor.
 .TP

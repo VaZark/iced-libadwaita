@@ -22,19 +22,30 @@
 //!     .on_press(Msg::Play(track.id))
 //! ```
 
-use super::{Element, typography as ty};
+use super::{Element, SortHeader, typography as ty};
 use crate::Metrics;
+use crate::primitives::sorting::SortState;
 use crate::style::button as sb;
 use crate::style::text as st;
+use iced::alignment::Horizontal;
 use iced::widget::{button, column, container, row};
 use iced::{Alignment, Length, Padding};
+
+/// The usual width of a picture (a cover, an avatar) at the start of a row.
+pub const PICTURE_WIDTH: f32 = 40.0;
+/// The usual width of a time or a count column.
+pub const TIME_WIDTH: f32 = 44.0;
+/// The usual width of the trailing part: a menu button.
+pub const SUFFIX_WIDTH: f32 = 36.0;
 
 /// See the [module](self).
 pub struct MediaRow<'a, M> {
     title: String,
     subtitle: Option<String>,
     picture: Option<Element<'a, M>>,
-    columns: Vec<(Length, Element<'a, M>)>,
+    columns: Vec<(Length, Horizontal, Element<'a, M>)>,
+    /// The widths and alignments a shared [`MediaColumns`] gave, for [`cell`](Self::cell).
+    spec: Vec<(Length, Horizontal)>,
     suffix: Vec<Element<'a, M>>,
     compact: bool,
     height: Length,
@@ -49,6 +60,7 @@ impl<'a, M: 'a> MediaRow<'a, M> {
             subtitle: None,
             picture: None,
             columns: Vec::new(),
+            spec: Vec::new(),
             suffix: Vec::new(),
             compact: false,
             height: Length::Shrink,
@@ -68,7 +80,26 @@ impl<'a, M: 'a> MediaRow<'a, M> {
     }
     /// An extra cell of `width` after the title: an album, a BPM, a time. Add as many as needed.
     pub fn column(mut self, width: impl Into<Length>, cell: impl Into<Element<'a, M>>) -> Self {
-        self.columns.push((width.into(), cell.into()));
+        self.columns
+            .push((width.into(), Horizontal::Left, cell.into()));
+        self
+    }
+    /// Aligns the cell just added within its width: `Right` for a time or a count.
+    pub fn align(mut self, align: Horizontal) -> Self {
+        if let Some(last) = self.columns.last_mut() {
+            last.1 = align;
+        }
+        self
+    }
+    /// The next extra cell, in the width and alignment the shared [`MediaColumns`] gave this
+    /// column (see [`MediaColumns::row`]). Cells are given in the columns' order.
+    pub fn cell(mut self, cell: impl Into<Element<'a, M>>) -> Self {
+        let (width, align) = self
+            .spec
+            .get(self.columns.len())
+            .copied()
+            .unwrap_or((Length::Shrink, Horizontal::Left));
+        self.columns.push((width, align, cell.into()));
         self
     }
     /// A trailing part: a menu button, a toggle. Add as many as needed.
@@ -116,8 +147,8 @@ impl<'a, M: Clone + 'a> From<MediaRow<'a, M>> for Element<'a, M> {
             }
             line = line.push(text.width(Length::FillPortion(3)));
         }
-        for (width, cell) in r.columns {
-            line = line.push(container(cell).width(width));
+        for (width, align, cell) in r.columns {
+            line = line.push(container(cell).width(width).align_x(align));
         }
         for part in r.suffix {
             line = line.push(part);
@@ -141,6 +172,155 @@ impl<'a, M: Clone + 'a> From<MediaRow<'a, M>> for Element<'a, M> {
     }
 }
 
+#[derive(Clone)]
+struct Def<K> {
+    key: Option<K>,
+    label: String,
+    width: Length,
+    align: Horizontal,
+}
+
+/// The columns of a media list, **written once** for both the [`SortHeader`] and the rows, so the
+/// labels sit over their cells without matching widths by hand.
+///
+/// ```ignore
+/// let cols = MediaColumns::new()
+///     .picture(true)                                   // PICTURE_WIDTH, over the cover
+///     .title(Col::Title, "Title")
+///     .column(Col::Album, "Album", Length::FillPortion(2))
+///     .column(Col::Time, "Time", Length::Fixed(TIME_WIDTH)).align(Horizontal::Right)
+///     .suffix(true);                                   // SUFFIX_WIDTH, over the menu
+///
+/// cols.header(&self.sort, Msg::Sort)                   // the header
+/// cols.row(&t.title).subtitle(&t.artist)               // each row, cells in order
+///     .picture(cover).cell(caption(&t.album)).cell(caption(t.time())).suffix(menu)
+/// ```
+#[derive(Clone)]
+pub struct MediaColumns<K> {
+    title: Option<(Option<K>, String)>,
+    subtitle: Option<(Option<K>, String)>,
+    cols: Vec<Def<K>>,
+    picture: bool,
+    suffix: bool,
+    compact: bool,
+}
+
+impl<K> Default for MediaColumns<K> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<K> MediaColumns<K> {
+    pub fn new() -> Self {
+        Self {
+            title: None,
+            subtitle: None,
+            cols: Vec::new(),
+            picture: false,
+            suffix: false,
+            compact: false,
+        }
+    }
+    /// The title column, sortable under `key`.
+    pub fn title(mut self, key: K, label: impl Into<String>) -> Self {
+        self.title = Some((Some(key), label.into()));
+        self
+    }
+    /// The subtitle column, shown in the header only in [compact](Self::compact) mode (where the
+    /// subtitle has a column of its own). Sortable under `key`.
+    pub fn subtitle(mut self, key: K, label: impl Into<String>) -> Self {
+        self.subtitle = Some((Some(key), label.into()));
+        self
+    }
+    /// An extra column after the title, sortable under `key`.
+    pub fn column(mut self, key: K, label: impl Into<String>, width: impl Into<Length>) -> Self {
+        self.cols.push(Def {
+            key: Some(key),
+            label: label.into(),
+            width: width.into(),
+            align: Horizontal::Left,
+        });
+        self
+    }
+    /// An extra column whose label does not sort.
+    pub fn label(mut self, label: impl Into<String>, width: impl Into<Length>) -> Self {
+        self.cols.push(Def {
+            key: None,
+            label: label.into(),
+            width: width.into(),
+            align: Horizontal::Left,
+        });
+        self
+    }
+    /// Aligns the column just added, header label and cells alike.
+    pub fn align(mut self, align: Horizontal) -> Self {
+        if let Some(last) = self.cols.last_mut() {
+            last.align = align;
+        }
+        self
+    }
+    /// Room at the start for a picture ([`PICTURE_WIDTH`]); ignored in compact mode.
+    pub fn picture(mut self, picture: bool) -> Self {
+        self.picture = picture;
+        self
+    }
+    /// Room at the end for a trailing part ([`SUFFIX_WIDTH`]).
+    pub fn suffix(mut self, suffix: bool) -> Self {
+        self.suffix = suffix;
+        self
+    }
+    /// No picture, the subtitle in a column of its own.
+    pub fn compact(mut self, compact: bool) -> Self {
+        self.compact = compact;
+        self
+    }
+    /// A row in these columns: compact as the columns are, and ready for [`MediaRow::cell`].
+    pub fn row<'a, M: 'a>(&self, title: impl Into<String>) -> MediaRow<'a, M> {
+        let mut r = MediaRow::new(title).compact(self.compact);
+        r.spec = self.cols.iter().map(|c| (c.width, c.align)).collect();
+        r
+    }
+}
+
+impl<K: PartialEq + Clone> MediaColumns<K> {
+    /// The header over these columns, in the same order and widths as the rows. `on_sort` gets
+    /// the key of a pressed label.
+    pub fn header<'a, M: Clone + 'a>(
+        &self,
+        state: &'a SortState<K>,
+        on_sort: impl Fn(K) -> M + 'a,
+    ) -> SortHeader<'a, K, M>
+    where
+        K: 'a,
+    {
+        let mut h = SortHeader::new(state, on_sort);
+        if self.picture && !self.compact {
+            h = h.space(Length::Fixed(PICTURE_WIDTH));
+        }
+        let put = |h: SortHeader<'a, K, M>, def: &(Option<K>, String), w: Length| match &def.0 {
+            Some(k) => h.column(k.clone(), def.1.clone(), w),
+            None => h.label(def.1.clone(), w),
+        };
+        if let Some(t) = &self.title {
+            h = put(h, t, Length::FillPortion(3));
+        }
+        if self.compact
+            && let Some(s) = &self.subtitle
+        {
+            h = put(h, s, Length::FillPortion(2));
+        }
+        for c in &self.cols {
+            let def = (c.key.clone(), c.label.clone());
+            h = put(h, &def, c.width).align(c.align);
+        }
+        if self.suffix {
+            h = h.space(Length::Fixed(SUFFIX_WIDTH));
+        }
+        h
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,5 +336,38 @@ mod tests {
         assert_eq!(r.columns.len(), 1);
         assert_eq!(r.suffix.len(), 1);
         assert!(r.compact && r.height == Length::Fill && r.subtitle.as_deref() == Some("Artist"));
+    }
+
+    #[test]
+    fn rows_take_their_widths_from_the_shared_columns() {
+        let cols = MediaColumns::<u8>::new()
+            .title(0, "Title")
+            .column(1, "Album", Length::FillPortion(2))
+            .column(2, "Time", Length::Fixed(TIME_WIDTH))
+            .align(Horizontal::Right);
+        let r: MediaRow<'_, ()> = cols
+            .row("Song")
+            .cell(iced::widget::space())
+            .cell(iced::widget::space());
+        assert_eq!(
+            r.columns.iter().map(|c| (c.0, c.1)).collect::<Vec<_>>(),
+            vec![
+                (Length::FillPortion(2), Horizontal::Left),
+                (Length::Fixed(TIME_WIDTH), Horizontal::Right)
+            ]
+        );
+    }
+
+    #[test]
+    fn the_header_leaves_room_for_the_picture_and_the_suffix() {
+        let state = SortState::<u8>::new();
+        let cols = MediaColumns::<u8>::new()
+            .picture(true)
+            .title(0, "Title")
+            .suffix(true);
+        // space, title, space
+        assert_eq!(cols.header::<()>(&state, |_| ()).len(), 3);
+        // No picture in compact mode.
+        assert_eq!(cols.compact(true).header::<()>(&state, |_| ()).len(), 2);
     }
 }

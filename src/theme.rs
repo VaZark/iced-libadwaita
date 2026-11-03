@@ -44,6 +44,10 @@ pub struct Theme {
     /// A color the surfaces are tinted with, its alpha the strength; opt-in, `None` (the default)
     /// is no tint ([`Semantic::apply_tint`]). The surfaces keep their own alpha.
     pub tint: Option<iced::Color>,
+    /// The app's theme tokens (see [`theme_config`](crate::theme_config)): its own colors and sizes,
+    /// readable from a style function through [`token_color`](Self::token_color) and friends.
+    /// Empty until [`with_theme_config`](Self::with_theme_config).
+    pub tokens: std::sync::Arc<crate::theme_config::Tokens>,
     name: String,
     iced: iced::Theme,
 }
@@ -120,8 +124,45 @@ impl Theme {
             auto_contrast: true,
             transparency: 0.0,
             tint: None,
+            tokens: Default::default(),
             name,
         }
+    }
+
+    /// Applies the app's [theme config](crate::theme_config): the palette, metric and typography
+    /// tokens that were set (hardcoded, in the app theme, or in the toolkit theme), over what the
+    /// desktop config gave. Radii are **not** clamped to the HIG maxima: a different vibe may be
+    /// rounder or squarer. The theme also carries every token, so a style function can read the
+    /// app's own with [`token_color`](Self::token_color).
+    #[must_use]
+    pub fn with_theme_config(mut self, cfg: &crate::theme_config::ThemeConfig) -> Self {
+        let scheme = self.scheme;
+        self = self.with_palette(|p| cfg.apply_to_palette(p, scheme));
+        let mut metrics = self.metrics;
+        cfg.apply_to_metrics(&mut metrics);
+        self.metrics = metrics;
+        if let Some(t) = cfg.typography() {
+            self.typography = t;
+        }
+        self.tokens = std::sync::Arc::new(cfg.tokens());
+        self
+    }
+
+    /// An app theme token that is a color (see [`with_theme_config`](Self::with_theme_config)).
+    pub fn token_color(&self, section: &str, key: &str) -> Option<iced::Color> {
+        self.tokens.color(section, key)
+    }
+    /// An app theme token that is a number: a size, a padding, a factor.
+    pub fn token_number(&self, section: &str, key: &str) -> Option<f32> {
+        self.tokens.number(section, key)
+    }
+    /// An app theme token that is a bool.
+    pub fn token_bool(&self, section: &str, key: &str) -> Option<bool> {
+        self.tokens.bool(section, key)
+    }
+    /// An app theme token that is text.
+    pub fn token_text(&self, section: &str, key: &str) -> Option<&str> {
+        self.tokens.text(section, key)
     }
 
     /// Switches the system accent color.

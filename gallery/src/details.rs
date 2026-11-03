@@ -349,8 +349,25 @@ impl Gallery {
                     .on_action(Message::EditorEmpty)
                     .into()]);
                 let readonly = stack(sp, vec![w::text_view(&self.editor_ro).into()]);
+                let grow_lines = stack(sp, vec![w::text_view(&self.editor_grow)
+                    .min_lines(1)
+                    .max_lines(6)
+                    .on_action(Message::EditorGrow)
+                    .into()]);
+                let grow_px = stack(sp, vec![w::text_view(&self.editor_grow_px)
+                    .placeholder("Grows to 120 px, starting at two lines")
+                    .min_lines(2)
+                    .max_height(120.0)
+                    .on_action(Message::EditorGrowPx)
+                    .into()]);
                 column![
                     g("Editable").push(w::card(editable)),
+                    g("Grows to a maximum number of lines")
+                        .description("A maximum makes it a textarea: it grows with its text, then scrolls. Without one it stays a fixed height.")
+                        .push(w::card(grow_lines)),
+                    g("Grows to a maximum height")
+                        .description("`.max_height(px)`, from `.min_lines(2)`. With both a maximum in lines and in pixels, the smaller applies.")
+                        .push(w::card(grow_px)),
                     g("Placeholder").push(w::card(placeholder)),
                     g("Read-only (disabled)").push(w::card(readonly)),
                 ]
@@ -372,12 +389,18 @@ impl Gallery {
             Detail::DateInput => self.inline(Inline::DateInput),
             Detail::RangeSlider => self.inline(Inline::RangeSlider),
             Detail::DateRange => self.inline(Inline::DateRange),
-            Detail::MetaComponent => self.sections.meta_view(m).map(Message::Sections),
+            Detail::MetaComponent => column![
+                self.sections.meta_view(m).map(Message::Sections),
+                self.upstream.flow_view(m).map(Message::Upstream),
+            ]
+            .spacing(m.group_spacing)
+            .into(),
             Detail::MetaParent => self.reorder.parent_view(m).map(Message::Reorder),
             Detail::Composed => self.composed.view(m).map(Message::Composed),
             Detail::VirtualList => self.upstream.virtual_view(m).map(Message::Upstream),
             Detail::EditableText => self.upstream.editable_view(m).map(Message::Upstream),
             Detail::PageHeader => self.upstream.header_view(m).map(Message::Upstream),
+            Detail::ThemeConfig => self.theme_cfg.view(m).map(Message::ThemeCfg),
             Detail::CardGrid => self.upstream.grid_view(m).map(Message::Upstream),
             Detail::SectionHeading => self.upstream.heading_view(m).map(Message::Upstream),
             Detail::MediaRow => self.upstream.media_view(m).map(Message::Upstream),
@@ -423,10 +446,15 @@ impl Gallery {
             // Shown by its playground (see `plays.rs`).
             Detail::Tabs
             | Detail::Container
+            | Detail::ColorHelpers
             | Detail::IconToggle
             | Detail::LineChart
             | Detail::BarChart
             | Detail::PieChart
+            | Detail::DonutChart
+            | Detail::RadarChart
+            | Detail::BubbleChart
+            | Detail::ComboChart
             | Detail::Funnel
             | Detail::Sankey
             | Detail::Sunburst

@@ -173,6 +173,8 @@ pub struct Chip<'a, M> {
     icon: Option<IconSource>,
     color: Option<iced::Color>,
     on_color: Option<iced::Color>,
+    text_color: Option<iced::Color>,
+    min_contrast: f32,
     size: ChipSize,
     role: Role,
     selected: bool,
@@ -190,6 +192,8 @@ impl<'a, M> Chip<'a, M> {
             icon: None,
             color: None,
             on_color: None,
+            text_color: None,
+            min_contrast: 4.5,
             size: ChipSize::Medium,
             role: Role::Neutral,
             selected: false,
@@ -209,6 +213,19 @@ impl<'a, M> Chip<'a, M> {
     /// place of the one picked for contrast (white on every tag, for a consistent look).
     pub fn on_color(mut self, color: iced::Color) -> Self {
         self.on_color = Some(color);
+        self
+    }
+    /// The text and icon color of an unselected chip that has its own [`color`](Self::color), in
+    /// place of that color itself. Used as given: no [contrast](Self::min_contrast) is enforced.
+    pub fn text_color(mut self, color: iced::Color) -> Self {
+        self.text_color = Some(color);
+        self
+    }
+    /// The least contrast ratio an unselected chip's own-colored text keeps against the page
+    /// (default 4.5, the WCAG minimum for text). A color too close to the page is moved towards
+    /// white or black until it reads; `0.0` keeps the color exactly as given.
+    pub fn min_contrast(mut self, ratio: f32) -> Self {
+        self.min_contrast = ratio.max(0.0);
         self
     }
     /// The size: [`ChipSize::Small`], `Medium` (default) or `Large`.
@@ -252,26 +269,40 @@ impl<'a, M> Chip<'a, M> {
     }
 }
 
+/// The colors a chip was given of its own.
+#[derive(Clone, Copy)]
+struct OwnColor {
+    color: iced::Color,
+    on: Option<iced::Color>,
+    text: Option<iced::Color>,
+    min_contrast: f32,
+}
+
 /// Background and text colors of a chip.
 fn chip_colors(
     t: &Theme,
     role: Role,
-    custom: Option<(iced::Color, Option<iced::Color>)>,
+    custom: Option<OwnColor>,
     selected: bool,
     disabled: bool,
 ) -> (iced::Color, iced::Color) {
-    let (mut bg, mut fg) = if let Some((c, on)) = custom {
+    let (mut bg, mut fg) = if let Some(own) = custom {
+        let c = own.color;
         if selected {
-            (c, on.unwrap_or_else(|| crate::color::readable_on(c)))
+            (c, own.on.unwrap_or_else(|| crate::color::readable_on(c)))
         } else {
-            // The text is the chip's own color, pulled away from the page if it is too close
-            // to it to read (a dark tag color on a dark page).
+            // The text is the chip's own color (or the one given), pulled away from the page
+            // if it is too close to read (a dark tag color on a dark page).
             let surface = t.semantic.window.bg;
             let tinted = crate::color::mix(surface, c, 0.18);
-            (
-                crate::color::alpha(c, 0.18),
-                crate::color::ensure_contrast(c, tinted, 4.5),
-            )
+            let text = match own.text {
+                Some(text) => text,
+                None if own.min_contrast > 0.0 => {
+                    crate::color::ensure_contrast(c, tinted, own.min_contrast)
+                }
+                None => c,
+            };
+            (crate::color::alpha(c, 0.18), text)
         }
     } else if selected {
         let s = t.semantic.swatch(role).surface();
@@ -295,7 +326,12 @@ impl<'a, M: Clone + 'a> From<Chip<'a, M>> for Element<'a, M> {
     fn from(c: Chip<'a, M>) -> Self {
         let m = c.metrics;
         let (role, selected, disabled) = (c.role, c.selected, c.disabled);
-        let custom = c.color.map(|col| (col, c.on_color));
+        let custom = c.color.map(|color| OwnColor {
+            color,
+            on: c.on_color,
+            text: c.text_color,
+            min_contrast: c.min_contrast,
+        });
         let (text_size, icon_size, pad_y, pad_x) = c.size.dims(&m);
         let tint = move |t: &Theme| chip_colors(t, role, custom, selected, disabled).1;
         // Inside the pill the buttons are transparent; hover is a faint layer of the text color.
@@ -374,5 +410,40 @@ mod tests {
             .color(iced::Color::from_rgb(1.0, 0.0, 0.0))
             .size(30.0);
         assert!(b.color.is_some() && b.size == 30.0);
+    }
+
+    fn own(min_contrast: f32, text: Option<iced::Color>) -> Option<OwnColor> {
+        Some(OwnColor {
+            color: crate::color::hex(0x3b4a7a),
+            on: None,
+            text,
+            min_contrast,
+        })
+    }
+
+    #[test]
+    fn a_dark_tag_color_is_made_readable_unless_told_otherwise() {
+        let dark = Theme::dark();
+        let page = dark.semantic.window.bg;
+        let ratio = |fg| {
+            crate::color::contrast_ratio(
+                fg,
+                crate::color::mix(page, crate::color::hex(0x3b4a7a), 0.18),
+            )
+        };
+        let (_, fixed) = chip_colors(&dark, Role::Neutral, own(4.5, None), false, false);
+        assert!(ratio(fixed) >= 4.5);
+        // Contrast off: the color exactly as given.
+        let (_, raw) = chip_colors(&dark, Role::Neutral, own(0.0, None), false, false);
+        assert_eq!(raw, crate::color::hex(0x3b4a7a));
+        // A text color of its own is used as given.
+        let (_, given) = chip_colors(
+            &dark,
+            Role::Neutral,
+            own(4.5, Some(iced::Color::WHITE)),
+            false,
+            false,
+        );
+        assert_eq!(given, iced::Color::WHITE);
     }
 }

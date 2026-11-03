@@ -1,0 +1,30 @@
+.TH IAD\-THEME.CONF 5 "2026-11-03" "iced-adaptive-design 0.1.0" "iced-adaptive-design Manual"
+.SH NAME
+theme.conf \- the theme files of an iad application and of the toolkit
+.SH DESCRIPTION
+The desktop configuration (\fBiad\-desktop.conf\fR(5)) is shared by every application. An application that needs its own look (its own colors, paddings and radii, tokens for objects only it has) uses theme files, in the same key\-file format.
+.PP
+Every setting is a \fItoken\fR: a typed value (a color \fI#rrggbb\fR or \fI#rrggbbaa\fR, a number, a bool or text) under a section and a key. A token only takes effect when it is set.
+.SH FILES
+Highest priority first:
+.IP 1. 3
+\fBHardcoded\fR in the application's code (\fBBuilder::hardcode\fR). Extremely discouraged: it cannot be changed without a rebuild, and every one is reported on stderr at startup.
+.IP 2. 3
+The application theme file, \fI$XDG_CONFIG_HOME/<app\-id>/theme.conf\fR. The application declares its tokens and their defaults in a schema.
+.IP 3. 3
+The toolkit theme file, \fI$XDG_CONFIG_HOME/iced\-adaptive\-design/theme.conf\fR. The toolkit declares the tokens it understands, with its own values as defaults.
+.PP
+Below these, a token is its declared default, and the toolkit's look is what the desktop configuration makes of it.
+.PP
+A missing file is written from the declared defaults, every token commented out as \fI#key=default\fR under a description, so it documents the tokens and pins none of them. Uncomment a line to change it; delete the file to get a fresh one.
+.SH TOKENS
+.SS [colors] and [colors-dark]
+\fBaccent\fR, \fBwindow\-bg\fR, \fBwindow\-fg\fR, \fBview\-bg\fR, \fBview\-fg\fR, \fBcard\-bg\fR, \fBcard\-fg\fR, \fBheaderbar\-bg\fR, \fBheaderbar\-fg\fR, \fBsidebar\-bg\fR, \fBsidebar\-fg\fR, \fBpopover\-bg\fR, \fBpopover\-fg\fR, \fBdialog\-bg\fR, \fBdialog\-fg\fR, \fBsuccess\fR, \fBwarning\fR, \fBdestructive\fR, \fBerror\fR. \fB[colors\-dark]\fR is read over \fB[colors]\fR on a dark scheme.
+.SS [metrics]
+Numbers in px: \fBspace\-xs\fR to \fBspace\-xl\fR, \fBradius\-s\fR, \fBradius\-m\fR, \fBradius\-l\fR, \fBradius\-menu\fR, \fBradius\-popover\fR, \fBradius\-toast\fR, \fBradius\-window\fR, \fBbutton\-padding\-y\fR and \fB\-x\fR, \fBentry\-padding\-y\fR and \fB\-x\fR, \fBrow\-padding\-y\fR and \fB\-x\fR, \fBpage\-padding\-y\fR and \fB\-x\fR, \fBcard\-padding\fR, \fBdialog\-padding\fR, \fBpopover\-padding\fR, \fBbutton\-min\-height\fR, \fBentry\-min\-height\fR, \fBrow\-min\-height\fR, \fBborder\-width\fR, \fBicon\-size\fR, \fBgroup\-spacing\fR, \fBclamp\-maximum\fR, \fBheaderbar\-height\fR, \fBsidebar\-width\fR. Radii are not clamped to the HIG maxima.
+.SS [typography]
+\fBtext\-scale\fR multiplies every text size; \fBbase\-size\fR is the body size in px before the scale.
+.SS Other sections
+Whatever the application declares for its own objects.
+.SH SEE ALSO
+\fBiad\-desktop.conf\fR(5), \fBiad\fR(7)

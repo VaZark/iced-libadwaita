@@ -233,13 +233,26 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
 
 // --------------------------------------------------------------- TextView
 
+/// The text size of a [`TextView`] and the line height that goes with it.
+const TEXT_SIZE: f32 = 16.0;
+const LINE_HEIGHT: f32 = TEXT_SIZE * 1.3;
+
 /// `GtkTextView`: a multi-line editor over a [`text_editor::Content`]. Without
 /// [`on_action`](TextView::on_action) it is read-only and drawn disabled.
+///
+/// **Fixed or growing.** By default it is a fixed [`height`](TextView::height) and scrolls. Give it
+/// a maximum, [`max_lines`](TextView::max_lines) or [`max_height`](TextView::max_height), and it
+/// becomes a textarea that **grows with its text** from [`min_lines`](TextView::min_lines)
+/// (default one line) up to that maximum, then scrolls. Without a maximum it never grows: an unbounded textarea
+/// would push the rest of the page away without limit.
 pub struct TextView<'a, M> {
     content: &'a text_editor::Content,
     on_action: Option<Box<dyn Fn(text_editor::Action) -> M + 'a>>,
     placeholder: Option<String>,
     height: Length,
+    min_lines: usize,
+    max_lines: Option<usize>,
+    max_height: Option<f32>,
     metrics: Metrics,
 }
 
@@ -249,6 +262,9 @@ pub fn text_view<'a, M>(content: &'a text_editor::Content) -> TextView<'a, M> {
         on_action: None,
         placeholder: None,
         height: Length::Fixed(90.0),
+        min_lines: 1,
+        max_lines: None,
+        max_height: None,
         metrics: Metrics::desktop(),
     }
 }
@@ -262,18 +278,57 @@ impl<'a, M> TextView<'a, M> {
         self.placeholder = Some(p.into());
         self
     }
+    /// The fixed height of a view that does not grow (default 90). Ignored once a maximum is set.
     pub fn height(mut self, h: impl Into<Length>) -> Self {
         self.height = h.into();
         self
+    }
+    /// The fewest lines a growing view shows, however short its text (default 1). Only applies
+    /// with a maximum.
+    pub fn min_lines(mut self, lines: usize) -> Self {
+        self.min_lines = lines.max(1);
+        self
+    }
+    /// Makes the view grow with its text up to this many lines, then scroll.
+    pub fn max_lines(mut self, lines: usize) -> Self {
+        self.max_lines = Some(lines.max(1));
+        self
+    }
+    /// Makes the view grow with its text up to this height in px, then scroll. With
+    /// [`max_lines`](Self::max_lines) too, the smaller of the two applies.
+    pub fn max_height(mut self, px: f32) -> Self {
+        self.max_height = Some(px.max(1.0));
+        self
+    }
+
+    /// The `(min, max)` height in px of a growing view, or `None` for a fixed one.
+    fn growth(&self) -> Option<(f32, f32)> {
+        if self.max_lines.is_none() && self.max_height.is_none() {
+            return None;
+        }
+        let pad = self.metrics.entry_padding.y();
+        let lines_px = |n: usize| n as f32 * LINE_HEIGHT + pad;
+        let min = lines_px(self.min_lines);
+        let max = [self.max_lines.map(lines_px), self.max_height]
+            .into_iter()
+            .flatten()
+            .fold(f32::INFINITY, f32::min);
+        Some((min, max.max(min)))
     }
 }
 
 impl<'a, M: Clone + 'a> From<TextView<'a, M>> for Element<'a, M> {
     fn from(t: TextView<'a, M>) -> Self {
+        let growth = t.growth();
         let mut e = text_editor(t.content)
-            .height(t.height)
+            .size(TEXT_SIZE)
             .padding(t.metrics.entry_padding)
             .style(style::text_editor::default);
+        e = match growth {
+            // Fits its text, between the two bounds.
+            Some((min, max)) => e.height(Length::Shrink).min_height(min).max_height(max),
+            None => e.height(t.height),
+        };
         if let Some(p) = t.placeholder {
             e = e.placeholder(p);
         }
@@ -531,5 +586,39 @@ mod valid_tests {
         assert_eq!(EntryState::from(P::Valid), EntryState::Normal);
         assert_eq!(EntryState::from(P::Warning), EntryState::Warning);
         assert_eq!(EntryState::from(P::Invalid), EntryState::Error);
+    }
+}
+
+#[cfg(test)]
+mod text_view_tests {
+    use super::*;
+
+    fn view(content: &text_editor::Content) -> TextView<'_, ()> {
+        text_view(content)
+    }
+
+    #[test]
+    fn without_a_maximum_it_does_not_grow() {
+        let c = text_editor::Content::new();
+        assert_eq!(view(&c).min_lines(3).growth(), None);
+    }
+
+    #[test]
+    fn a_maximum_in_lines_or_pixels_makes_it_grow_between_bounds() {
+        let c = text_editor::Content::new();
+        let pad = Metrics::desktop().entry_padding.y();
+        let (min, max) = view(&c).min_lines(2).max_lines(6).growth().unwrap();
+        assert_eq!(min, 2.0 * LINE_HEIGHT + pad);
+        assert_eq!(max, 6.0 * LINE_HEIGHT + pad);
+        // In pixels.
+        assert_eq!(view(&c).max_height(120.0).growth().unwrap().1, 120.0);
+        // Both: the smaller applies.
+        assert_eq!(
+            view(&c).max_lines(10).max_height(100.0).growth().unwrap().1,
+            100.0
+        );
+        // The maximum is never below the minimum.
+        let (min, max) = view(&c).min_lines(5).max_height(10.0).growth().unwrap();
+        assert_eq!(max, min);
     }
 }

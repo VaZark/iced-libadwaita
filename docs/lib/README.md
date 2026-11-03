@@ -22,6 +22,7 @@ The design rationale (HIG notes, libadwaita sources) is for contributors. It is 
 - [choosing.md](choosing.md): which component for which job.
 - [layout.md](layout.md): pages, rows, the sidebar, adaptive layouts, docks.
 - [windows-and-menus.md](windows-and-menus.md): decorations, dialogs, overlays, docks, focus, separate windows, menus, shortcuts, toasts.
+- [theme-config.md](theme-config.md): per-app styling: hardcoded, app theme file, toolkit theme file, each regenerable.
 - [theming.md](theming.md): colors, accent, contrast, radii, shadows, density, transparency, tint.
 - [motion.md](motion.md): animation, reduced motion, ordered transitions.
 - [components.md](components.md): the shape every component has, forms, number input.

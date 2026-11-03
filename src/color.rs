@@ -143,6 +143,33 @@ pub fn readable_on(bg: Color) -> Color {
     color_contrast(bg, &[LIGHT_TEXT, DARK_TEXT])
 }
 
+/// Parses `#rgb`, `#rrggbb` or `#rrggbbaa` (the `#` is optional) into a color.
+pub fn parse(text: &str) -> Option<Color> {
+    let t = text.trim().trim_start_matches('#');
+    let nibble = |i: usize| u8::from_str_radix(&t[i..=i], 16).ok().map(|v| v * 17);
+    let byte = |i: usize| u8::from_str_radix(&t[i..i + 2], 16).ok();
+    if !t.is_ascii() {
+        return None;
+    }
+    let (r, g, b, a) = match t.len() {
+        3 => (nibble(0)?, nibble(1)?, nibble(2)?, 255),
+        6 => (byte(0)?, byte(2)?, byte(4)?, 255),
+        8 => (byte(0)?, byte(2)?, byte(4)?, byte(6)?),
+        _ => return None,
+    };
+    Some(Color::from_rgba8(r, g, b, a as f32 / 255.0))
+}
+
+/// The color as `#rrggbb`, or `#rrggbbaa` when it is not opaque.
+pub fn to_hex(c: Color) -> String {
+    let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    if c.a >= 1.0 {
+        format!("#{:02x}{:02x}{:02x}", b(c.r), b(c.g), b(c.b))
+    } else {
+        format!("#{:02x}{:02x}{:02x}{:02x}", b(c.r), b(c.g), b(c.b), b(c.a))
+    }
+}
+
 /// A color from the GNOME avatar palette for `index` (wraps). Stable: the same index is the
 /// same color, so a list keeps its colors from one run to the next.
 pub fn from_index(index: usize) -> Color {
@@ -193,6 +220,17 @@ pub fn ensure_contrast(fg: Color, bg: Color, min_ratio: f32) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn colors_parse_and_print_as_hex() {
+        assert_eq!(to_hex(parse("#3584e4").unwrap()), "#3584e4");
+        assert_eq!(to_hex(parse("3584E4").unwrap()), "#3584e4");
+        assert_eq!(to_hex(parse("#fff").unwrap()), "#ffffff");
+        assert_eq!(to_hex(parse("#3584e480").unwrap()), "#3584e480");
+        assert_eq!(parse("#12"), None);
+        assert_eq!(parse("not a color"), None);
+        assert_eq!(parse("#gg0000"), None);
+    }
 
     #[test]
     fn a_seed_is_always_the_same_color() {

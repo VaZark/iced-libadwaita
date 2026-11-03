@@ -298,6 +298,69 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             v.extend(cartesian_specs());
             v
         }
+        Detail::DonutChart => vec![
+            S::choice("rings", "Rings", &["One", "Two"], 0),
+            S::number("thickness", "Ring thickness (px)", 8.0..=60.0, 28.0),
+            S::number("ring_gap", "Gap between rings (px)", 0.0..=16.0, 4.0),
+            S::number("pad", "Gap between slices (rad)", 0.0..=0.1, 0.015),
+            S::text("center", "Center title (empty: the total)", ""),
+            S::bool("labels", "Percent labels", true),
+            S::bool("legend", "Legend", true),
+            S::bool("tooltip", "Tooltip", true),
+            S::number("height", "Height (px)", 160.0..=420.0, 280.0),
+        ],
+        Detail::RadarChart => vec![
+            S::number("axes", "Axes", 3.0..=5.0, 5.0),
+            S::number("series", "Series", 1.0..=3.0, 2.0),
+            S::bool("stacked", "Stacked", false),
+            S::bool("filled", "Filled", true),
+            S::bool("points", "Points", true),
+            S::number("rings", "Rings", 2.0..=8.0, 4.0),
+            S::bool("legend", "Legend", true),
+            S::bool("value_axis", "Ring values", true),
+            S::bool("category_axis", "Axis labels", true),
+            S::bool("grid", "Rings and spokes", true),
+            S::bool("tooltip", "Tooltip", true),
+            S::bool("hover", "Hover highlight", true),
+            S::choice("color", "Color", &["Series colors", "Accent"], 0),
+            S::number("height", "Height (px)", 200.0..=480.0, 300.0),
+        ],
+        Detail::BubbleChart => vec![
+            S::number("series", "Series", 1.0..=3.0, 3.0),
+            S::number("rmin", "Smallest radius (px)", 2.0..=20.0, 5.0),
+            S::number("rmax", "Largest radius (px)", 10.0..=60.0, 26.0),
+            S::number("opacity", "Fill opacity", 0.1..=1.0, 0.55),
+            S::bool("titles", "Axis titles", true),
+            S::bool("legend", "Legend", true),
+            S::bool("value_axis", "Y axis labels", true),
+            S::bool("category_axis", "X axis labels", true),
+            S::bool("grid", "Gridlines", true),
+            S::bool("tooltip", "Tooltip", true),
+            S::bool("hover", "Hover highlight", true),
+            S::choice("color", "Color", &["Series colors", "Accent"], 0),
+            S::number("height", "Height (px)", 200.0..=480.0, 320.0),
+        ],
+        Detail::ComboChart => vec![
+            S::bool("area", "Trend as an area", true),
+            S::bool("revenue", "Revenue as bars", true),
+            S::bool("costs", "Costs as bars", true),
+            S::bool("target", "Target as a line", true),
+            S::bool("stack", "Stack the bars", false),
+            S::choice(
+                "curve",
+                "Curve (lines, areas)",
+                &["Linear", "Step", "Smooth"],
+                0,
+            ),
+            S::bool("points", "Points on lines", true),
+            S::bool("legend", "Legend", true),
+            S::bool("value_axis", "Value axis", true),
+            S::bool("category_axis", "Category axis", true),
+            S::bool("grid", "Gridlines", true),
+            S::bool("tooltip", "Tooltip", true),
+            S::bool("hover", "Hover highlight", true),
+            S::number("height", "Height (px)", 160.0..=420.0, 280.0),
+        ],
         Detail::PieChart => vec![
             S::number("donut", "Hole (fraction of the radius)", 0.0..=0.9, 0.0),
             S::number("pad", "Gap between slices (rad)", 0.0..=0.1, 0.01),
@@ -482,6 +545,22 @@ pub fn specs(d: Detail) -> Vec<Spec> {
                 0,
             ),
         ],
+        Detail::ColorHelpers => vec![
+            S::text("seed", "Seed (a name)", "Evening drive"),
+            S::choice(
+                "tag",
+                "Tag color",
+                &[
+                    "Dark blue #3b4a7a",
+                    "Amber #e5a50a",
+                    "Pink #c04a9a",
+                    "Gray #77767b",
+                ],
+                0,
+            ),
+            S::choice("page", "Page", &["Light", "Dark"], 1),
+            S::number("ratio", "Minimum contrast", 1.0..=7.0, 4.5),
+        ],
         Detail::IconToggle => vec![
             S::choice(
                 "icon",
@@ -532,6 +611,19 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             ),
             S::choice("chip_size", "Chip size", &["Small", "Medium", "Large"], 1),
             S::bool("on_color", "White text when selected (own color)", false),
+            S::choice(
+                "contrast",
+                "Unselected text contrast (own color)",
+                &["Ensure 4.5", "Off (as given)"],
+                0,
+            ),
+            S::choice(
+                "text",
+                "Unselected text color (own color)",
+                &["The chip's color", "Custom (dark gray)"],
+                0,
+            ),
+            S::choice("tint", "Tag color", &["Pink", "Dark blue", "Amber"], 0),
             S::number("size", "Round badge size (px)", 14.0..=48.0, 24.0),
             S::choice("role", "Role", &ROLES, 0),
             S::bool("solid", "Solid", false),
@@ -1202,6 +1294,213 @@ pub fn build<'a>(
                 .add(!p.bool("legend"), ".legend(false)");
             (c.into(), cartesian_code(code, p).done())
         }
+        Detail::DonutChart => {
+            let (outer, inner) = crate::chart_demo::revenue();
+            let mut c = w::DonutChart::new(outer)
+                .thickness(p.number("thickness"))
+                .ring_gap(p.number("ring_gap"))
+                .pad(p.number("pad"))
+                .labels(p.bool("labels"))
+                .legend(p.bool("legend"))
+                .tooltip(p.bool("tooltip"))
+                .height(p.number("height"));
+            let two = p.choice("rings") == 1;
+            if two {
+                c = c.ring(inner);
+            }
+            let centered = !p.text("center").is_empty();
+            if centered {
+                c = c.center(p.text("center").to_string(), "this quarter");
+            }
+            let code = Code::new("DonutChart::new(by_region)   // the outer ring")
+                .add(two, ".ring(by_product)             // another ring, inside")
+                .add(
+                    p.number("thickness") != 28.0,
+                    &format!(".thickness({:.0}.0)", p.number("thickness")),
+                )
+                .add(
+                    p.number("ring_gap") != 4.0,
+                    &format!(".ring_gap({:.0}.0)", p.number("ring_gap")),
+                )
+                .add(
+                    p.number("pad") != 0.015,
+                    &format!(".pad({:.3})", p.number("pad")),
+                )
+                .add(
+                    centered,
+                    &format!(
+                        ".center({:?}, \"this quarter\")   // default: the total",
+                        p.text("center")
+                    ),
+                )
+                .add(!p.bool("labels"), ".labels(false)")
+                .add(!p.bool("legend"), ".legend(false)")
+                .add(!p.bool("tooltip"), ".tooltip(false)")
+                .add(
+                    p.number("height") != 280.0,
+                    &format!(".height({:.0}.0)", p.number("height")),
+                )
+                .done();
+            (c.into(), code)
+        }
+        Detail::RadarChart => {
+            let (names, series) = crate::chart_demo::abilities();
+            let axes = p.number("axes") as usize;
+            let n = p.number("series") as usize;
+            let series: Vec<_> = series
+                .into_iter()
+                .take(n)
+                .map(|s| iad::primitives::chart::Series::new(s.name, s.values[..axes].to_vec()))
+                .collect();
+            let mut c = w::RadarChart::new(names.into_iter().take(axes), series)
+                .stacked(p.bool("stacked"))
+                .filled(p.bool("filled"))
+                .points(p.bool("points"))
+                .rings(p.number("rings") as usize)
+                .legend(p.bool("legend"))
+                .value_axis(p.bool("value_axis"))
+                .category_axis(p.bool("category_axis"))
+                .grid(p.bool("grid"))
+                .tooltip(p.bool("tooltip"))
+                .hover(p.bool("hover"))
+                .height(p.number("height"));
+            if p.choice("color") == 1 {
+                c = c.colors(|t, _| t.palette.accent_bg_color);
+            }
+            let code = Code::new("RadarChart::new(axes, series)   // three or more axes")
+                .add(
+                    p.bool("stacked"),
+                    ".stacked(true)          // each series a band on the last",
+                )
+                .add(!p.bool("filled"), ".filled(false)")
+                .add(!p.bool("points"), ".points(false)")
+                .add(
+                    p.number("rings") != 4.0,
+                    &format!(".rings({})", p.number("rings") as usize),
+                )
+                .add(!p.bool("legend"), ".legend(false)")
+                .add(!p.bool("value_axis"), ".value_axis(false)")
+                .add(!p.bool("category_axis"), ".category_axis(false)")
+                .add(!p.bool("grid"), ".grid(false)")
+                .add(!p.bool("tooltip"), ".tooltip(false)")
+                .add(!p.bool("hover"), ".hover(false)")
+                .add(
+                    p.choice("color") == 1,
+                    ".colors(|theme, _| theme.palette.accent_bg_color)",
+                )
+                .add(
+                    p.number("height") != 300.0,
+                    &format!(".height({:.0}.0)", p.number("height")),
+                )
+                .done();
+            (c.into(), code)
+        }
+        Detail::BubbleChart => {
+            let n = p.number("series") as usize;
+            let mut c = w::BubbleChart::new(crate::chart_demo::markets().into_iter().take(n))
+                .radii(p.number("rmin"), p.number("rmax"))
+                .opacity(p.number("opacity"))
+                .size_name("Market (m)")
+                .legend(p.bool("legend"))
+                .value_axis(p.bool("value_axis"))
+                .category_axis(p.bool("category_axis"))
+                .grid(p.bool("grid"))
+                .tooltip(p.bool("tooltip"))
+                .hover(p.bool("hover"))
+                .height(p.number("height"));
+            if p.bool("titles") {
+                c = c.x_title("Marketing spend").y_title("Sales");
+            }
+            if p.choice("color") == 1 {
+                c = c.colors(|t, _| t.palette.accent_bg_color);
+            }
+            let code = Code::new(
+                "BubbleChart::new(series)   // BubbleSeries::new(name, [Bubble::new(x, y, size)])",
+            )
+            .add(
+                p.number("rmin") != 5.0 || p.number("rmax") != 26.0,
+                &format!(
+                    ".radii({:.0}.0, {:.0}.0)   // area follows the size",
+                    p.number("rmin"),
+                    p.number("rmax")
+                ),
+            )
+            .add(
+                p.number("opacity") != 0.55,
+                &format!(".opacity({:.2})", p.number("opacity")),
+            )
+            .add(
+                p.bool("titles"),
+                ".x_title(\"Marketing spend\").y_title(\"Sales\")",
+            )
+            .add(!p.bool("legend"), ".legend(false)")
+            .add(!p.bool("value_axis"), ".value_axis(false)")
+            .add(!p.bool("category_axis"), ".category_axis(false)")
+            .add(!p.bool("grid"), ".grid(false)")
+            .add(!p.bool("tooltip"), ".tooltip(false)")
+            .add(!p.bool("hover"), ".hover(false)")
+            .add(
+                p.choice("color") == 1,
+                ".colors(|theme, _| theme.palette.accent_bg_color)",
+            )
+            .add(
+                p.number("height") != 320.0,
+                &format!(".height({:.0}.0)", p.number("height")),
+            )
+            .done();
+            (c.into(), code)
+        }
+        Detail::ComboChart => {
+            let (cats, series) = crate::chart_demo::quarters();
+            let [trend, revenue, costs, target] = series;
+            let curve = [w::Curve::Linear, w::Curve::Step, w::Curve::Monotone][p.choice("curve")];
+            let mut c = w::ComboChart::new(cats)
+                .stack_bars(p.bool("stack"))
+                .curve(curve)
+                .points(p.bool("points"))
+                .legend(p.bool("legend"))
+                .value_axis(p.bool("value_axis"))
+                .category_axis(p.bool("category_axis"))
+                .grid(p.bool("grid"))
+                .tooltip(p.bool("tooltip"))
+                .hover(p.bool("hover"))
+                .height(p.number("height"));
+            // Painted in the order added: the backdrop first.
+            let mut code = Code::new("ComboChart::new(quarters)   // one canvas, one scale");
+            if p.bool("area") {
+                c = c.area(trend);
+                code = code.add(true, ".area(trend)          // painted first");
+            }
+            if p.bool("revenue") {
+                c = c.bars(revenue);
+                code = code.add(true, ".bars(revenue)");
+            }
+            if p.bool("costs") {
+                c = c.bars(costs);
+                code = code.add(true, ".bars(costs)           // bars share the category");
+            }
+            if p.bool("target") {
+                c = c.line(target);
+                code = code.add(true, ".line(target)         // painted last, on top");
+            }
+            let code = code
+                .add(p.bool("stack"), ".stack_bars(true)")
+                .add(p.choice("curve") == 1, ".curve(Curve::Step)")
+                .add(p.choice("curve") == 2, ".curve(Curve::Monotone)")
+                .add(!p.bool("points"), ".points(false)")
+                .add(!p.bool("legend"), ".legend(false)")
+                .add(!p.bool("value_axis"), ".value_axis(false)")
+                .add(!p.bool("category_axis"), ".category_axis(false)")
+                .add(!p.bool("grid"), ".grid(false)")
+                .add(!p.bool("tooltip"), ".tooltip(false)")
+                .add(!p.bool("hover"), ".hover(false)")
+                .add(
+                    p.number("height") != 280.0,
+                    &format!(".height({:.0}.0)", p.number("height")),
+                )
+                .done();
+            (c.into(), code)
+        }
         Detail::PieChart => {
             let c = w::PieChart::new(crate::chart_demo::browsers())
                 .donut(p.number("donut"))
@@ -1767,6 +2066,61 @@ pub fn build<'a>(
                 .done();
             (stage(Element::from(bar)), code)
         }
+        Detail::ColorHelpers => {
+            let seed = p.text("seed").to_string();
+            let tag = [0x3b4a7au32, 0xe5a50a, 0xc04a9a, 0x77767b][p.choice("tag")];
+            let page = if p.choice("page") == 0 {
+                0xfafafau32
+            } else {
+                0x242424
+            };
+            let ratio = p.number("ratio");
+            let (tag_c, page_c) = (iad::color::hex(tag), iad::color::hex(page));
+            let fixed = iad::color::ensure_contrast(tag_c, page_c, ratio);
+            let sample = |label: String, c: iced::Color| -> Element<'a> {
+                container(
+                    column![
+                        text("Late night").size(18).color(c),
+                        ty::caption(format!(
+                            "{label}: {:.1}:1",
+                            iad::color::contrast_ratio(c, page_c)
+                        ))
+                        .color(c),
+                    ]
+                    .spacing(4),
+                )
+                .padding(m.space_m)
+                .width(Length::Fill)
+                .style(move |_: &iad::Theme| iced::widget::container::Style {
+                    background: Some(page_c.into()),
+                    border: iced::Border::default().rounded(8),
+                    ..Default::default()
+                })
+                .into()
+            };
+            let el = column![
+                row![
+                    w::avatar(48.0, seed.clone()),
+                    column![
+                        ty::heading(seed.clone()),
+                        ty::caption("color::from_seed: the same text, the same color")
+                            .style(iad::style::text::dim),
+                    ],
+                ]
+                .spacing(m.space_m)
+                .align_y(iced::Alignment::Center),
+                row![
+                    sample("as given".into(), tag_c),
+                    sample(format!("ensure_contrast({ratio:.1})"), fixed),
+                ]
+                .spacing(m.space_m),
+            ]
+            .spacing(m.space_l);
+            let code = format!(
+                "// the same text is always the same color\nlet c = color::from_seed(\"{seed}\");\nlet c = color::from_index(3);\n\n// a color too close to its surface is moved towards white or black until it reads\nlet text = color::ensure_contrast(tag_color, page_bg, {ratio:.1});   // 4.5 is the WCAG minimum for text"
+            );
+            (stage(Element::from(el)), code)
+        }
         Detail::IconToggle => {
             let icon = [
                 Icon::Shuffle,
@@ -1905,7 +2259,19 @@ pub fn build<'a>(
                             c = c.icon(i);
                         }
                         if p.choice("color") == 1 {
-                            c = c.color(iced::Color::from_rgb8(0xc0, 0x4a, 0x9a));
+                            c = c.color(
+                                [
+                                    iced::Color::from_rgb8(0xc0, 0x4a, 0x9a),
+                                    iced::Color::from_rgb8(0x3b, 0x4a, 0x7a),
+                                    iced::Color::from_rgb8(0xe5, 0xa5, 0x0a),
+                                ][p.choice("tint")],
+                            );
+                            if p.choice("contrast") == 1 {
+                                c = c.min_contrast(0.0);
+                            }
+                            if p.choice("text") == 1 {
+                                c = c.text_color(iced::Color::from_rgb8(0x2a, 0x2a, 0x2a));
+                            }
                             if p.bool("on_color") {
                                 c = c.on_color(iced::Color::WHITE);
                             }
@@ -1924,6 +2290,14 @@ pub fn build<'a>(
                         .add(
                             p.choice("color") == 1,
                             ".color(tag_color)   // in place of the role's",
+                        )
+                        .add(
+                            p.choice("color") == 1 && p.choice("contrast") == 1,
+                            ".min_contrast(0.0)   // keep the color as given (default 4.5)",
+                        )
+                        .add(
+                            p.choice("color") == 1 && p.choice("text") == 1,
+                            ".text_color(dark_gray)   // unselected text, used as given",
                         )
                         .add(
                             p.choice("color") == 1 && p.bool("on_color"),
@@ -1980,7 +2354,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "ResponsiveTable::new(&rows)\n    .column(Column::new(\"Name\", |r| text(r.name).into()).sortable(Col::Name))\n    .sort(&self.sort)                         // SortState: asc / desc / unsorted\n    .on_sort(Msg::Sort)\n    .footer(|| Pagination::new(&self.paging, Msg::Page).siblings(1).into())\n\n// InfiniteList for load-more: request ids discard stale pages"
         }
         Detail::TextView => {
-            "text_view(&self.content)\n    .placeholder(\"Type here…\")\n    .on_action(Msg::Edit)   // omit for a read-only view\n\n// update: self.content.perform(action)"
+            "text_view(&self.content)\n    .placeholder(\"Type here…\")\n    .on_action(Msg::Edit)   // omit for a read-only view\n    .height(90.0)           // fixed, scrolls (the default)\n\n// a textarea: a maximum makes it grow with its text, then scroll\ntext_view(&self.content)\n    .min_lines(2)           // never shorter than this (default 1)\n    .max_lines(6)           // grows up to six lines\n    .max_height(120.0)      // or px; with both, the smaller applies\n    .on_action(Msg::Edit)\n\n// update: self.content.perform(action)"
         }
         Detail::Carousel => {
             "carousel(pages, self.position, Msg::Carousel)\n    .indicator(CarouselIndicator::Dots) // or Lines"
@@ -2006,6 +2380,9 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
         Detail::RangeSlider => {
             "range_slider(0.0..=100.0, self.value, Msg::Range)\n\nRangeSliderRow::new(\"Volume\", self.value, 0.0..=100.0, Msg::Range)"
         }
+        Detail::ThemeConfig => {
+            "// 1. declare the tokens of the app's own objects, with their defaults\nlet schema = Schema::new()\n    .color(\"cover\", \"background\", \"#9c4ad1\", \"Behind a missing cover\")\n    .number(\"cover\", \"size\", 88.0, \"The cover edge in px\");\n\n// 2. load: hardcoded > app theme file > toolkit theme file > declared default\n//    ~/.config/<app-id>/theme.conf and ~/.config/iced-adaptive-design/theme.conf are written\n//    from the declared defaults (every line commented) when missing: delete them to reset\nlet cfg = ThemeConfig::builder(\"org.example.Player\")\n    .schema(schema)\n    // .hardcode(\"cover\", \"size\", Value::Number(64.0))   // extremely discouraged\n    .build();\n\n// 3. install: metric tokens reach every widget, palette and typography tokens the theme\ntheme_config::install(cfg.clone());\nconfig::install(Config::load().with_theme_config(&cfg));\nlet theme = Theme::from_config(&config::current()).with_theme_config(&cfg);\n\n// 4. read the app's own tokens anywhere a Theme is given\nlet bg = theme.token_color(\"cover\", \"background\");\nlet size = theme.token_number(\"cover\", \"size\");"
+        }
         Detail::CardGrid => {
             "CardGrid::new(albums.iter().map(album_card))\n    .max_width(180.0)   // as many columns as fit, each at most this wide\n    .spacing(12.0)\n\n// cards fill their cells and keep their own height; rows are as tall as the tallest card"
         }
@@ -2013,10 +2390,10 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "SectionHeading::new(\"Recently played\")\n    .subtitle(\"Fresh this week\")\n    .link(\"View all\", Msg::OpenHistory)   // \"View all ›\" at the far end"
         }
         Detail::MediaRow => {
-            "// the list: a sort header over a virtual list of media rows\nSortHeader::new(&self.sort, Msg::Sort)         // Msg::Sort(c) => self.sort.activate(c, false)\n    .space(Length::Fixed(40.0))                // over the picture\n    .column(Col::Title, \"Title\", Length::FillPortion(3))\n    .column(Col::Time, \"Time\", Length::Fixed(44.0))\n\nVirtualList::new(n, 56.0, &self.viewport, |i| {\n    MediaRow::new(&t.title)\n        .subtitle(&t.artist)\n        .picture(Avatar::new(40.0, &t.title).icon(Icon::MusicNote).shape(AvatarShape::Rounded))\n        .column(Length::Fixed(44.0), caption(t.time()))\n        .suffix(menu_button(Icon::ViewMore, menu))\n        .compact(false)            // no picture, subtitle on the title's line\n        .height(Length::Fill)      // centered in the row the list gives it\n        .on_press(Msg::Play(i))\n        .into()\n})"
+            "// the columns, written ONCE: the header and every row take their widths from them\nlet cols = MediaColumns::new()\n    .picture(true)                                   // room for the cover (PICTURE_WIDTH)\n    .title(Col::Title, \"Title\")\n    .subtitle(Col::Artist, \"Artist\")                  // its own column in compact mode\n    .column(Col::Album, \"Album\", Length::FillPortion(2))\n    .column(Col::Time, \"Time\", Length::Fixed(TIME_WIDTH)).align(Horizontal::Right)\n    .suffix(true)                                    // room for the menu (SUFFIX_WIDTH)\n    .compact(self.compact);\n\ncols.header(&self.sort, Msg::Sort)                   // Msg::Sort(c) => self.sort.activate(c, false)\n\nVirtualList::new(n, 56.0, &self.viewport, |i| {\n    cols.row(&t.title)                               // compact as the columns are\n        .subtitle(&t.artist)\n        .picture(Avatar::new(PICTURE_WIDTH, &t.title).icon(Icon::MusicNote).shape(AvatarShape::Rounded))\n        .cell(caption(&t.album))                     // the next column's width and alignment\n        .cell(caption(t.time()))\n        .suffix(menu_button(Icon::ViewMore, menu))\n        .height(Length::Fill)                        // centered in the row the list gives it\n        .on_press(Msg::Play(i))\n        .into()\n})\n\n// or without the shared spec: MediaRow::new(..).column(width, cell).align(Horizontal::Right)"
         }
         Detail::ChipGroup => {
-            "ChipGroup::new(\n    tags.iter().map(|t| ChipOption::new(t.id, &t.name).color(t.color).icon(Icon::Tag)),\n    &self.selected,\n    Msg::Toggle,                    // gets the key of the pressed chip\n)\n.search(&self.query, Msg::Query)    // an entry above filters by label as you type\n.on_color(Color::WHITE)             // selected chips with their own color\n.size(ChipSize::Small)"
+            "ChipGroup::new(\n    tags.iter().map(|t| ChipOption::new(t.id, &t.name).color(t.color).icon(Icon::Tag)),\n    &self.selected,\n    Msg::Toggle,                    // gets the key of the pressed chip\n)\n.search(&self.query, Msg::Query)    // an entry above filters by label as you type\n// or filter without drawing an entry (two groups sharing one field):\n.query(&self.query)\n.on_color(Color::WHITE)             // selected chips with their own color\n.size(ChipSize::Small)"
         }
         Detail::History => {
             "let mut history = History::new(Place::Home);\n\nhistory.open(Place::Album(7));    // pushes the place you leave\nhistory.back();                  // returns to it: not a fixed parent\nhistory.go(Place::Library);      // a sidebar entry: forgets the trail\nhistory.can_back();              // enable the back button"
@@ -2034,7 +2411,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "Icon::Star.view(16.0)                 // a built-in\n\n// anything that takes an icon takes your own SVG too\nlet mine = IconSource::svg(include_str!(\"vinyl.svg\"));\nMenuItem::action(\"Rate\", Msg::Rate).icon(mine.clone())\nmenu_button(mine, menu)\nChip::new(\"Jazz\").icon(mine).color(tag_color)"
         }
         Detail::Composed => {
-            "// HistogramRangeSlider is in the library; this is how it is DEFINED with ComposedComponent:\n// data + callback, and a conversion\npub struct HistogramRangeSlider<'a, M> {\n    histogram: &'a Histogram,\n    range: (f32, f32),                       // the shared state\n    on_change: Box<dyn Fn((f32, f32)) -> M + 'a>,\n}\n\nimpl<'a, M: 'a> From<HistogramRangeSlider<'a, M>> for Element<'a, M> {\n    fn from(c: HistogramRangeSlider<'a, M>) -> Self {\n        let h = c.histogram;\n        ComposedComponent::new(c.range, c.on_change)   // state + one message for every part\n            // each part is built from the state and answers with the NEXT state\n            .part(move |r| BarChart::histogram(h)\n                .minimal()                                  // only the bars, as a range picker\n                .selected(move |i| h.selected(i, *r))      // bars inside the range\n                .on_pick(move |i| h.bin_range(i))           // a pressed bar is a range\n                .into())\n            .part(|r| range_slider(0.0..=100.0, *r, |moved| moved).into())\n            .normalize(|(lo, hi)| (lo.min(hi), lo.max(hi))) // the rule, in one place\n            .into()\n    }\n}\n\n// USE it like any component; the slider's bounds are the histogram's own\nHistogramRangeSlider::new(&self.histogram, self.range, Msg::Range).step(1.0)"
+            "// HistogramRangeSlider is in the library; this is how it is DEFINED with ComposedComponent:\n// data + callback, and a conversion\npub struct HistogramRangeSlider<'a, M> {\n    histogram: &'a Histogram,\n    range: (f32, f32),                       // the shared state\n    on_change: Box<dyn Fn((f32, f32)) -> M + 'a>,\n}\n\nimpl<'a, M: 'a> From<HistogramRangeSlider<'a, M>> for Element<'a, M> {\n    fn from(c: HistogramRangeSlider<'a, M>) -> Self {\n        let h = c.histogram;\n        ComposedComponent::new(c.range, c.on_change)   // state + one message for every part\n            // each part is built from the state and answers with the NEXT state\n            .part(move |r| BarChart::histogram(h)\n                .minimal()                                  // only the bars, as a range picker\n                .selected(move |i| h.selected(i, *r))      // bars inside the range\n                .on_pick(move |i| h.bin_range(i))           // a pressed bar is a range\n                .into())\n            .part(|r| range_slider(0.0..=100.0, *r, |moved| moved).into())\n            .normalize(|(lo, hi)| (lo.min(hi), lo.max(hi))) // the rule, in one place\n            .into()\n    }\n}\n\n// USE it like any component; the slider's bounds are the histogram's own\nHistogramRangeSlider::new(&self.histogram, self.range, Msg::Range).step(1.0)\n\n// or build one in the view when it depends on a filter, and pass it owned\nHistogramRangeSlider::new(Histogram::from_values(filtered, 0.0, 100.0, 20), self.range, Msg::Range)"
         }
         Detail::SyncedText => {
             "SyncedText::new(LYRICS, &self.lines, Msg::Seek).position(self.pos)\n\n// update: when the current line changes, scroll to it\nif synced::current(&self.lines, self.pos) != before {\n    return follow_synced_text(LYRICS, now, self.lines.len());\n}"

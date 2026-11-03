@@ -8,7 +8,7 @@ use iad::primitives::sorting::{Direction, SortState, cmp_str};
 use iad::primitives::virtualize::Viewport;
 use iad::widget::{
     self as w, Avatar, AvatarShape, CardGrid, ChipGroup, ChipOption, ChipSize, DetailHeader,
-    EditableText, MediaRow, PreferencesGroup, SectionHeading, SortHeader, VirtualList,
+    EditableText, MediaColumns, PreferencesGroup, SectionHeading, VirtualList,
 };
 use iad::{Element, Icon, Metrics};
 use iced::widget::{column, container, row, text};
@@ -38,12 +38,15 @@ pub enum Msg {
     Open(&'static str),
     Go(&'static str),
     Back,
+    Flow(bool),
+    FlowText(String),
 }
 
 /// The columns of the media list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Col {
     Title,
+    Artist,
     Album,
     Time,
 }
@@ -81,6 +84,8 @@ pub struct State {
     chips: Vec<u8>,
     query: String,
     history: History<&'static str>,
+    flow_editing: bool,
+    flow_text: String,
     viewport: Viewport,
     bio: String,
     editing: bool,
@@ -114,6 +119,8 @@ impl Default for State {
             chips: vec![0, 3],
             query: String::new(),
             history: History::new("Home"),
+            flow_editing: false,
+            flow_text: "A paragraph the content decides the height of.".into(),
         }
     }
 }
@@ -136,6 +143,7 @@ impl State {
                 let sort = &self.sort;
                 sort.apply(&mut self.tracks, |k, a, b| match k {
                     Col::Title => cmp_str(&a.title, &b.title),
+                    Col::Artist => cmp_str(a.artist, b.artist),
                     Col::Album => cmp_str(a.album, b.album),
                     Col::Time => a.secs.cmp(&b.secs),
                 });
@@ -151,6 +159,8 @@ impl State {
             Msg::Query(q) => self.query = q,
             Msg::Open(p) => self.history.open(p),
             Msg::Go(p) => self.history.go(p),
+            Msg::Flow(e) => self.flow_editing = e,
+            Msg::FlowText(t) => self.flow_text = t,
             Msg::Back => {
                 self.history.back();
             }
@@ -322,24 +332,32 @@ impl State {
     pub fn media_view(&self, m: Metrics) -> Element<'_, Msg> {
         let row_h = if self.compact { 36.0 } else { 56.0 };
         let compact = self.compact;
+        // The columns, written once: the header and every row take their widths from them.
+        let cols = MediaColumns::new()
+            .picture(true)
+            .compact(compact)
+            .title(Col::Title, "Title")
+            .subtitle(Col::Artist, "Artist")
+            .column(Col::Album, "Album", Length::FillPortion(2))
+            .column(Col::Time, "Time", Length::Fixed(w::TIME_WIDTH))
+            .align(iced::alignment::Horizontal::Right)
+            .suffix(true);
         let tracks = &self.tracks;
+        let spec = cols.clone();
         let list = VirtualList::new(tracks.len(), row_h, &self.media_vp, move |i| {
             let t = &tracks[i];
             let time = format!("{}:{:02}", t.secs / 60, t.secs % 60);
-            let mut r = MediaRow::new(t.title.clone())
+            let mut r = spec
+                .row(t.title.clone())
                 .subtitle(t.artist)
-                .compact(compact)
                 .height(Length::Fill)
-                .column(
-                    Length::FillPortion(2),
-                    iad::widget::typography::caption(t.album),
-                )
-                .column(Length::Fixed(44.0), iad::widget::typography::caption(time))
+                .cell(iad::widget::typography::caption(t.album))
+                .cell(iad::widget::typography::caption(time))
                 .suffix(w::icon_button(Icon::ViewMore).on_press(Msg::Noop))
                 .on_press(Msg::Noop);
             if !compact {
                 r = r.picture(
-                    Avatar::new(40.0, t.title.clone())
+                    Avatar::new(w::PICTURE_WIDTH, t.title.clone())
                         .icon(Icon::MusicNote)
                         .shape(AvatarShape::Rounded),
                 );
@@ -347,19 +365,11 @@ impl State {
             r.into()
         })
         .on_scroll(Msg::Scroll2);
-        let mut header = SortHeader::new(&self.sort, Msg::Sort);
-        if !compact {
-            header = header.space(Length::Fixed(40.0));
-        }
-        let header = header
-            .column(Col::Title, "Title", Length::FillPortion(3))
-            .column(Col::Album, "Album", Length::FillPortion(2))
-            .column(Col::Time, "Time", Length::Fixed(44.0))
-            .space(Length::Fixed(36.0));
+        let header = cols.header(&self.sort, Msg::Sort);
         column![
             Self::group(
                 "Media list",
-                "A virtual list of media rows under a sort header. The whole row is the target.",
+                "A virtual list of media rows under a sort header. The columns are written once and shared by the header and the rows; the time is right-aligned.",
                 m,
             )
             .push(w::SwitchRow::new("Compact", self.compact, Msg::Compact).metrics(m)),
@@ -372,24 +382,39 @@ impl State {
     }
 
     pub fn chips_view(&self, m: Metrics) -> Element<'_, Msg> {
-        let options = TAGS.iter().enumerate().map(|(i, t)| {
-            let mut o = ChipOption::new(i as u8, *t).color(iad::color::from_index(i + 3));
-            if i % 3 == 0 {
-                o = o.icon(Icon::Tag);
-            }
-            o
-        });
-        let group = ChipGroup::new(options, &self.chips, Msg::ChipToggle)
+        let options = |from: usize, to: usize| {
+            (from..to).map(|i| {
+                let mut o = ChipOption::new(i as u8, TAGS[i]).color(iad::color::from_index(i + 3));
+                if i % 3 == 0 {
+                    o = o.icon(Icon::Tag);
+                }
+                o
+            })
+        };
+        let first = ChipGroup::new(options(0, 6), &self.chips, Msg::ChipToggle)
             .search(&self.query, Msg::Query)
             .placeholder("Find a tag")
+            .on_color(iced::Color::WHITE);
+        // The second group shares the first one's query and draws no entry of its own.
+        let second = ChipGroup::new(options(6, 12), &self.chips, Msg::ChipToggle)
+            .query(&self.query)
             .on_color(iced::Color::WHITE)
-            .size(ChipSize::Medium);
-        Self::group(
-            "Chip group",
-            "Toggle chips that wrap, filtered as you type. Each has its own color and icon; selected ones use white text so they read alike.",
-            m,
-        )
-        .push(w::card(group))
+            .size(ChipSize::Small);
+        column![
+            Self::group(
+                "Chip group",
+                "Toggle chips that wrap, filtered as you type. Each has its own color and icon; selected ones use white text so they read alike.",
+                m,
+            )
+            .push(w::card(first)),
+            Self::group(
+                "Sharing one query",
+                "`.query(..)` filters without drawing an entry: this group follows the field above.",
+                m,
+            )
+            .push(w::card(second)),
+        ]
+        .spacing(m.group_spacing)
         .into()
     }
 
@@ -465,6 +490,40 @@ impl State {
                 .wrap(),
             ]
             .spacing(m.space_m),
+        ))
+        .into()
+    }
+
+    /// `MetaComponent::flow`: the variant is built without measuring the container, so it takes
+    /// its content's height and what is below follows it.
+    pub fn flow_view(&self, m: Metrics) -> Element<'_, Msg> {
+        #[derive(Clone, Copy, PartialEq)]
+        enum Mode {
+            Entry,
+            Text,
+        }
+        let text_value = self.flow_text.clone();
+        let flowing = w::MetaComponent::new()
+            .selected(self.flow_editing.then_some(Mode::Entry))
+            .when_selected(Mode::Entry, {
+                let v = self.flow_text.clone();
+                move |_| w::entry("Text", v.clone()).on_input(Msg::FlowText).metrics(m).into()
+            })
+            .variant(Mode::Text, w::When::always(), move |_| {
+                iad::widget::typography::body(
+                    format!("{text_value} It is long enough to wrap onto a second line when the pane is narrow, and the height follows it."),
+                )
+                .into()
+            })
+            .flow(0.0);
+        Self::group(
+            "MetaComponent::flow",
+            "The usual conversion fills its container (it is built on responsive). `.flow(width)` builds the chosen variant as it is, so it takes its content's size and the line below moves with it.",
+            m,
+        )
+        .push(w::SwitchRow::new("Editing", self.flow_editing, Msg::Flow).metrics(m))
+        .push(w::card(
+            column![flowing, text("Content below the variant").size(12)].spacing(m.space_m),
         ))
         .into()
     }

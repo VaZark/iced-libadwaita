@@ -34,6 +34,7 @@ mod resizable_demo;
 mod sections_demo;
 mod stepper_demo;
 mod synced_demo;
+mod theme_config_demo;
 mod tree_demo;
 mod upstream_demo;
 mod virtual_demo;
@@ -181,6 +182,8 @@ struct Gallery {
     editor: w::TextContent,
     editor_empty: w::TextContent,
     editor_ro: w::TextContent,
+    editor_grow: w::TextContent,
+    editor_grow_px: w::TextContent,
     sw: bool,
     row_sw: bool,
     combo2: Option<&'static str>,
@@ -197,6 +200,7 @@ struct Gallery {
     composed: composed_demo::State,
     synced: synced_demo::State,
     upstream: upstream_demo::State,
+    theme_cfg: theme_config_demo::State,
     stepper: stepper_demo::State,
     data: data_demo::State,
     resizable: resizable_demo::State,
@@ -312,6 +316,8 @@ enum Message {
     Slider(f32),
     Editor(w::TextAction),
     EditorEmpty(w::TextAction),
+    EditorGrow(w::TextAction),
+    EditorGrowPx(w::TextAction),
     Picked(&'static str),
     MultiToggle(&'static str),
     Date(date_demo::Msg),
@@ -323,6 +329,7 @@ enum Message {
     Composed(composed_demo::Msg),
     Synced(synced_demo::Msg),
     Upstream(upstream_demo::Msg),
+    ThemeCfg(theme_config_demo::Msg),
     Stepper(stepper_demo::Msg),
     Data(data_demo::Msg),
     Resizable(resizable_demo::Msg),
@@ -551,6 +558,10 @@ impl Gallery {
             editor: w::TextContent::with_text("Multi-line text editor\nstyled by the theme."),
             editor_empty: w::TextContent::new(),
             editor_ro: w::TextContent::with_text("Read-only text.\nIt cannot be edited."),
+            editor_grow: w::TextContent::with_text(
+                "Type, and press Enter for new lines.\nThe field grows with its text up to six lines, then scrolls.",
+            ),
+            editor_grow_px: w::TextContent::new(),
             sw: true,
             row_sw: false,
             combo2: None,
@@ -563,6 +574,7 @@ impl Gallery {
             composed: composed_demo::State::default(),
             synced: synced_demo::State::default(),
             upstream: upstream_demo::State::default(),
+            theme_cfg: theme_config_demo::State::default(),
             stepper: stepper_demo::State::default(),
             data: data_demo::State::default(),
             resizable: resizable_demo::State::default(),
@@ -848,6 +860,8 @@ impl Gallery {
             Message::Slider(v) => self.slider = v,
             Message::Editor(a) => self.editor.perform(a),
             Message::EditorEmpty(a) => self.editor_empty.perform(a),
+            Message::EditorGrow(a) => self.editor_grow.perform(a),
+            Message::EditorGrowPx(a) => self.editor_grow_px.perform(a),
             Message::Picked(s) => self.picked = Some(s),
             Message::MultiToggle(s) => match self.multi.iter().position(|x| *x == s) {
                 Some(i) => {
@@ -865,6 +879,7 @@ impl Gallery {
             Message::Range(m) => self.range.update(m),
             Message::Composed(m) => self.composed.update(m),
             Message::Upstream(m) => self.upstream.update(m),
+            Message::ThemeCfg(m) => self.theme_cfg.update(m),
             Message::Synced(m) => return self.synced.update(m).map(Message::Synced),
             Message::Stepper(m) => self.stepper.update(m),
             Message::Data(m) => return self.data.update(m).map(Message::Data),

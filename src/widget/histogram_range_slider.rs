@@ -14,10 +14,12 @@
 
 use super::{BarChart, ComposedComponent, Element, range_slider};
 use crate::primitives::histogram::Histogram;
+use std::borrow::Cow;
+use std::rc::Rc;
 
 /// See the [module](self).
 pub struct HistogramRangeSlider<'a, M> {
-    histogram: &'a Histogram,
+    histogram: Cow<'a, Histogram>,
     range: (f32, f32),
     on_change: Box<dyn Fn((f32, f32)) -> M + 'a>,
     step: Option<f32>,
@@ -26,15 +28,16 @@ pub struct HistogramRangeSlider<'a, M> {
 }
 
 impl<'a, M: 'a> HistogramRangeSlider<'a, M> {
-    /// `range` is the chosen `(lo, hi)` within the histogram's `min..max`; `on_change` gets the
-    /// next range from whichever part the user touched.
+    /// `histogram` is borrowed (`&hist`) or owned (`Histogram::from_counts(..)` built in the view,
+    /// for one that depends on a filter). `range` is the chosen `(lo, hi)` within its `min..max`;
+    /// `on_change` gets the next range from whichever part the user touched.
     pub fn new(
-        histogram: &'a Histogram,
+        histogram: impl Into<Cow<'a, Histogram>>,
         range: (f32, f32),
         on_change: impl Fn((f32, f32)) -> M + 'a,
     ) -> Self {
         Self {
-            histogram,
+            histogram: histogram.into(),
             range,
             on_change: Box::new(on_change),
             step: None,
@@ -62,17 +65,22 @@ impl<'a, M: 'a> HistogramRangeSlider<'a, M> {
 
 impl<'a, M: 'a> From<HistogramRangeSlider<'a, M>> for Element<'a, M> {
     fn from(c: HistogramRangeSlider<'a, M>) -> Self {
-        let (h, full, step, height) = (c.histogram, c.full, c.step, c.height);
+        let (full, step, height) = (c.full, c.step, c.height);
+        let h: Rc<Histogram> = Rc::new(c.histogram.into_owned());
         let (min, max) = (h.min(), h.max());
         ComposedComponent::new(c.range, c.on_change)
             // Part 1: the bars. Those inside the range are accented; pressing one picks its range.
-            .part(move |r| {
-                let r = *r;
-                let bars = BarChart::histogram(h)
-                    .height(if full { height.max(140.0) } else { height })
-                    .selected(move |i| h.selected(i, r))
-                    .on_pick(move |i| h.bin_range(i));
-                if full { bars } else { bars.minimal().gap(0.07) }.into()
+            .part({
+                let h = h.clone();
+                move |r| {
+                    let r = *r;
+                    let (sel, pick) = (h.clone(), h.clone());
+                    let bars = BarChart::histogram(&h)
+                        .height(if full { height.max(140.0) } else { height })
+                        .selected(move |i| sel.selected(i, r))
+                        .on_pick(move |i| pick.bin_range(i));
+                    if full { bars } else { bars.minimal().gap(0.07) }.into()
+                }
             })
             // Part 2: the thumbs, for the exact ends.
             .part(move |r| {

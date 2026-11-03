@@ -19,6 +19,8 @@ flowchart LR
     P{{"policy: allow-app-overrides"}} -.-> D
 ```
 
+An app that needs its own look (custom colors, paddings, tokens for its own objects) uses the [app theme config](theme-config.md), not an opt-out.
+
 Later wins per key. `ICED_ADAPTIVE_DESIGN_CONFIG=/path.conf` replaces 2 and 3 with one file (testing). Invalid or unknown values are ignored with a warning (`Config::warnings`).
 
 ## Settings

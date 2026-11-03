@@ -73,6 +73,7 @@ pub struct ChipGroup<'a, K, M> {
     empty: String,
     size: ChipSize,
     on_color: Option<Color>,
+    min_contrast: f32,
     metrics: Metrics,
 }
 
@@ -93,6 +94,7 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
             empty: "No matches".into(),
             size: ChipSize::Medium,
             on_color: None,
+            min_contrast: 4.5,
             metrics: Metrics::desktop(),
         }
     }
@@ -101,6 +103,13 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
     pub fn search(mut self, query: &'a str, on_query: impl Fn(String) -> M + 'a) -> Self {
         self.query = Some(query);
         self.on_query = Some(Box::new(on_query));
+        self
+    }
+    /// Filters the chips by `query` **without drawing an entry**: the application owns the field
+    /// (shared by several groups, in a dialog's own layout). [`search`](Self::search) is this plus
+    /// the entry.
+    pub fn query(mut self, query: &'a str) -> Self {
+        self.query = Some(query);
         self
     }
     /// The entry's placeholder (default "Search").
@@ -121,6 +130,12 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
     /// [`Chip::on_color`]).
     pub fn on_color(mut self, color: Color) -> Self {
         self.on_color = Some(color);
+        self
+    }
+    /// The least contrast of unselected chips' own-colored text against the page (default 4.5;
+    /// `0.0` keeps the colors as given). See [`Chip::min_contrast`].
+    pub fn min_contrast(mut self, ratio: f32) -> Self {
+        self.min_contrast = ratio;
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -154,7 +169,7 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for
                     c = c.icon(i);
                 }
                 if let Some(col) = o.color {
-                    c = c.color(col);
+                    c = c.color(col).min_contrast(g.min_contrast);
                     if let Some(on) = g.on_color {
                         c = c.on_color(on);
                     }
@@ -168,6 +183,7 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for
                 .vertical_spacing(m.space_s)
                 .into()
         };
+        // The entry is drawn only when `search` gave it somewhere to send what is typed.
         match (g.query, g.on_query) {
             (Some(q), Some(on_query)) => column![
                 entry(g.placeholder, q.to_string())
@@ -192,6 +208,19 @@ mod tests {
         assert!(matches("Late Night Drive", ""));
         assert!(matches("Late Night Drive", "NIGHT"));
         assert!(!matches("Late Night Drive", "late day"));
+    }
+
+    #[test]
+    fn a_query_filters_without_an_entry() {
+        let sel: [u8; 0] = [];
+        let g: ChipGroup<'_, u8, ()> = ChipGroup::new(
+            [ChipOption::new(1, "Jazz"), ChipOption::new(2, "Rock")],
+            &sel,
+            |_| (),
+        )
+        .query("rock");
+        assert!(g.on_query.is_none());
+        assert_eq!(g.visible().len(), 1);
     }
 
     #[test]

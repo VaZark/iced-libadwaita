@@ -2,7 +2,7 @@
 
 use iced_adaptive_design as iad;
 
-use iad::widget::{Sankey, Series, TreeValue};
+use iad::widget::{BubblePoint, BubbleSeries, Sankey, Series, TreeValue};
 
 pub const MONTHS: [&str; 6] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
 
@@ -76,6 +76,79 @@ pub fn disk() -> TreeValue {
                 ],
             ),
             TreeValue::leaf("System", 35.0),
+        ],
+    )
+}
+
+/// Two characters over five abilities, for the radar.
+pub fn abilities() -> ([&'static str; 5], [Series; 3]) {
+    (
+        ["Speed", "Power", "Range", "Defense", "Stamina"],
+        [
+            Series::new("Scout", [9.0, 3.0, 8.0, 2.0, 6.0]),
+            Series::new("Guard", [3.0, 6.0, 2.0, 9.0, 7.0]),
+            Series::new("Mage", [5.0, 9.0, 7.0, 3.0, 4.0]),
+        ],
+    )
+}
+
+/// Spend, sales and market size by region, for the bubble chart.
+pub fn markets() -> [BubbleSeries; 3] {
+    let b = BubblePoint::new;
+    [
+        BubbleSeries::new(
+            "Europe",
+            [
+                b(12.0, 30.0, 40.0),
+                b(25.0, 48.0, 90.0),
+                b(40.0, 61.0, 30.0),
+                b(18.0, 22.0, 15.0),
+            ],
+        ),
+        BubbleSeries::new(
+            "Americas",
+            [
+                b(30.0, 40.0, 120.0),
+                b(52.0, 75.0, 60.0),
+                b(8.0, 15.0, 20.0),
+            ],
+        ),
+        BubbleSeries::new(
+            "Asia",
+            [
+                b(45.0, 80.0, 150.0),
+                b(20.0, 55.0, 70.0),
+                b(60.0, 66.0, 35.0),
+                b(35.0, 28.0, 25.0),
+            ],
+        ),
+    ]
+}
+
+/// Revenue by region (outer) and by product (inner), for the donut.
+type Shares<const N: usize> = [(&'static str, f32); N];
+
+pub fn revenue() -> (Shares<4>, Shares<3>) {
+    (
+        [
+            ("North", 42.0),
+            ("South", 28.0),
+            ("East", 18.0),
+            ("West", 12.0),
+        ],
+        [("Hardware", 55.0), ("Software", 30.0), ("Services", 15.0)],
+    )
+}
+
+/// Revenue and costs as bars, a target as a line and a trend as an area, for the combo chart.
+pub fn quarters() -> ([&'static str; 6], [Series; 4]) {
+    (
+        ["Q1", "Q2", "Q3", "Q4", "Q5", "Q6"],
+        [
+            Series::new("Trend", [30.0, 38.0, 44.0, 50.0, 58.0, 66.0]),
+            Series::new("Revenue", [40.0, 55.0, 38.0, 62.0, 70.0, 64.0]),
+            Series::new("Costs", [22.0, 28.0, 25.0, 31.0, 36.0, 34.0]),
+            Series::new("Target", [45.0, 50.0, 55.0, 60.0, 65.0, 70.0]),
         ],
     )
 }

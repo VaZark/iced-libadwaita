@@ -185,6 +185,8 @@ pub struct Config {
     denied: Vec<Setting>,
     warnings: Vec<String>,
     metrics: Metrics,
+    /// The app's theme config, whose metric tokens are applied over the density's metrics.
+    theme_config: Option<crate::theme_config::ThemeConfig>,
 }
 
 impl Default for Config {
@@ -240,6 +242,7 @@ impl Default for Config {
             denied: Vec::new(),
             warnings: Vec::new(),
             metrics: Metrics::default(),
+            theme_config: None,
         };
         c.metrics = c.compute_metrics();
         c
@@ -639,13 +642,29 @@ impl Config {
             Density::Default => Metrics::default(),
             Density::Compact => Metrics::compact(),
         };
-        Metrics {
+        let mut m = Metrics {
             row_collapse: self.row_collapse,
             row_wrap_basis: self.row_wrap_basis,
             expander_indent: self.expander_indent,
             clamp_maximum: self.page_max_width,
             ..base
+        };
+        // The app's own look, over the desktop's.
+        if let Some(t) = &self.theme_config {
+            t.apply_to_metrics(&mut m);
         }
+        m
+    }
+
+    /// Applies the app's [theme config](crate::theme_config): its metric tokens (radii, paddings,
+    /// heights, spacing) reach every widget that sizes itself from [`Metrics::desktop`], over the
+    /// desktop's density. Call it before [`install`]. The palette and typography tokens apply to
+    /// the theme: [`Theme::with_theme_config`](crate::Theme::with_theme_config).
+    #[must_use]
+    pub fn with_theme_config(mut self, cfg: &crate::theme_config::ThemeConfig) -> Self {
+        self.theme_config = Some(cfg.clone());
+        self.metrics = self.compute_metrics();
+        self
     }
 
     /// The config directories searched, lowest priority first (system, then user).

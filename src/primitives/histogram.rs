@@ -91,6 +91,21 @@ impl Histogram {
     }
 }
 
+/// A histogram, borrowed or owned, where either is asked for: `&hist` from the app's state, or one
+/// built on the spot in a view when it depends on a filter
+/// (`HistogramRangeSlider::new(Histogram::from_counts(..), ..)`).
+impl<'a> From<&'a Histogram> for std::borrow::Cow<'a, Histogram> {
+    fn from(h: &'a Histogram) -> Self {
+        std::borrow::Cow::Borrowed(h)
+    }
+}
+
+impl From<Histogram> for std::borrow::Cow<'_, Histogram> {
+    fn from(h: Histogram) -> Self {
+        std::borrow::Cow::Owned(h)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -28,6 +28,7 @@ pub mod shortcut;
 pub mod style;
 pub mod system;
 pub mod theme;
+pub mod theme_config;
 pub mod widget;
 pub mod window;
 

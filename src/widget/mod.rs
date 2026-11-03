@@ -134,6 +134,7 @@ pub use carousel::{Carousel, CarouselIndicator, carousel};
 pub use chart::{
     BarChart, BarLayout, Funnel, FunnelShape, LineChart, PieChart, Sankey, Sunburst, format_value,
 };
+pub use chart::{BubbleChart, BubblePoint, BubbleSeries, ComboChart, DonutChart, RadarChart};
 pub use chip_group::{ChipGroup, ChipOption};
 pub use collapsible::Collapsible;
 pub use color_picker::{ColorInput, ColorPicker};
@@ -168,7 +169,7 @@ pub use histogram_range_slider::HistogramRangeSlider;
 pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent};
 pub use icon_toggle::IconToggleButton;
 pub use infinite::{InfiniteList, LoadTrigger};
-pub use media_row::MediaRow;
+pub use media_row::{MediaColumns, MediaRow, PICTURE_WIDTH, SUFFIX_WIDTH, TIME_WIDTH};
 pub use menu::{
     Menu, MenuButton, MenuCheckStyle, MenuIconSide, MenuItem, MenuPresentation, menu_button,
     primary_menu,

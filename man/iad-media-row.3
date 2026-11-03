@@ -40,6 +40,9 @@ Builder methods, chained after the constructor.
 .B \&.subtitle(subtitle: impl Into<String>)
 The dimmed line under the title (the artist, the show).
 .TP
+.B \&.align(align: Horizontal)
+Aligns the cell just added within its width: \fBRight\fR for a time or a count.
+.TP
 .B \&.compact(compact: bool)
 No picture, and the subtitle on the title's line.
 .TP
@@ -55,6 +58,9 @@ The picture at the start (a cover, an avatar). Hidden in compact mode.
 .TP
 .B \&.column(width: impl Into<Length>, cell: impl Into<Element<'a, M>>)
 An extra cell of \fBwidth\fR after the title: an album, a BPM, a time. Add as many as needed.
+.TP
+.B \&.cell(cell: impl Into<Element<'a, M>>)
+The next extra cell, in the width and alignment the shared \fBMediaColumns\fR gave this column (see \fBMediaColumns::row\fR). Cells are given in the columns' order.
 .TP
 .B \&.suffix(part: impl Into<Element<'a, M>>)
 A trailing part: a menu button, a toggle. Add as many as needed.
