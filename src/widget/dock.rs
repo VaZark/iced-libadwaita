@@ -39,7 +39,7 @@
 //!     .length(DockSize::Fixed(480.0))      // 480 wide ...
 //!     .align(Align::Center)                // ... centered on the edge
 //!     .margin(12.0)                        // floating 12 px off the bottom
-//!     .mode(DockMode::Modal)
+//!     .mode(DockMode::Overlay)
 //!     .on_outside(Message::Close)
 //! ```
 
@@ -490,8 +490,17 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
                         ..sc::dialog(t)
                     });
                 let panel: Element<'a, M> = match d.size {
-                    // Its own size: the panel shrinks to its content.
-                    DockSize::Auto => panel.width(Length::Fill).height(Length::Shrink).into(),
+                    // Its own size: across the edge the panel shrinks to its content (its width
+                    // on a left or right edge, its height on a top or bottom one); along the edge
+                    // it fills what the layer gives it.
+                    DockSize::Auto => match side {
+                        Side::Left | Side::Right => {
+                            panel.width(Length::Shrink).height(Length::Fill).into()
+                        }
+                        Side::Top | Side::Bottom => {
+                            panel.width(Length::Fill).height(Length::Shrink).into()
+                        }
+                    },
                     _ => panel.into(),
                 };
                 let panel = outlined(panel, d.border, flush, side, edge_radius, lifted_radius);

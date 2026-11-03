@@ -16,7 +16,7 @@ flowchart TD
 - Do not add animation in the app for things components already do. If you must animate something yourself, use `animation::Tween` with a `Spec`, and gate it with `Trigger::…::spec(..)` or `animation::enabled()` so reduced motion is respected.
 - Use springs for things the user moves (drawer, sheet, carousel), short eased transitions for state changes.
 
-Parameters and the full trigger table: [animations](../hig-inferences/design-language/animations.md).
+Every trigger is a key of the `[motion]` section: see `iced-libadwaita-desktop.conf(5)`.
 
 #### Ordered transitions
 

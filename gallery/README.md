@@ -63,7 +63,7 @@ Everything about large or remote data is on one page, *Data*: the tables (respon
 
 #### Adding a property
 
-When a component gets a new property, add it to its playground in `plays.rs` in the same change: a control in `specs`, its use in `build`, and its line in the generated code. A property with a toolkit default is a plain value that starts at it and that the builder overrides (see Expander row > Indent, default 24 px from `[rows] expander-indent`): its control shows the default, and the generated code only adds the call once the value is changed. The catalog (`src/catalog.rs`) and the component's docs page are updated with it; see [CONTRIBUTING.md](../../CONTRIBUTING.md#working-on-a-component).
+When a component gets a new property, add it to its playground in `plays.rs` in the same change: a control in `specs`, its use in `build`, and its line in the generated code. A property with a toolkit default is a plain value that starts at it and that the builder overrides (see Expander row > Indent, default 24 px from `[rows] expander-indent`): its control shows the default, and the generated code only adds the call once the value is changed. The method's doc comment (and so its generated man page: `cargo xtask man`) and the component's docs page are updated with it; see [CONTRIBUTING.md](../../CONTRIBUTING.md#working-on-a-component).
 
 #### Preview / Code on every page
 

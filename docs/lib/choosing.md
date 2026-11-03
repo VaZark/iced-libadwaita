@@ -1,6 +1,6 @@
 # Choosing components
 
-Pick by the job, then check the [gallery](../../gallery/README.md) for the states.
+Pick by the job, then read the component's man page for its API (`iced-libadwaita-<alias>(3)`, see the [README](README.md)) and run the gallery (a separate crate: `cargo run -p iced-libadwaita-gallery`) to see its states.
 
 #### Telling the user something
 

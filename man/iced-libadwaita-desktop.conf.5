@@ -1,0 +1,199 @@
+.TH ICED\-LIBADWAITA\-DESKTOP.CONF 5 "2026-11-03" "iced-libadwaita 0.1.0" "iced-libadwaita Manual"
+.SH NAME
+desktop.conf \- the shared desktop configuration of iced\-libadwaita applications
+.SH DESCRIPTION
+Desktop\-level behavior is defined \fIonce per desktop\fR, in a shared file, so every iced\-libadwaita application behaves the same way. Applications read these decisions; they do not hard\-code them.
+.PP
+The file is in the GLib key\-file format: \fB[section]\fR headers, \fBkey=value\fR lines and \fB#\fR comments. Every setting is optional; the values shown below are the defaults. Invalid or unknown values are ignored with a warning.
+.SH FILES
+Lowest to highest priority:
+.IP 1. 3
+the built\-in defaults (the HIG defaults);
+.IP 2. 3
+system files, \fI$XDG_CONFIG_DIRS/iced\-libadwaita/desktop.conf\fR (default \fI/etc/xdg\fR);
+.IP 3. 3
+the user file, \fI$XDG_CONFIG_HOME/iced\-libadwaita/desktop.conf\fR (default \fI~/.config\fR);
+.IP 4. 3
+the application's opt\-outs, if \fBpolicy.allow\-app\-overrides\fR allows them.
+.PP
+Later files win per key. \fBICED_LIBADWAITA_CONFIG\fR=\fIpath\fR replaces files 2 and 3 with one file.
+.SH SETTINGS
+.SS [appearance]
+.TP
+\fBcolor\-scheme\fR=\fIsystem\fR
+system | light | dark
+.TP
+\fBaccent\fR=\fIsystem\fR
+system | blue | teal | green | yellow | orange | red | pink | purple | slate
+.TP
+\fBflat\-headerbars\fR=\fIfalse\fR
+header bars with no color of their own (Nautilus\-style)
+.TP
+\fBauto\-contrast\fR=\fItrue\fR
+light/dark text on colored fills by contrast; false = fixed white
+.TP
+\fBdensity\fR=\fIdefault\fR
+default | compact
+.TP
+\fBtext\-scale\fR=\fI1.0\fR
+0.5 .. 3.0
+.TP
+\fBtransparency\fR=\fI0.0\fR
+0 (opaque) .. 1: how see\-through the surfaces are
+.TP
+\fBtint\fR=\fInone\fR
+none | #rrggbb | #rrggbbaa: a color mixed into the surfaces (the alpha is the strength; their own alpha is kept)
+.TP
+\fBshadows\fR=\fItrue\fR
+.TP
+\fBshadow\-scale\fR=\fI1.0\fR
+.TP
+\fBshadow\-intensity\fR=\fI1.0\fR
+.SS [motion]
+.TP
+\fBanimations\fR=\fIsystem\fR
+system | on | off
+.TP
+\fBreduced\-motion\fR=\fIfalse\fR
+true: every trigger below is "none" (prefers\-reduced\-motion)
+.TP
+\fBpage\-change\fR=\fIdefault\fR
+content fades in
+.TP
+\fBpage\-push\fR=\fIdefault\fR
+navigation page slides over the previous one
+.TP
+\fBpopover\fR=\fIdefault\fR
+menus and dropdowns rise into place
+.TP
+\fBselection\fR=\fIdefault\fR
+selection highlight fades
+.TP
+\fBdrawer\fR=\fIdefault\fR
+collapsed sidebar slides in over a scrim
+.TP
+\fBdialog\fR=\fIdefault\fR
+dialog scrim + slide
+.TP
+\fBsheet\fR=\fIdefault\fR
+bottom sheet scrim + slide
+.TP
+\fBtoast\fR=\fIdefault\fR
+toast slides up
+.TP
+\fBreveal\fR=\fIdefault\fR
+expanders and banners slide open
+.TP
+\fBswitch\fR=\fIdefault\fR
+switch knob slides
+.TP
+\fBcarousel\fR=\fIdefault\fR
+carousel spring
+.TP
+\fBlayout\fR=\fIdefault\fR
+the sidebar slides in/out of the layout at the collapse breakpoint
+.TP
+\fBtransition\-close\fR=\fI30\fR
+.TP
+\fBtransition\-open\fR=\fI30\fR
+.SS [windows]
+.TP
+\fBdecorations\fR=\fIcsd\fR
+csd (Adwaita) | ssd (discouraged)
+.TP
+\fBbutton\-layout\fR=\fIsystem\fR
+system | a GTK button\-layout string, e.g. appmenu:close
+.TP
+\fBmin\-width\fR=\fI360\fR
+smallest window
+.TP
+\fBmin\-height\fR=\fI200\fR
+.TP
+\fBmobile\-max\-width\fR=\fI575\fR
+at or below this width: mobile mode (no window buttons, full\-page menus)
+.SS [breakpoints]
+.TP
+\fBsm\fR=\fI576\fR
+.TP
+\fBmd\fR=\fI768\fR
+.TP
+\fBlg\fR=\fI992\fR
+.TP
+\fBxl\fR=\fI1200\fR
+.TP
+\fBxxl\fR=\fI1400\fR
+.SS [layout]
+.TP
+\fBpage\-max\-width\fR=\fI600\fR
+readable width of pages and preference lists
+.SS [navigation]
+.TP
+\fBcollapse\-width\fR=\fI767\fR
+split views collapse at or below this width (just under md = 768)
+.TP
+\fBmin\-content\-width\fR=\fI520\fR
+\&...and whenever the content area would be narrower than this
+.TP
+\fBsidebar\-fraction\fR=\fI0.25\fR
+sidebar width: this share of the window...
+.TP
+\fBsidebar\-min\-width\fR=\fI180\fR
+\&...clamped to min..max
+.TP
+\fBsidebar\-max\-width\fR=\fI280\fR
+.TP
+\fBdrawer\-max\-fraction\fR=\fI0.85\fR
+a drawer takes at most this share of the window
+.TP
+\fBmobile\-sidebar\fR=\fIdrawer\fR
+drawer | parent\-page
+.SS [menus]
+.TP
+\fBpresentation\fR=\fIauto\fR
+auto (full page in mobile mode) | dropdown | full\-page
+.SS [shortcuts]
+.TP
+\fBenabled\fR=\fItrue\fR
+keyboard shortcuts work (and are shown)
+.TP
+\fBhints\fR=\fIauto\fR
+auto | always | never: accelerator hints in menus (auto: not in touch menus)
+.SS [toasts]
+.TP
+\fBposition\fR=\fIbottom\-center\fR
+top|bottom \- left|center|right, e.g. top\-right
+.TP
+\fBtarget\fR=\fIcontent\fR
+content (content area only, centered on it) | window (over the sidebar too)
+.SS [popovers]
+.TP
+\fBbounds\fR=\fIcontent\fR
+content (kept inside the content area it opened from) | window (the whole window)
+.SS [rows]
+.TP
+\fBcollapse\fR=\fIstacked\fR
+stacked | flex  (what a wrapped row suffix does)
+.TP
+\fBwrap\-basis\fR=\fI128\fR
+minimum title width before the suffix wraps
+.TP
+\fBexpander\-indent\fR=\fI24\fR
+px a row nested in an expander row is indented (0 = libadwaita's flush nesting)
+.SS [icons]
+.TP
+\fBtheme\fR=\fIsystem\fR
+system | an icon theme name
+.SS [policy]
+.TP
+\fBallow\-app\-overrides\fR=\fItrue\fR
+.SH EXAMPLES
+Compact density with a darker, tinted look:
+.PP
+.nf
+[appearance]
+density=compact
+color\-scheme=dark
+tint=#3584e440
+.fi
+.SH SEE ALSO
+\fBiced\-libadwaita\fR(7), \fBiced\-libadwaita\-components\fR(3)

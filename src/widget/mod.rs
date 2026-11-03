@@ -130,8 +130,9 @@ pub use floating_indicator::FloatingIndicator;
 pub use focus::{FocusScope, focus_return};
 pub use form::{Form, FormActions, Step, StepIndicator};
 pub use forms::{
-    Entry, EntryState, TextView, accent_picker, card_button, check_button, color_swatch, entry,
-    link_button, password_entry, radio_button, scale, status_swatch, tag, text_view,
+    AccentPicker, Entry, EntryState, TextView, accent_picker, card_button, check_button,
+    color_swatch, entry, link_button, password_entry, radio_button, scale, status_swatch, tag,
+    text_view,
 };
 pub use header_bar::{HeaderBar, WindowControls, header_bar, window_title};
 pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent};

@@ -41,24 +41,27 @@ How the gallery is organized, and when a component gets a nested page: [examples
 #### Layout of the repo
 
 - `src/`: the library (`widget/`, `primitives/` headless logic, `window/` window logic and the dialogs, `style/`, `theme`, `config`, `animation`, …).
-- `examples/`: `gallery/` (including `appshell.rs`, the adaptive-layout demo) and `catalog.rs` (prints the component catalog).
+- `examples/`: the gallery is a separate crate, `gallery/` (including `appshell.rs`, the adaptive-layout demo).
+- `man/`: the man pages. `iced-libadwaita(7)` and `iced-libadwaita-desktop.conf(5)` are written by hand; `iced-libadwaita-<alias>(3)`, one per component, and the index `iced-libadwaita-components(3)` are **generated** from the source by `cargo xtask man` (`cargo xtask man --check` fails when they are stale).
+- `xtask/`: the repository's own tasks.
+- `docs/lib/` is the user guide and is published with the crate together with `man/`; `docs/hig-inferences/` is the contributors' design rationale and is not (see `include` in `Cargo.toml`).
 - `docs/lib/`: guidance on using the library. `docs/hig-inferences/`: what we target.
 
 #### Working on a component
 
 1. Read its file in `docs/hig-inferences/widgets/` and its _iced mapping_.
-2. Give it the shape in [docs/lib/components.md](docs/lib/components.md); add it to `src/catalog.rs` and regenerate the catalog: `cargo run --example catalog > docs/lib/components-catalog.md`.
+2. Give it the shape in [docs/lib/components.md](docs/lib/components.md); write its doc comments (`///` on the struct and on every public builder method, and `//!` on the file): `cargo xtask man` turns them into its man page. A component is a public struct exported from `src/widget/mod.rs` that becomes an `Element`, or an exported function returning an element.
 3. Show its states (including disabled) in the gallery.
 4. Record deviations from the reference in its _iced mapping_ section.
 5. Anything that wraps a child widget must forward `overlay()`; test popovers inside it.
 
 **Adding a property to an existing component** is not done until it works end to end. The property is added **to the library** (never only to an example or an app; the gallery is a client of it), and every new builder method gets, in the same change:
 
-- its entry in `src/catalog.rs` (`props`, `slots` or `events`), and the catalog regenerated;
-- a **control in the component's gallery playground** (`examples/gallery/plays.rs`: the `specs` control, its use in `build`, and its line in the generated code), so the property can be tried and its code read. A property whose default comes from the toolkit or the desktop config is a **plain value that starts at that default** and is overridden by its builder method, not an `Option` with a `None` case; its control shows the default, and the generated code only mentions it once it is changed;
-- a line in its `docs/hig-inferences/widgets/` page, and in `docs/lib/desktop-config.md` plus `desktop.conf.example` if a desktop config key backs the default.
+- a `///` doc comment on the method, then `cargo xtask man` (its man page lists it under PROPERTIES, SLOTS or EVENTS);
+- a **control in the component's gallery playground** (`gallery/src/plays.rs`: the `specs` control, its use in `build`, and its line in the generated code), so the property can be tried and its code read. A property whose default comes from the toolkit or the desktop config is a **plain value that starts at that default** and is overridden by its builder method, not an `Option` with a `None` case; its control shows the default, and the generated code only mentions it once it is changed;
+- a line in its `docs/hig-inferences/widgets/` page, and in `docs/lib/desktop-config.md` plus `desktop.conf.example` if a desktop config key backs the default (also `man/iced-libadwaita-desktop.conf.5`).
 
-A property that is missing from the catalog or the playground is invisible to everyone using the gallery or a declarative layer, so treat that as unfinished work.
+A property that has no doc comment (so is missing from the man page) or no playground control is invisible to everyone using the gallery or a declarative layer, so treat that as unfinished work.
 
 #### Docs
 

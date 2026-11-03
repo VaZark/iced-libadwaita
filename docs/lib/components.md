@@ -1,6 +1,6 @@
 # Components
 
-iced-libadwaita is a **component library**: every UI element is a reusable component with a uniform shape, so layouts can be written in code, or generated from a declarative description (XML/Blueprint, JSX-like, a macro) that maps tags to components. The machine-readable list is `iced_libadwaita::catalog::COMPONENTS` (rendered in [components-catalog.md](components-catalog.md)); `iced_libadwaita::prelude::*` imports everything needed.
+iced-libadwaita is a **component library**: every UI element is a reusable component with a uniform shape, so layouts can be written in code, or generated from a declarative description (XML/Blueprint, JSX-like, a macro) that maps tags to components. This page is the guide to how components fit together. The API of each one (constructors, properties, slots, events) is its man page, `iced-libadwaita-<alias>(3)` in `man/` (for example `man -l man/iced-libadwaita-dock.3`), generated from the doc comments; `iced-libadwaita-components(3)` indexes them; `iced_libadwaita::prelude::*` imports everything needed.
 
 ## Conventions
 
@@ -15,7 +15,7 @@ iced-libadwaita is a **component library**: every UI element is a reusable compo
 
 ## How to use forms
 
-The app owns the values and one `FormState<Key>`; a `FormSpec` lists the keys (one step is a single-page form). The state only remembers what the user touched or submitted, and answers, per key, whether the field may show its validity. `Field` draws the label, the control and the message; `Form` (optional) adds the Submit and Reset bar and, with several steps, Back and Next. See [Form](../hig-inferences/widgets/form.md) and [Field](../hig-inferences/widgets/field.md).
+The app owns the values and one `FormState<Key>`; a `FormSpec` lists the keys (one step is a single-page form). The state only remembers what the user touched or submitted, and answers, per key, whether the field may show its validity. `Field` draws the label, the control and the message; `Form` (optional) adds the Submit and Reset bar and, with several steps, Back and Next. See `Form` (`iced-libadwaita-form(3)`) and `Field` (`iced-libadwaita-field(3)`).
 
 ```rust
 use iced_libadwaita::prelude::*;
@@ -101,4 +101,4 @@ toolbar_view(page(
 </toolbar_view>
 ```
 
-Tag names are the snake_case constructors; attribute names are the properties; child elements go to the `slot` named by the catalog (`push` by default); `on_*` attributes name messages.
+Tag names are the snake_case constructors; attribute names are the properties; child elements go to the slot named in the component's man page (its SLOTS section) (`push` by default); `on_*` attributes name messages.

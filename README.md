@@ -28,7 +28,7 @@ Use `adw::Theme` as the application theme. The gallery is a separate crate that 
 
 #### Parameters belong to the library
 
-Every component property (a builder method, a desktop-config key behind its default, an override of that default) is added **to the library itself**, never only to an example or an app. The gallery is a client of the library: it shows what exists, and a parameter that cannot be reached through the library's own API does not exist. So whenever a new parameter is added, the same change adds it to the library's component, its catalog entry (`src/catalog.rs`), its docs, and its gallery playground, so it works end to end. The checklist is in [CONTRIBUTING.md](CONTRIBUTING.md#working-on-a-component).
+Every component property (a builder method, a desktop-config key behind its default, an override of that default) is added **to the library itself**, never only to an example or an app. The gallery is a client of the library: it shows what exists, and a parameter that cannot be reached through the library's own API does not exist. So whenever a new parameter is added, the same change adds it to the library's component, its doc comment (the man page is generated from it: `cargo xtask man`), its docs, and its gallery playground, so it works end to end. The checklist is in [CONTRIBUTING.md](CONTRIBUTING.md#working-on-a-component).
 
 #### Where to go next
 
