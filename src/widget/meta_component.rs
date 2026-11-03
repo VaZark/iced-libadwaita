@@ -110,6 +110,22 @@ impl<'a, P: PartialEq + 'a, M: 'a> MetaComponent<'a, P, M> {
         self.variant(key, trigger, build)
     }
 
+    /// The actions this component announces when it registers with a
+    /// [`MetaParentComponent`](super::MetaParentComponent): the keys its variants are selected
+    /// by, once each, in variant order.
+    pub fn actions(&self) -> Vec<P>
+    where
+        P: Clone,
+    {
+        let mut keys: Vec<P> = Vec::new();
+        for k in self.variants.iter().flat_map(|v| v.trigger.keys()) {
+            if !keys.contains(&k) {
+                keys.push(k);
+            }
+        }
+        keys
+    }
+
     fn index(&self, width: f32, scale: &Breakpoints) -> Option<usize> {
         meta::pick(
             self.variants.iter().map(|v| &v.trigger),

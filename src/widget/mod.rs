@@ -29,12 +29,14 @@ mod header_bar;
 mod infinite;
 mod menu;
 mod meta_component;
+mod meta_parent_component;
 mod motion;
 mod multi_select;
 mod navigation;
 mod pagination;
 mod preferences;
 mod range_slider;
+mod reorderable_list;
 mod resizable;
 mod responsive_table;
 mod rows;
@@ -57,7 +59,10 @@ pub use crate::primitives::anchor::{self, Align as AnchorAlign, Placed, Placemen
 pub use crate::primitives::calendar::{CalendarView, Dir as NavDir, Level};
 pub use crate::primitives::date::{Date, days_in_month, is_leap_year, validate as validate_date};
 pub use crate::primitives::form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
+pub use crate::primitives::meta_parent::Registry as MetaRegistry;
+pub use crate::primitives::meta_parent::{ChildEvent, Emitted};
 pub use crate::primitives::range::{Collide, DateRange, DayRole, Edge, Range, Thumb, Track};
+pub use crate::primitives::reorder::{Event as ReorderEvent, Mode, ReorderState};
 pub use crate::primitives::stepper::{Fill as StepperFill, Status as StepperStatus, StepperState};
 pub use crate::primitives::validation::{
     self, Interaction, Presentation as ValidationState, Validity,
@@ -108,6 +113,7 @@ pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent
 pub use infinite::{InfiniteList, LoadTrigger};
 pub use menu::{Menu, MenuButton, MenuItem, MenuPresentation, menu_button, primary_menu};
 pub use meta_component::MetaComponent;
+pub use meta_parent_component::{MetaParentComponent, Reporter};
 pub use motion::{
     DrawerLayer, Entrance, Highlight, PageTransition, PushStack, Reveal, drawer_layer, entrance,
     highlight, layered, page_transition, push_stack, reveal,
@@ -125,6 +131,7 @@ pub use pagination::label as pagination_label;
 pub use pagination::{PageSize, Pagination, PaginationSize, page_size_dropdown};
 pub use preferences::{PreferencesGroup, PreferencesPage, preferences_group, preferences_page};
 pub use range_slider::{RangeSlider, range_slider};
+pub use reorderable_list::ReorderableList;
 pub use resizable::Resizable;
 pub use responsive_table::{
     Column, Mode as TableMode, Presentation as TablePresentation, ResponsiveTable,

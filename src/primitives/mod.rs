@@ -15,6 +15,7 @@
 //! * [`pagination`]: page, page size, "Showing 21-40 of 187", Mantine's page-number window with dots;
 //! * [`range`]: a value with two ends (`lo <= hi`): the two-thumb slider's thumbs, a date range;
 //! * [`sections`]: text padding around an input's left / right sections;
+//! * [`reorder`]: a list with a preview and an edit view, the draft order, and what dragging a row means;
 //! * [`relative`]: relative time wording ("yesterday", "12 days ago", "in 3 hours") from an explicit `now`;
 //! * [`animation`]: the animation engine (easing, timed and spring animations, `Tween`, `Progress`);
 //! * [`transition`]: ordered close / open transitions between layouts (`Sequence`, `Transitions`);
@@ -23,6 +24,7 @@
 //! * [`stepper`]: step statuses from an `active` index, click rules, next / back, connector fill;
 //! * [`validation`]: when a field shows valid / invalid, and chaining validators;
 //! * [`meta`]: which variant of a meta component shows, and its [`Trigger`] (breakpoint or select);
+//! * [`meta_parent`]: the children of a meta parent: what each announced when it registered, and who a notification reaches;
 //! * [`resize`]: dragging a handle into a size (grips, min / max, grid and breakpoint snapping);
 //! * [`responsive`]: which presentation a width gets ([`When`](responsive::When)).
 
@@ -34,10 +36,12 @@ pub mod form;
 pub mod infinite;
 pub mod lookup;
 pub mod meta;
+pub mod meta_parent;
 pub mod notifications;
 pub mod pagination;
 pub mod range;
 pub mod relative;
+pub mod reorder;
 pub mod resize;
 pub mod responsive;
 pub mod sections;
@@ -53,6 +57,7 @@ pub use lookup::{Highlight, Lookup, Query, Request, RequestId, Status as LookupS
 pub use meta::Trigger;
 pub use pagination::{PageItem, Pagination};
 pub use relative::Relative;
+pub use reorder::{Event as ReorderEvent, Mode as ReorderMode, ReorderState};
 pub use responsive::When;
 pub use selection::Selection;
 pub use sorting::{Cycle as SortCycle, Direction as SortDirection, SortState};

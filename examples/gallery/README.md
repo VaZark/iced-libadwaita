@@ -30,7 +30,15 @@ flowchart TD
     T -- no --> I["Inline demo<br/>on the group page"]
 ```
 
+A component that is **large** (a nested page's worth of demo), even with one property group, also gets a nested page; the group page lists only small ones inline.
+
 Examples: Text input (validation, password, color override, width) is nested; a Check button (checked, unchecked, disabled) is inline; Alert dialog is an action row; the whole Feedback group is inline or actions, so it has no nested pages.
+
+#### Playgrounds
+
+A nested page for a component whose properties a single instance can express is a **playground** (`playground.rs`, after Mantine's docs configurators): one live component, a **Properties** panel (a switch per boolean, a toggle group per choice, a slider per number, with Reset) and the **Code** that builds what is shown, which follows the controls. Do not replicate the component once per property value. Keep separate static demos only where a playground cannot show it: several states at once (disabled next to enabled), a different layout per size, or anything that needs more than one instance to make sense.
+
+Pages so far: Layout > Reorderable list, Layout > Meta parent. The other nested pages still show static groups and move to a playground when touched.
 
 Guidelines:
 
