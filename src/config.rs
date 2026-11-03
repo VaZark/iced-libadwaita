@@ -67,6 +67,7 @@ pub enum Setting {
     RowCollapse,
     ToastPosition,
     ToastTarget,
+    PopoverBounds,
     RowWrapBasis,
     ExpanderIndent,
     IconTheme,
@@ -159,6 +160,8 @@ pub struct Config {
     pub toast_position: crate::widget::ToastPosition,
     /// `[toasts] target`: the whole window or only the content area.
     pub toast_target: crate::widget::ToastTarget,
+    /// `[popovers] bounds`: what a popover is kept inside by default.
+    pub popover_bounds: crate::widget::PopoverBounds,
     /// `[shortcuts] enabled`: keyboard shortcuts work (and are shown) at all.
     pub shortcuts_enabled: bool,
     /// `[shortcuts] hints`: whether menus show accelerator hints.
@@ -217,6 +220,7 @@ impl Default for Config {
             row_collapse: CollapseBehavior::Stacked,
             toast_position: Default::default(),
             toast_target: Default::default(),
+            popover_bounds: Default::default(),
             shortcuts_enabled: true,
             shortcut_hints: Default::default(),
             row_wrap_basis: 128.0,
@@ -525,6 +529,11 @@ impl Config {
                 .map(|p| self.toast_position = p)
                 .unwrap_or_else(|| bad!("toasts", "position", v));
         }
+        if let Some(v) = get("popovers", "bounds") {
+            crate::widget::PopoverBounds::from_key(v)
+                .map(|b| self.popover_bounds = b)
+                .unwrap_or_else(|| bad!("popovers", "bounds", v));
+        }
         if let Some(v) = get("toasts", "target") {
             crate::widget::ToastTarget::from_key(v)
                 .map(|t| self.toast_target = t)
@@ -725,6 +734,7 @@ pub struct Overrides {
     row_collapse: Option<CollapseBehavior>,
     toast_position: Option<crate::widget::ToastPosition>,
     toast_target: Option<crate::widget::ToastTarget>,
+    popover_bounds: Option<crate::widget::PopoverBounds>,
     shortcuts_enabled: Option<bool>,
     shortcut_hints: Option<crate::shortcut::Hints>,
     row_wrap_basis: Option<f32>,
@@ -808,6 +818,12 @@ impl Overrides {
         toast_target,
         crate::widget::ToastTarget,
         Setting::ToastTarget
+    );
+    override_fn!(
+        popover_bounds,
+        popover_bounds,
+        crate::widget::PopoverBounds,
+        Setting::PopoverBounds
     );
     override_fn!(
         shortcuts_enabled,
@@ -937,6 +953,9 @@ impl Overrides {
         }
         if let Some(v) = self.toast_target {
             c.toast_target = v
+        }
+        if let Some(v) = self.popover_bounds {
+            c.popover_bounds = v
         }
         if let Some(v) = self.shortcuts_enabled {
             c.shortcuts_enabled = v
@@ -1173,6 +1192,22 @@ thing=1
             assert_eq!(Trigger::from_key(t.key()), Some(t));
             assert!(!t.animation().is_empty());
         }
+    }
+
+    #[test]
+    fn popovers_stay_in_the_content_area_unless_the_config_says_window() {
+        use crate::widget::PopoverBounds;
+        assert_eq!(Config::default().popover_bounds, PopoverBounds::Content);
+        let c = Config::from_keyfile("[popovers]\nbounds=window\n");
+        assert_eq!(c.popover_bounds, PopoverBounds::Window);
+        assert!(c.warnings().is_empty());
+        let bad = Config::from_keyfile("[popovers]\nbounds=everywhere\n");
+        assert_eq!(
+            bad.popover_bounds,
+            PopoverBounds::Content,
+            "an invalid value keeps the default"
+        );
+        assert!(!bad.warnings().is_empty());
     }
 
     #[test]

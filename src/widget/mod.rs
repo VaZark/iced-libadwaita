@@ -15,6 +15,7 @@ mod banner;
 mod button;
 mod carousel;
 mod collapsible;
+mod content_area;
 mod date_input;
 mod date_range_input;
 mod divider;
@@ -35,6 +36,7 @@ mod motion;
 mod multi_select;
 mod navigation;
 mod pagination;
+mod popover;
 mod preferences;
 mod range_slider;
 mod reorderable_list;
@@ -94,19 +96,16 @@ pub use button::{
 };
 pub use carousel::{Carousel, CarouselIndicator, carousel};
 pub use collapsible::Collapsible;
+pub use content_area::{ContentArea, content_area};
 pub use date_input::DateInput;
 pub use date_range_input::DateRangeInput;
 pub use divider::{Divider, DividerTone, divider};
-pub use dropdown::{
-    Align as PopoverAlign, Appearance as DropdownAppearance, Dropdown,
-    Presentation as DropdownPresentation, dropdown, dropdown_disabled, menu_item,
-    menu_item_disabled, popover,
-};
+pub use dropdown::{dropdown, dropdown_disabled, menu_item, menu_item_disabled};
 pub use elevated::{Elevated, card_shadow};
 pub use extra::{
     bottom_sheet, bottom_sheet_in_window, breakpoint_bin, carousel_indicator_dots,
     carousel_indicator_lines, inline_view_switcher, password_entry_row, path_bar, shortcut_label,
-    sidebar, tab_bar, tab_button, view_switcher, view_switcher_bar, window, wrap_box,
+    sidebar, tab_button, view_switcher, view_switcher_bar, window, wrap_box,
 };
 pub use field::{Field, FieldLayout, outlined as field_outline};
 pub use flex::FlexRow;
@@ -137,6 +136,10 @@ pub use navigation::{
 };
 pub use pagination::label as pagination_label;
 pub use pagination::{PageSize, Pagination, PaginationSize, page_size_dropdown};
+pub use popover::{
+    Align as PopoverAlign, Appearance as PopoverAppearance, Popover, PopoverBounds,
+    Presentation as PopoverPresentation, popover, popover_bounds,
+};
 pub use preferences::{PreferencesGroup, PreferencesPage, preferences_group, preferences_page};
 pub use range_slider::{RangeSlider, range_slider};
 pub use reorderable_list::ReorderableList;

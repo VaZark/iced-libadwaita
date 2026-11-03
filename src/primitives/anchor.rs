@@ -13,7 +13,7 @@
 //! the anchor (`MatchAnchor`), a fraction of it, or `Fill`, with min / max and a `fit` that
 //! shrinks a popover to the room it has, like CSS `anchor-size()`.
 //!
-//! [`Dropdown`](crate::widget::Dropdown) and `Autocomplete` use it for their popovers.
+//! [`Popover`](crate::widget::Popover) and `Autocomplete` use it for their popovers.
 
 use iced::{Point, Rectangle, Size};
 

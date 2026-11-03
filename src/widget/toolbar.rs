@@ -119,7 +119,8 @@ impl<'a, M: 'a> From<ToolbarView<'a, M>> for Element<'a, M> {
         }
 
         let mut layers = vec![
-            container(t.content)
+            // The content between the bars: popovers opened inside stay inside it.
+            container(super::content_area(t.content))
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .into(),

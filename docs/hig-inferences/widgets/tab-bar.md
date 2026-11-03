@@ -16,7 +16,7 @@ Tabs for an `AdwTabView`: scrollable, pinned tabs, autohide, `expand-tabs`, acti
 
 ## iced mapping
 
-`tab_bar(tabs, active, on_select, on_close)`, `tab_button(count, msg)`.
+[`Tabs`](tabs.md) (any variant; `TabItem::closable(true)` with `Tabs::on_close`), `tab_button(count, msg)`.
 
 ## Deviations / gaps
 

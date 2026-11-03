@@ -229,6 +229,6 @@ pub fn page_size_dropdown<'a, M: Clone + 'a>(
     options: &'a [PageSize],
     current: usize,
     on_select: impl Fn(usize) -> M + 'a,
-) -> super::Dropdown<'a, M> {
+) -> super::Popover<'a, M> {
     super::dropdown(options, Some(PageSize(current)), move |s| on_select(s.0))
 }

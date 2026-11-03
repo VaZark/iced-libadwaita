@@ -322,7 +322,6 @@ impl Gallery {
             Detail::WrapBox => self.inline(Inline::WrapBox),
             Detail::Collapse => self.inline(Inline::Collapse),
             Detail::ViewSwitcher => self.inline(Inline::ViewSwitcher),
-            Detail::TabBar => self.inline(Inline::TabBar),
             Detail::Avatar => self.inline(Inline::Avatar),
             Detail::Tag => self.inline(Inline::Tag),
             Detail::ShortcutLabel => self.inline(Inline::ShortcutLabel),
@@ -782,15 +781,6 @@ impl Gallery {
                 ]
                 .into()
             }
-            Inline::TabBar => {
-                let tabs = w::tab_bar(
-                    vec!["Home".into(), "Docs".into(), "Settings".into()],
-                    self.tab as usize,
-                    |i| Message::Tab([Tab::One, Tab::Two, Tab::Three][i]),
-                    Some(|_| Message::Noop),
-                );
-                column![g("Tab bar").push(w::Card::new(tabs).padding(0))].into()
-            }
             Inline::PathBar => column![
                 g("Path bar").push(w::card(w::path_bar(
                     vec!["Home".into(), "Projects".into(), "iced-libadwaita".into()],
@@ -1086,7 +1076,7 @@ impl Gallery {
                 };
                 let pop = |label: &'static str, side: w::Side, o: bool| {
                     Element::from(
-                        w::Dropdown::custom(text(label), menu(label))
+                        w::Popover::new(text(label), menu(label))
                             .side(side)
                             .offset(8.0)
                             .popover_width(140.0)
@@ -1100,7 +1090,28 @@ impl Gallery {
                     pop("Left", w::Side::Left, false),
                 ]
                 .spacing(m.space_m);
-                column![g("Anchored popover").description("Side and offset against the trigger; it flips to the other side and shifts to stay inside the window.").push(w::card(sides))].into()
+                // Opening to the left from the edge of the content: kept to the content area it flips
+                // right; opted out to the window it opens over the sidebar.
+                let bounded = |label: &'static str, b: w::PopoverBounds| {
+                    Element::from(
+                        w::Popover::new(text(label), menu(label))
+                            .side(w::Side::Left)
+                            .offset(8.0)
+                            .popover_width(140.0)
+                            .bounds(b),
+                    )
+                };
+                let bounds = row![
+                    bounded("Left, content area", w::PopoverBounds::Content),
+                    bounded("Left, window", w::PopoverBounds::Window),
+                ]
+                .spacing(m.space_m);
+                column![
+                    g("Anchored popover").description("Side and offset against the trigger; it flips to the other side and shifts to stay inside the content area it opened from.").push(w::card(sides)),
+                    g("Bounds").description("A popover is kept inside the content area (beside the sidebar), not the whole window. `bounds(PopoverBounds::Window)` opts out; the default is the desktop config's `[popovers] bounds`.").push(w::card(bounds)),
+                ]
+                .spacing(m.group_spacing)
+                .into()
             }
             Inline::ResponsiveTable => {
                 let table = |mode: w::TableMode| {

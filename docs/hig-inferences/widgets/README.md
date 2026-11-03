@@ -49,6 +49,7 @@ One file per libadwaita element. Each ends with an **iced mapping** section.
 - [OverlaySplitView](overlay-split-view.md)
 - [PasswordEntryRow](password-entry-row.md)
 - [PathBar (Nautilus-style)](path-bar.md)
+- [Popover (anchored, content-area aware; the base of dropdowns and menus)](popover.md)
 - [PreferencesDialog](preferences-dialog.md)
 - [PreferencesGroup](preferences-group.md)
 - [PreferencesPage](preferences-page.md)

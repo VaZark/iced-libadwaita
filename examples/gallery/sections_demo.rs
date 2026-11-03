@@ -198,11 +198,11 @@ impl State {
     /// The search entry: `left` section, and the filter button (with its popover) as the right
     /// section.
     fn search_entry<'a>(&'a self, m: Metrics, left: Element<'a, Msg>) -> Element<'a, Msg> {
-        let filter = w::Dropdown::custom(
+        let filter = w::Popover::new(
             w::SectionButton::<Msg>::face(Icon::Filter, self.filtered()),
             self.filter_popover(),
         )
-        .appearance(w::DropdownAppearance::Flat)
+        .appearance(w::PopoverAppearance::Flat)
         .padding(0)
         .align(w::PopoverAlign::End)
         .keep_open(true)

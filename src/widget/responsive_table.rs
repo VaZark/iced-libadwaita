@@ -494,7 +494,7 @@ fn sort_control<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Opti
         .align_y(Vertical::Center),
     )
     .center_y(Length::Fixed(side - m.button_padding.y()));
-    let picker = super::Dropdown::custom(trigger, super::popover(items, 280.0));
+    let picker = super::Popover::new(trigger, super::popover(items, 280.0));
 
     let (arrow, press) = match current {
         Some((_, s)) => (

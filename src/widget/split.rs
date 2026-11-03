@@ -12,7 +12,8 @@
 //! separated by a hairline, like a two-segment [`ToggleGroup`](super::ToggleGroup).
 
 use super::button::sized;
-use super::dropdown::{Align, Appearance, Dropdown, menu_item, menu_item_disabled, popover};
+use super::dropdown::{menu_item, menu_item_disabled};
+use super::popover::{Align, Appearance, Popover, popover};
 use super::{ButtonContent, Element, Menu};
 use crate::style::button::{self as sb, Position};
 use crate::{Icon, Metrics, Theme};
@@ -37,7 +38,7 @@ fn joined<'a, M: Clone + 'a>(
         }
     }))
     .center_y(Length::Fixed(m.button_min_height - m.button_padding.y()));
-    let menu = Dropdown::custom(arrow, popover)
+    let menu = Popover::new(arrow, popover)
         .appearance(Appearance::Linked(Position::End))
         .align(Align::End)
         .popover_width(220.0)

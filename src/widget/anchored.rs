@@ -10,7 +10,7 @@
 //! The floating surface is drawn over the base and gets events first. Placement is a pure
 //! function (`place_sized`, unit tested); this widget only lays the two children out and routes
 //! events, draws and overlays. There is no viewport here, so an `Outside` placement does not
-//! flip or shift; use [`Dropdown`](super::Dropdown) for popovers.
+//! flip or shift; use [`Popover`](super::Popover) for popovers.
 
 use super::Element;
 use crate::Theme;

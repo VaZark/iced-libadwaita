@@ -9,7 +9,7 @@ libadwaita has no form-field widget: rows (`AdwEntryRow`, `AdwSpinRow`, ...) car
 
 ## iced mapping
 
-`widget::Field` over `primitives::validation` (pure: `Validity`, `present`, `chain`, `required`; unit tested). The state is controlled: the application passes `validity`, `touched`, `submitted`; the field stores nothing. The control is wrapped in a container that draws the ring, at a fixed position in a column, so wrapped widgets keep their state and their overlays (a `Dropdown` popover opens inside a field).
+`widget::Field` over `primitives::validation` (pure: `Validity`, `present`, `chain`, `required`; unit tested). The state is controlled: the application passes `validity`, `touched`, `submitted`; the field stores nothing. The control is wrapped in a container that draws the ring, at a fixed position in a column, so wrapped widgets keep their state and their overlays (a `Popover` opens inside a field).
 
 Deviations:
 

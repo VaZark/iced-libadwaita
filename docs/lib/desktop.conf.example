@@ -79,6 +79,9 @@ hints=auto               # auto | always | never: accelerator hints in menus (au
 position=bottom-center   # top|bottom - left|center|right, e.g. top-right
 target=content           # content (content area only, centered on it) | window (over the sidebar too)
 
+[popovers]
+bounds=content           # content (kept inside the content area it opened from) | window (the whole window)
+
 [rows]
 collapse=stacked         # stacked | flex  (what a wrapped row suffix does)
 wrap-basis=128           # minimum title width before the suffix wraps

@@ -11,7 +11,8 @@
 //! computed by the shared [`Selection`](crate::primitives::Selection) rule, which also gives
 //! a single-choice variant (`Selection::SINGLE`) with the same widget.
 
-use super::dropdown::{Dropdown, option_items, popover};
+use super::dropdown::option_items;
+use super::popover::{Popover, popover};
 use super::{Badge, Element};
 use crate::{Icon, Metrics, Role};
 use iced::Length;
@@ -128,7 +129,7 @@ where
         .center_y(Length::Fixed(m.button_min_height - m.button_padding.y()));
         let selected = s.selected;
         let items = option_items(s.options, |o| selected.contains(o), &s.on_toggle);
-        Dropdown::custom(trigger, popover(items, 280.0))
+        Popover::new(trigger, popover(items, 280.0))
             .width(s.width)
             .keep_open(true)
             .disabled(disabled)

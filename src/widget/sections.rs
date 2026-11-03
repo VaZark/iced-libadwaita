@@ -109,7 +109,7 @@ impl<'a, M> SectionButton<'a, M> {
         self
     }
     /// The button's look with no press handler, for a trigger that handles the press itself
-    /// (a [`Dropdown`](super::Dropdown) anchored to it).
+    /// (a [`Popover`](super::Popover) anchored to it).
     pub fn face(icon: Icon, active: bool) -> Element<'a, M>
     where
         M: 'a,

@@ -365,6 +365,12 @@ pub const PROPERTIES: &[Property] = &[
         Choice(&["window", "content"]),
         "content",
     ),
+    p(
+        "popovers",
+        "bounds",
+        Choice(&["content", "window"]),
+        "content",
+    ),
     p("rows", "collapse", Choice(&["stacked", "flex"]), "stacked"),
     p(
         "rows",

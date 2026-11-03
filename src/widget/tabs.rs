@@ -3,6 +3,9 @@
 //! activates, disabled tabs) is the [`tabs`](crate::primitives::tabs) primitive, shared with the
 //! segmented control behind [`toggle_group`](super::toggle_group).
 //!
+//! A tab can be [`closable`](TabItem::closable): the close button is drawn in the style of the
+//! variant and sends the tab's key to [`on_close`](Tabs::on_close) (the app removes it).
+//!
 //! Controlled: the app owns the active key and takes it from `on_change`. Each tab may carry
 //! the panel that shows while it is active (built only then), or none, for a list that drives
 //! something else (the gallery's Preview / Code tabs).
@@ -55,6 +58,7 @@ pub struct TabItem<'a, K, M> {
     label: String,
     icon: Option<Icon>,
     disabled: bool,
+    closable: bool,
     panel: Option<Panel<'a, M>>,
 }
 
@@ -65,6 +69,7 @@ impl<'a, K, M> TabItem<'a, K, M> {
             label: label.into(),
             icon: None,
             disabled: false,
+            closable: false,
             panel: None,
         }
     }
@@ -75,6 +80,12 @@ impl<'a, K, M> TabItem<'a, K, M> {
     /// A disabled tab is dimmed and cannot be activated.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+    /// A close button on this tab, in the style of the tabs' variant. Its press sends the tab's
+    /// key to [`Tabs::on_close`]; the app removes the tab.
+    pub fn closable(mut self, closable: bool) -> Self {
+        self.closable = closable;
         self
     }
     /// What shows while this tab is active; built only then.
@@ -89,6 +100,7 @@ pub struct Tabs<'a, K, M> {
     items: Vec<TabItem<'a, K, M>>,
     active: Option<K>,
     on_change: Box<dyn Fn(K) -> M + 'a>,
+    on_close: Option<Box<dyn Fn(K) -> M + 'a>>,
     variant: TabsVariant,
     grow: bool,
     metrics: Metrics,
@@ -100,6 +112,7 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
             items: Vec::new(),
             active,
             on_change: Box::new(on_change),
+            on_close: None,
             variant: TabsVariant::default(),
             grow: false,
             metrics: Metrics::desktop(),
@@ -107,6 +120,11 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
     }
     pub fn tab(mut self, item: TabItem<'a, K, M>) -> Self {
         self.items.push(item);
+        self
+    }
+    /// A closable tab's close button was pressed.
+    pub fn on_close(mut self, f: impl Fn(K) -> M + 'a) -> Self {
+        self.on_close = Some(Box::new(f));
         self
     }
     pub fn variant(mut self, v: TabsVariant) -> Self {
@@ -132,6 +150,21 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
     fn active_index(&self) -> Option<usize> {
         let key = self.active.as_ref()?;
         self.items.iter().position(|t| t.key == *key)
+    }
+    /// The close button of tab `i`, if it is closable and the app handles closing.
+    fn close_button(&self, i: usize) -> Option<Element<'a, M>> {
+        let item = &self.items[i];
+        let f = self
+            .on_close
+            .as_ref()
+            .filter(|_| item.closable && !item.disabled)?;
+        Some(
+            button(Icon::WindowClose.view(12.0))
+                .padding(self.metrics.space_xs)
+                .style(sb::circular_flat)
+                .on_press(f(item.key.clone()))
+                .into(),
+        )
     }
     /// The message a press on tab `i` sends: none when it is disabled.
     fn press(&self, i: usize) -> Option<M> {
@@ -160,11 +193,15 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
         let b = button(content)
             .padding([m.space_xs, m.space_m])
             .on_press_maybe(self.press(i));
-        match self.variant {
+        let title: Element<'a, M> = match self.variant {
             TabsVariant::Pills if active => b.style(sb::suggested_pill),
             _ => b.style(sb::flat),
         }
-        .into()
+        .into();
+        match self.close_button(i) {
+            Some(close) => row![title, close].align_y(Vertical::Center).into(),
+            None => title,
+        }
     }
 
     fn tab_list(&self) -> Element<'a, M> {
@@ -291,5 +328,31 @@ mod tests {
             }));
         let _: Element<'_, u8> = t.into();
         assert_eq!(built.get(), 1);
+    }
+
+    #[test]
+    fn a_close_button_needs_a_closable_enabled_tab_and_a_handler() {
+        let tabs = |handler: bool| {
+            let mut t: Tabs<'static, u8, u8> = Tabs::new(Some(0), |k| k)
+                .tab(TabItem::new(0, "Pinned"))
+                .tab(TabItem::new(1, "Closable").closable(true))
+                .tab(TabItem::new(2, "Disabled").closable(true).disabled(true));
+            if handler {
+                t = t.on_close(|k| 100 + k);
+            }
+            t
+        };
+        let t = tabs(true);
+        assert!(t.close_button(0).is_none(), "not closable");
+        assert!(t.close_button(1).is_some());
+        assert!(
+            t.close_button(2).is_none(),
+            "a disabled tab cannot be closed"
+        );
+        assert!(
+            tabs(false).close_button(1).is_none(),
+            "nobody handles closing"
+        );
+        let _: Element<'_, u8> = t.into();
     }
 }

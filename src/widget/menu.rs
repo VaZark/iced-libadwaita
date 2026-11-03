@@ -1,6 +1,7 @@
 //! Menus and `GtkMenuButton`, with two presentations.
 //!
-//! * [`MenuPresentation::Dropdown`]: an anchored popover (the desktop default).
+//! * [`MenuPresentation::Dropdown`]: a [`Popover`] anchored to the button (the desktop default),
+//!   kept inside the content area it opens from (see [`Popover::bounds`]).
 //! * [`MenuPresentation::FullPage`]: the menu takes over the window as a page
 //!   with a header (back button + title) and large touch rows, for narrow or
 //!   mobile windows.
@@ -14,8 +15,8 @@
 //!   libadwaita's `AdwDialog` switches to a sheet on narrow windows. We follow that with
 //!   [`MenuPresentation::for_width`] (mobile mode, below 576px → full page).
 
-use super::dropdown::{
-    Align, Appearance, Dropdown, PAGE_BACK_WIDTH, PAGE_HEADER_HEIGHT, Presentation,
+use super::popover::{
+    Align, Appearance, PAGE_BACK_WIDTH, PAGE_HEADER_HEIGHT, Popover, PopoverBounds, Presentation,
 };
 use super::{Element, boxed_list, clamp, scrolled_window};
 use crate::style::{button as sb, container as sc, text as st};
@@ -170,6 +171,7 @@ pub struct MenuButton<M> {
     tooltip: Option<String>,
     window_radius: f32,
     open_initially: bool,
+    bounds: Option<PopoverBounds>,
 }
 
 /// An icon button opening `menu`.
@@ -181,6 +183,7 @@ pub fn menu_button<M>(icon: Icon, menu: Menu<M>) -> MenuButton<M> {
         tooltip: None,
         window_radius: 0.0,
         open_initially: false,
+        bounds: None,
     }
 }
 
@@ -200,6 +203,12 @@ impl<M> MenuButton<M> {
         self
     }
     /// Rounds the full page's corners to match a rounded window.
+    /// What the menu's popover is kept inside: the content area the button is in, or the whole
+    /// window. Without it the popover's default applies (`[popovers] bounds`).
+    pub fn bounds(mut self, bounds: PopoverBounds) -> Self {
+        self.bounds = Some(bounds);
+        self
+    }
     pub fn window_radius(mut self, r: f32) -> Self {
         self.window_radius = r;
         self
@@ -381,13 +390,16 @@ impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
             ),
             MenuPresentation::FullPage => (page(&b.menu, b.window_radius), Presentation::Page),
         };
-        let dd = Dropdown::custom(trigger, content)
+        let mut dd = Popover::new(trigger, content)
             .appearance(Appearance::Flat)
             .padding(0)
             .presentation(presentation)
             .align(Align::End)
             .popover_width(260.0)
             .open_initially(b.open_initially);
+        if let Some(bounds) = b.bounds {
+            dd = dd.bounds(bounds);
+        }
         let button: Element<'a, M> = match b.tooltip {
             Some(t) => tooltip(
                 Element::from(dd),

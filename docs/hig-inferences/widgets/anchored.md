@@ -8,6 +8,6 @@
 
 ## iced mapping
 
-`widget::Anchored` is generic over the renderer (so its layout is unit tested without a window). Popovers of both children are forwarded as overlays. There is no viewport inside a layout, so an `Outside` placement does not flip or shift here: use `Dropdown` for popovers.
+`widget::Anchored` is generic over the renderer (so its layout is unit tested without a window). Popovers of both children are forwarded as overlays. There is no viewport inside a layout, so an `Outside` placement does not flip or shift here: use `Popover` for popovers (it works inside the region it is kept in).
 
 Deviations from Mantine: no `processing` pulse, no `inline`/`withBorder` (draw the ring in the badge's own style), `size` belongs to the badge.

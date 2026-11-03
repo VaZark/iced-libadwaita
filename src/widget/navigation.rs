@@ -648,7 +648,7 @@ impl<'a, M: Clone + 'a> NavigationSplitView<'a, M> {
             .height(Length::Fill)
             .style(pane(left))
             .into();
-        let content: Element<'a, M> = container(v.content)
+        let content: Element<'a, M> = container(super::content_area(v.content))
             .width(Length::Fill)
             .height(Length::Fill)
             .into();
@@ -710,8 +710,10 @@ impl<'a, M: 'a> OverlaySplitView<'a, M> {
 
 impl<'a, M: Clone + 'a> From<OverlaySplitView<'a, M>> for Element<'a, M> {
     fn from(v: OverlaySplitView<'a, M>) -> Self {
+        // Popovers opened in the content stay inside it, not under the sidebar.
+        let content: Element<'a, M> = super::content_area(v.content).into();
         if !v.show_sidebar {
-            return v.content;
+            return content;
         }
         let side = container(v.sidebar)
             .width(Length::Fixed(v.sidebar_width))
@@ -722,7 +724,7 @@ impl<'a, M: Clone + 'a> From<OverlaySplitView<'a, M>> for Element<'a, M> {
                 container(space().width(1))
                     .height(Length::Fill)
                     .style(sc::sidebar_separator),
-                v.content
+                content
             ]
             .into();
         }
@@ -735,7 +737,7 @@ impl<'a, M: Clone + 'a> From<OverlaySplitView<'a, M>> for Element<'a, M> {
         if let Some(m) = v.on_close {
             scrim = scrim.on_press(m);
         }
-        stack![v.content, opaque(scrim), opaque(side)].into()
+        stack![content, opaque(scrim), opaque(side)].into()
     }
 }
 

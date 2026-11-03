@@ -16,7 +16,7 @@
 //! The calendar stays open while you page through months or pick a day (click outside or press
 //! Escape to close it).
 
-use super::dropdown::{Align, Appearance, Dropdown, popover};
+use super::popover::{Align, Appearance, Popover, popover};
 use super::{Element, EntryState, entry};
 use crate::primitives::calendar::{COLUMNS, CalendarView, Cell, Dir, Level, can_jump};
 use crate::primitives::date::{Date, WEEKDAYS};
@@ -481,7 +481,7 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
             },
         );
         let calendar = popover([grid], 400.0);
-        let opener = Dropdown::custom(Icon::GoDown.view(m.icon_size), calendar)
+        let opener = Popover::new(Icon::GoDown.view(m.icon_size), calendar)
             .appearance(Appearance::Button)
             .align(Align::End)
             .popover_width(POPOVER_WIDTH)

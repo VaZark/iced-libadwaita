@@ -22,7 +22,7 @@
 //! [`Field`](super::Field)); [`validity`](DateRangeInput::validity) is the message for it.
 
 use super::date_input::{CELL, Cal, OnNav, OnView, POPOVER_WIDTH, calendar, nav_message};
-use super::dropdown::{Align, Appearance, Dropdown, popover};
+use super::popover::{Align, Appearance, Popover, popover};
 use super::{Element, EntryState, entry};
 use crate::Theme;
 use crate::primitives::calendar::{CalendarView, Level};
@@ -361,7 +361,7 @@ impl<'a, M: Clone + 'a> From<DateRangeInput<'a, M>> for Element<'a, M> {
             }
         });
 
-        let opener = Dropdown::custom(Icon::GoDown.view(m.icon_size), popover([grid], 400.0))
+        let opener = Popover::new(Icon::GoDown.view(m.icon_size), popover([grid], 400.0))
             .appearance(Appearance::Button)
             .align(Align::End)
             .popover_width(POPOVER_WIDTH)

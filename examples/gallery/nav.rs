@@ -154,10 +154,7 @@ impl Page {
                 ),
             ],
             Page::Navigation => vec![
-                (
-                    "Switchers",
-                    vec![n(Tabs), n(ViewSwitcher), n(TabBar), n(PathBar)],
-                ),
+                ("Switchers", vec![n(Tabs), n(ViewSwitcher), n(PathBar)]),
                 ("Paging", vec![n(Carousel)]),
                 (
                     "Menus & shortcuts",
@@ -258,7 +255,6 @@ pub enum Detail {
     WrapBox,
     Collapse,
     ViewSwitcher,
-    TabBar,
     Avatar,
     Tag,
     ShortcutLabel,
@@ -307,7 +303,6 @@ pub enum Inline {
     WrapBox,
     Collapse,
     ViewSwitcher,
-    TabBar,
     PathBar,
     Carousel,
     MenuButton,
@@ -397,7 +392,6 @@ impl Detail {
             Detail::WrapBox => "Wrap box",
             Detail::Collapse => "Collapse behavior",
             Detail::ViewSwitcher => "View switcher",
-            Detail::TabBar => "Tab bar",
             Detail::Avatar => "Avatar",
             Detail::Tag => "Tag",
             Detail::ShortcutLabel => "Shortcut label",
@@ -478,7 +472,6 @@ impl Detail {
             Detail::WrapBox => "Spacing and wrapping children",
             Detail::Collapse => "Stacked and flex controls in a row",
             Detail::ViewSwitcher => "Icons and labels",
-            Detail::TabBar => "Tabs and a close button",
             Detail::Avatar => "Size, name and initials",
             Detail::Tag => "Roles",
             Detail::ShortcutLabel => "Key combinations",

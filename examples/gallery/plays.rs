@@ -227,6 +227,9 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::bool("icons", "Icons", false),
             S::bool("disabled", "Settings disabled", false),
             S::bool("panels", "Panels", true),
+            S::bool("closable", "Closable tabs", false),
+            S::bool("show_messages", "Messages tab", true),
+            S::bool("show_settings", "Settings tab", true),
         ],
         Detail::ViewSwitcher => vec![S::choice(
             "selected",
@@ -234,10 +237,6 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             &["Files", "Search", "Settings"],
             0,
         )],
-        Detail::TabBar => vec![
-            S::choice("selected", "Selected", &["Home", "Docs", "Settings"], 0),
-            S::bool("closable", "Closable", true),
-        ],
         Detail::PathBar => vec![S::choice(
             "current",
             "Current segment",
@@ -762,9 +761,24 @@ pub fn build<'a>(
             let mut tabs = w::Tabs::new(Some(p.choice("selected")), on_pick(d, "selected"))
                 .variant(variant)
                 .grow(p.bool("grow"))
+                .on_close(move |k: usize| {
+                    // Closing a tab turns its control off: the app removes the tab.
+                    let key = if k == 1 {
+                        "show_messages"
+                    } else {
+                        "show_settings"
+                    };
+                    Message::Play(d, PMsg::Bool(key, false))
+                })
                 .metrics(m);
             for (i, (name, icon)) in names.into_iter().enumerate() {
-                let mut t = w::TabItem::new(i, name).disabled(i == 2 && p.bool("disabled"));
+                if (i == 1 && !p.bool("show_messages")) || (i == 2 && !p.bool("show_settings")) {
+                    continue;
+                }
+                // The first tab is pinned: it has no close button.
+                let mut t = w::TabItem::new(i, name)
+                    .disabled(i == 2 && p.bool("disabled"))
+                    .closable(p.bool("closable") && i != 0);
                 if p.bool("icons") {
                     t = t.icon(icon);
                 }
@@ -783,6 +797,10 @@ pub fn build<'a>(
                 )
                 .add(p.bool("grow"), ".grow(true)")
                 .add(
+                    p.bool("closable"),
+                    ".on_close(Msg::CloseTab)   // the app removes the tab",
+                )
+                .add(
                     true,
                     &format!(
                         ".tab(TabItem::new(0, \"Gallery\"){}{})",
@@ -798,13 +816,28 @@ pub fn build<'a>(
                         }
                     ),
                 )
-                .add(true, ".tab(TabItem::new(1, \"Messages\"))")
                 .add(
-                    true,
+                    p.bool("show_messages"),
                     &format!(
-                        ".tab(TabItem::new(2, \"Settings\"){})",
+                        ".tab(TabItem::new(1, \"Messages\"){})",
+                        if p.bool("closable") {
+                            ".closable(true)"
+                        } else {
+                            ""
+                        }
+                    ),
+                )
+                .add(
+                    p.bool("show_settings"),
+                    &format!(
+                        ".tab(TabItem::new(2, \"Settings\"){}{})",
                         if p.bool("disabled") {
                             ".disabled(true)"
+                        } else {
+                            ""
+                        },
+                        if p.bool("closable") {
+                            ".closable(true)"
                         } else {
                             ""
                         }
@@ -828,19 +861,6 @@ pub fn build<'a>(
                 stage(el),
                 Code::new("view_switcher(items, Some(self.selected), Msg::Select)").done(),
             )
-        }
-        Detail::TabBar => {
-            let close = p.bool("closable");
-            let tabs = w::tab_bar(
-                vec!["Home".into(), "Docs".into(), "Settings".into()],
-                p.choice("selected"),
-                on_pick(d, "selected"),
-                close.then_some(|_| Message::Noop),
-            );
-            let code = Code::new("tab_bar(titles, self.selected, Msg::Select, on_close)")
-                .add(!close, "// no close button: pass None")
-                .done();
-            (Element::from(tabs), code)
         }
         Detail::PathBar => {
             let el = w::path_bar(
@@ -1032,7 +1052,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "MultiSelect::new(&FRUITS, &self.chosen, Msg::Toggle)\n    .placeholder(\"Pick fruits\")\n    .max_chips(2)\n    .width(Length::Fixed(260.0))"
         }
         Detail::AnchoredPopover => {
-            "Anchored::new(trigger, popover([menu_item(\"First\", false, Msg::A)], 160.0))\n    .placement(Placement { side: Side::Bottom, align: Align::Start, ..Placement::default() })\n\n// it flips to the other side and shifts to stay inside the window"
+            "Popover::new(text(\"Open\"), popover([menu_item(\"First\", false, Msg::A)], 160.0))\n    .side(Side::Bottom)\n    .align(PopoverAlign::Start)\n    .offset(8.0)\n    .popover_width(140.0)\n    .bounds(PopoverBounds::Window)   // omitted: kept inside the content area it opened from\n\n// it flips to the other side and shifts to stay inside its bounds"
         }
         Detail::Surfaces => {
             "let sem = theme.semantic;\ncolor_swatch(\"card\", sem.card)\nstatus_swatch(\"accent\", sem.accent)\n\n// every surface and status color is a field of `Theme::semantic`"

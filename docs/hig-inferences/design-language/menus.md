@@ -29,4 +29,4 @@ Sources: [GNOME HIG: Menus](https://developer.gnome.org/hig/patterns/controls/me
 
 ## iced mapping
 
-`primary_menu(Menu)` / `menu_button(icon, Menu)` with `.presentation(..)`, `.tooltip(..)`, `.window_radius(..)`. Menus are built from `MenuItem::action` / `MenuItem::check` (`.accel`, `.icon`, `.destructive`) grouped with `Menu::section`. Built on the same overlay as `Dropdown`: click outside, Escape or a selection closes a dropdown; the full page closes on Escape, selection, or its back area. No submenus (HIG), no access keys, no keyboard navigation yet.
+`primary_menu(Menu)` / `menu_button(icon, Menu)` with `.presentation(..)`, `.tooltip(..)`, `.window_radius(..)`. Menus are built from `MenuItem::action` / `MenuItem::check` (`.accel`, `.icon`, `.destructive`) grouped with `Menu::section`. Built on [`Popover`](../widgets/popover.md) (kept inside the content area it opens from; `.bounds(PopoverBounds::Window)` opts out): click outside, Escape or a selection closes a dropdown; the full page closes on Escape, selection, or its back area. No submenus (HIG), no access keys, no keyboard navigation yet.

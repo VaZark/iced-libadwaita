@@ -10,7 +10,7 @@ libadwaita and GTK 4 have no date-range picker (`GtkCalendar` selects one day). 
 
 ## iced mapping
 
-`widget::DateRangeInput`: two `Entry`s and a `Dropdown` with `keep_open(true)`. The month grid is shared with `DateInput` (`date_input::calendar`); only the day cells differ. The pointer preview is app state (`on_hover`/`hover`, sent only while a start is chosen without an end) because iced buttons do not expose hover; without `on_hover` the range just has no preview. `.revealed(bool)` and `validity()` follow `DateInput`, so it works inside `Field`: pass `Field::validity(input.validity())` and `revealed(touched || submitted)`.
+`widget::DateRangeInput`: two `Entry`s and a `Popover` with `keep_open(true)`. The month grid is shared with `DateInput` (`date_input::calendar`); only the day cells differ. The pointer preview is app state (`on_hover`/`hover`, sent only while a start is chosen without an end) because iced buttons do not expose hover; without `on_hover` the range just has no preview. `.revealed(bool)` and `validity()` follow `DateInput`, so it works inside `Field`: pass `Field::validity(input.validity())` and `revealed(touched || submitted)`.
 
 Navigation is the shared `primitives::calendar` (see `DateInput`); `on_view` remains the month-level compatibility path.
 

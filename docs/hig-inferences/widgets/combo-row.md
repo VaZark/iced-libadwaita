@@ -24,7 +24,7 @@ Row: `row.combo`. Popover: `popover.menu` > `scrolledwindow` > `listview`. Role:
 
 ## iced mapping
 
-`ComboRow::new(title, options, selected, on_select)` using the shared `adw::widget::Dropdown` (custom overlay popover).
+`ComboRow::new(title, options, selected, on_select)` using the shared [`Popover`](popover.md).
 
 ## Deviations / gaps
 

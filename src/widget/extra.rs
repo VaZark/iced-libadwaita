@@ -192,41 +192,6 @@ fn indicator<'a, M: Clone + 'a>(
     container(r).padding(8).into()
 }
 
-/// `AdwTabBar`: a row of tabs, each optionally closable.
-pub fn tab_bar<'a, M: Clone + 'a>(
-    tabs: Vec<String>,
-    active: usize,
-    on_select: impl Fn(usize) -> M + 'a,
-    on_close: Option<impl Fn(usize) -> M + 'a>,
-) -> Element<'a, M> {
-    let m = Metrics::desktop();
-    let mut r = row![]
-        .spacing(m.space_xs)
-        .padding(m.space_xs)
-        .align_y(Vertical::Center);
-    for (i, title) in tabs.into_iter().enumerate() {
-        let mut label = row![container(super::typography::label(title)).width(Length::Fill)]
-            .spacing(m.space_s)
-            .align_y(Vertical::Center);
-        if let Some(close) = &on_close {
-            label = label.push(
-                button(Icon::WindowClose.view(12.0))
-                    .padding(m.space_xs)
-                    .style(sb::circular_flat)
-                    .on_press(close(i)),
-            );
-        }
-        r = r.push(
-            button(label)
-                .padding([m.space_xs, m.space_m])
-                .width(Length::FillPortion(1))
-                .style(sb::flat_toggle(i == active))
-                .on_press(on_select(i)),
-        );
-    }
-    container(r).width(Length::Fill).style(sc::headerbar).into()
-}
-
 /// `AdwTabButton`: shows the open tab count, e.g. to open a tab overview.
 pub fn tab_button<'a, M: Clone + 'a>(count: usize, on_press: M) -> Element<'a, M> {
     let m = Metrics::desktop();

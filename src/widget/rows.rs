@@ -479,8 +479,8 @@ where
                 super::menu_item(o.to_string(), is_selected, on_select(o.clone()))
             }
         });
-        super::Dropdown::custom(header, super::popover(items, 280.0))
-            .appearance(super::DropdownAppearance::Row)
+        super::Popover::new(header, super::popover(items, 280.0))
+            .appearance(super::PopoverAppearance::Row)
             .align(super::PopoverAlign::End)
             .popover_width(240.0)
             .open_initially(c.open_initially)
