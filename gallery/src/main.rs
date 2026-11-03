@@ -135,6 +135,13 @@ struct Gallery {
     accent: AccentColor,
     accent_text: String,
     compact: bool,
+    /// Surface transparency in percent, and what is typed for it.
+    transparency: u32,
+    /// Opt-in surface tint: whether it is on, and its color (alpha is the strength).
+    tint_on: bool,
+    tint: iced::Color,
+    tint_text: String,
+    transparency_text: String,
     radius_m: f32,
     radius_l: f32,
     radius_toast: f32,
@@ -261,6 +268,10 @@ enum Message {
     Scheme(bool),
     Accent(AccentColor),
     AccentText(String),
+    Transparency(String),
+    Tint(adw::widget::Hsva),
+    TintOn(bool),
+    TintText(String),
     Compact(bool),
     RadiusM(f32),
     RadiusL(f32),
@@ -441,6 +452,9 @@ impl Gallery {
             adw::config::Pick::Fixed(a) => a,
             adw::config::Pick::System => adw::system::accent_color().unwrap_or(AccentColor::Blue),
         };
+        let tint_color = cfg
+            .tint
+            .unwrap_or(iced::Color::from_rgba(0.21, 0.52, 0.89, 0.25));
         let boot = Task::batch([
             open_main.map(|_| Message::Noop),
             boot,
@@ -468,6 +482,17 @@ impl Gallery {
                 accent,
                 accent_text: accent.key(),
                 compact: cfg.density == adw::config::Density::Compact,
+                transparency: (cfg.transparency * 100.0).round() as u32,
+                tint_on: cfg.tint.is_some(),
+                tint: tint_color,
+                tint_text: adw::widget::Hsva::from_rgba(
+                    tint_color.r,
+                    tint_color.g,
+                    tint_color.b,
+                    tint_color.a,
+                )
+                .format(adw::widget::ColorFormat::Hexa),
+                transparency_text: ((cfg.transparency * 100.0).round() as u32).to_string(),
                 radius_m: std::env::var("GALLERY_RM")
                     .ok()
                     .and_then(|v| v.parse().ok())
@@ -653,6 +678,8 @@ impl Gallery {
             .with_metrics(self.metrics())
             .with_shadows(shadows)
             .with_auto_contrast(adw::config::current().auto_contrast)
+            .with_transparency(self.transparency as f32 / 100.0)
+            .with_tint(self.tint_on.then_some(self.tint))
             .with_transparent_window(Self::csd());
         if self.card_override {
             t = t.with_semantic(|s| {
@@ -719,6 +746,29 @@ impl Gallery {
                 self.accent_text = t;
             }
             Message::Compact(c) => self.compact = c,
+            Message::TintOn(on) => self.tint_on = on,
+            Message::Tint(c) => {
+                self.tint = iced::Color::from_rgba(
+                    c.to_rgb8()[0] as f32 / 255.0,
+                    c.to_rgb8()[1] as f32 / 255.0,
+                    c.to_rgb8()[2] as f32 / 255.0,
+                    c.a,
+                );
+                self.tint_text = c.format(adw::widget::ColorFormat::Hexa);
+            }
+            Message::TintText(t) => {
+                if let Some(c) = adw::widget::Hsva::parse(&t) {
+                    let [r, g, b] = c.to_rgb8();
+                    self.tint = iced::Color::from_rgba8(r, g, b, c.a);
+                }
+                self.tint_text = t;
+            }
+            Message::Transparency(t) => {
+                if let Some(p) = adw::widget::Numeric::integer().min(0).max(90).parse(&t) {
+                    self.transparency = p.units as u32;
+                }
+                self.transparency_text = t;
+            }
             Message::RadiusM(r) => self.radius_m = r,
             Message::RadiusL(r) => self.radius_l = r,
             Message::RadiusToast(r) => self.radius_toast = r,

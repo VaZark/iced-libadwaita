@@ -38,6 +38,12 @@ pub struct Theme {
     /// Choose the text color on colored fills (accent, destructive, …) by contrast, like CSS
     /// `color-contrast()`. Default `true`; `false` keeps the palette's fixed `*_fg_color`s.
     pub auto_contrast: bool,
+    /// How see-through the surfaces are: 0 opaque (the default), 1 fully clear
+    /// ([`Semantic::apply_transparency`]). It needs a transparent window.
+    pub transparency: f32,
+    /// A color the surfaces are tinted with, its alpha the strength; opt-in, `None` (the default)
+    /// is no tint ([`Semantic::apply_tint`]). The surfaces keep their own alpha.
+    pub tint: Option<iced::Color>,
     name: String,
     iced: iced::Theme,
 }
@@ -83,6 +89,8 @@ impl Theme {
             .with_shadows(shadows)
             .with_flat_headerbars(c.flat_headerbars)
             .with_auto_contrast(c.auto_contrast)
+            .with_tint(c.tint)
+            .with_transparency(c.transparency)
             .with_transparent_window(c.decorations == crate::config::DecorationMode::Csd)
     }
 
@@ -110,6 +118,8 @@ impl Theme {
             transparent_window: true,
             flat_headerbars: true,
             auto_contrast: true,
+            transparency: 0.0,
+            tint: None,
             name,
         }
     }
@@ -128,6 +138,8 @@ impl Theme {
         if self.auto_contrast {
             self.semantic.apply_contrast();
         }
+        self.semantic.apply_tint(self.tint);
+        self.semantic.apply_transparency(self.transparency);
         self.iced = build_iced(&self.name, &self.semantic);
         self
     }
@@ -136,6 +148,18 @@ impl Theme {
     /// the palette's fixed foregrounds (libadwaita's white).
     pub fn with_auto_contrast(mut self, on: bool) -> Self {
         self.auto_contrast = on;
+        self.with_palette(|_| {})
+    }
+
+    /// Makes the surfaces translucent (0 opaque .. 1 clear); see [`Semantic::apply_transparency`].
+    pub fn with_transparency(mut self, transparency: f32) -> Self {
+        self.transparency = transparency.clamp(0.0, 1.0);
+        self.with_palette(|_| {})
+    }
+
+    /// Tints the surfaces with a color, its alpha the strength; see [`Semantic::apply_tint`].
+    pub fn with_tint(mut self, tint: Option<iced::Color>) -> Self {
+        self.tint = tint;
         self.with_palette(|_| {})
     }
 
@@ -231,7 +255,7 @@ impl iced::theme::Base for Theme {
 
     fn base(&self) -> iced::theme::Style {
         iced::theme::Style {
-            background_color: if self.transparent_window {
+            background_color: if self.transparent_window || self.transparency > 0.0 {
                 iced::Color::TRANSPARENT
             } else {
                 self.semantic.window.bg
@@ -635,5 +659,48 @@ mod header_tests {
         assert_eq!(t.semantic.accent.fg, crate::color::DARK_TEXT);
         let off = t.with_auto_contrast(false);
         assert_eq!(off.semantic.accent.fg, iced::Color::WHITE);
+    }
+
+    #[test]
+    fn transparency_scales_surface_alpha_and_keeps_tints_translucent() {
+        let solid = Theme::light();
+        let glass = Theme::light().with_transparency(0.4);
+        let (a, b) = (solid.semantic.window.bg, glass.semantic.window.bg);
+        assert_eq!((a.r, a.g, a.b), (b.r, b.g, b.b), "the color is unchanged");
+        assert!((b.a - 0.6).abs() < 1e-5);
+        // Floating surfaces take half, foregrounds none.
+        assert!((glass.semantic.popover.bg.a - 0.8).abs() < 1e-5);
+        assert_eq!(glass.semantic.window.fg, solid.semantic.window.fg);
+        // A hover or press tint of a translucent fill stays as translucent.
+        assert!((glass.semantic.hover_fill(b).a - 0.6).abs() < 1e-5);
+        assert!((glass.semantic.active_fill(b).a - 0.6).abs() < 1e-5);
+        // Re-deriving the palette keeps the transparency; 0 restores the solid theme.
+        assert!(
+            (glass
+                .clone()
+                .accent(crate::AccentColor::Teal)
+                .semantic
+                .window
+                .bg
+                .a
+                - 0.6)
+                .abs()
+                < 1e-5
+        );
+        assert_eq!(glass.with_transparency(0.0).semantic.window.bg, a);
+    }
+
+    #[test]
+    fn a_tint_moves_the_color_towards_its_own_color_and_keeps_the_alpha() {
+        let plain = Theme::light().with_transparency(0.5);
+        let red = iced::Color::from_rgba(1.0, 0.0, 0.0, 0.3);
+        let tinted = Theme::light().with_transparency(0.5).with_tint(Some(red));
+        let (a, b) = (plain.semantic.window.bg, tinted.semantic.window.bg);
+        assert_eq!(a.a, b.a, "transparency is kept");
+        assert!(b.r > a.r && b.g < a.g, "towards red, not the accent");
+        assert_eq!(
+            Theme::light().with_tint(None).semantic.window.bg,
+            Theme::light().semantic.window.bg
+        );
     }
 }

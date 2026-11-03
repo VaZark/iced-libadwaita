@@ -1,15 +1,16 @@
-//! `DateRangeInput`: a start and an end date entry with one calendar popover that selects the
-//! range; the sibling of [`DateInput`](super::DateInput) the way
+//! `DateRangeInput`: one entry for a date range (`2026-11-02 – 2026-11-09`) with the calendar in
+//! its left section, in a popover or a dialog, that selects the range; the sibling of [`DateInput`](super::DateInput) the way
 //! [`RangeSlider`](super::RangeSlider) is of [`scale`](super::scale).
 //!
 //! The rule is [`DateRange::pick`](crate::primitives::range::DateRange::pick): the first click
 //! sets the start, the second the end (swapped when earlier), a third starts over. Everything
-//! is controlled like `DateInput`: you keep the two texts, the month on show and the
-//! [`DateRange`], and the widget reports `on_input(edge, text)`, `on_pick(range)`,
+//! is controlled like `DateInput`: you keep the text, the month on show and the
+//! [`DateRange`] (set the text from [`DateRange::text`] when a range is picked), and the widget
+//! reports `on_input(text)`, `on_pick(range)`,
 //! `on_view(first-of-month)` and, to preview the range under the pointer, `on_hover(day)`.
 //!
 //! ```ignore
-//! DateRangeInput::new(&self.start_text, &self.end_text, self.view, Message::Text)
+//! DateRangeInput::new(&self.text, self.view, Message::Text)
 //!     .selected(self.range)
 //!     .hover(self.hover)
 //!     .on_pick(Message::Picked)
@@ -17,31 +18,27 @@
 //!     .on_hover(Message::Hover)
 //! ```
 //!
-//! An unparsable or out-of-range text, or an end before the start, draws the entry in its error
+//! An unparsable or out-of-range date, or an end before the start, draws the entry in its error
 //! state, once [`revealed`](DateRangeInput::revealed) (pass the `Field`'s interaction inside a
 //! [`Field`](super::Field)); [`validity`](DateRangeInput::validity) is the message for it.
 
-use super::date_input::{CELL, Cal, OnNav, OnView, POPOVER_WIDTH, calendar, nav_message};
-use super::popover::{Align, Appearance, Popover, popover};
+use super::date_input::{CELL, Cal, OnNav, OnView, Opening, calendar, nav_message, opener};
+use super::popover::popover;
 use super::{Element, EntryState, entry};
+use crate::Metrics;
 use crate::Theme;
 use crate::primitives::calendar::{CalendarView, Level};
 use crate::primitives::date::{self, Date};
 use crate::primitives::range::{DateRange, DayRole, Edge, within};
 use crate::primitives::validation::{self, Presentation, Validity};
-use crate::{Icon, Metrics};
-use iced::alignment::Vertical;
 use iced::widget::button::Status;
-use iced::widget::{button, container, mouse_area, row, text};
+use iced::widget::{button, container, mouse_area, text};
 use iced::{Background, Border, Length, Shadow};
 
-type OnInput<'a, M> = Box<dyn Fn(Edge, String) -> M + 'a>;
-
 pub struct DateRangeInput<'a, M> {
-    start_text: &'a str,
-    end_text: &'a str,
+    text: &'a str,
     view: Date,
-    on_input: Option<OnInput<'a, M>>,
+    on_input: Option<Box<dyn Fn(String) -> M + 'a>>,
     on_pick: Option<Box<dyn Fn(DateRange) -> M + 'a>>,
     on_view: Option<OnView<'a, M>>,
     on_nav: Option<OnNav<'a, M>>,
@@ -57,21 +54,20 @@ pub struct DateRangeInput<'a, M> {
     disabled: bool,
     width: Length,
     open_initially: bool,
+    dialog: bool,
+    scrim: bool,
+    close_on_outside: bool,
+    window_radius: f32,
     revealed: bool,
     metrics: Metrics,
 }
 
 impl<'a, M> DateRangeInput<'a, M> {
-    /// The two entries' texts; `view` is any date in the month the calendar shows.
-    pub fn new(
-        start_text: &'a str,
-        end_text: &'a str,
-        view: Date,
-        on_input: impl Fn(Edge, String) -> M + 'a,
-    ) -> Self {
+    /// `text` is the entry's content (`2026-11-02 – 2026-11-09`, see [`DateRange::parse`]);
+    /// `view` is any date in the month the calendar shows.
+    pub fn new(text: &'a str, view: Date, on_input: impl Fn(String) -> M + 'a) -> Self {
         Self {
-            start_text,
-            end_text,
+            text,
             view: view.month_start(),
             on_input: Some(Box::new(on_input)),
             on_pick: None,
@@ -87,8 +83,12 @@ impl<'a, M> DateRangeInput<'a, M> {
             max: None,
             strict: false,
             disabled: false,
-            width: Length::Fixed(360.0),
+            width: Length::Fixed(300.0),
             open_initially: false,
+            dialog: false,
+            scrim: true,
+            close_on_outside: true,
+            window_radius: Metrics::desktop().radius_window,
             revealed: true,
             metrics: Metrics::desktop(),
         }
@@ -182,20 +182,41 @@ impl<'a, M> DateRangeInput<'a, M> {
         self.open_initially = open;
         self
     }
+    /// Opens the calendar as a dialog centered in the window instead of a popover.
+    pub fn dialog(mut self, on: bool) -> Self {
+        self.dialog = on;
+        self
+    }
+    /// Fades the window behind the dialog (default on); only a [`dialog`](Self::dialog) has it.
+    pub fn scrim(mut self, on: bool) -> Self {
+        self.scrim = on;
+        self
+    }
+    /// Whether a press outside the dialog closes it (default true).
+    pub fn close_on_outside(mut self, on: bool) -> Self {
+        self.close_on_outside = on;
+        self
+    }
+    /// Rounds the dialog's fade to the window's corners (`window::State::radius`).
+    pub fn window_radius(mut self, r: f32) -> Self {
+        self.window_radius = r;
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
     }
 
-    /// The range the two texts spell, an end that does not parse being `None`.
+    /// The range the text spells, a side that does not parse being `None`.
     pub fn typed(&self) -> DateRange {
-        DateRange::new(Date::parse(self.start_text), Date::parse(self.end_text))
+        DateRange::parse(self.text)
     }
 
     /// Which entry a problem belongs to, with its message: an unparsable or out-of-range text
     /// on its own entry, an end before the start on the end.
     fn problem(&self) -> Option<(Edge, Validity)> {
-        for (edge, t) in [(Edge::Start, self.start_text), (Edge::End, self.end_text)] {
+        let (a, b) = DateRange::split_text(self.text);
+        for (edge, t) in [(Edge::Start, a), (Edge::End, b)] {
             let v = date::validate(t, self.min, self.max);
             if v.blocks_submit() {
                 return Some((edge, v));
@@ -210,20 +231,14 @@ impl<'a, M> DateRangeInput<'a, M> {
         self.problem().map_or(Validity::Ok, |(_, v)| v)
     }
 
-    /// The entry states of the start and the end: an error only once
-    /// [`revealed`](Self::revealed), and on the entry the problem is in.
-    pub fn text_states(&self) -> (EntryState, EntryState) {
-        let shown = self
-            .problem()
-            .filter(|(_, v)| validation::present(v, self.revealed) == Presentation::Invalid);
-        let at = |e: Edge| {
-            if shown.as_ref().is_some_and(|(p, _)| *p == e) {
+    /// The entry's state: an error only once [`revealed`](Self::revealed).
+    pub fn text_state(&self) -> EntryState {
+        match self.problem() {
+            Some((_, v)) if validation::present(&v, self.revealed) == Presentation::Invalid => {
                 EntryState::Error
-            } else {
-                EntryState::Normal
             }
-        };
-        (at(Edge::Start), at(Edge::End))
+            _ => EntryState::Normal,
+        }
     }
 }
 
@@ -294,22 +309,13 @@ fn day_style(
 impl<'a, M: Clone + 'a> From<DateRangeInput<'a, M>> for Element<'a, M> {
     fn from(mut d: DateRangeInput<'a, M>) -> Self {
         let m = d.metrics;
-        let (start_state, end_state) = d.text_states();
-        let mut start = entry::<M>("YYYY-MM-DD", d.start_text)
-            .state(start_state)
-            .width(Length::Fill)
-            .metrics(m);
-        let mut end = entry::<M>("YYYY-MM-DD", d.end_text)
-            .state(end_state)
-            .width(Length::Fill)
+        let mut field = entry::<M>("YYYY-MM-DD \u{2013} YYYY-MM-DD", d.text)
+            .state(d.text_state())
             .metrics(m);
         if !d.disabled
             && let Some(f) = d.on_input.take()
         {
-            let f = std::rc::Rc::new(f);
-            let g = f.clone();
-            start = start.on_input(move |t| f(Edge::Start, t));
-            end = end.on_input(move |t| g(Edge::End, t));
+            field = field.on_input(f);
         }
 
         let (selected, hover, min, max) = (d.selected, d.hover, d.min, d.max);
@@ -361,25 +367,19 @@ impl<'a, M: Clone + 'a> From<DateRangeInput<'a, M>> for Element<'a, M> {
             }
         });
 
-        let opener = Popover::new(Icon::GoDown.view(m.icon_size), popover([grid], 400.0))
-            .appearance(Appearance::Button)
-            .align(Align::End)
-            .popover_width(POPOVER_WIDTH)
-            .keep_open(true)
-            .disabled(d.disabled)
-            .open_initially(d.open_initially);
-        let dash = text("\u{2013}").style(move |t: &Theme| iced::widget::text::Style {
-            color: Some(if d.disabled {
-                crate::color::fade(t.semantic.window.fg, t.semantic.opacity.disabled)
-            } else {
-                t.semantic.window.fg
-            }),
-        });
-        row![start, dash, end, opener]
-            .spacing(m.space_s)
-            .align_y(Vertical::Center)
-            .width(d.width)
-            .into()
+        let opener = opener(
+            popover([grid], 400.0),
+            Opening {
+                dialog: d.dialog,
+                scrim: d.scrim,
+                close_on_outside: d.close_on_outside,
+                window_radius: d.window_radius,
+                disabled: d.disabled,
+                open_initially: d.open_initially,
+            },
+            m,
+        );
+        field.left_section(opener).width(d.width).into()
     }
 }
 
@@ -390,39 +390,32 @@ mod tests {
     fn d(y: i32, m: u8, dd: u8) -> Date {
         Date::new(y, m, dd).unwrap()
     }
-    fn mk<'a>(a: &'a str, b: &'a str) -> DateRangeInput<'a, ()> {
-        DateRangeInput::new(a, b, d(2026, 11, 1), |_, _| ())
+    fn mk(text: &str) -> DateRangeInput<'_, ()> {
+        DateRangeInput::new(text, d(2026, 11, 1), |_| ())
     }
 
     #[test]
     fn the_texts_spell_a_range() {
         assert_eq!(
-            mk("2026-11-02", "2026-11-09").typed(),
+            mk("2026-11-02 \u{2013} 2026-11-09").typed(),
             DateRange::new(Some(d(2026, 11, 2)), Some(d(2026, 11, 9)))
         );
-        assert_eq!(mk("2026-11-02", "").typed().end, None);
+        assert_eq!(mk("2026-11-02").typed().end, None);
     }
 
     #[test]
-    fn problems_land_on_the_entry_they_belong_to() {
+    fn a_problem_in_either_date_or_their_order_is_an_error() {
         use EntryState::*;
-        assert_eq!(mk("", "").text_states(), (Normal, Normal));
+        assert_eq!(mk("").text_state(), Normal);
+        assert_eq!(mk("2026-11-02 \u{2013} 2026-11-09").text_state(), Normal);
+        assert_eq!(mk("2026-13-02 \u{2013} 2026-11-09").text_state(), Error);
+        assert_eq!(mk("2026-11-02 \u{2013} nope").text_state(), Error);
+        assert_eq!(mk("2026-11-09 \u{2013} 2026-11-02").text_state(), Error);
         assert_eq!(
-            mk("2026-11-02", "2026-11-09").text_states(),
-            (Normal, Normal)
-        );
-        assert_eq!(
-            mk("2026-13-02", "2026-11-09").text_states(),
-            (Error, Normal)
-        );
-        assert_eq!(mk("2026-11-02", "nope").text_states(), (Normal, Error));
-        assert_eq!(
-            mk("2026-11-09", "2026-11-02").text_states(),
-            (Normal, Error)
-        );
-        assert_eq!(
-            mk("2026-11-09", "2026-11-02").revealed(false).text_states(),
-            (Normal, Normal),
+            mk("2026-11-09 \u{2013} 2026-11-02")
+                .revealed(false)
+                .text_state(),
+            Normal,
             "quiet until revealed"
         );
     }
@@ -430,18 +423,18 @@ mod tests {
     #[test]
     fn the_end_must_follow_the_start() {
         assert_eq!(
-            mk("2026-11-09", "2026-11-02").validity(),
+            mk("2026-11-09 \u{2013} 2026-11-02").validity(),
             Validity::error("End must not be before start.")
         );
-        assert!(mk("2026-11-02", "2026-11-02").validity().is_ok());
+        assert!(mk("2026-11-02 \u{2013} 2026-11-02").validity().is_ok());
         assert!(
-            mk("2026-11-02", "2026-11-02")
+            mk("2026-11-02 \u{2013} 2026-11-02")
                 .strict(true)
                 .validity()
                 .blocks_submit()
         );
         assert!(
-            mk("2026-11-02", "").validity().is_ok(),
+            mk("2026-11-02").validity().is_ok(),
             "an open end is not an error"
         );
     }
@@ -450,13 +443,13 @@ mod tests {
     fn bounds_apply_to_both_ends() {
         let lo = d(2026, 11, 1);
         assert!(
-            mk("2026-10-30", "2026-11-09")
+            mk("2026-10-30 \u{2013} 2026-11-09")
                 .min(lo)
                 .validity()
                 .blocks_submit()
         );
         assert!(
-            mk("2026-11-02", "2026-12-09")
+            mk("2026-11-02 \u{2013} 2026-12-09")
                 .max(d(2026, 11, 30))
                 .validity()
                 .blocks_submit()

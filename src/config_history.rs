@@ -149,6 +149,13 @@ pub const PROPERTIES: &[Property] = &[
         Number { min: 0.5, max: 3.0 },
         "1",
     ),
+    p(
+        "appearance",
+        "transparency",
+        Number { min: 0.0, max: 1.0 },
+        "0",
+    ),
+    p("appearance", "tint", Text, "none"),
     p("appearance", "shadows", Bool, "true"),
     p(
         "appearance",

@@ -12,6 +12,8 @@ flat-headerbars=false    # header bars with no color of their own (Nautilus-styl
 auto-contrast=true        # light/dark text on colored fills by contrast; false = fixed white
 density=default          # default | compact
 text-scale=1.0           # 0.5 .. 3.0
+transparency=0.0         # 0 (opaque) .. 1: how see-through the surfaces are
+tint=none                # none | #rrggbb | #rrggbbaa: a color mixed into the surfaces (the alpha is the strength; their own alpha is kept)
 shadows=true
 shadow-scale=1.0
 shadow-intensity=1.0

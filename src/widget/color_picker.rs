@@ -12,7 +12,7 @@
 //!     .swatches(["#e01b24", "#ff7800", "#f5c211", "#33d17a", "#3584e4", "#9141ac"])
 //!     .format(Format::Hex)                            // the readout under it
 //!
-//! ColorInput::new(self.color, &self.text, Msg::Text, Msg::Color)   // an entry and a popover picker
+//! ColorInput::new(self.color, &self.text, Msg::Text, Msg::Color)   // a color box that opens the picker and an entry for the code
 //! ```
 //!
 //! A drag keeps working outside the control. Keyboard nudging of the thumbs is not included:
@@ -386,7 +386,6 @@ pub struct ColorPicker<'a, M> {
     swatches: Vec<Hsva>,
     format: Format,
     readout: bool,
-    input: Option<super::forms::TextBinding<'a, M>>,
     width: Length,
     metrics: Metrics,
 }
@@ -400,7 +399,6 @@ impl<'a, M: Clone + 'a> ColorPicker<'a, M> {
             swatches: Vec::new(),
             format: Format::Hex,
             readout: true,
-            input: None,
             width: Length::Fixed(240.0),
             metrics: Metrics::desktop(),
         }
@@ -427,13 +425,6 @@ impl<'a, M: Clone + 'a> ColorPicker<'a, M> {
     /// Whether the readout (a swatch and the value as text) shows (default true).
     pub fn readout(mut self, on: bool) -> Self {
         self.readout = on;
-        self
-    }
-    /// An entry under the controls to type the color in: `text` is what it shows (the app keeps
-    /// it, so typing is not interrupted) and `on_input` gets what was typed; parse it with
-    /// [`Hsva::parse`]. Text that does not parse shows the error state. It replaces the readout.
-    pub fn input(mut self, text: impl Into<String>, on_input: impl Fn(String) -> M + 'a) -> Self {
-        self.input = Some((text.into(), std::rc::Rc::new(on_input)));
         self
     }
     pub fn width(mut self, w: impl Into<Length>) -> Self {
@@ -492,20 +483,7 @@ impl<'a, M: Clone + 'a> From<ColorPicker<'a, M>> for Element<'a, M> {
                 .collect();
             col = col.push(wrap_box(chips, m.space_xs));
         }
-        if let Some((text, on_input)) = p.input {
-            let invalid = !text.trim().is_empty() && Hsva::parse(&text).is_none();
-            let mut entry = super::entry("Color", text)
-                .on_input(move |t| on_input(t))
-                .metrics(m);
-            if invalid {
-                entry = entry.state(super::EntryState::Error);
-            }
-            col = col.push(
-                row![chip(p.value, 20.0), Element::from(entry)]
-                    .spacing(m.space_s)
-                    .align_y(iced::Alignment::Center),
-            );
-        } else if p.readout {
+        if p.readout {
             let format = if p.alpha && !p.format.has_alpha() {
                 match p.format {
                     Format::Hex => Format::Hexa,
@@ -527,24 +505,31 @@ impl<'a, M: Clone + 'a> From<ColorPicker<'a, M>> for Element<'a, M> {
     }
 }
 
-/// An entry for a color, with the picker in a popover behind a swatch. See the
+/// A color input: a box showing the color (like `GtkColorDialogButton`) that opens a
+/// [`ColorPicker`] with an entry for the color code, in a popover or a dialog. See the
 /// [module](self).
 pub struct ColorInput<'a, M> {
     value: Hsva,
     text: &'a str,
     on_input: Box<dyn Fn(String) -> M + 'a>,
     on_change: std::rc::Rc<dyn Fn(Hsva) -> M + 'a>,
-    placeholder: String,
     alpha: bool,
     swatches: Vec<Hsva>,
-    format: Format,
+    trigger: Option<Element<'a, M>>,
+    dialog: bool,
+    scrim: bool,
+    close_on_outside: bool,
+    window_radius: f32,
+    disabled: bool,
+    open_initially: bool,
     metrics: Metrics,
 }
 
 impl<'a, M: Clone + 'a> ColorInput<'a, M> {
-    /// `text` is what the entry shows (the app keeps it, so typing is not interrupted); `value`
-    /// is the color. `on_input` gets the typed text, `on_change` a color picked in the popover:
-    /// parse the text with [`Hsva::parse`] and format a picked color with [`Hsva::format`].
+    /// `text` is what the entry in the picker shows (the app keeps it, so typing is not
+    /// interrupted); `value` is the color. `on_input` gets the typed text, `on_change` a color
+    /// picked with the controls: parse the text with [`Hsva::parse`] and format a picked color
+    /// with [`Hsva::format`].
     pub fn new(
         value: Hsva,
         text: &'a str,
@@ -556,16 +541,17 @@ impl<'a, M: Clone + 'a> ColorInput<'a, M> {
             text,
             on_input: Box::new(on_input),
             on_change: std::rc::Rc::new(on_change),
-            placeholder: "Pick a color".into(),
             alpha: false,
             swatches: Vec::new(),
-            format: Format::Hex,
+            trigger: None,
+            dialog: false,
+            scrim: true,
+            close_on_outside: true,
+            window_radius: Metrics::desktop().radius_window,
+            disabled: false,
+            open_initially: false,
             metrics: Metrics::desktop(),
         }
-    }
-    pub fn placeholder(mut self, p: impl Into<String>) -> Self {
-        self.placeholder = p.into();
-        self
     }
     pub fn alpha(mut self, on: bool) -> Self {
         self.alpha = on;
@@ -578,8 +564,37 @@ impl<'a, M: Clone + 'a> ColorInput<'a, M> {
             .collect();
         self
     }
-    pub fn format(mut self, f: Format) -> Self {
-        self.format = f;
+    /// What opens the picker, instead of the color box.
+    pub fn trigger(mut self, t: impl Into<Element<'a, M>>) -> Self {
+        self.trigger = Some(t.into());
+        self
+    }
+    /// Opens the picker as a dialog centered in the window (default: a popover at the box).
+    pub fn dialog(mut self, on: bool) -> Self {
+        self.dialog = on;
+        self
+    }
+    /// Fades the window behind the dialog (default on); only a [`dialog`](Self::dialog) has it.
+    pub fn scrim(mut self, on: bool) -> Self {
+        self.scrim = on;
+        self
+    }
+    /// Whether a press outside the dialog closes it (default true).
+    pub fn close_on_outside(mut self, on: bool) -> Self {
+        self.close_on_outside = on;
+        self
+    }
+    /// Rounds the dialog's fade to the window's corners (`window::State::radius`).
+    pub fn window_radius(mut self, r: f32) -> Self {
+        self.window_radius = r;
+        self
+    }
+    pub fn disabled(mut self, on: bool) -> Self {
+        self.disabled = on;
+        self
+    }
+    pub fn open_initially(mut self, open: bool) -> Self {
+        self.open_initially = open;
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -588,40 +603,58 @@ impl<'a, M: Clone + 'a> ColorInput<'a, M> {
     }
 }
 
+/// Width of the picker's popover, as the date input's calendar.
+const PICKER_WIDTH: f32 = super::date_input::POPOVER_WIDTH;
+
 impl<'a, M: Clone + 'a> From<ColorInput<'a, M>> for Element<'a, M> {
     fn from(i: ColorInput<'a, M>) -> Self {
         let m = i.metrics;
         let change = i.on_change.clone();
-        let picker = ColorPicker::new(i.value, move |c| change(c))
+        let mut picker = ColorPicker::new(i.value, move |c| change(c))
             .alpha(i.alpha)
-            .format(i.format)
             .readout(false)
-            .width(240.0)
+            .width(Length::Fill)
             .metrics(m);
-        let picker = if i.swatches.is_empty() {
-            picker
-        } else {
-            ColorPicker {
-                swatches: i.swatches,
-                ..picker
-            }
-        };
-        let swatch = Popover::new(chip(i.value, 20.0), popover([Element::from(picker)], 480.0))
-            .appearance(super::PopoverAppearance::Flat)
-            .padding(m.space_xs)
-            .keep_open(true);
+        picker.swatches = i.swatches;
         let invalid = !i.text.trim().is_empty() && Hsva::parse(i.text).is_none();
-        let mut entry = super::entry(i.placeholder, i.text)
-            .on_input(i.on_input)
-            .metrics(m);
+        let mut entry = super::entry("", i.text).on_input(i.on_input).metrics(m);
         if invalid {
             entry = entry.state(super::EntryState::Error);
         }
-        row![Element::from(swatch), Element::from(entry)]
-            .spacing(m.space_s)
-            .align_y(iced::Alignment::Center)
-            .into()
+        let content = popover([Element::from(picker), Element::from(entry)], 560.0);
+        let trigger = i.trigger.unwrap_or_else(|| color_box(i.value));
+        let mut opener = Popover::new(trigger, content)
+            .appearance(super::PopoverAppearance::Flat)
+            .padding(0)
+            .popover_width(PICKER_WIDTH)
+            .keep_open(true)
+            .disabled(i.disabled)
+            .open_initially(i.open_initially)
+            .scrim(i.scrim)
+            .close_on_outside(i.close_on_outside)
+            .window_radius(i.window_radius);
+        if i.dialog {
+            opener = opener.presentation(super::PopoverPresentation::Dialog);
+        }
+        opener.into()
     }
+}
+
+/// The color in a box with a hairline: the closed state of a [`ColorInput`].
+fn color_box<'a, M: 'a>(c: Hsva) -> Element<'a, M> {
+    container(space())
+        .width(48.0)
+        .height(28.0)
+        .style(move |t: &Theme| iced::widget::container::Style {
+            background: Some(Background::Color(to_color(c))),
+            border: Border {
+                color: t.semantic.border,
+                width: 1.0,
+                radius: t.metrics.radius_s.into(),
+            },
+            ..Default::default()
+        })
+        .into()
 }
 
 #[cfg(test)]

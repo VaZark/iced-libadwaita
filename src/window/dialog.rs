@@ -7,10 +7,10 @@ use crate::widget::Element;
 use crate::{DecorationLayout, Metrics, Role, Theme, Typography, WindowButton};
 use iced::Length;
 use iced::alignment::{Horizontal, Vertical};
-use iced::widget::{button, column, container, mouse_area, opaque, row, space, stack, text};
+use iced::widget::{button, column, container, row, space, text};
 
-/// Presents `dialog` modally over `base` with a dimmed backdrop.
-/// `on_backdrop` is sent when the backdrop is clicked.
+/// Presents `dialog` modally over `base`: the base is faded and cannot be used. `on_backdrop` is
+/// sent when the backdrop is clicked; pass `None` for a dialog that a press outside does not close.
 pub fn dialog<'a, M: Clone + 'a>(
     base: impl Into<Element<'a, M>>,
     dialog: impl Into<Element<'a, M>>,
@@ -19,7 +19,7 @@ pub fn dialog<'a, M: Clone + 'a>(
     dialog_in_window(base, dialog, on_backdrop, 0.0)
 }
 
-/// Like [`dialog`], for a window with rounded corners: the backdrop takes the window
+/// Like [`dialog`], for a window with rounded corners: the fade takes the window
 /// radius (`window::State::radius`) so it stays inside the rounded window.
 pub fn dialog_in_window<'a, M: Clone + 'a>(
     base: impl Into<Element<'a, M>>,
@@ -27,25 +27,13 @@ pub fn dialog_in_window<'a, M: Clone + 'a>(
     on_backdrop: Option<M>,
     window_radius: f32,
 ) -> Element<'a, M> {
-    // The scrim fades in and the dialog slides up on the sheet spring (damping ratio
-    // 0.8, mass 1, stiffness 400), as `AdwDialog` presents. The transparent catcher
-    // blocks the window below and sends `on_backdrop` when clicked.
-    let mut catcher = mouse_area(container(space()).width(Length::Fill).height(Length::Fill));
+    // The dialog slides up on the sheet spring (damping ratio 0.8, mass 1, stiffness 400), as
+    // `AdwDialog` presents, with the scrim fading in over the base.
+    let mut o = crate::widget::Overlay::new(base, dialog).window_radius(window_radius);
     if let Some(m) = on_backdrop {
-        catcher = catcher.on_press(m);
+        o = o.on_outside(m);
     }
-    let layer = stack![
-        opaque(catcher),
-        container(opaque(dialog.into()))
-            .center(Length::Fill)
-            .padding(12)
-    ];
-    crate::widget::layered(
-        base,
-        Some(Element::from(
-            crate::widget::entrance(layer, iced::Vector::new(0.0, 24.0)).scrim(window_radius),
-        )),
-    )
+    o.into()
 }
 
 /// Like [`dialog_in_window`] for an app that has a dialog only sometimes: with `None`

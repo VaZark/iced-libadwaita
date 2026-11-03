@@ -24,7 +24,7 @@ fn view(&self) -> iced::Element<'_, Message, adw::Theme> {
 }
 ```
 
-Use `adw::Theme` as the application theme. Try `cargo run --example gallery`.
+Use `adw::Theme` as the application theme. The gallery is a separate crate that depends on this one: `cargo run -p iced-libadwaita-gallery`.
 
 #### Parameters belong to the library
 

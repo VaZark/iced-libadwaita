@@ -40,6 +40,7 @@ pub enum Icon {
     Delete,
     Settings,
     Home,
+    Calendar,
     /// A funnel: filter a list (`funnel-symbolic` / `view-filter`).
     Filter,
     /// A folder (`folder-symbolic`).
@@ -104,6 +105,9 @@ impl Icon {
                 r#"<path d="M4 2h5l3 3v8.2a.8.8 0 01-.8.8H4.8a.8.8 0 01-.8-.8V2.8A.8.8 0 014.8 2zM9 2v3h3"/>"#
             }
             Icon::DragHandle => r#"<path d="M3 4.5h10M3 8h10M3 11.5h10"/>"#,
+            Icon::Calendar => {
+                r#"<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/>"#
+            }
             Icon::Home => r#"<path d="M2 8l6-5.5L14 8M3.5 7v6.5h3.2V10h2.6v3.5h3.2V7"/>"#,
         }
     }

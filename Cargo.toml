@@ -6,9 +6,10 @@ edition = "2024"
 keywords = ["iced", "gui", "gnome", "libadwaita", "theme"]
 description = "libadwaita-style theme and widgets for iced"
 
+[workspace]
+members = ["gallery"]
+default-members = ["."]
+
 [dependencies]
 iced = { version = "0.14", features = ["advanced", "svg", "image", "tokio", "canvas"] }
 
-[dev-dependencies]
-image = { version = "0.25", default-features = false, features = ["png"] }
-tokio = { version = "1", features = ["time"] }

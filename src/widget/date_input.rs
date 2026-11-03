@@ -44,6 +44,10 @@ pub struct DateInput<'a, M> {
     disabled: bool,
     width: Length,
     open_initially: bool,
+    dialog: bool,
+    scrim: bool,
+    close_on_outside: bool,
+    window_radius: f32,
     revealed: bool,
     metrics: Metrics,
 }
@@ -68,6 +72,10 @@ impl<'a, M> DateInput<'a, M> {
             disabled: false,
             width: Length::Fixed(220.0),
             open_initially: false,
+            dialog: false,
+            scrim: true,
+            close_on_outside: true,
+            window_radius: Metrics::desktop().radius_window,
             revealed: true,
             metrics: Metrics::desktop(),
         }
@@ -157,6 +165,26 @@ impl<'a, M> DateInput<'a, M> {
         self.open_initially = open;
         self
     }
+    /// Opens the calendar as a dialog centered in the window instead of a popover.
+    pub fn dialog(mut self, on: bool) -> Self {
+        self.dialog = on;
+        self
+    }
+    /// Fades the window behind the dialog (default on); only a [`dialog`](Self::dialog) has it.
+    pub fn scrim(mut self, on: bool) -> Self {
+        self.scrim = on;
+        self
+    }
+    /// Whether a press outside the dialog closes it (default true).
+    pub fn close_on_outside(mut self, on: bool) -> Self {
+        self.close_on_outside = on;
+        self
+    }
+    /// Rounds the dialog's fade to the window's corners (`window::State::radius`).
+    pub fn window_radius(mut self, r: f32) -> Self {
+        self.window_radius = r;
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -186,6 +214,40 @@ pub(super) const POPOVER_WIDTH: f32 = CELL * 7.0 + 2.0 * 6.0 + 12.0 + 12.0;
 const GAP: f32 = 2.0;
 /// Height of the weekday-name row.
 const WEEKDAY_H: f32 = 22.0;
+
+/// How a date input's calendar opens: a popover or a dialog.
+#[derive(Clone, Copy)]
+pub(super) struct Opening {
+    pub dialog: bool,
+    pub scrim: bool,
+    pub close_on_outside: bool,
+    pub window_radius: f32,
+    pub disabled: bool,
+    pub open_initially: bool,
+}
+
+/// The calendar button for an entry's left section: opens `calendar`.
+pub(super) fn opener<'a, M: 'a>(
+    calendar: Element<'a, M>,
+    o: Opening,
+    m: Metrics,
+) -> Element<'a, M> {
+    let mut p = Popover::new(Icon::Calendar.view(m.icon_size), calendar)
+        .appearance(Appearance::Flat)
+        .padding(m.space_xs)
+        .align(Align::Start)
+        .popover_width(POPOVER_WIDTH)
+        .keep_open(true)
+        .scrim(o.scrim)
+        .close_on_outside(o.close_on_outside)
+        .window_radius(o.window_radius)
+        .disabled(o.disabled)
+        .open_initially(o.open_initially);
+    if o.dialog {
+        p = p.presentation(super::PopoverPresentation::Dialog);
+    }
+    p.into()
+}
 
 pub(super) type OnNav<'a, M> = Box<dyn Fn(CalendarView) -> M + 'a>;
 pub(super) type OnView<'a, M> = Box<dyn Fn(Date) -> M + 'a>;
@@ -436,10 +498,7 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
     fn from(mut d: DateInput<'a, M>) -> Self {
         let m = d.metrics;
         let state = d.text_state();
-        let mut field = entry::<M>("YYYY-MM-DD", d.text)
-            .state(state)
-            .width(Length::Fill)
-            .metrics(m);
+        let mut field = entry::<M>("YYYY-MM-DD", d.text).state(state).metrics(m);
         if !d.disabled
             && let Some(f) = d.on_input.take()
         {
@@ -481,18 +540,19 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
             },
         );
         let calendar = popover([grid], 400.0);
-        let opener = Popover::new(Icon::GoDown.view(m.icon_size), calendar)
-            .appearance(Appearance::Button)
-            .align(Align::End)
-            .popover_width(POPOVER_WIDTH)
-            .keep_open(true)
-            .disabled(d.disabled)
-            .open_initially(d.open_initially);
-        row![field, opener]
-            .spacing(m.space_s)
-            .align_y(Vertical::Center)
-            .width(d.width)
-            .into()
+        let opener = opener(
+            calendar,
+            Opening {
+                dialog: d.dialog,
+                scrim: d.scrim,
+                close_on_outside: d.close_on_outside,
+                window_radius: d.window_radius,
+                disabled: d.disabled,
+                open_initially: d.open_initially,
+            },
+            m,
+        );
+        field.left_section(opener).width(d.width).into()
     }
 }
 

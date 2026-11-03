@@ -444,6 +444,29 @@ impl DateRange {
     pub fn new(start: Option<Date>, end: Option<Date>) -> Self {
         Self { start, end }
     }
+    /// The range as one text: `YYYY-MM-DD – YYYY-MM-DD` (a missing end leaves that side empty).
+    pub fn text(&self) -> String {
+        let f = |d: Option<Date>| d.map(|d| d.format()).unwrap_or_default();
+        match (self.start, self.end) {
+            (None, None) => String::new(),
+            (s, e) => format!("{} \u{2013} {}", f(s), f(e)).trim_end().to_string(),
+        }
+    }
+    /// The two sides of a typed range: split at an en or em dash, ` - ` or ` to `; without a
+    /// separator all of it is the start.
+    pub fn split_text(text: &str) -> (&str, &str) {
+        for sep in ["\u{2013}", "\u{2014}", " - ", " to "] {
+            if let Some((a, b)) = text.split_once(sep) {
+                return (a.trim(), b.trim());
+            }
+        }
+        (text.trim(), "")
+    }
+    /// The range a typed text spells; a side that does not parse is `None`.
+    pub fn parse(text: &str) -> Self {
+        let (a, b) = Self::split_text(text);
+        Self::new(Date::parse(a), Date::parse(b))
+    }
     /// Both ends, in order.
     pub fn complete(&self) -> Option<Range<Date>> {
         Some(Range::new(self.start?, self.end?))
@@ -828,5 +851,26 @@ mod tests {
             Some(d(2026, 2, 1))
         );
         assert_eq!(<(Option<Date>, Option<Date>)>::from(r), (r.start, r.end));
+    }
+
+    #[test]
+    fn a_range_is_typed_as_two_dates_around_a_dash() {
+        let (a, b) = (
+            Date::new(2026, 11, 2).unwrap(),
+            Date::new(2026, 11, 9).unwrap(),
+        );
+        let r = DateRange::new(Some(a), Some(b));
+        assert_eq!(r.text(), "2026-11-02 \u{2013} 2026-11-09");
+        assert_eq!(DateRange::parse(&r.text()), r);
+        assert_eq!(DateRange::parse("2026-11-02 to 2026-11-09"), r);
+        assert_eq!(DateRange::parse("2026-11-02 - 2026-11-09"), r);
+        assert_eq!(
+            DateRange::parse("2026-11-02"),
+            DateRange::new(Some(a), None)
+        );
+        let open = DateRange::new(Some(a), None);
+        assert_eq!(open.text(), "2026-11-02 \u{2013}");
+        assert_eq!(DateRange::parse(&open.text()), open);
+        assert_eq!(DateRange::default().text(), "");
     }
 }

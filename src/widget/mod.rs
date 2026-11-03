@@ -36,6 +36,8 @@ mod meta_parent_component;
 mod motion;
 mod multi_select;
 mod navigation;
+mod number_input;
+mod overlay;
 mod pagination;
 mod popover;
 mod preferences;
@@ -72,6 +74,7 @@ pub use crate::primitives::date::{Date, days_in_month, is_leap_year, validate as
 pub use crate::primitives::form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
 pub use crate::primitives::meta_parent::Registry as MetaRegistry;
 pub use crate::primitives::meta_parent::{ChildEvent, Emitted};
+pub use crate::primitives::numeric::{Decimal, Numeric};
 pub use crate::primitives::range::{Collide, DateRange, DayRole, Edge, Range, Thumb, Track};
 pub use crate::primitives::reorder::{Event as ReorderEvent, Mode, ReorderState};
 pub use crate::primitives::splitter::{
@@ -145,6 +148,8 @@ pub use navigation::{
     navigation_sidebar_rounded_padded, navigation_view, sidebar_row, sidebar_row_padded,
     sidebar_width_for, split_collapsed,
 };
+pub use number_input::NumberInput;
+pub use overlay::{Layer as OverlayLayer, Overlay, stacked as overlay_stack};
 pub use pagination::label as pagination_label;
 pub use pagination::{PageSize, Pagination, PaginationSize, page_size_dropdown};
 pub use popover::{

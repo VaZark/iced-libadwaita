@@ -1444,6 +1444,14 @@ name = "iced-libadwaita"
 version = "0.1.0"
 dependencies = [
  "iced",
+]
+
+[[package]]
+name = "iced-libadwaita-gallery"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "iced-libadwaita",
  "image",
  "tokio",
 ]

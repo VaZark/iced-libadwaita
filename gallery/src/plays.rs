@@ -239,6 +239,13 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::bool("grip", "Grip", true),
             S::number("line", "Line size", 1.0..=6.0, 1.0),
         ],
+        Detail::NumberInput => vec![
+            S::number("decimals", "Decimals (0 is an integer)", 0.0..=4.0, 0.0),
+            S::bool("limits", "Limits (0 to 100)", true),
+            S::choice("step", "Step", &["1", "0.01", "0.1", "0.25", "5", "10"], 0),
+            S::bool("handles", "Handles", true),
+            S::bool("disabled", "Disabled", false),
+        ],
         Detail::ColorPicker => vec![
             S::choice("kind", "As", &["Picker", "Input"], 0),
             S::bool("alpha", "Alpha slider", false),
@@ -251,6 +258,8 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::bool("swatches", "Swatches", true),
             S::bool("readout", "Readout (picker)", true),
             S::number("width", "Width (picker)", 160.0..=320.0, 240.0),
+            S::bool("dialog", "Open in a dialog (input)", false),
+            S::bool("scrim", "Fade the window (dialog)", true),
         ],
         Detail::Timeline => vec![
             S::number("active", "Active item", 0.0..=5.0, 2.0),
@@ -885,6 +894,10 @@ pub fn build<'a>(
             let (el, code) = g.widgets_demo.split_play(p, m);
             (el.map(Message::Widgets), code)
         }
+        Detail::NumberInput => {
+            let (el, code) = g.widgets_demo.number_play(p, m);
+            (el.map(Message::Widgets), code)
+        }
         Detail::ColorPicker => {
             let (el, code) = g.widgets_demo.color_play(p, m);
             (el.map(Message::Widgets), code)
@@ -1289,10 +1302,10 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "card_button(column![heading(\"Title\"), body(\"Any content\")])\n    .on_press(Msg::Open)"
         }
         Detail::DateInput => {
-            "DateInput::new(&self.text, self.nav.date, Msg::Text)\n    .calendar(self.nav)           // CalendarView: Month / Year / Decade\n    .selected(self.pick)\n    .on_pick(Msg::Pick)\n    .on_nav(Msg::Nav)\n    .min(Date::new(2026, 11, 1))"
+            "DateInput::new(&self.text, self.nav.date, Msg::Text)\n    .calendar(self.nav)           // CalendarView: Month / Year / Decade\n    .selected(self.pick)\n    .on_pick(Msg::Pick)\n    .on_nav(Msg::Nav)\n    .dialog(true)                 // a dialog over a faded window; .scrim(false) keeps it clear\n    .min(Date::new(2026, 11, 1))"
         }
         Detail::DateRange => {
-            "DateRangeInput::new(&self.start, &self.end, self.nav.date, Msg::Text)\n    .calendar(self.nav)\n    .selected(self.range)\n    .hover(self.hover)            // the preview of the range being picked"
+            "DateRangeInput::new(&self.text, self.nav.date, Msg::Text)   // \"2026-11-02 \u{2013} 2026-11-09\"\n    .dialog(true)                 // a dialog over a faded window; .scrim(false) keeps it clear\n    .calendar(self.nav)\n    .selected(self.range)\n    .hover(self.hover)            // the preview of the range being picked"
         }
         Detail::RangeSlider => {
             "range_slider(0.0..=100.0, self.value, Msg::Range)\n\nRangeSliderRow::new(\"Volume\", self.value, 0.0..=100.0, Msg::Range)"
@@ -1349,7 +1362,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "bottom_sheet_in_window(content, sheet, self.open, Msg::Close, window_radius)"
         }
         Detail::AppShell => {
-            "// examples/gallery/appshell.rs: an app shell assembled from library parts\nAdaptive over Layouts              // width classes -> whole layouts; Close(old) then Open(new)\nSidebarList::new(items).follow(..) // the navbar and the drawer list\nheader_bar().title(\"Gallery\")\ndock_drawer(main, drawer, Side::Right, Dim::Fraction(0.4))"
+            "// gallery/src/appshell.rs: an app shell assembled from library parts\nAdaptive over Layouts              // width classes -> whole layouts; Close(old) then Open(new)\nSidebarList::new(items).follow(..) // the navbar and the drawer list\nheader_bar().title(\"Gallery\")\ndock_drawer(main, drawer, Side::Right, Dim::Fraction(0.4))"
         }
         _ => return None,
     })

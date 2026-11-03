@@ -1,6 +1,6 @@
 # Choosing components
 
-Pick by the job, then check the [gallery](../../examples/gallery/README.md) for the states.
+Pick by the job, then check the [gallery](../../gallery/README.md) for the states.
 
 #### Telling the user something
 

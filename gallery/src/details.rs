@@ -391,6 +391,7 @@ impl Gallery {
             | Detail::Divider
             | Detail::Splitter
             | Detail::ColorPicker
+            | Detail::NumberInput
             | Detail::Timeline
             | Detail::Spoiler => column![].into(),
             Detail::TableVirtual => self.virtual_demo.virtual_view(m).map(Message::Virtual),
@@ -544,22 +545,59 @@ impl Gallery {
                 .into()
             }
             // ------------------------------------------------------------ theming
-            Detail::ThemeColors => column![
-                g("Scheme and accent").push(w::SwitchRow::new("Dark", self.scheme.is_dark(), Message::Scheme).metrics(m)).push(
+            Detail::ThemeColors => {
+                let scheme = g("Scheme and accent").push(w::SwitchRow::new("Dark", self.scheme.is_dark(), Message::Scheme).metrics(m)).push(
                     w::ActionRow::new("Accent color")
                         .suffix(
                             w::accent_picker(self.accent, Message::Accent)
                                 .custom(&self.accent_text, Message::AccentText),
                         )
                         .metrics(m),
-                ),
-                g("Overrides")
+                );
+                let mut overrides = g("Overrides")
                     .description("Edits to the theme's tokens.")
+                    .push(
+                        w::ActionRow::new("Transparency")
+                            .subtitle("Percent of the surfaces that is see-through")
+                            .suffix(
+                                w::NumberInput::new(&self.transparency_text, Message::Transparency)
+                                    .min(0)
+                                    .max(90)
+                                    .step(5)
+                                    .width(100.0)
+                                    .metrics(m),
+                            )
+                            .metrics(m),
+                    )
+                    .push(
+                        w::SwitchRow::new("Tint", self.tint_on, Message::TintOn)
+                            .subtitle("Opt-in: a color of its own mixed into the surfaces, its alpha the strength; their transparency is kept")
+                            .metrics(m),
+                    )
+                    ;
+                // Opt-in: the color appears once the tint is on.
+                if self.tint_on {
+                    overrides = overrides.push(
+                        w::ActionRow::new("Tint color")
+                            .suffix(
+                                w::ColorInput::new(
+                                    w::Hsva::from_rgba(self.tint.r, self.tint.g, self.tint.b, self.tint.a),
+                                    &self.tint_text,
+                                    Message::TintText,
+                                    Message::Tint,
+                                )
+                                .alpha(true)
+                                .metrics(m),
+                            )
+                            .metrics(m),
+                    );
+                }
+                overrides = overrides
                     .push(w::SwitchRow::new("Compact metrics", self.compact, Message::Compact).metrics(m))
-                    .push(w::SwitchRow::new("Override card color", self.card_override, Message::CardOverride).metrics(m)),
-            ]
-            .spacing(m.group_spacing)
-            .into(),
+                    .push(w::SwitchRow::new("Override card color", self.card_override, Message::CardOverride).metrics(m));
+                column![scheme, overrides].spacing(m.group_spacing).into()
+            }
+
             Detail::ThemeShape => {
                 // Everything here reads the theme's radii at draw time, so the sliders visibly
                 // change it: control radius rounds buttons, entries and toggles; card radius

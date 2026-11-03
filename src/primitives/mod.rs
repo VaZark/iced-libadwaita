@@ -13,6 +13,8 @@
 //! * [`infinite`]: a list that grows page by page (offset or cursor): one request in flight, stale responses discarded, the scroll rule;
 //! * [`lookup`]: a query answered asynchronously: debounce, stale-response discarding, cache;
 //! * [`notifications`]: the queue behind stacked toasts: ids, a limit, in-place update, auto-dismiss from an explicit `now`;
+//! * [`numeric`]: fixed-point numbers with a chosen number of digits (never floats), min / max, a handle step, parsing, formatting and validation (Mantine's NumberInput);
+//! * [`overlay`]: a layer over another (a dialog, a nested window): opt-in scrim, modality, dismissal, a stack of layers, centering;
 //! * [`pagination`]: page, page size, "Showing 21-40 of 187", Mantine's page-number window with dots;
 //! * [`range`]: a value with two ends (`lo <= hi`): the two-thumb slider's thumbs, a date range;
 //! * [`sections`]: text padding around an input's left / right sections;
@@ -47,6 +49,8 @@ pub mod lookup;
 pub mod meta;
 pub mod meta_parent;
 pub mod notifications;
+pub mod numeric;
+pub mod overlay;
 pub mod pagination;
 pub mod range;
 pub mod relative;

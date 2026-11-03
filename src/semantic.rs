@@ -214,6 +214,60 @@ impl Semantic {
         }
     }
 
+    /// Tints the surfaces with a color of its own (opt-in): each surface background moves towards
+    /// `tint`'s color by its alpha (0 none .. 1 the color itself), keeping its own alpha
+    /// ([`color::tint`](crate::color::tint)), so a tint and
+    /// [`apply_transparency`](Self::apply_transparency) combine in either order. Foregrounds are
+    /// untouched; keep the strength small (a few tens of percent) for legible text.
+    pub fn apply_tint(&mut self, tint: Option<Color>) {
+        let Some(tint) = tint else { return };
+        let k = tint.a.clamp(0.0, 1.0);
+        let toward = Color { a: 1.0, ..tint };
+        for s in [
+            &mut self.window,
+            &mut self.view,
+            &mut self.headerbar,
+            &mut self.card,
+            &mut self.sidebar,
+            &mut self.secondary_sidebar,
+            &mut self.thumbnail,
+            &mut self.overview,
+            &mut self.active_toggle,
+            &mut self.dialog,
+            &mut self.popover,
+        ] {
+            s.bg = crate::color::tint(s.bg, toward, k);
+        }
+    }
+
+    /// Makes the surfaces translucent: `transparency` 0 is opaque, 1 fully clear. Every surface
+    /// background (window, view, bars, sidebars, cards, toggles) keeps its color and has its alpha
+    /// scaled, so what the window is over (the desktop) shows through; the
+    /// tints derived from them ([`hover_fill`](Self::hover_fill), [`active_fill`](Self::active_fill),
+    /// [`color::lighten`](crate::color::lighten)) keep that alpha. Floating surfaces (popover,
+    /// dialog) take half of it so their text stays legible; foregrounds, accents and the
+    /// hairlines are untouched.
+    pub fn apply_transparency(&mut self, transparency: f32) {
+        let t = transparency.clamp(0.0, 1.0);
+        let base = 1.0 - t;
+        let floating = 1.0 - t * 0.5;
+        for (s, k) in [
+            (&mut self.window, base),
+            (&mut self.view, base),
+            (&mut self.headerbar, base),
+            (&mut self.card, base),
+            (&mut self.sidebar, base),
+            (&mut self.secondary_sidebar, base),
+            (&mut self.thumbnail, base),
+            (&mut self.overview, base),
+            (&mut self.active_toggle, base),
+            (&mut self.dialog, floating),
+            (&mut self.popover, floating),
+        ] {
+            s.bg = alpha(s.bg, k);
+        }
+    }
+
     pub fn is_dark(&self) -> bool {
         self.scheme.is_dark()
     }
@@ -245,7 +299,7 @@ impl Semantic {
     /// Pressed variant of a solid fill.
     pub fn active_fill(&self, c: Color) -> Color {
         // `background-image: image(RGB(0 0 6 / 20%))`
-        crate::color::mix(c, crate::color::ink(1.0), 0.20)
+        crate::color::tint(c, crate::color::ink(1.0), 0.20)
     }
 
     /// `alpha(window_fg, a)`, the basis of translucent state layers.

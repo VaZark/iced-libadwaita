@@ -27,3 +27,7 @@ Backdrop dims the window; floating dialogs have a shadow.
 ## Deviations / gaps
 
 No bottom-sheet mode.
+
+## Overlay
+
+`widget::Overlay::new(base, layer)` is the layer under `dialog_in_window` and a nested window (a preferences window over a dialog): the base is faded and disabled while it is up (`scrim(false)` keeps it unfaded), and a press outside sends `on_outside` (a dialog's app closes it; leave it unset, or send something else, for a layer that stays). `overlay_stack` nests layers; the rules (scrim, modality, `close_on_outside`, Escape closing only the top layer) are `primitives::overlay`. A `Popover` presented as `Presentation::Dialog` and the pickers' `dialog(true)` use the same rules, closing on a press outside unless `close_on_outside(false)`. A modal child window disables and fades its parent too, but a press on the parent brings the window forward (`Child::disable_parent`) and never closes it.

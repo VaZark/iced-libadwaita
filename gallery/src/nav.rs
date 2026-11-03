@@ -94,7 +94,16 @@ impl Page {
             ],
             Page::Inputs => vec![
                 ("Text", vec![n(TextInput), n(TextView), n(Autocomplete)]),
-                ("Forms", vec![n(Field), n(Form), n(Stepper), n(ColorPicker)]),
+                (
+                    "Forms",
+                    vec![
+                        n(Field),
+                        n(Form),
+                        n(Stepper),
+                        n(NumberInput),
+                        n(ColorPicker),
+                    ],
+                ),
                 ("Toggles", vec![n(Switch), n(CheckButton), n(RadioButton)]),
                 (
                     "Ranges & choosers",
@@ -234,6 +243,7 @@ pub enum Detail {
     Divider,
     Splitter,
     ColorPicker,
+    NumberInput,
     Timeline,
     Spoiler,
 
@@ -379,6 +389,7 @@ impl Detail {
             Detail::Divider => "Divider",
             Detail::Splitter => "Splitter",
             Detail::ColorPicker => "Color picker",
+            Detail::NumberInput => "Number input",
             Detail::Timeline => "Timeline",
             Detail::Spoiler => "Spoiler",
             Detail::TableVirtual => "Table: virtualization",
@@ -460,6 +471,7 @@ impl Detail {
             Detail::Divider => "Orientation, label, variant and size",
             Detail::Splitter => "Resizable panes: fixed and flexible, limits, collapsing",
             Detail::ColorPicker => "Saturation, hue and alpha, swatches, formats and an input",
+            Detail::NumberInput => "Integer or fixed decimals, limits, step handles",
             Detail::Timeline => "Events along a line, sharing the stepper primitive",
             Detail::Spoiler => "Part of the height or of the data, the rest on request",
             Detail::TableVirtual => "100,000 rows, only the ones in view built",

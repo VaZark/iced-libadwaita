@@ -7,9 +7,9 @@ use iced_libadwaita as adw;
 
 use crate::playground::Playground;
 use adw::widget::{
-    self as w, ColorFormat, ColorInput, ColorPicker, Hsva, Redistribute, Splitter, SplitterEvent,
-    SplitterLimit, SplitterOrientation, SplitterPane, SplitterState, Spoiler, SpoilerEvent,
-    SpoilerState, typography as ty,
+    self as w, ColorFormat, ColorInput, ColorPicker, Decimal, Hsva, NumberInput, Numeric,
+    Redistribute, Splitter, SplitterEvent, SplitterLimit, SplitterOrientation, SplitterPane,
+    SplitterState, Spoiler, SpoilerEvent, SpoilerState, typography as ty,
 };
 use adw::{Element, Metrics};
 use iced::widget::{column, container};
@@ -22,6 +22,7 @@ pub enum Msg {
     ResetSplit,
     Color(Hsva),
     ColorText(String),
+    Number(String),
     Spoiler(SpoilerEvent),
 }
 
@@ -31,6 +32,7 @@ pub struct State {
     split_shape: Vec<usize>,
     color: Hsva,
     color_text: String,
+    number: String,
     spoiler: SpoilerState,
     spoiler_shape: (usize, usize),
 }
@@ -47,6 +49,7 @@ impl Default for State {
             split_shape: Vec::new(),
             color,
             color_text: color.format(ColorFormat::Hex),
+            number: "12".into(),
             spoiler: SpoilerState::new(100, 3).step(10),
             spoiler_shape: (3, 10),
         }
@@ -104,6 +107,7 @@ impl State {
                 }
                 self.color_text = t;
             }
+            Msg::Number(t) => self.number = t,
             Msg::Spoiler(e) => {
                 self.spoiler.apply(e);
             }
@@ -193,7 +197,8 @@ impl State {
         let el: Element<'a, Msg> = if as_input {
             let mut i = ColorInput::new(self.color, &self.color_text, Msg::ColorText, Msg::Color)
                 .alpha(p.bool("alpha"))
-                .format(format)
+                .dialog(p.bool("dialog"))
+                .scrim(p.bool("scrim"))
                 .metrics(m);
             if swatches {
                 i = i.swatches(SWATCHES);
@@ -221,10 +226,16 @@ impl State {
             code.push_str(&s);
             code.push('\n');
         };
+        if as_input && p.bool("dialog") {
+            line(".dialog(true)".into());
+            if !p.bool("scrim") {
+                line(".scrim(false)".into());
+            }
+        }
         if p.bool("alpha") {
             line(".alpha(true)".into());
         }
-        if p.choice("format") != 0 {
+        if !as_input && p.choice("format") != 0 {
             line(format!(".format(ColorFormat::{format:?})"));
         }
         if swatches {
@@ -240,6 +251,60 @@ impl State {
             "\n// the color: Hsva; Hsva::parse(\"#3584e4\"), color.format(ColorFormat::{format:?}) = {}",
             self.color.format(format)
         ));
+        (el, code)
+    }
+
+    // -- Number input
+
+    pub fn number_play<'a>(&'a self, p: &Playground, m: Metrics) -> (Element<'a, Msg>, String) {
+        const STEPS: [(i64, u8, &str); 6] = [
+            (1, 0, "1"),
+            (1, 2, "0.01"),
+            (1, 1, "0.1"),
+            (25, 2, "0.25"),
+            (5, 0, "5"),
+            (10, 0, "10"),
+        ];
+        let decimals = p.number("decimals") as u8;
+        let (units, digits, label) = STEPS[p.choice("step")];
+        let mut input = NumberInput::new(&self.number, Msg::Number)
+            .decimals(decimals)
+            .step(Decimal::new(units, digits))
+            .handles(p.bool("handles"))
+            .disabled(p.bool("disabled"))
+            .placeholder("Number")
+            .metrics(m);
+        if p.bool("limits") {
+            input = input.min(0).max(100);
+        }
+        let numeric = Numeric::integer().digits(decimals);
+        let shown = numeric
+            .parse(&self.number)
+            .map_or("not a number".to_string(), |d| d.format());
+        let el = column![Element::from(input), ty::caption(format!("Value: {shown}"))]
+            .spacing(m.space_s)
+            .into();
+        let mut code = String::from("NumberInput::new(&self.text, Msg::Text)\n");
+        if decimals != 0 {
+            code.push_str(&format!("    .decimals({decimals})\n"));
+        }
+        if p.bool("limits") {
+            code.push_str("    .min(0)\n    .max(100)\n");
+        }
+        if p.changed("step") {
+            code.push_str(&if digits == 0 {
+                format!("    .step({label})\n")
+            } else {
+                format!("    .step(Decimal::new({units}, {digits}))   // {label}\n")
+            });
+        }
+        if !p.bool("handles") {
+            code.push_str("    .handles(false)\n");
+        }
+        if p.bool("disabled") {
+            code.push_str("    .disabled(true)\n");
+        }
+        code.push_str("\n// update: self.text = text;   a handle sends the stepped number as text\n// the number: Numeric::decimal(2).parse(&self.text) -> Option<Decimal> (fixed-point, no float)");
         (el, code)
     }
 

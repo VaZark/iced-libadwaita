@@ -4,8 +4,8 @@
 use iced_libadwaita as adw;
 
 use adw::primitives::form::{FormSpec, FormState, Outcome};
-use adw::primitives::range::{DateRange, Edge, Range, Track};
-use adw::widget::{self as w, CalendarView, Date, Field, Level, Validity};
+use adw::primitives::range::{DateRange, Range, Track};
+use adw::widget::{self as w, CalendarView, Date, Decimal, Field, Level, Numeric, Validity};
 use adw::{Element, Metrics};
 use iced::Length;
 use iced::widget::{column, container, row};
@@ -19,16 +19,19 @@ pub enum Msg {
     Marks((f32, f32)),
     Row((f32, f32)),
     Price((f32, f32)),
+    Temp((f32, f32)),
+    TempLo(String),
+    TempHi(String),
     FieldRange((f32, f32)),
-    Text(Edge, String),
+    Text(String),
     Pick(DateRange),
     Nav(CalendarView),
     Hover(Option<Date>),
-    FieldText(Edge, String),
+    FieldText(String),
     FieldPick(DateRange),
     FieldNav(CalendarView),
     FieldHover(Option<Date>),
-    BoundedText(Edge, String),
+    BoundedText(String),
     BoundedPick(DateRange),
     BoundedNav(CalendarView),
     BoundedHover(Option<Date>),
@@ -37,11 +40,10 @@ pub enum Msg {
     Noop,
 }
 
-/// A date entry pair with its calendar state.
+/// A date range entry with its calendar state.
 #[derive(Clone)]
 struct Dates {
-    start: String,
-    end: String,
+    text: String,
     range: DateRange,
     nav: CalendarView,
     hover: Option<Date>,
@@ -54,28 +56,22 @@ fn d(y: i32, m: u8, day: u8) -> Date {
 impl Dates {
     fn new(start: Option<Date>, end: Option<Date>) -> Self {
         Self {
-            start: start.map(|d| d.format()).unwrap_or_default(),
-            end: end.map(|d| d.format()).unwrap_or_default(),
+            text: DateRange::new(start, end).text(),
             range: DateRange::new(start, end),
             nav: CalendarView::month(d(2026, 11, 1)),
             hover: None,
         }
     }
-    fn text(&mut self, edge: Edge, t: String) {
-        let parsed = Date::parse(&t);
-        self.range = self.range.with(edge, parsed);
-        if let Some(p) = parsed {
+    fn text(&mut self, t: String) {
+        self.range = DateRange::parse(&t);
+        if let Some(p) = self.range.start {
             self.nav = CalendarView::new(p, self.nav.level);
         }
-        match edge {
-            Edge::Start => self.start = t,
-            Edge::End => self.end = t,
-        }
+        self.text = t;
     }
     fn pick(&mut self, r: DateRange) {
         *self = Self {
-            start: r.start.map(|d| d.format()).unwrap_or_default(),
-            end: r.end.map(|d| d.format()).unwrap_or_default(),
+            text: r.text(),
             range: r,
             hover: self.hover,
             nav: self.nav,
@@ -91,6 +87,8 @@ pub struct State {
     marks: (f32, f32),
     row: (f32, f32),
     price: (f32, f32),
+    temp: (f32, f32),
+    temp_text: (String, String),
     field_range: (f32, f32),
     live: Dates,
     field_dates: Dates,
@@ -142,6 +140,8 @@ impl Default for State {
             marks: (10.0, 40.0),
             row: (200.0, 800.0),
             price: (12.0, 48.0),
+            temp: (18.0, 26.5),
+            temp_text: ("18.0".into(), "26.5".into()),
             field_range: (45.0, 55.0),
             live,
             field_dates: Dates::new(Some(d(2026, 11, 12)), Some(d(2026, 11, 8))),
@@ -161,16 +161,32 @@ impl State {
             Msg::Marks(v) => self.marks = v,
             Msg::Row(v) => self.row = v,
             Msg::Price(v) => self.price = v,
+            Msg::Temp(v) => {
+                self.temp = v;
+                self.temp_text = (temp_text(v.0), temp_text(v.1));
+            }
+            Msg::TempLo(t) => {
+                if let Some(v) = temp_value(&t) {
+                    self.temp.0 = v.min(self.temp.1);
+                }
+                self.temp_text.0 = t;
+            }
+            Msg::TempHi(t) => {
+                if let Some(v) = temp_value(&t) {
+                    self.temp.1 = v.max(self.temp.0);
+                }
+                self.temp_text.1 = t;
+            }
             Msg::FieldRange(v) => {
                 self.field_range = v;
                 self.touch("range");
             }
-            Msg::Text(e, t) => self.live.text(e, t),
+            Msg::Text(t) => self.live.text(t),
             Msg::Pick(r) => self.live.pick(r),
             Msg::Nav(v) => self.live.nav = v,
             Msg::Hover(h) => self.live.hover = h,
-            Msg::FieldText(e, t) => {
-                self.field_dates.text(e, t);
+            Msg::FieldText(t) => {
+                self.field_dates.text(t);
                 self.touch("dates");
             }
             Msg::FieldPick(r) => {
@@ -179,7 +195,7 @@ impl State {
             }
             Msg::FieldNav(v) => self.field_dates.nav = v,
             Msg::FieldHover(h) => self.field_dates.hover = h,
-            Msg::BoundedText(e, t) => self.bounded.text(e, t),
+            Msg::BoundedText(t) => self.bounded.text(t),
             Msg::BoundedPick(r) => self.bounded.pick(r),
             Msg::BoundedNav(v) => self.bounded.nav = v,
             Msg::BoundedHover(h) => self.bounded.hover = h,
@@ -234,6 +250,22 @@ impl State {
     fn group<'a>(title: &'static str, m: Metrics) -> w::PreferencesGroup<'a, Msg> {
         w::PreferencesGroup::<Msg>::new().title(title).metrics(m)
     }
+}
+
+/// The numeric rule of the temperature range: one decimal, 0 to 40, half-degree steps.
+fn temp_rule() -> Numeric {
+    Numeric::decimal(1).min(0).max(40).step(Decimal::new(5, 1))
+}
+
+fn temp_text(v: f32) -> String {
+    temp_rule().format(Decimal::new((v * 10.0).round() as i64, 1))
+}
+
+/// The slider value of a typed temperature, `None` for text that is not one or out of range.
+fn temp_value(text: &str) -> Option<f32> {
+    let n = temp_rule();
+    n.validate(text).is_ok().then_some(())?;
+    n.parse(text).map(|d| d.units as f32 / 10.0)
 }
 
 fn pair((lo, hi): (f32, f32)) -> String {
@@ -323,6 +355,24 @@ impl State {
                     .metrics(m),
             );
 
+        let numbers = Self::group("With number inputs", m)
+            .description("The handles step by half a degree; the fixed-point input keeps one decimal and the slider follows what is typed.")
+            .push(w::card(
+                column![
+                    w::range_slider(0.0..=40.0, self.temp, Msg::Temp).step(0.5),
+                    row![
+                        w::NumberInput::new(&self.temp_text.0, Msg::TempLo)
+                            .numeric(temp_rule())
+                            .metrics(m),
+                        w::NumberInput::new(&self.temp_text.1, Msg::TempHi)
+                            .numeric(temp_rule())
+                            .metrics(m),
+                    ]
+                    .spacing(m.space_m),
+                ]
+                .spacing(m.space_m),
+            ));
+
         let spec = spec();
         let field = Field::new(
             "Allowed volume",
@@ -339,6 +389,7 @@ impl State {
                 .description("Two thumbs on one rail. Drag a thumb or click the rail; arrows, Page and Home/End when focused.")
                 .push(w::card(sliders)),
             rows,
+            numbers,
             Self::group("In a field", m)
                 .description("The field draws the one ring and the message; the slider has no state of its own.")
                 .push(w::card(field)),
@@ -351,9 +402,9 @@ impl State {
         t: &'a Dates,
         m: Metrics,
         open: bool,
-        wrap: impl Fn(Edge, String) -> Msg + 'a,
+        wrap: impl Fn(String) -> Msg + 'a,
     ) -> w::DateRangeInput<'a, Msg> {
-        w::DateRangeInput::new(&t.start, &t.end, t.nav.date, wrap)
+        w::DateRangeInput::new(&t.text, t.nav.date, wrap)
             .calendar(t.nav)
             .selected(t.range)
             .hover(t.hover)
@@ -372,9 +423,9 @@ impl State {
             .on_nav(Msg::Nav)
             .on_hover(Msg::Hover);
 
-        let fixed = |a: &'static str, b: &'static str| {
-            w::DateRangeInput::new(a, b, d(2026, 11, 1), |_, _| Msg::Noop)
-                .selected(DateRange::new(Date::parse(a), Date::parse(b)))
+        let fixed = |text: &'static str| {
+            w::DateRangeInput::new(text, d(2026, 11, 1), |_| Msg::Noop)
+                .selected(DateRange::parse(text))
                 .metrics(m)
         };
         let min = d(2026, 11, 1);
@@ -392,27 +443,28 @@ impl State {
             )
             .plain_label(true)
             .metrics(m),
-            Field::new("Empty", fixed("", ""))
+            Field::new("Empty", fixed("")).plain_label(true).metrics(m),
+            Field::new("Start chosen", fixed("2026-11-10"))
                 .plain_label(true)
                 .metrics(m),
-            Field::new("Start chosen", fixed("2026-11-10", ""))
-                .plain_label(true)
-                .metrics(m),
-            Field::new("Selected", fixed("2026-11-03", "2026-11-09"))
+            Field::new("Selected", fixed("2026-11-03 \u{2013} 2026-11-09"))
                 .plain_label(true)
                 .metrics(m),
             Field::new(
                 "Minimum 2026-11-01 (the first is before it)",
-                fixed("2026-10-28", "2026-11-09").min(min)
+                fixed("2026-10-28 \u{2013} 2026-11-09").min(min)
             )
             .plain_label(true)
             .metrics(m),
-            Field::new("End before start", fixed("2026-11-09", "2026-11-02"))
+            Field::new("End before start", fixed("2026-11-09 \u{2013} 2026-11-02"))
                 .plain_label(true)
                 .metrics(m),
-            Field::new("Disabled", fixed("2026-11-03", "2026-11-09").disabled(true))
-                .plain_label(true)
-                .metrics(m),
+            Field::new(
+                "Disabled",
+                fixed("2026-11-03 \u{2013} 2026-11-09").disabled(true)
+            )
+            .plain_label(true)
+            .metrics(m),
         ]
         .spacing(sp);
 

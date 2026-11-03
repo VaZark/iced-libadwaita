@@ -1,0 +1,16 @@
+[package]
+name = "iced-libadwaita-gallery"
+version = "0.1.0"
+edition = "2024"
+description = "A tour of the iced-libadwaita components"
+publish = false
+
+[dependencies]
+iced-libadwaita = { path = ".." }
+iced = { version = "0.14", features = ["advanced", "svg", "image", "tokio", "canvas"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+tokio = { version = "1", features = ["time"] }
+
+[[bin]]
+name = "gallery"
+path = "src/main.rs"

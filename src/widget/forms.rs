@@ -4,8 +4,7 @@
 //! Each is a thin, themed wrapper with libadwaita-style properties, so a layout (code, XML or
 //! JSX-like) can use one vocabulary instead of raw iced widgets.
 
-use super::popover::{Align, Appearance, Popover, popover};
-use super::{ColorPicker, Element};
+use super::{ColorInput, Element};
 use crate::primitives::color_picker::{Format as ColorFormat, Hsva};
 use crate::primitives::sections::{slot_width, text_padding};
 use crate::style;
@@ -46,9 +45,6 @@ impl From<crate::primitives::validation::Presentation> for EntryState {
 /// `GtkEntry` / `GtkPasswordEntry`.
 ///
 /// Without [`on_input`](Entry::on_input) it is read-only and drawn disabled.
-/// The text an entry shows and what typing sends.
-pub(super) type TextBinding<'a, M> = (String, std::rc::Rc<dyn Fn(String) -> M + 'a>);
-
 pub struct Entry<'a, M> {
     placeholder: String,
     value: String,
@@ -376,10 +372,16 @@ pub fn status_swatch<'a, M: 'a>(label: impl Into<String>, swatch: Swatch) -> Ele
 /// the selected one. With [`custom`](AccentPicker::custom) a last swatch opens a
 /// [`ColorPicker`](super::ColorPicker) (with a text input) in a popover for any other color, and
 /// the choice is an [`AccentColor::Custom`].
+/// The text the custom accent's entry shows and what typing sends.
+type Custom<'a, M> = (&'a str, std::rc::Rc<dyn Fn(String) -> M + 'a>);
+
 pub struct AccentPicker<'a, M> {
     selected: AccentColor,
     on_select: std::rc::Rc<dyn Fn(AccentColor) -> M + 'a>,
-    custom: Option<TextBinding<'a, M>>,
+    custom: Option<Custom<'a, M>>,
+    dialog: bool,
+    scrim: bool,
+    close_on_outside: bool,
     metrics: Metrics,
 }
 
@@ -391,6 +393,9 @@ pub fn accent_picker<'a, M: Clone + 'a>(
         selected,
         on_select: std::rc::Rc::new(on_select),
         custom: None,
+        dialog: false,
+        scrim: true,
+        close_on_outside: true,
         metrics: Metrics::desktop(),
     }
 }
@@ -399,8 +404,23 @@ impl<'a, M: Clone + 'a> AccentPicker<'a, M> {
     /// Adds the custom swatch. `text` is what the popover's entry shows (the app keeps it, so
     /// typing is not interrupted); `on_text` gets what was typed. Parse it with
     /// [`AccentColor::parse`] and select the result.
-    pub fn custom(mut self, text: impl Into<String>, on_text: impl Fn(String) -> M + 'a) -> Self {
-        self.custom = Some((text.into(), std::rc::Rc::new(on_text)));
+    pub fn custom(mut self, text: &'a str, on_text: impl Fn(String) -> M + 'a) -> Self {
+        self.custom = Some((text, std::rc::Rc::new(on_text)));
+        self
+    }
+    /// Opens the color picker as a dialog centered in the window (default: a popover).
+    pub fn dialog(mut self, on: bool) -> Self {
+        self.dialog = on;
+        self
+    }
+    /// Fades the window behind the dialog (default on).
+    /// Whether a press outside the dialog closes it (default true).
+    pub fn close_on_outside(mut self, on: bool) -> Self {
+        self.close_on_outside = on;
+        self
+    }
+    pub fn scrim(mut self, on: bool) -> Self {
+        self.scrim = on;
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -445,17 +465,6 @@ impl<'a, M: Clone + 'a> From<AccentPicker<'a, M>> for Element<'a, M> {
             let current = p.selected.to_color();
             let c = Hsva::from_rgba(current.r, current.g, current.b, 1.0);
             let on_select = p.on_select.clone();
-            let picker = ColorPicker::new(c, move |h: Hsva| {
-                let [r, g, b] = h.to_rgb8();
-                on_select(AccentColor::custom(r, g, b))
-            })
-            .swatches(AccentColor::ALL.map(|a| {
-                let c = a.to_color();
-                Hsva::from_rgba(c.r, c.g, c.b, 1.0).format(ColorFormat::Hex)
-            }))
-            .input(text, move |t| on_text(t))
-            .readout(false)
-            .metrics(m);
             let custom = matches!(p.selected, AccentColor::Custom(_));
             // A custom accent shows its color; otherwise a plus invites choosing one.
             let trigger: Element<'a, M> = if custom {
@@ -473,12 +482,27 @@ impl<'a, M: Clone + 'a> From<AccentPicker<'a, M>> for Element<'a, M> {
                     })
                     .into()
             };
+            let input = ColorInput::new(
+                c,
+                // The text is the app's; a custom accent is its hex.
+                text,
+                move |t| on_text(t),
+                move |h: Hsva| {
+                    let [r, g, b] = h.to_rgb8();
+                    on_select(AccentColor::custom(r, g, b))
+                },
+            );
             swatches.push(
-                Popover::new(trigger, popover([Element::from(picker)], 520.0))
-                    .appearance(Appearance::Flat)
-                    .padding(0)
-                    .align(Align::End)
-                    .keep_open(true)
+                input
+                    .swatches(AccentColor::ALL.map(|a| {
+                        let c = a.to_color();
+                        Hsva::from_rgba(c.r, c.g, c.b, 1.0).format(ColorFormat::Hex)
+                    }))
+                    .trigger(trigger)
+                    .dialog(p.dialog)
+                    .scrim(p.scrim)
+                    .close_on_outside(p.close_on_outside)
+                    .metrics(m)
                     .into(),
             );
         }

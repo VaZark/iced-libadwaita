@@ -49,6 +49,8 @@ pub enum Setting {
     Accent,
     FlatHeaderbars,
     AutoContrast,
+    Transparency,
+    Tint,
     Density,
     TextScale,
     Shadows,
@@ -116,6 +118,11 @@ pub struct Config {
     pub auto_contrast: bool,
     pub density: Density,
     pub text_scale: f32,
+    /// How see-through surfaces are, 0 (opaque) .. 1 ([`Theme::with_transparency`](crate::Theme::with_transparency)).
+    pub transparency: f32,
+    /// The color surfaces are tinted with, its alpha the strength (`none`, the default, `#rrggbb`
+    /// or `#rrggbbaa`; [`Theme::with_tint`](crate::Theme::with_tint)). Opt-in.
+    pub tint: Option<iced::Color>,
     pub shadows: bool,
     pub shadow_scale: f32,
     pub shadow_intensity: f32,
@@ -191,6 +198,8 @@ impl Default for Config {
             auto_contrast: true,
             density: Density::Default,
             text_scale: 1.0,
+            transparency: 0.0,
+            tint: None,
             shadows: true,
             shadow_scale: 1.0,
             shadow_intensity: 1.0,
@@ -267,6 +276,22 @@ fn parse_bool(v: &str) -> Option<bool> {
     }
 }
 
+/// `none`, or a hex color whose alpha (`#rrggbbaa`, else a quarter) is the strength.
+fn parse_tint(v: &str) -> Option<Option<iced::Color>> {
+    if v.eq_ignore_ascii_case("none") {
+        return Some(None);
+    }
+    let c = crate::primitives::color_picker::Hsva::parse(v)?;
+    let [r, g, b] = c.to_rgb8();
+    let has_alpha = v.trim_start_matches('#').len() == 8;
+    Some(Some(iced::Color::from_rgba8(
+        r,
+        g,
+        b,
+        if has_alpha { c.a } else { 0.25 },
+    )))
+}
+
 fn parse_accent(v: &str) -> Option<AccentColor> {
     AccentColor::parse(v)
 }
@@ -329,6 +354,18 @@ impl Config {
                 "default" => self.density = Density::Default,
                 "compact" => self.density = Density::Compact,
                 _ => bad!("appearance", "density", v),
+            }
+        }
+        if let Some(v) = get("appearance", "transparency") {
+            match v.parse::<f32>() {
+                Ok(f) if (0.0..=1.0).contains(&f) => self.transparency = f,
+                _ => bad!("appearance", "transparency", v),
+            }
+        }
+        if let Some(v) = get("appearance", "tint") {
+            match parse_tint(v) {
+                Some(c) => self.tint = c,
+                None => bad!("appearance", "tint", v),
             }
         }
         if let Some(v) = get("appearance", "text-scale") {
@@ -716,6 +753,8 @@ pub struct Overrides {
     auto_contrast: Option<bool>,
     density: Option<Density>,
     text_scale: Option<f32>,
+    transparency: Option<f32>,
+    tint: Option<Option<iced::Color>>,
     shadows: Option<bool>,
     animations: Option<bool>,
     reduced_motion: Option<bool>,
@@ -764,6 +803,8 @@ impl Overrides {
     override_fn!(auto_contrast, auto_contrast, bool, Setting::AutoContrast);
     override_fn!(density, density, Density, Setting::Density);
     override_fn!(text_scale, text_scale, f32, Setting::TextScale);
+    override_fn!(transparency, transparency, f32, Setting::Transparency);
+    override_fn!(tint, tint, Option<iced::Color>, Setting::Tint);
     override_fn!(shadows, shadows, bool, Setting::Shadows);
     override_fn!(animations, animations, bool, Setting::Animations);
     override_fn!(reduced_motion, reduced_motion, bool, Setting::ReducedMotion);
@@ -912,6 +953,12 @@ impl Overrides {
         }
         if let Some(v) = self.text_scale {
             c.text_scale = v
+        }
+        if let Some(v) = self.transparency {
+            c.transparency = v
+        }
+        if let Some(v) = self.tint {
+            c.tint = v
         }
         if let Some(v) = self.shadows {
             c.shadows = v
@@ -1372,5 +1419,18 @@ thing=1
             Config::default(),
             "missing properties use defaults"
         );
+    }
+
+    #[test]
+    fn transparency_and_tint_are_read_and_validated() {
+        let c = Config::from_keyfile("[appearance]\ntransparency=0.35\ntint=#ff000080\n");
+        assert_eq!(c.transparency, 0.35);
+        let t = c.tint.unwrap();
+        assert_eq!((t.r, t.g, t.b), (1.0, 0.0, 0.0));
+        assert!((t.a - 0.5).abs() < 0.01);
+        let c = Config::from_keyfile("[appearance]\ntransparency=2\ntint=maybe\n");
+        assert_eq!((c.transparency, c.tint), (0.0, None));
+        let c = Config::from_keyfile("[appearance]\ntint=#3584e4\n");
+        assert_eq!(c.tint.unwrap().a, 0.25);
     }
 }

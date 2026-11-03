@@ -15,6 +15,7 @@
 //! area. The default is the desktop config's `[popovers] bounds`.
 
 use super::Element;
+use crate::primitives::overlay::{Action, Input, Overlay as Rules};
 use crate::style::{button as sb, container as sc};
 use crate::{Metrics, Theme};
 use iced::advanced::layout::{self, Layout};
@@ -90,6 +91,9 @@ pub enum Presentation {
     /// top-left corner ([`PAGE_HEADER_HEIGHT`] × [`PAGE_BACK_WIDTH`]). The content
     /// should provide its own header drawn in that area.
     Page,
+    /// A modal dialog centered in the window, over a faded parent
+    /// ([`scrim`](Popover::scrim), on by default); a press outside or Escape closes it.
+    Dialog,
 }
 
 /// Height of the full-page header region (matches the header bar height).
@@ -121,6 +125,9 @@ pub struct Popover<'a, M> {
     offset: f32,
     keep_open: bool,
     bounds: PopoverBounds,
+    scrim: bool,
+    close_on_outside: bool,
+    window_radius: f32,
 }
 
 struct State {
@@ -174,6 +181,9 @@ impl<'a, M: 'a> Popover<'a, M> {
             keep_open: false,
             // The desktop config's default; `bounds(..)` overrides it for this popover.
             bounds: popover_bounds(),
+            scrim: true,
+            close_on_outside: true,
+            window_radius: m.radius_window,
         }
     }
     /// The side of the trigger the popover opens on (default below). It flips to the opposite
@@ -207,6 +217,21 @@ impl<'a, M: 'a> Popover<'a, M> {
         self
     }
     /// [`Presentation::Popover`] (default) or [`Presentation::Page`].
+    /// Fades the window behind a [`Dialog`](Presentation::Dialog) (default on).
+    pub fn scrim(mut self, on: bool) -> Self {
+        self.scrim = on;
+        self
+    }
+    /// Whether a press outside a [`Dialog`](Presentation::Dialog) closes it (default true).
+    pub fn close_on_outside(mut self, on: bool) -> Self {
+        self.close_on_outside = on;
+        self
+    }
+    /// Rounds that fade to the window's corners (`window::State::radius`).
+    pub fn window_radius(mut self, r: f32) -> Self {
+        self.window_radius = r;
+        self
+    }
     pub fn presentation(mut self, p: Presentation) -> Self {
         self.presentation = p;
         self
@@ -418,6 +443,10 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
             side: self.side,
             offset: self.offset,
             keep_open: self.keep_open,
+            window: Size::ZERO,
+            scrim: self.scrim,
+            close_on_outside: self.close_on_outside,
+            window_radius: self.window_radius,
             // A full-window page ignores the content area.
             area: (self.bounds == PopoverBounds::Content
                 && self.presentation == Presentation::Popover)
@@ -439,12 +468,36 @@ struct PopoverOverlay<'a, 'b, M> {
     side: crate::primitives::anchor::Side,
     offset: f32,
     keep_open: bool,
+    /// The window, as of the last layout.
+    window: Size,
+    scrim: bool,
+    close_on_outside: bool,
+    window_radius: f32,
     /// The content area it is kept inside, in window coordinates; `None`: the window.
     area: Option<Rectangle>,
 }
 
+/// Room kept around a dialog, and its width unless the content asks for another.
+const DIALOG_MARGIN: f32 = 12.0;
+const DIALOG_WIDTH: f32 = 360.0;
 const MARGIN: f32 = 6.0;
 const GAP: f32 = 4.0;
+
+impl<M> PopoverOverlay<'_, '_, M> {
+    /// The layer rules of this presentation: a dialog is modal and may fade the window; a popover
+    /// and a page are neither, a page only closes by its back area or Escape.
+    fn rules(&self) -> Rules {
+        let dialog = self.presentation == Presentation::Dialog;
+        Rules::default()
+            .scrim(dialog && self.scrim)
+            .modal(dialog)
+            .close_on_outside(match self.presentation {
+                Presentation::Page => false,
+                Presentation::Dialog => self.close_on_outside,
+                Presentation::Popover => true,
+            })
+    }
+}
 
 impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a, 'b, M> {
     fn layout(&mut self, renderer: &iced::Renderer, bounds: Size) -> layout::Node {
@@ -456,6 +509,22 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
                 .as_widget_mut()
                 .layout(self.tree, renderer, &limits);
             return layout::Node::with_children(bounds, vec![node]);
+        }
+        if self.presentation == Presentation::Dialog {
+            self.window = bounds;
+            let max = crate::primitives::overlay::max_size(bounds, DIALOG_MARGIN);
+            let w = self.min_width.unwrap_or(DIALOG_WIDTH).min(max.width);
+            let limits = layout::Limits::new(Size::new(w, 0.0), Size::new(w, max.height));
+            let node = self
+                .content
+                .as_widget_mut()
+                .layout(self.tree, renderer, &limits);
+            let at = crate::primitives::overlay::centered(
+                Rectangle::with_size(bounds),
+                node.size(),
+                DIALOG_MARGIN,
+            );
+            return layout::Node::with_children(node.size(), vec![node]).move_to(at.position());
         }
         use crate::primitives::anchor::{self, Side};
         let placement = anchor::Placement {
@@ -521,9 +590,23 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
         let p = self.appear.shown.clamp(0.0, 1.0);
         let d = if self.presentation == Presentation::Page {
             iced::Vector::new(layout.bounds().width * (1.0 - p), 0.0)
+        } else if self.presentation == Presentation::Dialog {
+            iced::Vector::new(0.0, 24.0 * (1.0 - p))
         } else {
             iced::Vector::new(0.0, -8.0 * (1.0 - p))
         };
+        let rules = self.rules();
+        if rules.scrim_amount(p) > 0.0 {
+            renderer.fill_quad(
+                Quad {
+                    bounds: Rectangle::with_size(self.window),
+                    border: iced::Border::default().rounded(self.window_radius),
+                    shadow: Shadow::default(),
+                    snap: false,
+                },
+                iced::Background::Color(super::motion::scrim(theme, rules.scrim_amount(p))),
+            );
+        }
         renderer.with_translation(d, |renderer| {
             self.content.as_widget().draw(
                 self.tree,
@@ -562,17 +645,29 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
             shell.request_redraw();
         };
         let page = self.presentation == Presentation::Page;
-        match event {
+        let rules = self.rules();
+        let input = match event {
             Event::Keyboard(keyboard::Event::KeyPressed {
                 key: keyboard::Key::Named(Named::Escape),
                 ..
-            }) => return close(self.open, shell),
-            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-                if !page && !cursor.is_over(bounds) =>
-            {
-                return close(self.open, shell);
+            }) => Some(Input::Escape),
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => Some(Input::Press {
+                inside: cursor.is_over(bounds),
+            }),
+            _ => None,
+        };
+        match input.map(|i| rules.route(i)) {
+            Some(Action::Close) => return close(self.open, shell),
+            Some(Action::Swallow) => {
+                shell.capture_event();
+                return;
             }
             _ => {}
+        }
+        // A modal dialog keeps the pointer from reaching the window below.
+        if rules.modal && matches!(event, Event::Mouse(_)) && !cursor.is_over(bounds) {
+            shell.capture_event();
+            return;
         }
         if page {
             // The back area in the page header closes it.

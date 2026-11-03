@@ -1,6 +1,6 @@
 # DateInput
 
-libadwaita and GTK 4 have no date picker (`GtkCalendar` is a bare month grid, with no entry). `DateInput` combines an entry with a calendar popover, in the manner of GNOME apps that add a `GtkCalendar` to a `GtkPopover`.
+libadwaita and GTK 4 have no date picker (`GtkCalendar` is a bare month grid, with no entry). `DateInput` is an entry with the calendar button in its left section, opening a calendar popover (or, with `dialog(true)`, a dialog centered in the window over a faded, disabled window (`scrim(false)` keeps it clear; a press outside closes it unless `close_on_outside(false)`)), in the manner of GNOME apps that add a `GtkCalendar` to a `GtkPopover`.
 
 - Text is `YYYY-MM-DD` (also `/` or `.` as separators); an unparsable date, or one outside `min`/`max`, draws the entry in its error state.
 - The calendar is a Monday-first month grid with previous/next buttons. Days outside `min`/`max` are disabled. The chosen day is accent-colored like a selected menu item.

@@ -46,14 +46,24 @@ pub fn mix(a: Color, b: Color, t: f32) -> Color {
     }
 }
 
-/// Mixes `color` towards white.
-pub fn lighten(color: Color, t: f32) -> Color {
-    mix(color, Color::WHITE, t)
+/// Tints `base` towards the color of `toward` by `t`, keeping the **alpha of `base`**: only the
+/// hue moves, so a translucent surface stays as translucent after a hover or press tint (a
+/// plain [`mix`] would drag its alpha towards the other color's).
+pub fn tint(base: Color, toward: Color, t: f32) -> Color {
+    Color {
+        a: base.a,
+        ..mix(base, toward, t)
+    }
 }
 
-/// Mixes `color` towards black.
+/// Tints `color` towards white (its alpha is kept).
+pub fn lighten(color: Color, t: f32) -> Color {
+    tint(color, Color::WHITE, t)
+}
+
+/// Tints `color` towards black (its alpha is kept).
 pub fn darken(color: Color, t: f32) -> Color {
-    mix(color, Color::BLACK, t)
+    tint(color, Color::BLACK, t)
 }
 
 /// Black with the given alpha (`rgba(0, 0, 0, a)`).
@@ -178,5 +188,20 @@ mod tests {
             color_contrast_to(bg, &list, 30.0),
             color_contrast(bg, &list)
         );
+    }
+
+    #[test]
+    fn a_tint_keeps_the_alpha_of_the_color_it_tints() {
+        let glass = Color::from_rgba(0.2, 0.4, 0.8, 0.5);
+        for c in [
+            lighten(glass, 0.3),
+            darken(glass, 0.3),
+            tint(glass, hex(0xff0000), 0.4),
+        ] {
+            assert_eq!(c.a, 0.5);
+        }
+        assert!(lighten(glass, 0.3).r > glass.r, "still moves towards white");
+        // A mix is the CSS color-mix: alpha moves too.
+        assert!(mix(glass, Color::WHITE, 0.5).a > 0.5);
     }
 }

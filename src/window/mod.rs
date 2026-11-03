@@ -44,6 +44,15 @@ pub fn settings() -> Settings {
         decorations: false,
         transparent: true,
         min_size: Some(min_size()),
+        ..translucent_settings()
+    }
+}
+
+/// A transparent window when the desktop config's `[appearance] transparency` makes the surfaces
+/// translucent.
+fn translucent_settings() -> Settings {
+    Settings {
+        transparent: crate::config::current().transparency > 0.0,
         ..Settings::default()
     }
 }
@@ -68,7 +77,7 @@ pub fn settings_with_ssd(ssd: bool) -> Settings {
     if ssd {
         Settings {
             min_size: Some(min_size()),
-            ..Settings::default()
+            ..translucent_settings()
         }
     } else {
         settings()
@@ -381,24 +390,26 @@ impl<T> Child<T> {
         iced::window::close(self.id)
     }
 
-    /// Disables `parent` while a **modal** child is open, like a regular dialog: a scrim over
-    /// it swallows input, and pressing it sends `on_press` (use it to [`focus`](Self::focus)
-    /// the child). Both windows can still be moved on the screen independently. With no child
-    /// (or a non-modal one) the parent is returned in the same tree position, so opening or
-    /// closing the child does not disturb it. `radius` rounds the scrim to the parent's
-    /// corners ([`Chrome::radius`]).
+    /// Disables `parent` while a **modal** child is open, like a regular dialog: it is faded and
+    /// a layer over it swallows input. Pressing it does not close the child (a window is closed
+    /// by its own controls): it sends `on_press`, to [`focus`](Self::focus) the child. Both
+    /// windows can still be moved on the screen independently. With no child (or a non-modal
+    /// one) the parent is returned in the same tree position, so opening or closing the child
+    /// does not disturb it. `radius` rounds the fade to the parent's corners
+    /// ([`Chrome::radius`]).
     pub fn disable_parent<'a, M: Clone + 'a>(
         child: Option<&Self>,
         parent: impl Into<Element<'a, M>>,
         on_press: M,
         radius: f32,
     ) -> Element<'a, M> {
-        crate::widget::present_dialog(
-            parent,
-            child.filter(|c| c.modal).map(|_| Element::from(space())),
-            Some(on_press),
-            radius,
-        )
+        match child.filter(|c| c.modal) {
+            Some(_) => crate::widget::Overlay::new(parent, space())
+                .on_outside(on_press)
+                .window_radius(radius)
+                .into(),
+            None => crate::widget::layered(parent, None),
+        }
     }
 }
 
