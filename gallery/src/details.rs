@@ -967,9 +967,25 @@ impl Gallery {
                     .presentation(presentation)
                     .open_initially(self.shots.is_some() && side == w::MenuIconSide::End)
                 };
+                let checks = |style| {
+                    w::menu_button(
+                        Icon::OpenMenu,
+                        w::Menu::new("Settings")
+                            .check_style(style)
+                            .section([
+                                w::MenuItem::check("Dark Style", self.scheme.is_dark(), Message::Noop),
+                                w::MenuItem::check("Compact", false, Message::Noop),
+                                w::MenuItem::check("Wi-Fi", true, Message::Noop).state_labels("Connected", "Disconnected"),
+                            ]),
+                    )
+                    .presentation(presentation)
+                };
                 column![
                     g("Menu button").description("The menu includes a disabled item.").push(w::card(row![menu])),
-                    g("Icon side").description("Icons and check marks sit at the end by default. MenuIconSide::Start puts them before the label.").push(w::card(
+                    g("Check items").description("A check item shows its state as text after the label, as in GNOME's quick settings: On or Off, or words of your own with state_labels. MenuCheckStyle::Mark opts in to a check mark.").push(w::card(
+                        row![checks(w::MenuCheckStyle::Text), checks(w::MenuCheckStyle::Mark)].spacing(m.space_m),
+                    )),
+                    g("Icon side").description("Icons sit at the end by default. MenuIconSide::Start puts them before the label.").push(w::card(
                         row![icons(w::MenuIconSide::End), icons(w::MenuIconSide::Start)].spacing(m.space_m),
                     )),
                     g("Presentation").push(

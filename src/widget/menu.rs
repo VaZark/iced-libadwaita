@@ -73,6 +73,16 @@ pub enum MenuIconSide {
     Start,
 }
 
+/// How a check item shows whether it is on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum MenuCheckStyle {
+    /// Text after the label, `On` or `Off` (GNOME's quick settings): the default.
+    #[default]
+    Text,
+    /// A check mark, shown while on, at the edge of [`Menu::icon_side`] (GTK's own menus).
+    Mark,
+}
+
 enum Kind<M> {
     Action { on_press: M },
     Check { checked: bool, on_press: M },
@@ -84,6 +94,7 @@ pub struct MenuItem<M> {
     accel: Option<String>,
     icon: Option<Icon>,
     icon_side: Option<MenuIconSide>,
+    labels: Option<(String, String)>,
     destructive: bool,
     disabled: bool,
     kind: Kind<M>,
@@ -97,6 +108,7 @@ impl<M> MenuItem<M> {
             accel: None,
             icon: None,
             icon_side: None,
+            labels: None,
             destructive: false,
             disabled: false,
             kind: Kind::Action { on_press },
@@ -109,6 +121,7 @@ impl<M> MenuItem<M> {
             accel: None,
             icon: None,
             icon_side: None,
+            labels: None,
             destructive: false,
             disabled: false,
             kind: Kind::Check { checked, on_press },
@@ -123,6 +136,12 @@ impl<M> MenuItem<M> {
     /// [`icon_side`](Self::icon_side) says otherwise.
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
+        self
+    }
+    /// The words a check item shows for on and off, in place of `On` and `Off`
+    /// (`"Connected"`, `"Disconnected"`). Used by [`MenuCheckStyle::Text`].
+    pub fn state_labels(mut self, on: impl Into<String>, off: impl Into<String>) -> Self {
+        self.labels = Some((on.into(), off.into()));
         self
     }
     /// Puts this item's icon on `side`, whatever the menu says.
@@ -148,6 +167,7 @@ pub struct Menu<M> {
     title: String,
     sections: Vec<Vec<MenuItem<M>>>,
     icon_side: MenuIconSide,
+    check_style: MenuCheckStyle,
 }
 
 impl<M> Menu<M> {
@@ -156,13 +176,20 @@ impl<M> Menu<M> {
             title: title.into(),
             sections: Vec::new(),
             icon_side: MenuIconSide::End,
+            check_style: MenuCheckStyle::Text,
         }
     }
-    /// The edge that holds the items' icons and check marks: [`MenuIconSide::End`] by default,
+    /// The edge that holds the items' icons (and check marks, with [`MenuCheckStyle::Mark`]): [`MenuIconSide::End`] by default,
     /// [`MenuIconSide::Start`] to opt in to the leading position. An item can override its
     /// icon with [`MenuItem::icon_side`].
     pub fn icon_side(mut self, side: MenuIconSide) -> Self {
         self.icon_side = side;
+        self
+    }
+    /// How check items show their state: text after the label ([`MenuCheckStyle::Text`], the
+    /// default) or a check mark ([`MenuCheckStyle::Mark`]).
+    pub fn check_style(mut self, style: MenuCheckStyle) -> Self {
+        self.check_style = style;
         self
     }
     /// Adds a group of items.
@@ -249,12 +276,42 @@ impl<M> MenuButton<M> {
     }
 }
 
+/// Whether some item of the menu has a mark (a check or an icon) at each edge. Rows without one
+/// keep a blank slot there only if another row has a mark, so labels line up and an edge no
+/// item uses takes no room.
+#[derive(Clone, Copy)]
+struct Slots {
+    lead: bool,
+    trail: bool,
+}
+
+fn slots<M>(menu: &Menu<M>) -> Slots {
+    let mut s = Slots {
+        lead: false,
+        trail: false,
+    };
+    for i in menu.sections.iter().flatten() {
+        let mut mark = |side| match side {
+            MenuIconSide::Start => s.lead = true,
+            MenuIconSide::End => s.trail = true,
+        };
+        if matches!(i.kind, Kind::Check { .. }) && menu.check_style == MenuCheckStyle::Mark {
+            mark(menu.icon_side);
+        }
+        if i.icon.is_some() {
+            mark(i.icon_side.unwrap_or(menu.icon_side));
+        }
+    }
+    s
+}
+
 /// Builds one row's content: `label … [accel] [mark]` (or `[mark] label … [accel]` for the
-/// start side). The mark is the check and the icon.
+/// start side). The mark is the check and the icon, sharing one slot per edge.
 fn row_content<'a, M: 'a>(
     item: &MenuItem<M>,
-    any_check: bool,
     side: MenuIconSide,
+    style: MenuCheckStyle,
+    slots: Slots,
     touch: bool,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
@@ -263,25 +320,30 @@ fn row_content<'a, M: 'a>(
     let accel = crate::shortcut::hint(item.accel.as_deref(), !item.disabled, touch);
     let disabled = item.disabled;
 
-    // The check slot is reserved on every row of a menu with check items, so labels line up.
-    let check: Option<Element<'a, M>> = any_check.then(|| {
-        if matches!(item.kind, Kind::Check { checked: true, .. }) {
-            Icon::Check
-                .view(m.icon_size)
-                .style(move |t: &Theme, _| iced::widget::svg::Style {
-                    color: Some(if disabled {
-                        t.semantic.dim_solid()
-                    } else {
-                        t.semantic.popover.fg
-                    }),
-                })
-                .into()
-        } else {
-            space().width(m.icon_size).into()
-        }
-    });
-    let icon: Option<Element<'a, M>> = item.icon.map(|i| i.view(m.icon_size).into());
-    let icon_side = item.icon_side.unwrap_or(side);
+    // Check marks follow the menu's side; an icon may be moved by its item. A check item shows
+    // its mark only while checked, but its slot is always there.
+    let check: Option<(MenuIconSide, Element<'a, M>)> =
+        (style == MenuCheckStyle::Mark && matches!(item.kind, Kind::Check { .. })).then(|| {
+            let on = matches!(item.kind, Kind::Check { checked: true, .. });
+            let el: Element<'a, M> = if on {
+                Icon::Check
+                    .view(m.icon_size)
+                    .style(move |t: &Theme, _| iced::widget::svg::Style {
+                        color: Some(if disabled {
+                            t.semantic.dim_solid()
+                        } else {
+                            t.semantic.popover.fg
+                        }),
+                    })
+                    .into()
+            } else {
+                space().width(m.icon_size).into()
+            };
+            (side, el)
+        });
+    let icon: Option<(MenuIconSide, Element<'a, M>)> = item
+        .icon
+        .map(|i| (item.icon_side.unwrap_or(side), i.view(m.icon_size).into()));
 
     let mut lbl = super::typography::label(item.label.clone()).width(Length::Fill);
     if item.destructive {
@@ -291,18 +353,41 @@ fn row_content<'a, M: 'a>(
         lbl = lbl.style(st::dim);
     }
     let accel = accel.map(|a| t.caption(a).wrapping(text::Wrapping::None).style(st::dim));
+    // A check item's state as words, after the accelerator and before any trailing mark.
+    let state = match (&item.kind, style) {
+        (Kind::Check { checked, .. }, MenuCheckStyle::Text) => {
+            let (on, off) = item
+                .labels
+                .clone()
+                .unwrap_or_else(|| ("On".into(), "Off".into()));
+            let word = if *checked { on } else { off };
+            let w = t.caption(word).wrapping(text::Wrapping::None);
+            Some(if *checked { w } else { w.style(st::dim) })
+        }
+        _ => None,
+    };
 
-    // Check marks follow the menu's side; an icon may be moved by its item.
-    let (mut lead, mut trail) = (Vec::new(), Vec::new());
-    let (check_to, icon_to) = (side, icon_side);
-    for (el, to) in [(check, check_to), (icon, icon_to)] {
+    let (mut lead, mut trail): (Vec<Element<'a, M>>, Vec<Element<'a, M>>) =
+        (Vec::new(), Vec::new());
+    for (to, el) in check.into_iter().chain(icon) {
         match to {
-            MenuIconSide::Start => lead.extend(el),
-            MenuIconSide::End => trail.extend(el),
+            MenuIconSide::Start => lead.push(el),
+            MenuIconSide::End => trail.push(el),
         }
     }
+    let blank = || -> Element<'a, M> { space().width(m.icon_size).into() };
+    if lead.is_empty() && slots.lead {
+        lead.push(blank());
+    }
+    if trail.is_empty() && slots.trail {
+        trail.push(blank());
+    }
     let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
-    r = r.extend(lead).push(lbl).extend(accel.map(Element::from));
+    r = r
+        .extend(lead)
+        .push(lbl)
+        .extend(accel.map(Element::from))
+        .extend(state.map(Element::from));
     r = r.extend(trail);
     r.into()
 }
@@ -323,11 +408,7 @@ pub(super) fn popover_content<'a, M: Clone + 'a>(
 
 fn dropdown_items<'a, M: Clone + 'a>(menu: &Menu<M>) -> Vec<Element<'a, M>> {
     let m = Metrics::desktop();
-    let any_check = menu
-        .sections
-        .iter()
-        .flatten()
-        .any(|i| matches!(i.kind, Kind::Check { .. }));
+    let slots = slots(menu);
     let mut out: Vec<Element<'a, M>> = Vec::new();
     for (si, section) in menu.sections.iter().enumerate() {
         if si > 0 {
@@ -344,9 +425,15 @@ fn dropdown_items<'a, M: Clone + 'a>(menu: &Menu<M>) -> Vec<Element<'a, M>> {
         for item in section {
             out.push(
                 button(
-                    container(row_content(item, any_check, menu.icon_side, false))
-                        .padding([0.0, m.space_m])
-                        .center_y(Length::Fixed(32.0)),
+                    container(row_content(
+                        item,
+                        menu.icon_side,
+                        menu.check_style,
+                        slots,
+                        false,
+                    ))
+                    .padding([0.0, m.space_m])
+                    .center_y(Length::Fixed(32.0)),
                 )
                 .padding(0)
                 .width(Length::Fill)
@@ -362,11 +449,7 @@ fn dropdown_items<'a, M: Clone + 'a>(menu: &Menu<M>) -> Vec<Element<'a, M>> {
 fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M> {
     let m = Metrics::desktop();
     let t = Typography::default();
-    let any_check = menu
-        .sections
-        .iter()
-        .flatten()
-        .any(|i| matches!(i.kind, Kind::Check { .. }));
+    let slots = slots(menu);
 
     // Header: back arrow (hit area handled by the overlay) + centered title.
     let header = container(
@@ -393,9 +476,15 @@ fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M>
     for section in &menu.sections {
         let rows = section.iter().map(|item| -> Element<'a, M> {
             button(
-                container(row_content(item, any_check, menu.icon_side, true))
-                    .padding(m.row_padding)
-                    .center_y(Length::Fixed(m.row_min_height)),
+                container(row_content(
+                    item,
+                    menu.icon_side,
+                    menu.check_style,
+                    slots,
+                    true,
+                ))
+                .padding(m.row_padding)
+                .center_y(Length::Fixed(m.row_min_height)),
             )
             .padding(0)
             .width(Length::Fill)
@@ -496,6 +585,33 @@ mod tests {
             item.icon_side(MenuIconSide::Start).icon_side,
             Some(MenuIconSide::Start)
         );
+    }
+
+    #[test]
+    fn an_edge_nobody_uses_takes_no_room() {
+        let icons: Menu<()> = Menu::new("m").icon_side(MenuIconSide::Start).section([
+            MenuItem::action("Edit", ()).icon(Icon::Edit),
+            MenuItem::action("Plain", ()),
+        ]);
+        let s = slots(&icons);
+        assert!(s.lead && !s.trail);
+        // Icons and a check share the one slot at their edge.
+        let both = icons
+            .check_style(MenuCheckStyle::Mark)
+            .section([MenuItem::check("Compact", true, ())]);
+        let s = slots(&both);
+        assert!(s.lead && !s.trail);
+        let end: Menu<()> = Menu::new("m")
+            .check_style(MenuCheckStyle::Mark)
+            .section([MenuItem::check("Compact", true, ())]);
+        let s = slots(&end);
+        assert!(!s.lead && s.trail);
+        // As text (the default) a check item needs no mark slot.
+        let text: Menu<()> = Menu::new("m").section([MenuItem::check("Compact", true, ())]);
+        assert!(!slots(&text).lead && !slots(&text).trail);
+        assert_eq!(text.check_style, MenuCheckStyle::Text);
+        let none: Menu<()> = Menu::new("m").section([MenuItem::action("Plain", ())]);
+        assert!(!slots(&none).lead && !slots(&none).trail);
     }
 
     #[test]

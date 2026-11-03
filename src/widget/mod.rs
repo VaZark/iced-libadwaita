@@ -153,7 +153,8 @@ pub use header_bar::{HeaderBar, WindowControls, header_bar, window_title};
 pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent};
 pub use infinite::{InfiniteList, LoadTrigger};
 pub use menu::{
-    Menu, MenuButton, MenuIconSide, MenuItem, MenuPresentation, menu_button, primary_menu,
+    Menu, MenuButton, MenuCheckStyle, MenuIconSide, MenuItem, MenuPresentation, menu_button,
+    primary_menu,
 };
 pub use meta_component::MetaComponent;
 pub use meta_parent_component::{MetaParentComponent, Reporter};
