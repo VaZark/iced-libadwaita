@@ -404,7 +404,7 @@ impl Gallery {
             Detail::Surface => self.upstream.surface_view(m).map(Message::Upstream),
             Detail::CardGrid => self.upstream.grid_view(m).map(Message::Upstream),
             Detail::SectionHeading => self.upstream.heading_view(m).map(Message::Upstream),
-            Detail::MediaRow => self.upstream.media_view(m).map(Message::Upstream),
+            Detail::MediaTable => self.upstream.media_view(m).map(Message::Upstream),
             Detail::ChipGroup => self.upstream.chips_view(m).map(Message::Upstream),
             Detail::History => self.upstream.history_view(m).map(Message::Upstream),
             Detail::Icons => {

@@ -211,7 +211,8 @@ impl State {
                     .min_width(80.0)
                     .align_y(iced::alignment::Vertical::Bottom),
             )
-            .virtualized(TOTAL, self.vfirst, ROW)
+            .virtualized(TOTAL, self.vfirst)
+            .row_height(ROW)
             .on_scroll(Msg::Scroll)
             .metrics(m);
         column![
@@ -251,7 +252,8 @@ impl State {
             .column(Column::new("Name", cell(|p| p.name.clone(), true)).min_width(160.0))
             .column(Column::new("City", cell(|p| p.city.to_string(), false)).min_width(100.0))
             .column(Column::new("Score", cell(|p| p.score.to_string(), false)).min_width(80.0))
-            .virtualized(ASYNC_TOTAL, self.afirst, ROW)
+            .virtualized(ASYNC_TOTAL, self.afirst)
+            .row_height(ROW)
             .on_scroll(Msg::AsyncScroll)
             .metrics(m);
         column![

@@ -43,7 +43,6 @@ mod histogram_range_slider;
 mod icon_toggle;
 mod infinite;
 mod media_card;
-mod media_row;
 mod menu;
 mod meta_component;
 mod meta_parent_component;
@@ -66,7 +65,6 @@ mod sections;
 mod segmented;
 mod shortcut_scope;
 mod slots;
-mod sort_header;
 mod spinner;
 mod split;
 mod split_view;
@@ -174,7 +172,6 @@ pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent
 pub use icon_toggle::IconToggleButton;
 pub use infinite::{InfiniteList, LoadTrigger};
 pub use media_card::MediaCard;
-pub use media_row::{MediaColumns, MediaRow, PICTURE_WIDTH, SUFFIX_WIDTH, TIME_WIDTH};
 pub use menu::{
     Menu, MenuButton, MenuCheckStyle, MenuIconSide, MenuItem, MenuPresentation, menu_button,
     primary_menu,
@@ -219,7 +216,6 @@ pub use scrolled::{scrollbar, scrolled_window, scrolled_window_both, scrolled_wi
 pub use section_heading::SectionHeading;
 pub use sections::{SectionButton, SectionIcon, section_button, section_icon, section_size};
 pub use shortcut_scope::shortcuts;
-pub use sort_header::SortHeader;
 pub use spinner::{Spinner, spinner};
 pub use split::{SplitAction, SplitButton, SplitButtonAction, split_button};
 pub use split_view::{AdaptiveSplit, adaptive_split};

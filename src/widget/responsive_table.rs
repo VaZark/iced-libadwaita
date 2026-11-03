@@ -28,8 +28,9 @@
 //! [`Pagination`](super::Pagination) goes.
 //!
 //! **Virtualization.** A table of thousands of rows builds only the ones in view:
-//! [`virtualized`](ResponsiveTable::virtualized)`(total, first, row_height)` says the rows you
-//! pass are `first..first + rows.len()` of `total` rows of a fixed height, and the table pads
+//! [`virtualized`](ResponsiveTable::virtualized)`(total, first)` says the rows you
+//! pass are `first..first + rows.len()` of `total` rows of a fixed height (set by
+//! [`density`](ResponsiveTable::density), or [`row_height`](ResponsiveTable::row_height)), and the table pads
 //! the scrolled area above and below with exact spacers so the scrollbar is true to the whole
 //! list. Feed it from [`on_scroll`](ResponsiveTable::on_scroll): keep a
 //! [`Viewport`](crate::primitives::virtualize::Viewport), ask it for the
@@ -38,6 +39,13 @@
 //! row whose chunk has not arrived is a placeholder your cell closures draw, a failed one an
 //! error row with Retry. Cards have no fixed height, so a virtualized table is always a table.
 //!
+//! **A plain table.** With [`Mode::Table`] it is a table at any width: the columns **shrink**
+//! (every column grows by default, shares the free width, and clips what does not fit instead of
+//! wrapping or overflowing), [`Column::width`] fixes one, [`Column::align`] right-aligns a time or a
+//! count, and [`density`](ResponsiveTable::density) picks roomy or compact rows. A music, podcast
+//! or file list is this: a picture-and-title column, an album column, a fixed time column,
+//! virtualized, sortable.
+//!
 //! `ResponsiveTable` is a [`MetaComponent`](super::MetaComponent) with two variants, a table
 //! and cards; the choice is [`ResponsiveTable::when`]. Like [`responsive`](iced::widget::responsive),
 //! it fills its container and scrolls vertically by itself; give it a bounded height.
@@ -45,12 +53,13 @@
 use super::Element;
 use super::meta_component::MetaComponent;
 use crate::breakpoints::WidthClass;
+use crate::config::Density;
 use crate::primitives::When;
 use crate::primitives::sorting::{Direction, SortState};
 use crate::primitives::virtualize::{self, Viewport};
 use crate::style::button as sb;
 use crate::{Icon, Metrics, Theme};
-use iced::alignment::Vertical;
+use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{button, column, container, row, space, text};
 use iced::{Length, Padding};
 use std::any::{Any, TypeId};
@@ -87,6 +96,7 @@ pub struct Column<'a, T, M> {
     width: Length,
     min_width: f32,
     align_y: Vertical,
+    align_x: Horizontal,
     sort_key: Option<Rc<dyn Any>>,
 }
 
@@ -98,6 +108,7 @@ impl<'a, T, M> Column<'a, T, M> {
             width: Length::Fill,
             min_width: 100.0,
             align_y: Vertical::Center,
+            align_x: Horizontal::Left,
             sort_key: None,
         }
     }
@@ -118,6 +129,12 @@ impl<'a, T, M> Column<'a, T, M> {
         self.align_y = align;
         self
     }
+    /// Where the header and the cells sit across the column's width: `Right` for a time or a
+    /// count (default `Left`).
+    pub fn align(mut self, align: Horizontal) -> Self {
+        self.align_x = align;
+        self
+    }
     /// The narrowest this column may be before the table gives way to cards (default 100).
     pub fn min_width(mut self, px: f32) -> Self {
         self.min_width = px;
@@ -132,13 +149,12 @@ type Fire<'a, M> = Rc<dyn Fn(&dyn Any) -> M + 'a>;
 type Footer<'a, M> = Rc<dyn Fn() -> Element<'a, M> + 'a>;
 type Scroll<'a, M> = Rc<dyn Fn(Viewport) -> M + 'a>;
 
-/// The rows passed in are a window of a longer list: `total` rows of `row_height`, the first
-/// passed being row `first`.
+/// The rows passed in are a window of a longer list: `total` rows, the first passed being row
+/// `first`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Window {
     total: usize,
     first: usize,
-    row_height: f32,
 }
 
 /// Rows of `T` as a table or as cards, by the width of the container. See the
@@ -154,6 +170,9 @@ pub struct ResponsiveTable<'a, T, M> {
     on_sort: Option<(TypeId, Fire<'a, M>)>,
     footer: Option<Footer<'a, M>>,
     window: Option<Window>,
+    density: Density,
+    header: bool,
+    row_height: Option<f32>,
     on_scroll: Option<Scroll<'a, M>>,
 }
 
@@ -170,6 +189,9 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
             on_sort: None,
             footer: None,
             window: None,
+            density: Density::Default,
+            header: true,
+            row_height: None,
             on_scroll: None,
         }
     }
@@ -218,16 +240,44 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
         ));
         self
     }
-    /// The rows passed to [`new`](Self::new) are a window of a long list: `total` rows, each
-    /// `row_height` pixels tall (plus a 1 px hairline), the first one passed being row `first`.
-    /// Only those are built; spacers stand in for the rest. See
-    /// [`primitives::virtualize`](crate::primitives::virtualize).
-    pub fn virtualized(mut self, total: usize, first: usize, row_height: f32) -> Self {
-        self.window = Some(Window {
-            total,
-            first,
-            row_height: row_height.max(1.0),
-        });
+    /// How roomy the rows are: [`Density::Default`], or [`Density::Compact`] for a dense list.
+    /// It sets the height of a row (virtualized tables) and the air above and below a cell.
+    pub fn density(mut self, density: Density) -> Self {
+        self.density = density;
+        self
+    }
+    /// Whether the header row shows (default yes): the column titles, with the sort arrows of
+    /// the [sortable](Column::sortable) ones (see [`sort`](Self::sort) and
+    /// [`on_sort`](Self::on_sort)). The header is part of the table; there is no separate header
+    /// widget to keep in step.
+    pub fn header(mut self, show: bool) -> Self {
+        self.header = show;
+        self
+    }
+    /// The height of a row in px, in place of the density's ([`row_height_of`](Self::row_height_of)).
+    /// Only a [virtualized](Self::virtualized) table has a fixed row height.
+    pub fn row_height(mut self, px: f32) -> Self {
+        self.row_height = Some(px.max(1.0));
+        self
+    }
+    /// The row height a density gives: 48 px by default, 32 compact.
+    pub fn row_height_of(density: Density) -> f32 {
+        match density {
+            Density::Default => 48.0,
+            Density::Compact => 32.0,
+        }
+    }
+    fn effective_row_height(&self) -> f32 {
+        self.row_height
+            .unwrap_or_else(|| Self::row_height_of(self.density))
+    }
+    /// The rows passed to [`new`](Self::new) are a window of a long list: `total` rows, the first
+    /// one passed being row `first`, each as tall as the [density](Self::density) says (or
+    /// [`row_height`](Self::row_height)) plus a 1 px hairline. Only those are built; spacers stand
+    /// in for the rest. See [`primitives::virtualize`](crate::primitives::virtualize); give
+    /// [`Viewport::window`] [`pitch`](Self::pitch) of the same height.
+    pub fn virtualized(mut self, total: usize, first: usize) -> Self {
+        self.window = Some(Window { total, first });
         self
     }
     /// The table scrolled: its [`Viewport`] (offset and height), to update the one the window
@@ -285,6 +335,7 @@ struct ColumnSort<M> {
 
 fn dim_caption<'a, M: 'a>(s: &str) -> Element<'a, M> {
     super::typography::caption_heading(s.to_owned())
+        .wrapping(text::Wrapping::None)
         .style(crate::style::text::dim)
         .into()
 }
@@ -334,30 +385,40 @@ fn table_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Elemen
         return space().into();
     }
     let m = &t.metrics;
+    // Every cell is as wide as its column and clips what does not fit, so a column shrinks
+    // with the table instead of pushing the others out.
     let line = |cells: Vec<Element<'a, M>>| {
-        row(cells
-            .into_iter()
-            .zip(&t.columns)
-            .map(|(c, col)| container(c).width(col.width).into()))
+        row(cells.into_iter().zip(&t.columns).map(|(c, col)| {
+            container(c)
+                .width(col.width)
+                .align_x(col.align_x)
+                .clip(true)
+                .into()
+        }))
         .spacing(m.row_spacing)
     };
     let header = line(t.columns.iter().map(|c| header_cell(t, c)).collect());
     if let Some(w) = t.window {
         return virtual_table_view(t, w, header);
     }
-    let mut rows = t
-        .rows
-        .iter()
-        .map(|item| line(t.columns.iter().map(|c| (c.cell)(item)).collect()));
+    let air = if t.density == Density::Compact {
+        2.0
+    } else {
+        8.0
+    };
+    let mut rows = t.rows.iter().map(|item| {
+        container(line(t.columns.iter().map(|c| (c.cell)(item)).collect()))
+            .padding(Padding::from([air, 0.0]))
+    });
     let mut card = super::Card::new(rows.next().expect("not empty"));
     for r in rows {
         card = card.push(r);
     }
-    let mut body = column![
-        container(header).padding(m.card_padding),
-        super::scrolled_window(card).height(Length::Fill),
-    ]
-    .spacing(m.space_s);
+    let mut body = column![].spacing(m.space_s);
+    if t.header {
+        body = body.push(container(header).padding(m.card_padding));
+    }
+    body = body.push(super::scrolled_window(card).height(Length::Fill));
     if let Some(footer) = &t.footer {
         body = body.push(footer());
     }
@@ -372,7 +433,8 @@ fn virtual_table_view<'a, T: 'a, M: Clone + 'a>(
     header: iced::widget::Row<'a, M, Theme>,
 ) -> Element<'a, M> {
     let m = &t.metrics;
-    let pitch = ResponsiveTable::<T, M>::pitch(w.row_height);
+    let row_height = t.effective_row_height();
+    let pitch = ResponsiveTable::<T, M>::pitch(row_height);
     let range = w.first..(w.first + t.rows.len()).min(w.total);
     let fill = virtualize::spacers(w.total, &range, pitch);
     let mut rows = column![space().height(fill.above)];
@@ -381,15 +443,17 @@ fn virtual_table_view<'a, T: 'a, M: Clone + 'a>(
             container((col.cell)(item))
                 .width(col.width)
                 .height(Length::Fill)
+                .align_x(col.align_x)
                 .align_y(col.align_y)
+                .clip(true)
                 .into()
         }))
         .spacing(m.row_spacing)
         .height(Length::Fill);
         rows = rows.push(column![
             container(cells)
-                .height(w.row_height)
-                .center_y(Length::Fixed(w.row_height))
+                .height(row_height)
+                .center_y(Length::Fixed(row_height))
                 .padding(
                     Padding::ZERO
                         .left(m.card_padding.left)
@@ -416,7 +480,11 @@ fn virtual_table_view<'a, T: 'a, M: Clone + 'a>(
             f(v)
         });
     }
-    let mut body = column![container(header).padding(m.card_padding), scroll].spacing(m.space_s);
+    let mut body = column![].spacing(m.space_s);
+    if t.header {
+        body = body.push(container(header).padding(m.card_padding));
+    }
+    body = body.push(scroll);
     if let Some(footer) = &t.footer {
         body = body.push(footer());
     }
@@ -449,28 +517,35 @@ fn header_cell<'a, T: 'a, M: Clone + 'a>(
                     th.semantic.dim_solid()
                 }),
             });
-    let mut content = row![super::typography::caption_heading(col.header.clone()), icon]
-        .spacing(m.space_xs)
-        .align_y(Vertical::Center);
+    let mut content = row![
+        super::typography::caption_heading(col.header.clone()).wrapping(text::Wrapping::None),
+        icon
+    ]
+    .spacing(m.space_xs)
+    .align_y(Vertical::Center);
     if let Some(n) = sort.priority {
         content = content.push(super::typography::caption(n.to_string()));
     }
-    // No padding: the label stays on the column's left edge, aligned with the cells.
-    button(content)
-        .padding(Padding::ZERO)
-        .style(move |th: &Theme, status| {
-            let hot = sorted || matches!(status, button::Status::Hovered | button::Status::Pressed);
-            button::Style {
-                text_color: if hot {
-                    th.semantic.window.fg
-                } else {
-                    th.semantic.dim()
-                },
-                ..button::Style::default()
-            }
-        })
-        .on_press(sort.press)
-        .into()
+    // The click target is the whole column header, aligned like the cells; it does not react to
+    // the pointer, only to being sorted (a header is not something to look at).
+    button(
+        container(content)
+            .width(Length::Fill)
+            .align_x(col.align_x)
+            .clip(true),
+    )
+    .width(Length::Fill)
+    .padding(Padding::ZERO)
+    .style(move |th: &Theme, _| button::Style {
+        text_color: if sorted {
+            th.semantic.window.fg
+        } else {
+            th.semantic.dim()
+        },
+        ..button::Style::default()
+    })
+    .on_press(sort.press)
+    .into()
 }
 
 /// The cards' stand-in for the header row: a dropdown of the sortable columns and a button
@@ -704,7 +779,8 @@ mod tests {
         let t = ResponsiveTable::<(), ()>::new(&rows)
             .column(Column::new("a", |_| space().into()).min_width(2000.0))
             .mode(Mode::Cards)
-            .virtualized(10_000, 40, 32.0);
+            .virtualized(10_000, 40)
+            .row_height(32.0);
         // Cards cannot be windowed (no fixed height): the table wins, even when narrow.
         assert_eq!(*t.into_meta().pick(300.0, &B).unwrap(), Presentation::Table);
         assert_eq!(
@@ -724,7 +800,32 @@ mod tests {
         assert_eq!(w, 38..61, "40..59 in view, two rows of overscan each side");
         let t = ResponsiveTable::<u32, ()>::new(&rows)
             .column(Column::new("n", |_| space().into()))
-            .virtualized(10_000, 40, 32.0);
+            .virtualized(10_000, 40)
+            .row_height(32.0);
         let _: Element<'_, ()> = t.into();
+    }
+
+    #[test]
+    fn density_sets_the_row_height_unless_one_is_given() {
+        use crate::config::Density;
+        let rows = [()];
+        let t = ResponsiveTable::<(), ()>::new(&rows).density(Density::Compact);
+        assert_eq!(t.effective_row_height(), 32.0);
+        assert!(
+            ResponsiveTable::<(), ()>::row_height_of(Density::Default)
+                > ResponsiveTable::<(), ()>::row_height_of(Density::Compact)
+        );
+        assert_eq!(t.row_height(40.0).effective_row_height(), 40.0);
+    }
+
+    #[test]
+    fn the_header_is_a_parameter_and_columns_align() {
+        let rows = [()];
+        let t = ResponsiveTable::<(), ()>::new(&rows)
+            .header(false)
+            .column(Column::new("a", |_| space().into()).align(Horizontal::Right));
+        assert!(!t.header);
+        assert_eq!(t.columns[0].align_x, Horizontal::Right);
+        assert!(ResponsiveTable::<(), ()>::new(&rows).header);
     }
 }

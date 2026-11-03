@@ -145,7 +145,7 @@ impl Page {
                         n(ButtonRow),
                     ],
                 ),
-                ("Lists", vec![n(MediaRow)]),
+                ("Lists", vec![n(MediaTable)]),
                 ("Groups", vec![n(PreferencesGroup), n(Accordion)]),
             ],
             Page::Data => vec![
@@ -366,7 +366,7 @@ pub enum Detail {
     IconToggle,
     CardGrid,
     SectionHeading,
-    MediaRow,
+    MediaTable,
     ChipGroup,
     History,
     Icons,
@@ -548,7 +548,7 @@ impl Detail {
             Detail::IconToggle => "Icon toggle button",
             Detail::CardGrid => "Card grid",
             Detail::SectionHeading => "Section heading",
-            Detail::MediaRow => "Media row",
+            Detail::MediaTable => "Media table",
             Detail::ChipGroup => "Chip group",
             Detail::History => "History",
             Detail::Composed => "Composed component",
@@ -669,7 +669,9 @@ impl Detail {
             Detail::Surface => "Page surfaces with the gutter in one place",
             Detail::CardGrid => "Cards that fill the width",
             Detail::SectionHeading => "A heading with a link at the far end",
-            Detail::MediaRow => "A row of a music, podcast or file list, with its sort header",
+            Detail::MediaTable => {
+                "A music or file list as a plain table: virtualized, sortable, compact"
+            }
             Detail::ChipGroup => "Wrapping toggle chips, filtered as you type",
             Detail::History => "Where Back goes: open, go and back",
             Detail::Container => "Centered content at a named maximum width",
