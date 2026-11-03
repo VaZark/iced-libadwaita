@@ -105,6 +105,9 @@ enum MenuMode {
     FullPage,
 }
 
+/// The id of the search field, which takes focus when the search opens.
+const SEARCH_ID: &str = "gallery.search";
+
 /// The header's title: the search entry, or the usual title.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HeaderTitle {
@@ -205,9 +208,7 @@ struct Gallery {
     sidebar_padding: w::SidebarPadding,
     drawer_open: bool,
     win: adw::window::State,
-    /// The main window, and the preferences window while it is open (a separate OS window).
     main: window::Id,
-    prefs: Option<adw::window::Child<()>>,
     /// The AppShell demo: its own window, with its own state.
     shell: Option<adw::window::Child<appshell::AppShell>>,
     /// Screenshot harness: the window to capture instead of the main one.
@@ -343,13 +344,10 @@ enum Message {
     Noop,
     Drag,
     /// Chrome of a secondary window (preferences, AppShell): performed on that window.
-    ChildAction(window::Id, adw::window::Action),
     /// Closes the preferences window.
-    ClosePrefs,
     /// The window was closed (by the user or the compositor).
     WindowClosed(window::Id),
     /// A click on the disabled parent: bring the preferences window forward.
-    FocusPrefs,
     /// Escape: dismisses the topmost overlay.
     Escape,
     Narrow(bool),
@@ -440,7 +438,16 @@ impl Gallery {
             Task::none()
         };
         // A daemon opens its windows itself: the main one now, the preferences window on demand.
-        let (main, open_main) = window::open(Self::main_settings());
+        // `--appshell`: this process is the AppShell demo alone (started by the gallery's own
+        // action, see `Message::OpenShell`); closing its window ends it, and it does not depend on
+        // the gallery that started it.
+        let standalone = std::env::args().any(|a| a == "--appshell");
+        let (main, open_main) = if standalone {
+            (window::Id::unique(), Task::none())
+        } else {
+            let (main, open) = window::open(Self::main_settings());
+            (main, open.map(|_| Message::Noop))
+        };
         let (virtual_demo, virtual_boot) = virtual_demo::State::start();
         let plays: std::collections::HashMap<Detail, playground::Playground> = Detail::all()
             .into_iter()
@@ -456,140 +463,144 @@ impl Gallery {
             .tint
             .unwrap_or(iced::Color::from_rgba(0.21, 0.52, 0.89, 0.25));
         let boot = Task::batch([
-            open_main.map(|_| Message::Noop),
+            open_main,
             boot,
             virtual_boot.map(Message::Virtual),
             autocomplete_demo::script().map(Message::Autocomplete),
         ]);
-        (
-            Self {
-                main,
-                prefs: None,
-                shell: None,
-                shot_window: None,
-                page: start_detail
-                    .map(Detail::page)
-                    .or_else(|| {
-                        std::env::var("GALLERY_PAGE").ok().and_then(|v| {
-                            Page::ALL
-                                .into_iter()
-                                .find(|p| format!("{p:?}").eq_ignore_ascii_case(&v))
-                        })
+        let mut gallery = Self {
+            main,
+            shell: None,
+            shot_window: None,
+            page: start_detail
+                .map(Detail::page)
+                .or_else(|| {
+                    std::env::var("GALLERY_PAGE").ok().and_then(|v| {
+                        Page::ALL
+                            .into_iter()
+                            .find(|p| format!("{p:?}").eq_ignore_ascii_case(&v))
                     })
-                    .unwrap_or(Page::Buttons),
-                detail: start_detail,
-                scheme: from_cfg.scheme,
-                accent,
-                accent_text: accent.key(),
-                compact: cfg.density == adw::config::Density::Compact,
-                transparency: (cfg.transparency * 100.0).round() as u32,
-                tint_on: cfg.tint.is_some(),
-                tint: tint_color,
-                tint_text: adw::widget::Hsva::from_rgba(
-                    tint_color.r,
-                    tint_color.g,
-                    tint_color.b,
-                    tint_color.a,
-                )
-                .format(adw::widget::ColorFormat::Hexa),
-                transparency_text: ((cfg.transparency * 100.0).round() as u32).to_string(),
-                radius_m: std::env::var("GALLERY_RM")
-                    .ok()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(Metrics::default().radius_m),
-                radius_toast: Metrics::default().radius_toast,
-                radius_l: std::env::var("GALLERY_RL")
-                    .ok()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(12.0),
-                card_override: false,
-                shadows_on: cfg.shadows,
-                shadow_scale: 1.0,
-                shadow_intensity: 1.0,
-                path_bar_title: std::env::var_os("GALLERY_PATHBAR").is_some(),
-                // GALLERY_SEARCH=<text> starts with the search open (screenshots).
-                searching: std::env::var_os("GALLERY_SEARCH").is_some(),
-                search: std::env::var("GALLERY_SEARCH").unwrap_or_default(),
-                anim_enabled: adw::animation::enabled(),
-                demo: DemoMotion::EaseOutCubic,
-                demo_tween: adw::animation::Tween::new(0.0),
-                demo_value: 0.0,
-                wifi: true,
-                notifications: false,
-                expanded: true,
-                name: "Ada Lovelace".into(),
-                password: "hunter2".into(),
-                combo: Some("Adwaita Sans"),
-                spin: 3.0,
-                tab: Tab::One,
-                check: true,
-                radio: Some(1),
-                slider: 40.0,
-                editor: w::TextContent::with_text("Multi-line text editor\nstyled by the theme."),
-                editor_empty: w::TextContent::new(),
-                editor_ro: w::TextContent::with_text("Read-only text.\nIt cannot be edited."),
-                sw: true,
-                row_sw: false,
-                combo2: None,
-                split_choice: "merge",
-                picked: None,
-                multi: vec!["Banana", "Cherry"],
-                date: date_demo::State::default(),
-                sections: sections_demo::State::default(),
-                range: range_demo::State::default(),
-                stepper: stepper_demo::State::default(),
-                data: data_demo::State::default(),
-                resizable: resizable_demo::State::default(),
-                tree_demo: tree_demo::State::default(),
-                virtual_demo,
-                widgets_demo,
-                plays,
-                reorder: reorder_demo::State::default(),
-                field: {
-                    let mut f = field_demo::State::default();
-                    if std::env::var_os("GALLERY_FIELD_SUBMIT").is_some() {
-                        f.submit();
-                    }
-                    f
-                },
-                form: form_demo::State::default(),
-                autocomplete: autocomplete_demo::State::default(),
-                chips: vec!["Rust", "iced", "GTK"],
-                acc_single: vec![0],
-                acc_multi: vec![0, 1],
-                dialog: None,
-                show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
-                sidebar_mode: match std::env::var("GALLERY_SIDEBAR_MODE").as_deref() {
-                    Ok("parent-page") => w::CollapsedSidebar::ParentPage,
-                    _ => cfg.mobile_sidebar,
-                },
-                drawer_open: std::env::var_os("GALLERY_DRAWER").is_some(),
-                sidebar_padding: w::SidebarPadding::default(),
-                menu_mode: match std::env::var("GALLERY_MENU").as_deref() {
-                    Ok("page") => MenuMode::FullPage,
-                    Ok("dropdown") => MenuMode::Dropdown,
-                    _ => MenuMode::Auto,
-                },
-                win: adw::window::State {
-                    maximized: std::env::var_os("GALLERY_FULL").is_some(),
-                    fullscreen: false,
-                },
-                sheet: false,
-                carousel: 0,
-                carousel_indicator: w::CarouselIndicator::default(),
-                toasts: adw::primitives::notifications::Queue::new(),
-                toast_seq: 0,
-                toast_auto: false,
-                narrow: false,
-                toast_position: cfg.toast_position,
-                toast_target: cfg.toast_target,
-                banner: true,
-                angle: 0.0,
-                shots,
-                shot_tag: None,
+                })
+                .unwrap_or(Page::Buttons),
+            detail: start_detail,
+            scheme: from_cfg.scheme,
+            accent,
+            accent_text: accent.key(),
+            compact: cfg.density == adw::config::Density::Compact,
+            transparency: (cfg.transparency * 100.0).round() as u32,
+            tint_on: cfg.tint.is_some(),
+            tint: tint_color,
+            tint_text: adw::widget::Hsva::from_rgba(
+                tint_color.r,
+                tint_color.g,
+                tint_color.b,
+                tint_color.a,
+            )
+            .format(adw::widget::ColorFormat::Hexa),
+            transparency_text: ((cfg.transparency * 100.0).round() as u32).to_string(),
+            radius_m: std::env::var("GALLERY_RM")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(Metrics::default().radius_m),
+            radius_toast: Metrics::default().radius_toast,
+            radius_l: std::env::var("GALLERY_RL")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(12.0),
+            card_override: false,
+            shadows_on: cfg.shadows,
+            shadow_scale: 1.0,
+            shadow_intensity: 1.0,
+            path_bar_title: std::env::var_os("GALLERY_PATHBAR").is_some(),
+            // GALLERY_SEARCH=<text> starts with the search open (screenshots).
+            searching: std::env::var_os("GALLERY_SEARCH").is_some(),
+            search: std::env::var("GALLERY_SEARCH").unwrap_or_default(),
+            anim_enabled: adw::animation::enabled(),
+            demo: DemoMotion::EaseOutCubic,
+            demo_tween: adw::animation::Tween::new(0.0),
+            demo_value: 0.0,
+            wifi: true,
+            notifications: false,
+            expanded: true,
+            name: "Ada Lovelace".into(),
+            password: "hunter2".into(),
+            combo: Some("Adwaita Sans"),
+            spin: 3.0,
+            tab: Tab::One,
+            check: true,
+            radio: Some(1),
+            slider: 40.0,
+            editor: w::TextContent::with_text("Multi-line text editor\nstyled by the theme."),
+            editor_empty: w::TextContent::new(),
+            editor_ro: w::TextContent::with_text("Read-only text.\nIt cannot be edited."),
+            sw: true,
+            row_sw: false,
+            combo2: None,
+            split_choice: "merge",
+            picked: None,
+            multi: vec!["Banana", "Cherry"],
+            date: date_demo::State::default(),
+            sections: sections_demo::State::default(),
+            range: range_demo::State::default(),
+            stepper: stepper_demo::State::default(),
+            data: data_demo::State::default(),
+            resizable: resizable_demo::State::default(),
+            tree_demo: tree_demo::State::default(),
+            virtual_demo,
+            widgets_demo,
+            plays,
+            reorder: reorder_demo::State::default(),
+            field: {
+                let mut f = field_demo::State::default();
+                if std::env::var_os("GALLERY_FIELD_SUBMIT").is_some() {
+                    f.submit();
+                }
+                f
             },
-            boot,
-        )
+            form: form_demo::State::default(),
+            autocomplete: autocomplete_demo::State::default(),
+            chips: vec!["Rust", "iced", "GTK"],
+            acc_single: vec![0],
+            acc_multi: vec![0, 1],
+            dialog: None,
+            show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
+            sidebar_mode: match std::env::var("GALLERY_SIDEBAR_MODE").as_deref() {
+                Ok("parent-page") => w::CollapsedSidebar::ParentPage,
+                _ => cfg.mobile_sidebar,
+            },
+            drawer_open: std::env::var_os("GALLERY_DRAWER").is_some(),
+            sidebar_padding: w::SidebarPadding::default(),
+            menu_mode: match std::env::var("GALLERY_MENU").as_deref() {
+                Ok("page") => MenuMode::FullPage,
+                Ok("dropdown") => MenuMode::Dropdown,
+                _ => MenuMode::Auto,
+            },
+            win: adw::window::State {
+                maximized: std::env::var_os("GALLERY_FULL").is_some(),
+                fullscreen: false,
+            },
+            sheet: false,
+            carousel: 0,
+            carousel_indicator: w::CarouselIndicator::default(),
+            toasts: adw::primitives::notifications::Queue::new(),
+            toast_seq: 0,
+            toast_auto: false,
+            narrow: false,
+            toast_position: cfg.toast_position,
+            toast_target: cfg.toast_target,
+            banner: true,
+            angle: 0.0,
+            shots,
+            shot_tag: None,
+        };
+        if standalone {
+            let open = gallery.open_shell();
+            if let Some(c) = &gallery.shell {
+                gallery.main = c.id();
+            }
+            return (gallery, Task::batch([boot, open]));
+        }
+        (gallery, boot)
     }
 
     fn main_settings() -> window::Settings {
@@ -607,24 +618,11 @@ impl Gallery {
     }
 
     fn title(&self, id: window::Id) -> String {
-        if self.prefs.as_ref().is_some_and(|c| c.is(id)) {
-            "Preferences".into()
-        } else if self.shell.as_ref().is_some_and(|c| c.is(id)) {
+        if self.shell.as_ref().is_some_and(|c| c.is(id)) {
             "AppShell".into()
         } else {
             "iced-libadwaita gallery".into()
         }
-    }
-
-    /// Opens the preferences dialog as its own window, or brings it forward if open.
-    fn open_prefs(&mut self) -> Task<Message> {
-        if let Some(c) = &self.prefs {
-            return c.focus();
-        }
-        // A dialog: while it is open the parent is disabled (see `root`).
-        let (child, open) = adw::window::Child::dialog(iced::Size::new(620.0, 640.0), ());
-        self.prefs = Some(child);
-        open.map(|_| Message::Noop)
     }
 
     /// Opens the AppShell demo as its own window (a width of its own drives its layout), or
@@ -829,8 +827,19 @@ impl Gallery {
             Message::AccSingle(v) => self.acc_single = v,
             Message::AccMulti(v) => self.acc_multi = v,
             Message::ChipRemove(c) => self.chips.retain(|x| *x != c),
-            // Preferences is a window of its own; the other dialogs stay in the window.
-            Message::OpenShell => return self.open_shell(),
+            // The AppShell is a separate process, started by this action: it keeps running when
+            // this window is closed.
+            Message::OpenShell => {
+                let size = std::env::var("GALLERY_SHELL_SIZE").ok();
+                let mut d = adw::window::Detached::this_exe().map(|d| d.arg("--appshell"));
+                if let (Ok(d), Some(size)) = (&mut d, size) {
+                    *d = d.clone().env("GALLERY_SHELL_SIZE", size);
+                }
+                return match d {
+                    Ok(d) => d.task(|_| Message::Noop),
+                    Err(_) => Task::none(),
+                };
+            }
             // Chrome of the shell's window is its own message; everything else goes to the shell.
             Message::Shell(appshell::Message::Window(action)) => {
                 if let Some(c) = &self.shell {
@@ -842,7 +851,6 @@ impl Gallery {
                     return c.state.update(m).map(Message::Shell);
                 }
             }
-            Message::ChildAction(id, action) => return action.perform(id),
             Message::Resized(id, width) => {
                 if let Some(c) = &mut self.shell
                     && c.is(id)
@@ -857,7 +865,6 @@ impl Gallery {
                     ]);
                 }
             }
-            Message::OpenDialog(Dialog::Preferences) => return self.open_prefs(),
             Message::OpenDialog(d) => self.dialog = Some(d),
             Message::CloseDialog => self.dialog = None,
             Message::Sheet(o) => self.sheet = o,
@@ -904,22 +911,9 @@ impl Gallery {
             }
             Message::Noop => {}
             Message::Drag => return window::drag(self.main),
-            Message::ClosePrefs => {
-                if let Some(c) = &self.prefs {
-                    return c.close();
-                }
-            }
-            Message::FocusPrefs => {
-                if let Some(c) = &self.prefs {
-                    return c.focus();
-                }
-            }
             Message::WindowClosed(id) => {
                 if id == self.main {
                     return iced::exit();
-                }
-                if self.prefs.as_ref().is_some_and(|c| c.is(id)) {
-                    self.prefs = None;
                 }
                 if self.shell.as_ref().is_some_and(|c| c.is(id)) {
                     self.shell = None;
@@ -1031,8 +1025,6 @@ impl Gallery {
                     Message::Capture(i)
                 })
             };
-            // GALLERY_ANIM=prefs: open the preferences window, capture the disabled parent, then
-            // the preferences window itself.
             // GALLERY_ANIM=appshell: open the AppShell window (GALLERY_SHELL_SIZE=WxH) and capture
             // it.
             if kind == "appshell" {
@@ -1108,24 +1100,6 @@ impl Gallery {
                     2 => wait(90, "a2-160ms", self),
                     3 => wait(120, "a3-280ms", self),
                     4 => wait(700, "a4-end", self),
-                    _ => iced::exit(),
-                };
-            }
-            if kind == "prefs" {
-                return match i {
-                    0 => {
-                        self.scheme = Scheme::Light;
-                        let open = self.open_prefs();
-                        self.shot_tag = Some("parent");
-                        open.chain(Task::perform(
-                            tokio::time::sleep(Duration::from_millis(1500)),
-                            move |_| Message::Capture(i),
-                        ))
-                    }
-                    1 => {
-                        self.shot_window = self.prefs.as_ref().map(|c| c.id());
-                        wait(300, "prefs", self)
-                    }
                     _ => iced::exit(),
                 };
             }
@@ -1276,9 +1250,6 @@ impl Gallery {
     }
 
     fn view(&self, id: window::Id) -> IcedElement<'_, Message, Theme> {
-        if self.prefs.as_ref().is_some_and(|c| c.is(id)) {
-            return self.prefs_window(id);
-        }
         if let Some(c) = &self.shell
             && c.is(id)
         {
@@ -1397,14 +1368,21 @@ impl Gallery {
                 w::MetaComponent::new()
                     .selected(self.searching.then_some(HeaderTitle::Search))
                     .when_selected(HeaderTitle::Search, move |_| {
-                        container(w::clamp(
-                            w::entry("Search components", &self.search)
-                                .on_input(Message::SearchInput)
-                                .left_section(Icon::Search.view(entry_m.icon_size))
-                                .metrics(entry_m),
-                            420.0,
-                        ))
-                        .center_y(Length::Fill)
+                        // The search field takes focus as it appears (a focus scope that does not
+                        // trap Tab: the header's other controls stay reachable).
+                        w::FocusScope::new(
+                            container(w::clamp(
+                                w::entry("Search components", &self.search)
+                                    .id(SEARCH_ID)
+                                    .on_input(Message::SearchInput)
+                                    .left_section(Icon::Search.view(entry_m.icon_size))
+                                    .metrics(entry_m),
+                                420.0,
+                            ))
+                            .center_y(Length::Fill),
+                        )
+                        .trap(false)
+                        .initial_focus(SEARCH_ID)
                         .into()
                     })
                     .variant(HeaderTitle::Title, w::When::always(), move |_| {
@@ -1537,7 +1515,8 @@ impl Gallery {
             w::toast_stack_from(body, &self.toasts, toast_for)
         };
 
-        let base: Element = w::bottom_sheet_in_window(
+        // A docked sheet over the whole window: modal, so the window is faded and disabled.
+        let base: Element = w::Dock::new(
             base,
             column![
                 ty::title_3("Sheet"),
@@ -1545,10 +1524,14 @@ impl Gallery {
                 w::suggested_button(text("Done")).on_press(Message::Sheet(false))
             ]
             .spacing(m.space_m),
-            self.sheet,
-            Message::Sheet(false),
-            corner,
-        );
+        )
+        .open(self.sheet)
+        .side(w::Side::Bottom)
+        .mode(w::DockMode::Overlay)
+        .scope(w::DockScope::Window)
+        .window_radius(corner)
+        .on_outside(Message::Sheet(false))
+        .into();
         let dialog: Option<Element<'_>> = match self.dialog {
             None => None,
             Some(Dialog::Alert) => Some(Element::from(
@@ -1591,8 +1574,11 @@ impl Gallery {
                 ],
                 Message::CloseDialog,
             )),
-            // The preferences dialog is a window of its own (see `prefs_window`).
-            Some(Dialog::Preferences) => None,
+            Some(Dialog::Preferences) => Some(w::preferences_dialog(
+                "Preferences",
+                self.preferences_demo(),
+                Message::CloseDialog,
+            )),
             Some(Dialog::About) => Some(Element::from(
                 w::AboutDialog::new("Gallery")
                     .developer_name("The iced-libadwaita authors")
@@ -1616,38 +1602,11 @@ impl Gallery {
             .bind("Esc", Message::Escape)
             .bind("Ctrl+F", Message::ToggleSearch)
             .scope(result);
-        // While the preferences window (a modal child) is open the parent is disabled: a scrim
-        // that swallows input, and a click on it brings the preferences window forward.
-        let result = adw::window::Child::disable_parent(
-            self.prefs.as_ref(),
-            result,
-            Message::FocusPrefs,
-            corner,
-        );
         if csd {
             adw::window::frame(result, win_state, Message::Resize)
         } else {
             result
         }
-    }
-
-    /// The preferences dialog in its own window: a header with a close button, the preference
-    /// page, rounded corners and resize grips like the main window.
-    fn prefs_window(&self, id: window::Id) -> IcedElement<'_, Message, Theme> {
-        let m = self.metrics();
-        // A dialog: close button only, both side edges, like any window of the toolkit.
-        let chrome = adw::window::Chrome::new(adw::window::State::default()).close_only();
-        let header = w::header_bar::<Message>()
-            .title("Preferences")
-            .chrome(&chrome, move |a| Message::ChildAction(id, a))
-            .metrics(m);
-        // Esc closes it, like any dialog.
-        let content = adw::shortcut::Shortcuts::new()
-            .bind("Esc", Message::ClosePrefs)
-            .scope(Element::from(
-                w::toolbar_view(self.preferences_demo()).top_bar(header),
-            ));
-        chrome.frame(content, move |a| Message::ChildAction(id, a))
     }
 
     // --- pages ----------------------------------------------------------

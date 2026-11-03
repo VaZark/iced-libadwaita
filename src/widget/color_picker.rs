@@ -603,6 +603,9 @@ impl<'a, M: Clone + 'a> ColorInput<'a, M> {
     }
 }
 
+/// The id of the color code entry in the picker, its initial focus.
+const ENTRY_ID: &str = "iced-libadwaita.color-input.code";
+
 /// Width of the picker's popover, as the date input's calendar.
 const PICKER_WIDTH: f32 = super::date_input::POPOVER_WIDTH;
 
@@ -617,7 +620,11 @@ impl<'a, M: Clone + 'a> From<ColorInput<'a, M>> for Element<'a, M> {
             .metrics(m);
         picker.swatches = i.swatches;
         let invalid = !i.text.trim().is_empty() && Hsva::parse(i.text).is_none();
-        let mut entry = super::entry("", i.text).on_input(i.on_input).metrics(m);
+        // The color code is what the picker is opened for: its entry takes focus.
+        let mut entry = super::entry("", i.text)
+            .id(ENTRY_ID)
+            .on_input(i.on_input)
+            .metrics(m);
         if invalid {
             entry = entry.state(super::EntryState::Error);
         }
@@ -630,6 +637,7 @@ impl<'a, M: Clone + 'a> From<ColorInput<'a, M>> for Element<'a, M> {
             .keep_open(true)
             .disabled(i.disabled)
             .open_initially(i.open_initially)
+            .initial_focus(ENTRY_ID)
             .scrim(i.scrim)
             .close_on_outside(i.close_on_outside)
             .window_radius(i.window_radius);

@@ -22,15 +22,13 @@ adw::window::frame(
 
 - Track the window state with `window::changes()` + `refresh()` so corners are rounded only while floating.
 - Which buttons appear, and where, follows GNOME's `button-layout`; their icons follow the icon theme. In mobile mode they are hidden.
-- Anything that touches a window corner takes the window radius (`NavigationSplitView::window_radius`, `dialog_in_window`, `bottom_sheet_in_window`, `HeaderBar::window_corners`).
+- Anything that touches a window corner takes the window radius (`NavigationSplitView::window_radius`, `dialog_in_window`, `Dock` (window scope), `HeaderBar::window_corners`).
 - In a split view give each pane its own header bar; only the pane at a window edge shows the window buttons.
 
-#### Dialogs in their own window
+#### Dialogs are modals, not windows
 
-A dialog that is large or long-lived (preferences) can be a window of its own that the user moves independently of its parent, while the parent is disabled.
+A dialog (alert, about, shortcuts, preferences) is a modal layer over its parent window, as `AdwDialog` is: the parent is faded and disabled (`dialog_in_window`, `Overlay`), and the dialog is closed by its close button, Escape or a press outside (`close_on_outside`). The library opens no operating-system window for a dialog. An app that wants one in a window of its own opens it itself on a message the dialog sends it. A window that must outlive the main window is a **separate process**, not a child: `window::Detached::this_exe()?.arg("--settings").spawn()` starts this executable again in its own process group (the app decides, from its arguments, what the new process shows). Closing or quitting the parent leaves it running. `Child::window` is for a second window that belongs to this process and goes with it.
 
-- Open it with `window::open(adw::window::dialog_settings(size))` (client-side decorations, resizable, centered, never narrower than a phone) from an `iced::daemon` app, and give it its own view: a header bar with only a close button and `adw::window::frame` for corners and grips. Header drags and grips need the window's id (`window::drag(id)`, `window::drag_resize(id, d)`).
-- Disable the parent while it is open by covering the parent's view with `dialog_in_window(root, space(), Some(Msg::FocusDialog), corner)`: an empty dialog is a scrim that swallows input, and a click on it can `window::gain_focus` the dialog.
 - Handle `window::close_events()` to forget the window when the user closes it, and quit when the main window closes.
 
 Limits: iced has no transient-parent or system-modal window, so the compositor does not keep the dialog above its parent or center it on the parent, and Wayland ignores requested positions. Use this for preferences-style windows; short questions stay in-window (`AlertDialog`).

@@ -217,6 +217,17 @@ impl<'a, M: 'a> Popover<'a, M> {
         self
     }
     /// [`Presentation::Popover`] (default) or [`Presentation::Page`].
+    /// The child of the popover that takes focus when it opens, by its widget id: the popover
+    /// content becomes a [`FocusScope`](super::FocusScope) (it does not trap Tab) starting
+    /// there. Without it focus stays where it was.
+    pub fn initial_focus(mut self, id: impl Into<iced::widget::Id>) -> Self {
+        let content = std::mem::replace(&mut self.popover, iced::widget::space().into());
+        self.popover = super::FocusScope::new(content)
+            .trap(false)
+            .initial_focus(id)
+            .into();
+        self
+    }
     /// Fades the window behind a [`Dialog`](Presentation::Dialog) (default on).
     pub fn scrim(mut self, on: bool) -> Self {
         self.scrim = on;

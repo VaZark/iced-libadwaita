@@ -27,7 +27,7 @@ A toast must not be the only way to learn something important; use a banner or d
 #### Overlays
 
 - **Dialog** (`dialog_in_window`): blocks the window for a decision or short task.
-- **Bottom sheet**: a task that belongs to the current page, mostly on narrow windows.
+- **Dock** (`Dock`): a surface attached to an edge. As an overlay it is a dialog on an edge: a bottom sheet for a task that belongs to the current page (mostly on narrow windows), a drawer on the side. Pushing, it is a pane that makes room for itself, as a sidebar does.
 - **Popover / menu**: a choice that does not interrupt; use `Menu` for commands, `dropdown` or `ComboRow` for choosing a value.
 
 #### Choosing a value

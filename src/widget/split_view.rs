@@ -14,13 +14,13 @@
 use super::motion::{advance, scrim};
 use crate::Theme;
 use crate::animation::{Progress, Spec, Trigger, presets};
+use crate::primitives::anchor::Side;
+use crate::primitives::dock::{Extent, Flow, arrange, horizontal, resolve_extent};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
 use iced::advanced::widget::{Operation, Tree, Widget, tree};
 use iced::advanced::{Clipboard, Renderer as _, Shell, overlay};
-use iced::{
-    Background, Border, Color, Element, Event, Length, Point, Rectangle, Size, Vector, mouse,
-};
+use iced::{Background, Border, Color, Element, Event, Length, Rectangle, Size, Vector, mouse};
 
 pub struct AdaptiveSplit<'a, M> {
     /// `[sidebar, content]`.
@@ -31,7 +31,8 @@ pub struct AdaptiveSplit<'a, M> {
     drawer_open: bool,
     on_close: Option<M>,
     window_radius: f32,
-    end: bool,
+    side: Side,
+    extent: Option<Extent>,
 }
 
 /// A sidebar and a content area. `wide`: the sidebar sits beside the content (`sidebar_width`);
@@ -51,7 +52,8 @@ pub fn adaptive_split<'a, M>(
         drawer_open: false,
         on_close: None,
         window_radius: 0.0,
-        end: false,
+        side: Side::Left,
+        extent: None,
     }
 }
 
@@ -65,10 +67,18 @@ impl<'a, M> AdaptiveSplit<'a, M> {
         self.on_close = Some(msg);
         self
     }
-    /// Puts the sidebar at the end edge (an aside) instead of the start: it slides in from, and
-    /// the content gives way at, the right edge. Not mirrored for right-to-left text.
-    pub fn end(mut self, end: bool) -> Self {
-        self.end = end;
+    /// The edge the sidebar is docked to (default the start edge, `Left`): it slides in from it,
+    /// and the content gives way on that side. `Right` is an aside, `Top` and `Bottom` a bar or a
+    /// sheet. Not mirrored for right-to-left text.
+    pub fn side(mut self, side: Side) -> Self {
+        self.side = side;
+        self
+    }
+    /// Sizes the sidebar by an [`Extent`] resolved at layout (its own size, a fraction of the room)
+    /// instead of the widths given to [`adaptive_split`]; both the in-flow panel and the drawer
+    /// take it.
+    pub fn extent(mut self, extent: Extent) -> Self {
+        self.extent = Some(extent);
         self
     }
     /// Rounds the drawer scrim to the window's corners.
@@ -128,32 +138,70 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
             )
         };
         let in_flow = self.wide || slot > 0.001;
-        let side_w = if in_flow {
-            self.sidebar_width
-        } else {
-            self.drawer_width
-        };
-        let fixed =
-            |w: f32| layout::Limits::new(Size::new(w, max.height), Size::new(w, max.height));
-
+        let columnar = horizontal(self.side);
+        let room = if columnar { max.width } else { max.height };
         let (a, b) = tree.children.split_at_mut(1);
+        // The panel's size across its edge: given, or an extent resolved against the room (an
+        // `Auto` one is measured by laying the panel out freely).
+        let intrinsic = if matches!(self.extent, Some(Extent::Auto)) {
+            // On a scratch tree: laying the panel out freely must not leave its own state (text
+            // paragraphs) sized for that measurement.
+            let mut scratch = Tree::new(&self.children[0]);
+            let free = self.children[0].as_widget_mut().layout(
+                &mut scratch,
+                renderer,
+                &layout::Limits::new(Size::ZERO, max),
+            );
+            if columnar {
+                free.size().width
+            } else {
+                free.size().height
+            }
+        } else {
+            0.0
+        };
+        let resolve = |given: f32| match self.extent {
+            Some(e) => resolve_extent(e, room, intrinsic),
+            None => given,
+        };
+        let (sidebar_extent, drawer_extent) =
+            (resolve(self.sidebar_width), resolve(self.drawer_width));
+        let extent = if in_flow {
+            sidebar_extent
+        } else {
+            drawer_extent
+        };
+        let across = |e: f32| {
+            let size = if columnar {
+                Size::new(e, max.height)
+            } else {
+                Size::new(max.width, e)
+            };
+            layout::Limits::new(size, size)
+        };
         let sidebar = self.children[0]
             .as_widget_mut()
-            .layout(&mut a[0], renderer, &fixed(side_w));
-        // The content gives up exactly the space the sidebar has slid in.
-        let taken = self.sidebar_width * slot;
-        let content_w = (max.width - taken).max(0.0);
+            .layout(&mut a[0], renderer, &across(extent));
+        // In flow the content gives up exactly the space the sidebar has slid in; as a drawer it
+        // keeps its size (`primitives::dock`).
+        let arrangement = if in_flow {
+            arrange(max, self.side, sidebar_extent, slot, Flow::Push)
+        } else {
+            arrange(max, self.side, drawer_extent, drawer, Flow::Overlay)
+        };
+        let content_size = arrangement.content.size();
         let content = self.children[1]
             .as_widget_mut()
-            .layout(&mut b[0], renderer, &fixed(content_w))
-            .move_to(Point::new(if self.end { 0.0 } else { taken }, 0.0));
-        let side_x = match (self.end, in_flow) {
-            (false, true) => -self.sidebar_width * (1.0 - slot),
-            (false, false) => -side_w * (1.0 - drawer),
-            (true, true) => max.width - self.sidebar_width * slot,
-            (true, false) => max.width - side_w * drawer,
-        };
-        layout::Node::with_children(max, vec![sidebar.move_to(Point::new(side_x, 0.0)), content])
+            .layout(
+                &mut b[0],
+                renderer,
+                &layout::Limits::new(content_size, content_size),
+            )
+            .move_to(arrangement.content.position());
+        layout::Node::with_children(
+            max,
+            vec![sidebar.move_to(arrangement.panel.position()), content],
+        )
     }
 
     fn update(
@@ -331,16 +379,15 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
 
         if slot > 0.001 {
             // In flow: the part of the sidebar that has slid in, clipped to its slot.
-            let visible = Rectangle {
-                x: if self.end {
-                    b.x + b.width - self.sidebar_width * slot
-                } else {
-                    b.x
-                },
-                y: b.y,
-                width: self.sidebar_width * slot,
-                height: b.height,
+            let pane = side_l.bounds();
+            let extent = if horizontal(self.side) {
+                pane.width
+            } else {
+                pane.height
             };
+            let mut visible = arrange(b.size(), self.side, extent, slot, Flow::Push).visible;
+            visible.x += b.x;
+            visible.y += b.y;
             renderer.with_layer(visible, |r| {
                 self.children[0].as_widget().draw(
                     &tree.children[0],
@@ -351,17 +398,30 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
                     cursor,
                     viewport,
                 );
+                // A hairline on the edge that faces the content.
+                let line = match self.side {
+                    Side::Left => Rectangle {
+                        x: visible.x + visible.width - 1.0,
+                        width: 1.0,
+                        ..visible
+                    },
+                    Side::Right => Rectangle {
+                        width: 1.0,
+                        ..visible
+                    },
+                    Side::Top => Rectangle {
+                        y: visible.y + visible.height - 1.0,
+                        height: 1.0,
+                        ..visible
+                    },
+                    Side::Bottom => Rectangle {
+                        height: 1.0,
+                        ..visible
+                    },
+                };
                 r.fill_quad(
                     Quad {
-                        bounds: Rectangle {
-                            x: if self.end {
-                                visible.x
-                            } else {
-                                visible.x + visible.width - 1.0
-                            },
-                            width: 1.0,
-                            ..visible
-                        },
+                        bounds: line,
                         border: Border::default(),
                         shadow: Default::default(),
                         snap: false,
@@ -387,19 +447,20 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
                 r.fill_quad(
                     Quad {
                         bounds: pane,
-                        border: Border::default().rounded(if self.end {
+                        border: Border::default().rounded({
+                            // The corners on the window's own corners take its radius.
+                            let r = self.window_radius;
+                            let (tl, tr, br, bl) = match self.side {
+                                Side::Left => (r, 0.0, 0.0, r),
+                                Side::Right => (0.0, r, r, 0.0),
+                                Side::Top => (r, r, 0.0, 0.0),
+                                Side::Bottom => (0.0, 0.0, r, r),
+                            };
                             iced::border::Radius {
-                                top_left: 0.0,
-                                top_right: self.window_radius,
-                                bottom_right: self.window_radius,
-                                bottom_left: 0.0,
-                            }
-                        } else {
-                            iced::border::Radius {
-                                top_left: self.window_radius,
-                                top_right: 0.0,
-                                bottom_right: 0.0,
-                                bottom_left: self.window_radius,
+                                top_left: tl,
+                                top_right: tr,
+                                bottom_right: br,
+                                bottom_left: bl,
                             }
                         }),
                         shadow: theme.shadows.dialog().shadow,

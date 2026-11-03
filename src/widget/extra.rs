@@ -7,7 +7,7 @@ use crate::widget::button::{ToggleGroup, ToggleItem, toggle_group};
 use crate::widget::navigation::Breakpoint;
 use crate::{Icon, Metrics, Theme, Typography};
 use iced::alignment::Vertical;
-use iced::widget::{button, container, mouse_area, opaque, responsive, row, space, stack, text};
+use iced::widget::{button, container, responsive, row, space, text};
 use iced::{Length, Size};
 
 /// `AdwWindow` / `AdwApplicationWindow`: fills the window with the window
@@ -211,61 +211,4 @@ pub fn tab_button<'a, M: Clone + 'a>(count: usize, on_press: M) -> Element<'a, M
     .style(sb::flat)
     .on_press(on_press)
     .into()
-}
-
-/// `AdwBottomSheet`: slides a panel over the bottom of `content` when `open`.
-pub fn bottom_sheet<'a, M: Clone + 'a>(
-    content: impl Into<Element<'a, M>>,
-    sheet: impl Into<Element<'a, M>>,
-    open: bool,
-    on_close: M,
-) -> Element<'a, M> {
-    bottom_sheet_in_window(content, sheet, open, on_close, 0.0)
-}
-
-/// Like [`bottom_sheet`], for a window with rounded corners: the scrim and the
-/// panel's bottom corners take the window radius so nothing paints outside it.
-pub fn bottom_sheet_in_window<'a, M: Clone + 'a>(
-    content: impl Into<Element<'a, M>>,
-    sheet: impl Into<Element<'a, M>>,
-    open: bool,
-    on_close: M,
-    window_radius: f32,
-) -> Element<'a, M> {
-    if !open {
-        return super::layered(content, None);
-    }
-    let m = Metrics::desktop();
-    let catcher =
-        mouse_area(container(space()).width(Length::Fill).height(Length::Fill)).on_press(on_close);
-    let panel = container(sheet.into())
-        .padding(m.space_l)
-        .width(Length::Fill)
-        .style(move |t: &Theme| iced::widget::container::Style {
-            border: iced::Border {
-                radius: iced::border::Radius {
-                    top_left: t.metrics.radius_l,
-                    top_right: t.metrics.radius_l,
-                    bottom_right: window_radius,
-                    bottom_left: window_radius,
-                },
-                ..Default::default()
-            },
-            ..sc::dialog(t)
-        });
-    // Slides up on the sheet spring with a fading scrim (`AdwBottomSheet`).
-    let layer = stack![
-        opaque(catcher),
-        container(opaque(panel))
-            .height(Length::Fill)
-            .align_y(Vertical::Bottom)
-    ];
-    super::layered(
-        content,
-        Some(Element::from(
-            super::entrance(layer, iced::Vector::new(0.0, 160.0))
-                .trigger(crate::animation::Trigger::Sheet)
-                .scrim(window_radius),
-        )),
-    )
 }

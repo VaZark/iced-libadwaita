@@ -126,7 +126,6 @@ impl Gallery {
             Detail::AboutDialog => Message::OpenDialog(Dialog::About),
             Detail::ShortcutsDialog => Message::OpenDialog(Dialog::Shortcuts),
             Detail::PreferencesDialog => Message::OpenDialog(Dialog::Preferences),
-            Detail::BottomSheet => Message::Sheet(true),
             Detail::AppShell => Message::OpenShell,
             _ => return None,
         })
@@ -342,7 +341,6 @@ impl Gallery {
             Detail::Progress => self.inline(Inline::Progress),
             Detail::BadgeChip => self.inline(Inline::BadgeChip),
             Detail::Indicator => self.inline(Inline::Indicator),
-            Detail::Docked => self.inline(Inline::Docked),
             Detail::ResponsiveTable => self.inline(Inline::ResponsiveTable),
             Detail::Accordion => self.inline(Inline::Accordion),
             Detail::CardButton => self.inline(Inline::CardButton),
@@ -375,7 +373,6 @@ impl Gallery {
             | Detail::AboutDialog
             | Detail::ShortcutsDialog
             | Detail::PreferencesDialog
-            | Detail::BottomSheet
             | Detail::AppShell => column![
                 g(d.title())
                     .description(d.description())
@@ -386,6 +383,7 @@ impl Gallery {
             .into(),
             // Shown by its playground (see `plays.rs`).
             Detail::Tabs
+            | Detail::Docked
             | Detail::Tree
             | Detail::TreeRow
             | Detail::Divider
@@ -1096,56 +1094,6 @@ impl Gallery {
                 ]
                 .spacing(m.group_spacing)
                 .into()
-            }
-            Inline::Docked => {
-                use adw::primitives::anchor::{Dim, Side};
-                let stage = |lines: &'static str| -> Element<'static> {
-                    container(column![ty::heading("Content"), ty::body(lines).style(adw::style::text::dim)].spacing(4))
-                        .padding(12)
-                        .width(Length::Fill)
-                        .height(Length::Fill)
-                        .style(|t: &adw::Theme| iced::widget::container::Style {
-                            background: Some(iced::Background::Color(t.semantic.card.bg)),
-                            border: iced::Border::default().rounded(8),
-                            ..Default::default()
-                        })
-                        .into()
-                };
-                let bar = |label: &'static str| -> Element<'static> {
-                    container(row![ty::label(label), iced::widget::space().width(Length::Fill), w::suggested_button(ty::label("Save")).on_press(Message::Noop)].align_y(iced::Alignment::Center))
-                        .padding(8)
-                        .width(Length::Fill)
-                        .style(|t: &adw::Theme| iced::widget::container::Style {
-                            background: Some(iced::Background::Color(t.semantic.window.bg)),
-                            border: iced::Border::default().width(1).color(t.semantic.card.fg.scale_alpha(0.12)),
-                            ..Default::default()
-                        })
-                        .into()
-                };
-                let pane = || -> Element<'static> {
-                    container(column![ty::heading("Drawer"), ty::body("Docked left, full height").style(adw::style::text::dim)].spacing(4))
-                        .padding(12)
-                        .style(|t: &adw::Theme| iced::widget::container::Style {
-                            background: Some(iced::Background::Color(t.semantic.window.bg)),
-                            border: iced::Border::default().width(1).color(t.semantic.card.fg.scale_alpha(0.12)),
-                            ..Default::default()
-                        })
-                        .into()
-                };
-                let frame = |e: Element<'static>| -> Element<'static> {
-                    container(e).width(Length::Fixed(300.0)).height(Length::Fixed(190.0)).into()
-                };
-                let demos = row![
-                    frame(w::dock_footer(stage("Footer: inside the bottom edge, as wide as the content."), bar("Unsaved changes"))),
-                    frame(w::dock_banner(stage("Banner: inside the top edge, over the content."), bar("Offline: changes are kept"))),
-                    frame(w::dock_drawer(stage("Drawer: left edge, 120 wide, full height."), pane(), Side::Left, Dim::Fixed(120.0))),
-                    frame(w::dock_drawer(stage("Drawer: right edge, 60% of the width."), pane(), Side::Right, Dim::Fraction(0.6))),
-                    frame(w::dock_center(stage("Centered over the content."), bar("Centered"))),
-                ]
-                .spacing(m.space_m)
-                .wrap();
-                column![g("Docked").description("One placement primitive: an edge, an alignment along it, an inset and a size rule (`anchor::place_sized`).").push(demos)]
-                    .into()
             }
             Inline::MultiSelect => {
                 let open = std::env::var("GALLERY_OPEN").as_deref() == Ok("multiselect");

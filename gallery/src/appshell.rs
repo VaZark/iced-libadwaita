@@ -642,19 +642,22 @@ impl AppShell {
                 DRAWER_WIDTH,
                 DRAWER_WIDTH,
             )
-            .end(true)
+            .side(w::Side::Right)
             .into(),
-            Edge::Bottom => w::bottom_sheet_in_window(
-                content,
-                self.drawer_sheet(),
-                self.drawer_open,
-                Message::ToggleDrawer,
-                self.chrome(Touches {
-                    left: true,
-                    right: true,
-                })
-                .radius(),
-            ),
+            Edge::Bottom => w::Dock::new(content, self.drawer_sheet())
+                .open(self.drawer_open)
+                .side(w::Side::Bottom)
+                .mode(w::DockMode::Overlay)
+                .scope(w::DockScope::Window)
+                .window_radius(
+                    self.chrome(Touches {
+                        left: true,
+                        right: true,
+                    })
+                    .radius(),
+                )
+                .on_outside(Message::ToggleDrawer)
+                .into(),
         }
     }
 

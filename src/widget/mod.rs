@@ -20,12 +20,14 @@ mod content_area;
 mod date_input;
 mod date_range_input;
 mod divider;
+mod dock;
 mod dropdown;
 mod elevated;
 mod extra;
 mod field;
 mod flex;
 mod floating_indicator;
+mod focus;
 mod form;
 mod forms;
 mod header_bar;
@@ -67,7 +69,9 @@ mod tree;
 mod tree_row;
 pub mod typography;
 
-pub use crate::primitives::anchor::{self, Align as AnchorAlign, Placed, Placement, Side, place};
+pub use crate::primitives::anchor::{
+    self, Align as AnchorAlign, Dim, Placed, Placement, Side, place,
+};
 pub use crate::primitives::calendar::{CalendarView, Dir as NavDir, Level};
 pub use crate::primitives::color_picker::{Format as ColorFormat, Hsva};
 pub use crate::primitives::date::{Date, days_in_month, is_leap_year, validate as validate_date};
@@ -95,9 +99,7 @@ pub use crate::window::dialog::{
     present_dialog, shortcuts_dialog,
 };
 pub use accordion::{Accordion, AccordionItem};
-pub use anchored::{
-    Anchored, Indicator, dock_banner, dock_center, dock_drawer, dock_footer, docked_anchored,
-};
+pub use anchored::{Anchored, Indicator};
 pub use autocomplete::Autocomplete;
 pub use avatar::{Avatar, avatar};
 pub use badge::{Badge, Chip};
@@ -114,16 +116,18 @@ pub use content_area::{ContentArea, content_area};
 pub use date_input::DateInput;
 pub use date_range_input::DateRangeInput;
 pub use divider::{Divider, DividerTone, DividerVariant, LabelPosition, divider};
+pub use dock::{Dock, DockMode, DockScope, DockSize};
 pub use dropdown::{dropdown, dropdown_disabled, menu_item, menu_item_disabled};
 pub use elevated::{Elevated, card_shadow};
 pub use extra::{
-    bottom_sheet, bottom_sheet_in_window, breakpoint_bin, carousel_indicator_dots,
-    carousel_indicator_lines, inline_view_switcher, password_entry_row, path_bar, shortcut_label,
-    sidebar, tab_button, view_switcher, view_switcher_bar, window, wrap_box,
+    breakpoint_bin, carousel_indicator_dots, carousel_indicator_lines, inline_view_switcher,
+    password_entry_row, path_bar, shortcut_label, sidebar, tab_button, view_switcher,
+    view_switcher_bar, window, wrap_box,
 };
 pub use field::{Field, FieldLayout, outlined as field_outline};
 pub use flex::FlexRow;
 pub use floating_indicator::FloatingIndicator;
+pub use focus::{FocusScope, focus_return};
 pub use form::{Form, FormActions, Step, StepIndicator};
 pub use forms::{
     Entry, EntryState, TextView, accent_picker, card_button, check_button, color_swatch, entry,
@@ -149,7 +153,9 @@ pub use navigation::{
     sidebar_width_for, split_collapsed,
 };
 pub use number_input::NumberInput;
-pub use overlay::{Layer as OverlayLayer, Overlay, stacked as overlay_stack};
+pub use overlay::{
+    Layer as OverlayLayer, Overlay, closed as overlay_closed, stacked as overlay_stack,
+};
 pub use pagination::label as pagination_label;
 pub use pagination::{PageSize, Pagination, PaginationSize, page_size_dropdown};
 pub use popover::{

@@ -59,6 +59,7 @@ pub struct Entry<'a, M> {
     right: Option<Element<'a, M>>,
     left_width: Option<f32>,
     right_width: Option<f32>,
+    id: Option<iced::widget::Id>,
 }
 
 /// `GtkEntry`.
@@ -90,6 +91,7 @@ impl<'a, M> Entry<'a, M> {
             right: None,
             left_width: None,
             right_width: None,
+            id: None,
         }
     }
     pub fn on_input(mut self, f: impl Fn(String) -> M + 'a) -> Self {
@@ -124,6 +126,11 @@ impl<'a, M> Entry<'a, M> {
     }
     pub fn width(mut self, w: impl Into<Length>) -> Self {
         self.width = w.into();
+        self
+    }
+    /// The widget id: what a focus scope's `initial_focus` names.
+    pub fn id(mut self, id: impl Into<iced::widget::Id>) -> Self {
+        self.id = Some(id.into());
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -187,6 +194,9 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
                 st.value = c;
                 st
             });
+        }
+        if let Some(id) = e.id {
+            input = input.id(id);
         }
         if let Some(f) = e.on_input {
             input = input.on_input(f);

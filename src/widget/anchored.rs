@@ -4,8 +4,8 @@
 //!
 //! * [`Indicator`]: a badge, dot or count on a corner of an avatar, button or icon
 //!   (`Relation::Straddle`, Mantine's `Indicator`).
-//! * [`dock_footer`], [`dock_banner`], [`dock_drawer`] and [`docked_anchored`]: a bar or pane docked inside the base
-//!   against an edge (`Relation::Inside`), or [`dock_center`]ed in it, over the content.
+//! * [`Dock`](super::Dock) docks a bar, pane or sheet inside the base against an edge
+//!   (`Relation::Inside`) over the content, inline or on an overlay.
 //!
 //! The floating surface is drawn over the base and gets events first. Placement is a pure
 //! function (`place_sized`, unit tested); this widget only lays the two children out and routes
@@ -14,7 +14,7 @@
 
 use super::Element;
 use crate::Theme;
-use crate::primitives::anchor::{Align, Dim, Placement, Relation, Side, Sizing, place_sized};
+use crate::primitives::anchor::{Align, Placement, Relation, Side, Sizing, place_sized};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer;
 use iced::advanced::widget::{Operation, Tree, Widget};
@@ -324,72 +324,10 @@ impl<'a, M: 'a> From<Indicator<'a, M>> for Element<'a, M> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Docked
-// ---------------------------------------------------------------------------
-
-/// `surface` docked inside `base` against the edge `side`, over its content, `inset` px in from
-/// the edges: the surface keeps its own size. Chain [`Anchored::sizing`] on the result of
-/// [`docked_anchored`] for fill, fractions and fixed sizes, or use the presets below.
-pub fn docked_anchored<'a, M: 'a>(
-    base: impl Into<Element<'a, M>>,
-    surface: impl Into<Element<'a, M>>,
-    side: Side,
-    inset: f32,
-) -> Anchored<'a, M> {
-    Anchored::new(base, Some(surface.into())).placement(Placement {
-        offset: inset,
-        ..Placement::inside(side)
-    })
-}
-
-/// A bar along the bottom edge of `base`, as wide as it (a footer or a floating action bar).
-pub fn dock_footer<'a, M: 'a>(
-    base: impl Into<Element<'a, M>>,
-    bar: impl Into<Element<'a, M>>,
-) -> Element<'a, M> {
-    docked_anchored(base, bar, Side::Bottom, 0.0)
-        .sizing(Sizing::new().width(Dim::MatchAnchor))
-        .into()
-}
-
-/// A bar along the top edge of `base`, as wide as it (a banner over the content).
-pub fn dock_banner<'a, M: 'a>(
-    base: impl Into<Element<'a, M>>,
-    bar: impl Into<Element<'a, M>>,
-) -> Element<'a, M> {
-    docked_anchored(base, bar, Side::Top, 0.0)
-        .sizing(Sizing::new().width(Dim::MatchAnchor))
-        .into()
-}
-
-/// A pane `width` wide along the `Left` or `Right` edge of `base`, as tall as it (a drawer over
-/// the content; the scrim and the slide are [`drawer_layer`](super::drawer_layer)'s).
-pub fn dock_drawer<'a, M: 'a>(
-    base: impl Into<Element<'a, M>>,
-    pane: impl Into<Element<'a, M>>,
-    side: Side,
-    width: Dim,
-) -> Element<'a, M> {
-    docked_anchored(base, pane, side, 0.0)
-        .sizing(Sizing::new().width(width).height(Dim::MatchAnchor))
-        .into()
-}
-
-/// `surface` in the middle of `base`, over its content (a status overlay or a dialog without a
-/// scrim).
-pub fn dock_center<'a, M: 'a>(
-    base: impl Into<Element<'a, M>>,
-    surface: impl Into<Element<'a, M>>,
-) -> Element<'a, M> {
-    Anchored::new(base, Some(surface.into()))
-        .placement(Placement::centered())
-        .into()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::primitives::anchor::Dim;
     use iced::advanced::widget::Tree;
     use iced::widget::space;
 

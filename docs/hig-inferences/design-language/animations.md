@@ -37,7 +37,7 @@ Widgets animate themselves from iced's `RedrawRequested` events, so the app need
 | `Switch`                                                  | knob slides and track cross-fades, 200ms `$ease-out-quad`                                |
 | `ExpanderRow`, `Banner` (`reveal`)                        | slide open/closed, 250ms `ADW_EASE`                                                      |
 | Collapsed-sidebar drawer (`drawer_layer`)                 | sidebar spring (1, 0.5, 500) slide + scrim fade, **open and closed**                     |
-| `dialog_in_window`, `bottom_sheet_in_window` (`entrance`) | sheet spring (0.8, 1, 400) slide-in + scrim fade                                         |
+| `dialog_in_window`, a modal `Dock` (`entrance`) | sheet spring (0.8, 1, 400) slide-in + scrim fade                                         |
 | `toast_overlay`                                           | slide up, 300ms `ADW_EASE`                                                               |
 | `carousel`                                                | scroll spring (1, 0.5, 500), drag with velocity hand-off, indicator follows the position |
 

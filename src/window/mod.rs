@@ -9,7 +9,10 @@
 //!
 //! See `docs/hig-inferences/design-language/windows-and-csd.md`.
 
+pub mod detached;
 pub mod dialog;
+
+pub use detached::Detached;
 
 use crate::widget::Element;
 use crate::{Metrics, Theme};
@@ -54,20 +57,6 @@ fn translucent_settings() -> Settings {
     Settings {
         transparent: crate::config::current().transparency > 0.0,
         ..Settings::default()
-    }
-}
-
-/// Settings for a dialog in its own window (a preferences window, say): client-side
-/// decorations like [`settings`], resizable, opened centered, and never smaller than a phone
-/// width. A window the user can move and resize independently of its parent; the parent is
-/// disabled while it is open by covering it with [`dialog_in_window`](crate::widget::dialog_in_window)
-/// (an empty dialog is a scrim that swallows input).
-pub fn dialog_settings(size: Size) -> Settings {
-    Settings {
-        size,
-        position: iced::window::Position::Centered,
-        min_size: Some(Size::new(min_size().width, 240.0)),
-        ..settings()
     }
 }
 
@@ -335,9 +324,11 @@ impl Chrome {
     }
 }
 
-/// A window the app opens besides its main one: a dialog in a window of its own (a
-/// preferences window) or a whole second shell. It owns the window's id and its state, opens
-/// with the toolkit's decorations and can disable its parent the way a regular dialog does.
+/// A second window the app opens on its own (a whole second shell). It owns the window's id and
+/// its state and opens with the toolkit's decorations. A dialog is not a window: it is a modal
+/// layer over its parent ([`dialog_in_window`](crate::widget::dialog_in_window),
+/// [`preferences_dialog`](crate::widget::preferences_dialog)); an app that wants a dialog in a
+/// window of its own opens it itself, on a message from the dialog.
 ///
 /// Keep it in an `Option` in your state (`None` while closed), route
 /// [`Action`]s from its chrome to [`Action::perform`] with its id, and clear it when iced
@@ -345,26 +336,19 @@ impl Chrome {
 #[derive(Debug)]
 pub struct Child<T> {
     id: iced::window::Id,
-    modal: bool,
     /// Whatever the window needs (`()` for a static dialog).
     pub state: T,
 }
 
 impl<T> Child<T> {
-    /// Opens a **dialog** window of `size`: centered, never narrower than a phone, and modal:
-    /// while it is open the parent is disabled (see [`Child::disable_parent`]).
-    pub fn dialog(size: Size, state: T) -> (Self, Task<iced::window::Id>) {
-        Self::open(dialog_settings(size), true, state)
-    }
-
-    /// Opens an ordinary second **window** of `size` that does not disable its parent.
+    /// Opens an ordinary second **window** of `size`.
     pub fn window(size: Size, state: T) -> (Self, Task<iced::window::Id>) {
-        Self::open(Settings { size, ..settings() }, false, state)
+        Self::open(Settings { size, ..settings() }, state)
     }
 
-    fn open(settings: Settings, modal: bool, state: T) -> (Self, Task<iced::window::Id>) {
+    fn open(settings: Settings, state: T) -> (Self, Task<iced::window::Id>) {
         let (id, open) = iced::window::open(settings);
-        (Self { id, modal, state }, open)
+        (Self { id, state }, open)
     }
 
     pub fn id(&self) -> iced::window::Id {
@@ -376,10 +360,6 @@ impl<T> Child<T> {
         self.id == id
     }
 
-    pub fn is_modal(&self) -> bool {
-        self.modal
-    }
-
     /// Brings the window forward (what pressing the disabled parent does).
     pub fn focus<M>(&self) -> Task<M> {
         iced::window::gain_focus(self.id)
@@ -388,28 +368,6 @@ impl<T> Child<T> {
     /// Closes the window. Clear the `Option` when the close event arrives.
     pub fn close<M>(&self) -> Task<M> {
         iced::window::close(self.id)
-    }
-
-    /// Disables `parent` while a **modal** child is open, like a regular dialog: it is faded and
-    /// a layer over it swallows input. Pressing it does not close the child (a window is closed
-    /// by its own controls): it sends `on_press`, to [`focus`](Self::focus) the child. Both
-    /// windows can still be moved on the screen independently. With no child (or a non-modal
-    /// one) the parent is returned in the same tree position, so opening or closing the child
-    /// does not disturb it. `radius` rounds the fade to the parent's corners
-    /// ([`Chrome::radius`]).
-    pub fn disable_parent<'a, M: Clone + 'a>(
-        child: Option<&Self>,
-        parent: impl Into<Element<'a, M>>,
-        on_press: M,
-        radius: f32,
-    ) -> Element<'a, M> {
-        match child.filter(|c| c.modal) {
-            Some(_) => crate::widget::Overlay::new(parent, space())
-                .on_outside(on_press)
-                .window_radius(radius)
-                .into(),
-            None => crate::widget::layered(parent, None),
-        }
     }
 }
 
@@ -436,15 +394,6 @@ mod tests {
             .close_only()
             .edges(true, false);
         assert!(!c.minimize && !c.maximize && c.left && !c.right);
-    }
-
-    #[test]
-    fn dialog_windows_are_decorated_by_us_and_opened_centered() {
-        let s = dialog_settings(Size::new(620.0, 640.0));
-        assert!(!s.decorations && s.transparent && s.resizable);
-        assert_eq!(s.size, Size::new(620.0, 640.0));
-        assert!(matches!(s.position, iced::window::Position::Centered));
-        assert!(s.min_size.is_some());
     }
 
     #[test]

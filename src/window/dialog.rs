@@ -47,7 +47,7 @@ pub fn present_dialog<'a, M: Clone + 'a>(
 ) -> Element<'a, M> {
     match dialog {
         Some(d) => dialog_in_window(base, d, on_backdrop, window_radius),
-        None => crate::widget::layered(base, None),
+        None => crate::widget::overlay_closed(base),
     }
 }
 

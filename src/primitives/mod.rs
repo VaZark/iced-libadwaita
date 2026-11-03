@@ -8,7 +8,9 @@
 //! * [`anchor`]: where a floating surface sits against an anchor (flip, shift);
 //! * [`calendar`]: calendar navigation by level (month, year, decade);
 //! * [`color_picker`]: a color as hue / saturation / value / alpha, its conversions and text forms (hex, rgb, hsl, hsv), parsing (Mantine's ColorPicker);
+//! * [`dock`]: how a panel docked against an edge shares the space with the content: pushing it aside or floating over it, its slide-in geometry on every side (shared by `AdaptiveSplit` and `Dock`);
 //! * [`date`]: calendar dates and month math;
+//! * [`focus`]: keyboard focus rules: a Tab trap that wraps and its initial focus, returning focus when a scope closes, whether focus is within a scope (Mantine's use-focus-trap, use-focus-return, use-focus-within);
 //! * [`form`]: submit / reset / next / back gating and when a form's fields reveal errors (steps);
 //! * [`infinite`]: a list that grows page by page (offset or cursor): one request in flight, stale responses discarded, the scroll rule;
 //! * [`lookup`]: a query answered asynchronously: debounce, stale-response discarding, cache;
@@ -42,6 +44,8 @@ pub mod animation;
 pub mod calendar;
 pub mod color_picker;
 pub mod date;
+pub mod dock;
+pub mod focus;
 pub mod form;
 pub mod infinite;
 pub mod loading;

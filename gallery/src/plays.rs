@@ -239,6 +239,38 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::bool("grip", "Grip", true),
             S::number("line", "Line size", 1.0..=6.0, 1.0),
         ],
+        Detail::Docked => vec![
+            S::choice("side", "Side", &["Bottom", "Top", "Left", "Right"], 0),
+            S::choice(
+                "size",
+                "Size (across)",
+                &["Its own", "120 px", "40%", "Full screen"],
+                0,
+            ),
+            S::choice(
+                "length",
+                "Length (along)",
+                &["Whole edge", "320 px", "50%"],
+                0,
+            ),
+            S::choice(
+                "align",
+                "Position along the edge",
+                &["Start", "Center", "End"],
+                0,
+            ),
+            S::choice("mode", "Mode", &["Push content", "Overlay"], 0),
+            S::choice("scope", "Scope", &["Content", "Window"], 0),
+            S::number(
+                "margin",
+                "Margin off the edge (0 is flush)",
+                0.0..=32.0,
+                0.0,
+            ),
+            S::bool("border", "Hairline border (not on flush sides)", true),
+            S::bool("open", "Open", true),
+            S::bool("scrim", "Fade the base (overlay)", true),
+        ],
         Detail::NumberInput => vec![
             S::number("decimals", "Decimals (0 is an integer)", 0.0..=4.0, 0.0),
             S::bool("limits", "Limits (0 to 100)", true),
@@ -894,6 +926,105 @@ pub fn build<'a>(
             let (el, code) = g.widgets_demo.split_play(p, m);
             (el.map(Message::Widgets), code)
         }
+        Detail::Docked => {
+            let side =
+                [w::Side::Bottom, w::Side::Top, w::Side::Left, w::Side::Right][p.choice("side")];
+            let size = [
+                w::DockSize::Auto,
+                w::DockSize::Fixed(120.0),
+                w::DockSize::Fraction(0.4),
+                w::DockSize::FullScreen,
+            ][p.choice("size")];
+            let length = [
+                w::DockSize::FullScreen,
+                w::DockSize::Fixed(320.0),
+                w::DockSize::Fraction(0.5),
+            ][p.choice("length")];
+            let align = [
+                w::AnchorAlign::Start,
+                w::AnchorAlign::Center,
+                w::AnchorAlign::End,
+            ][p.choice("align")];
+            let mode = [w::DockMode::Push, w::DockMode::Overlay][p.choice("mode")];
+            let scope = [w::DockScope::Content, w::DockScope::Window][p.choice("scope")];
+            let stage = container(
+                column![
+                    ty::heading("Content"),
+                    ty::body("What the surface is docked to. An overlay dock fades and disables it; a push dock makes room.")
+                        .style(adw::style::text::dim),
+                    w::raised_button(ty::label("A button")).on_press(Message::Noop),
+                ]
+                .spacing(m.space_s),
+            )
+            .padding(m.space_l)
+            .width(Length::Fill)
+            .height(Length::Fill);
+            let surface = container(
+                column![
+                    ty::title_3("Docked"),
+                    ty::body("A footer, a banner, a drawer or a sheet.")
+                        .style(adw::style::text::dim),
+                ]
+                .spacing(m.space_s),
+            )
+            .padding(m.space_l)
+            .width(Length::Fill);
+            let el = w::Dock::new(stage, surface)
+                .open(p.bool("open"))
+                .side(side)
+                .size(size)
+                .length(length)
+                .align(align)
+                .mode(mode)
+                .scope(scope)
+                .margin(p.number("margin"))
+                .border(p.bool("border"))
+                .scrim(p.bool("scrim"))
+                .on_outside(Message::Noop);
+            let preview = container(Element::from(el))
+                .width(Length::Fill)
+                .height(Length::Fixed(260.0))
+                .style(|t: &adw::Theme| iced::widget::container::Style {
+                    background: Some(iced::Background::Color(t.semantic.view.bg)),
+                    border: iced::Border::default().rounded(t.metrics.radius_m),
+                    ..Default::default()
+                });
+            let side_name = ["Bottom", "Top", "Left", "Right"][p.choice("side")];
+            let size_code = [
+                "",
+                ".size(DockSize::Fixed(120.0))",
+                ".size(DockSize::Fraction(0.4))",
+                ".size(DockSize::FullScreen)   // the whole base, every border flush",
+            ][p.choice("size")];
+            let length_code = [
+                "",
+                ".length(DockSize::Fixed(320.0))",
+                ".length(DockSize::Fraction(0.5))",
+            ][p.choice("length")];
+            let align_code = ["", ".align(Align::Center)", ".align(Align::End)"][p.choice("align")];
+            let code = Code::new("Dock::new(content, surface)")
+                .add(true, ".open(self.open)")
+                .add(p.choice("side") != 0, &format!(".side(Side::{side_name})"))
+                .add(p.choice("size") != 0, size_code)
+                .add(p.choice("length") != 0, length_code)
+                .add(p.choice("align") != 0, align_code)
+                .add(
+                    p.choice("mode") == 1,
+                    ".mode(DockMode::Overlay)   // over the content: it is faded and disabled",
+                )
+                .add(
+                    p.choice("scope") == 1,
+                    ".scope(DockScope::Window)   // corners on the window's edge take its radius",
+                )
+                .add(!p.bool("border"), ".border(false)")
+                .add(p.choice("mode") == 1 && !p.bool("scrim"), ".scrim(false)")
+                .add(
+                    p.choice("mode") == 1,
+                    ".on_outside(Msg::Close)   // a press outside",
+                )
+                .done();
+            (Element::from(preview), code)
+        }
         Detail::NumberInput => {
             let (el, code) = g.widgets_demo.number_play(p, m);
             (el.map(Message::Widgets), code)
@@ -1286,9 +1417,6 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
         Detail::Carousel => {
             "carousel(pages, self.position, Msg::Carousel)\n    .indicator(CarouselIndicator::Dots) // or Lines"
         }
-        Detail::Docked => {
-            "dock_footer(content, footer)\ndock_banner(content, banner)\ndock_drawer(content, drawer, Side::Right, Dim::Fraction(0.4))\ndock_center(content, dialog)\n\n// all four are Anchored over the anchor primitive: Placement + Sizing"
-        }
         Detail::Indicator => {
             "Indicator::new(avatar(48.0, \"Ada\"), Badge::count(3, 99).role(Role::Error).solid(true))\n    .corner(Side::Bottom, Align::End)\n    .offset(4.0)\n    .show(unread > 0)"
         }
@@ -1357,9 +1485,6 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
         }
         Detail::PreferencesDialog => {
             "preferences_dialog(\n    \"Preferences\",\n    preferences_page().push(preferences_group().title(\"General\").push(row)),\n    Msg::Close,\n)"
-        }
-        Detail::BottomSheet => {
-            "bottom_sheet_in_window(content, sheet, self.open, Msg::Close, window_radius)"
         }
         Detail::AppShell => {
             "// gallery/src/appshell.rs: an app shell assembled from library parts\nAdaptive over Layouts              // width classes -> whole layouts; Close(old) then Open(new)\nSidebarList::new(items).follow(..) // the navbar and the drawer list\nheader_bar().title(\"Gallery\")\ndock_drawer(main, drawer, Side::Right, Dim::Fraction(0.4))"
