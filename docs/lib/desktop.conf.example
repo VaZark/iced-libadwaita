@@ -82,6 +82,7 @@ target=content           # content (content area only, centered on it) | window 
 [rows]
 collapse=stacked         # stacked | flex  (what a wrapped row suffix does)
 wrap-basis=128           # minimum title width before the suffix wraps
+expander-indent=24       # px a row nested in an expander row is indented (0 = libadwaita's flush nesting)
 
 [icons]
 theme=system             # system | an icon theme name

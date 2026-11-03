@@ -55,6 +55,8 @@ mod switch;
 mod tabs;
 mod toast;
 mod toolbar;
+mod tree;
+mod tree_row;
 pub mod typography;
 
 pub use crate::primitives::anchor::{self, Align as AnchorAlign, Placed, Placement, Side, place};
@@ -66,6 +68,9 @@ pub use crate::primitives::meta_parent::{ChildEvent, Emitted};
 pub use crate::primitives::range::{Collide, DateRange, DayRole, Edge, Range, Thumb, Track};
 pub use crate::primitives::reorder::{Event as ReorderEvent, Mode, ReorderState};
 pub use crate::primitives::stepper::{Fill as StepperFill, Status as StepperStatus, StepperState};
+pub use crate::primitives::tree::{
+    Effect as TreeEffect, Event as TreeEvent, Position as DropPosition, TreeNode, TreeState,
+};
 pub use crate::primitives::validation::{
     self, Interaction, Presentation as ValidationState, Validity,
 };
@@ -157,6 +162,8 @@ pub use toast::{
     Toast, ToastPosition, ToastTarget, toast_overlay, toast_stack, toast_stack_from, toast_target,
 };
 pub use toolbar::{ActionBar, BarStyle, ToolbarView, action_bar, toolbar_view};
+pub use tree::{DragMode, Payload as TreeNodePayload, ROW_HEIGHT as TREE_ROW_HEIGHT, Tree};
+pub use tree_row::TreeRow;
 
 /// Shorthand for an iced element using this crate's [`Theme`](crate::Theme).
 pub type Element<'a, Message> = iced::Element<'a, Message, crate::Theme>;

@@ -10,6 +10,7 @@ pub enum Page {
     Buttons,
     Inputs,
     Lists,
+    Data,
     Layout,
     Navigation,
     Feedback,
@@ -19,10 +20,11 @@ pub enum Page {
 }
 
 impl Page {
-    pub const ALL: [Page; 9] = [
+    pub const ALL: [Page; 10] = [
         Page::Buttons,
         Page::Inputs,
         Page::Lists,
+        Page::Data,
         Page::Layout,
         Page::Navigation,
         Page::Feedback,
@@ -36,6 +38,7 @@ impl Page {
             Page::Buttons => "Buttons",
             Page::Inputs => "Inputs",
             Page::Lists => "Rows & Lists",
+            Page::Data => "Data",
             Page::Layout => "Layout",
             Page::Navigation => "Navigation",
             Page::Feedback => "Feedback",
@@ -50,7 +53,8 @@ impl Page {
         match self {
             Page::Buttons => "Styles, shapes, content and toggles",
             Page::Inputs => "Text, switches, checks, ranges and choosers",
-            Page::Lists => "Action, entry, expander and preference rows",
+            Page::Lists => "Action, entry, tree and preference rows",
+            Page::Data => "Tables, trees, virtualization and async loading",
             Page::Layout => "Cards, status pages, wrapping and clamping",
             Page::Navigation => "Switchers, tabs, carousels and menus",
             Page::Feedback => "Banners, toasts, progress, avatars and tags",
@@ -65,6 +69,7 @@ impl Page {
             Page::Buttons => Icon::Check,
             Page::Inputs => Icon::Edit,
             Page::Lists => Icon::OpenMenu,
+            Page::Data => Icon::Folder,
             Page::Layout => Icon::Window,
             Page::Navigation => Icon::GoNext,
             Page::Feedback => Icon::DialogInformation,
@@ -110,12 +115,27 @@ impl Page {
                         n(ActionRow),
                         n(SwitchAndComboRows),
                         n(EntryRow),
-                        n(ExpanderRow),
+                        n(TreeRow),
                         n(ButtonRow),
                     ],
                 ),
                 ("Groups", vec![n(PreferencesGroup), n(Accordion)]),
-                ("Tables", vec![n(ResponsiveTable), n(Data)]),
+            ],
+            Page::Data => vec![
+                (
+                    "Tables",
+                    vec![n(ResponsiveTable), n(Data), n(TableVirtual), n(TableAsync)],
+                ),
+                (
+                    "Trees",
+                    vec![
+                        n(Tree),
+                        n(TreeAsync),
+                        n(TreeVirtualized),
+                        n(TreeFiles),
+                        n(TreeDocs),
+                    ],
+                ),
             ],
             Page::Layout => vec![
                 (
@@ -210,6 +230,14 @@ pub enum Detail {
     Card,
     // Feedback
     Toast,
+    TableVirtual,
+    TableAsync,
+    Tree,
+    TreeAsync,
+    TreeVirtualized,
+    TreeFiles,
+    TreeDocs,
+
     Tabs,
     AlertDialog,
     AboutDialog,
@@ -223,7 +251,7 @@ pub enum Detail {
     CheckButton,
     RadioButton,
     Scale,
-    ExpanderRow,
+    TreeRow,
     ButtonRow,
     Clamp,
     StatusPage,
@@ -273,7 +301,6 @@ pub enum Inline {
     CheckButton,
     RadioButton,
     Scale,
-    ExpanderRow,
     ButtonRow,
     Clamp,
     StatusPage,
@@ -344,6 +371,13 @@ impl Detail {
             Detail::PreferencesGroup => "Preferences group",
             Detail::Card => "Card",
             Detail::Toast => "Toast",
+            Detail::TableVirtual => "Table: virtualization",
+            Detail::TableAsync => "Table: async chunks",
+            Detail::Tree => "Tree",
+            Detail::TreeAsync => "Tree: async loading",
+            Detail::TreeVirtualized => "Tree: virtualization",
+            Detail::TreeFiles => "Tree: files",
+            Detail::TreeDocs => "Tree: docs editor",
             Detail::Tabs => "Tabs",
             Detail::AlertDialog => "Alert dialog",
             Detail::AboutDialog => "About dialog",
@@ -356,7 +390,7 @@ impl Detail {
             Detail::CheckButton => "Check button",
             Detail::RadioButton => "Radio button",
             Detail::Scale => "Scale",
-            Detail::ExpanderRow => "Expander row",
+            Detail::TreeRow => "Tree row",
             Detail::ButtonRow => "Button row",
             Detail::Clamp => "Clamp",
             Detail::StatusPage => "Status page",
@@ -414,6 +448,17 @@ impl Detail {
             Detail::PreferencesGroup => "Title, description and a header suffix",
             Detail::Card => "Padding, chained children, separators and size",
             Detail::Toast => "Call to action, status dot, radius, placement and colors",
+            Detail::TableVirtual => "100,000 rows, only the ones in view built",
+            Detail::TableAsync => {
+                "5,000 rows fetched in chunks as you scroll, with placeholders and Retry"
+            }
+            Detail::Tree => "Lines, checkboxes, search, filter and drag and drop",
+            Detail::TreeAsync => {
+                "Branches that load when opened, with a spinner, an error and Retry"
+            }
+            Detail::TreeVirtualized => "2,000 nodes, only the rows in view built",
+            Detail::TreeFiles => "A file browser with lines, icons and selection",
+            Detail::TreeDocs => "Search, drag and drop and a count per branch",
             Detail::Tabs => "Variants, icons, disabled tabs and panels",
             Detail::AlertDialog => "A question with Cancel, Save and Discard responses",
             Detail::AboutDialog => "Application name, version, links and license",
@@ -426,7 +471,7 @@ impl Detail {
             Detail::CheckButton => "Checked, label and disabled",
             Detail::RadioButton => "A choice among options, with disabled",
             Detail::Scale => "Value and range",
-            Detail::ExpanderRow => "Expanded, subtitle and nested rows",
+            Detail::TreeRow => "Rows, or any elements, nested in a row (within a page)",
             Detail::ButtonRow => "Neutral, suggested and destructive",
             Detail::Clamp => "Maximum width",
             Detail::StatusPage => "Icon, title, description and action",

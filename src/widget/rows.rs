@@ -559,6 +559,7 @@ pub struct ExpanderRow<'a, M> {
     expanded: bool,
     on_toggle: Box<dyn Fn(bool) -> M + 'a>,
     children: Vec<Element<'a, M>>,
+    indent: f32,
 }
 
 impl<'a, M> ExpanderRow<'a, M> {
@@ -573,6 +574,8 @@ impl<'a, M> ExpanderRow<'a, M> {
             expanded,
             on_toggle: Box::new(on_toggle),
             children: Vec::new(),
+            // The toolkit's default; `indent(..)` overrides it for this row.
+            indent: Metrics::desktop().expander_indent,
         }
     }
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {
@@ -581,6 +584,13 @@ impl<'a, M> ExpanderRow<'a, M> {
     }
     pub fn prefix(mut self, e: impl Into<Element<'a, M>>) -> Self {
         self.row = self.row.prefix(e);
+        self
+    }
+    /// How far the nested rows are indented, in pixels. It starts at the toolkit's default,
+    /// [`Metrics::expander_indent`] (the `[rows] expander-indent` desktop config); this
+    /// overrides it for this row. 0 is libadwaita's flush nesting.
+    pub fn indent(mut self, px: f32) -> Self {
+        self.indent = px.max(0.0);
         self
     }
     /// `add_row`.
@@ -600,8 +610,18 @@ impl<'a, M: Clone + 'a> From<ExpanderRow<'a, M>> for Element<'a, M> {
         if x.children.is_empty() {
             return Element::from(header);
         }
+        let indent = x.indent;
         let mut inner = column![];
         for c in x.children {
+            // The hairline spans the list; the row itself is indented.
+            let c: Element<'a, M> = if indent > 0.0 {
+                container(c)
+                    .width(Length::Fill)
+                    .padding(iced::Padding::ZERO.left(indent))
+                    .into()
+            } else {
+                c
+            };
             inner = inner
                 .push(
                     container(space().height(1))
@@ -842,5 +862,30 @@ impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> From<ToggleGroupRow<'a, T, M>
 {
     fn from(t: ToggleGroupRow<'a, T, M>) -> Self {
         t.row.suffix(Element::from(t.group)).into()
+    }
+}
+
+#[cfg(test)]
+mod expander_indent_tests {
+    use super::*;
+
+    fn row() -> ExpanderRow<'static, u8> {
+        ExpanderRow::new("A", true, |_| 0)
+    }
+
+    #[test]
+    fn the_indent_starts_at_the_toolkit_default_and_a_row_can_override_it() {
+        assert_eq!(row().indent, Metrics::desktop().expander_indent);
+        assert_eq!(row().indent(12.0).indent, 12.0);
+        assert_eq!(row().indent(0.0).indent, 0.0, "flush, like libadwaita");
+        assert_eq!(row().indent(-5.0).indent, 0.0, "never negative");
+    }
+
+    #[test]
+    fn the_toolkit_default_is_the_arrow_handle_and_the_config_can_change_it() {
+        assert_eq!(
+            Metrics::default().expander_indent,
+            Metrics::default().icon_size + 8.0
+        );
     }
 }

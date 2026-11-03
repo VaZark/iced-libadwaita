@@ -148,10 +148,20 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::bool("password", "Password", false),
             S::bool("disabled", "Disabled", false),
         ],
-        Detail::ExpanderRow => vec![
+        Detail::TreeRow => vec![
             S::bool("expanded", "Expanded", true),
+            S::bool("selected", "Selected", false),
             S::bool("subtitle", "Subtitle", true),
-            S::number("rows", "Rows", 1.0..=4.0, 2.0),
+            S::bool("prefix", "Icon prefix", false),
+            S::bool("suffix", "Suffix", false),
+            S::choice(
+                "children",
+                "Children",
+                &["Rows", "Mixed elements", "Nested tree rows"],
+                0,
+            ),
+            S::number("count", "How many", 1.0..=4.0, 2.0),
+            S::number("indent", "Indent", 0.0..=60.0, 24.0),
         ],
         Detail::ButtonRow => vec![
             S::text("title", "Title", "Delete account"),
@@ -176,6 +186,29 @@ pub fn specs(d: Detail) -> Vec<Spec> {
         Detail::Collapse => vec![
             S::choice("behavior", "Collapse behavior", &["Stacked", "Flex"], 0),
             S::number("value", "Value", 0.0..=100.0, 50.0),
+        ],
+        Detail::Tree => vec![
+            S::bool("lines", "Connecting lines", true),
+            S::number("offset", "Level offset", 8.0..=40.0, 20.0),
+            S::bool("icons", "Icons", true),
+            S::bool("checkboxes", "Checkboxes", false),
+            S::bool("strict", "Check strictly", false),
+            S::bool("multiple", "Multiple selection", false),
+            S::bool("expand_on_click", "Expand on click", true),
+            S::text("search", "Search", ""),
+            S::choice(
+                "search_mode",
+                "Search mode",
+                &["Off", "Highlight", "Filter", "Fuzzy filter"],
+                0,
+            ),
+            S::choice(
+                "drag",
+                "Drag and drop",
+                &["Off", "By the row", "By a grip"],
+                0,
+            ),
+            S::bool("locked", "Lock the “locked” folder", false),
         ],
         Detail::Tabs => vec![
             S::choice(
@@ -516,24 +549,85 @@ pub fn build<'a>(
             .done();
             (stage(Element::from(r)), code)
         }
-        Detail::ExpanderRow => {
-            let mut r =
-                w::ExpanderRow::new("Notifications", p.bool("expanded"), on_bool(d, "expanded"));
+        Detail::TreeRow => {
+            let selected = p.bool("selected");
+            let mut r = w::TreeRow::new("Notifications")
+                .metrics(m)
+                .expanded(p.bool("expanded"))
+                .on_toggle(on_bool(d, "expanded"))
+                .selected(selected)
+                .on_activate(Message::Play(d, PMsg::Bool("selected", !selected)));
             if p.bool("subtitle") {
                 r = r.subtitle("Expand for details");
             }
-            for i in 0..p.number("rows") as usize {
-                r = r.push(w::ActionRow::new(format!("Row {}", i + 1)).metrics(m));
+            if p.bool("prefix") {
+                r = r.prefix(Icon::Home.view(m.icon_size));
             }
-            let code =
-                Code::new("ExpanderRow::new(\"Notifications\", self.expanded, Msg::Expanded)")
-                    .add(p.bool("subtitle"), ".subtitle(\"Expand for details\")")
-                    .add(
-                        true,
-                        &format!(".push(..) // {} rows", p.number("rows") as usize),
-                    )
-                    .done();
-            (stage(Element::from(r)), code)
+            if p.bool("suffix") {
+                r = r.suffix(w::Badge::count(p.number("count") as u32, 99));
+            }
+            // Untouched, the row keeps the toolkit's default (`[rows] expander-indent`).
+            if p.changed("indent") {
+                r = r.indent(p.number("indent"));
+            }
+            let count = p.number("count") as usize;
+            let kind = p.choice("children");
+            match kind {
+                0 => {
+                    for i in 0..count {
+                        r = r.push(w::ActionRow::new(format!("Row {}", i + 1)).metrics(m));
+                    }
+                }
+                1 => {
+                    r = r
+                        .push(w::SwitchRow::new("A switch row", true, |_| Message::Noop).metrics(m))
+                        .push(
+                            w::ActionRow::new("An action row")
+                                .subtitle("With a subtitle")
+                                .metrics(m),
+                        )
+                        .push(
+                            iced::widget::container(ty::body("Any element can be a child"))
+                                .padding(m.space_m),
+                        );
+                }
+                _ => {
+                    for i in 0..count {
+                        r = r.push(
+                            w::TreeRow::new(format!("Group {}", i + 1))
+                                .metrics(m)
+                                .expanded(i == 0)
+                                .push(w::ActionRow::new("Nested").metrics(m)),
+                        );
+                    }
+                }
+            }
+            let children = ["rows", "mixed elements", "nested tree rows"][kind];
+            let code = Code::new("TreeRow::new(\"Notifications\")")
+                .add(p.bool("subtitle"), ".subtitle(\"Expand for details\")")
+                .add(p.bool("prefix"), ".prefix(Icon::Home.view(16.0))")
+                .add(p.bool("suffix"), ".suffix(Badge::count(n, 99))")
+                .add(
+                    true,
+                    ".expanded(self.open).on_toggle(Msg::Toggle)   // the arrow",
+                )
+                .add(
+                    true,
+                    ".selected(self.selected).on_activate(Msg::Select) // the title",
+                )
+                .add(
+                    p.changed("indent"),
+                    &format!(
+                        ".indent({:.0}.0)   // omitted: the toolkit's [rows] expander-indent",
+                        p.number("indent")
+                    ),
+                )
+                .add(
+                    true,
+                    &format!(".push(..)   // {children}: rows, other TreeRows, or any element"),
+                )
+                .done();
+            (Element::from(r), code)
         }
         Detail::ButtonRow => {
             let mut r = w::ButtonRow::new(p.text("title").to_string()).on_activate(Message::Noop);
@@ -648,6 +742,10 @@ pub fn build<'a>(
                 )
                 .done();
             (stage(Element::from(r)), code)
+        }
+        Detail::Tree => {
+            let (el, code) = g.tree_demo.play(p, m);
+            (el.map(Message::Tree), code)
         }
         Detail::Tabs => {
             let names = [
@@ -867,6 +965,24 @@ pub fn build<'a>(
 /// not a component with properties to play with).
 pub fn snippet(d: Detail) -> Option<&'static str> {
     Some(match d {
+        Detail::TableVirtual => {
+            "// the app keeps a Viewport (from on_scroll) and passes only the window's rows\nlet window = self.viewport.window(TOTAL, ResponsiveTable::pitch(ROW), 4);   // primitives::virtualize\nlet rows: Vec<Person> = window.clone().map(person).collect();\n\nResponsiveTable::new(&rows)\n    .column(Column::new(\"Name\", |p| heading(&p.name).into()).min_width(160.0))\n    .virtualized(TOTAL, window.start, ROW)   // rows of a long list: spacers stand in for the rest\n    .on_scroll(Msg::Scroll)                  // Msg::Scroll(vp) => self.viewport = vp\n\n// a virtualized table is always a table: cards have no fixed height"
+        }
+        Detail::TableAsync => {
+            "// rows fetched 50 at a time as they are scrolled to (primitives::loading)\nlet mut chunks = Chunks::new(TOTAL, 50);\n\n// Msg::Scroll(vp): ask for the chunks the window touches, once each\nfor chunk in chunks.request(vp.window(TOTAL, pitch, 4)) {\n    tasks.push(Task::perform(fetch(chunk), move |r| Msg::Fetched(chunk, r)));\n}\n// Msg::Fetched(chunk, r): cache it, then chunks.finish(chunk, r.map(|_| ()))\n\n// a row is a placeholder until its chunk arrives; a failed chunk is not asked for again\nmatch chunks.slot(row) {\n    Slot::Ready => ready_cells(row),\n    Slot::Loading => skeleton_cells(),\n    Slot::Failed(reason) => error_cells(reason, /* Retry: chunks.retry(chunk) */),\n}"
+        }
+        Detail::TreeAsync => {
+            "// data: a branch with children still to come\nTreeNode::lazy(\"remote\", \"remote\")\n\n// update: opening it returns an effect; fetch, then merge\nif let Some(TreeEffect::Load(v)) = self.tree.apply(&mut self.data, event) {\n    return Task::perform(fetch(v.clone()), move |r| Msg::Loaded(v.clone(), r));\n}\nMsg::Loaded(v, r) => self.tree.finish_load(&mut self.data, &v, r)   // Err: shows the error and Retry"
+        }
+        Detail::TreeVirtualized => {
+            "let total = self.tree.rows(&self.data).len();\nlet range = self.viewport.window(total, TREE_ROW_HEIGHT, 4);   // primitives::virtualize\n\nscrollable(Tree::new(&self.data, &self.tree).window(range).on_event(Msg::Tree))\n    .on_scroll(|vp| Msg::Scroll(vp.absolute_offset().y, vp.bounds().height))\n\n// rows have a fixed height; only the window is built, the rest is spacing"
+        }
+        Detail::TreeFiles => {
+            "Tree::new(&self.files, &self.tree)\n    .lines(true)\n    .icons(|node, row| Some(if row.has_children { Icon::Folder } else { Icon::Document }))\n    .on_event(Msg::Tree)"
+        }
+        Detail::TreeDocs => {
+            "Tree::new(&self.docs, &self.tree)\n    .draggable(DragMode::Row)\n    .highlight(&self.search)\n    .label(|p| {\n        let n = p.node.children.len();\n        if n == 0 { return p.text; }\n        row![p.text, Badge::count(n as u32, 99)].spacing(8).into()   // a count per branch\n    })\n    .on_event(Msg::Tree)\n\n// search: self.tree.set_expanded(tree::matching_ancestors(&self.docs, &query))"
+        }
         Detail::Field => {
             "Field::new(\"Name\", entry(\"Ada\", &self.name).on_input(Msg::Name))\n    .required(true)\n    .validity(self.validity(&\"name\"))\n    .interaction(self.form.interaction(&spec, &\"name\"))\n    .layout(FieldLayout::Row) // or Stacked\n    .plain_label(true)"
         }

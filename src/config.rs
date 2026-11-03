@@ -68,6 +68,7 @@ pub enum Setting {
     ToastPosition,
     ToastTarget,
     RowWrapBasis,
+    ExpanderIndent,
     IconTheme,
 }
 
@@ -163,6 +164,8 @@ pub struct Config {
     /// `[shortcuts] hints`: whether menus show accelerator hints.
     pub shortcut_hints: crate::shortcut::Hints,
     pub row_wrap_basis: f32,
+    /// `[rows] expander-indent`: the indent of rows nested in an expander row.
+    pub expander_indent: f32,
     /// `system` follows `icon-theme`.
     pub icon_theme: Pick<String>,
     /// May apps opt out? (`[policy] allow-app-overrides`, default yes.)
@@ -217,6 +220,7 @@ impl Default for Config {
             shortcuts_enabled: true,
             shortcut_hints: Default::default(),
             row_wrap_basis: 128.0,
+            expander_indent: 24.0,
             icon_theme: Pick::System,
             allow_app_overrides: true,
             overridden: Vec::new(),
@@ -553,6 +557,13 @@ impl Config {
                 .map(|f| self.row_wrap_basis = f)
                 .unwrap_or_else(|| bad!("rows", "wrap-basis", v));
         }
+        if let Some(v) = get("rows", "expander-indent") {
+            v.parse::<f32>()
+                .ok()
+                .filter(|f| *f >= 0.0)
+                .map(|f| self.expander_indent = f)
+                .unwrap_or_else(|| bad!("rows", "expander-indent", v));
+        }
         if let Some(v) = get("icons", "theme") {
             self.icon_theme = if v == "system" {
                 Pick::System
@@ -587,6 +598,7 @@ impl Config {
         Metrics {
             row_collapse: self.row_collapse,
             row_wrap_basis: self.row_wrap_basis,
+            expander_indent: self.expander_indent,
             clamp_maximum: self.page_max_width,
             ..base
         }
@@ -716,6 +728,7 @@ pub struct Overrides {
     shortcuts_enabled: Option<bool>,
     shortcut_hints: Option<crate::shortcut::Hints>,
     row_wrap_basis: Option<f32>,
+    expander_indent: Option<f32>,
     icon_theme: Option<String>,
     motion: Vec<(crate::animation::Trigger, crate::animation::Motion)>,
 }
@@ -809,6 +822,12 @@ impl Overrides {
         Setting::Shortcuts
     );
     override_fn!(row_wrap_basis, row_wrap_basis, f32, Setting::RowWrapBasis);
+    override_fn!(
+        expander_indent,
+        expander_indent,
+        f32,
+        Setting::ExpanderIndent
+    );
     override_fn!(icon_theme, icon_theme, String, Setting::IconTheme);
 
     /// Overrides one trigger's animation for this app (discouraged).
@@ -928,6 +947,9 @@ impl Overrides {
         if let Some(v) = self.row_wrap_basis {
             c.row_wrap_basis = v
         }
+        if let Some(v) = self.expander_indent {
+            c.expander_indent = v
+        }
         if let Some(v) = self.icon_theme {
             c.icon_theme = Pick::Fixed(v)
         }
@@ -1000,6 +1022,7 @@ presentation=dropdown
 [rows]
 collapse=flex
 wrap-basis=200
+expander-indent=10
 
 [bogus]
 thing=1
@@ -1040,6 +1063,7 @@ thing=1
         assert_eq!(c.menu_presentation, MenuPresentationSetting::Dropdown);
         assert_eq!(c.row_collapse, CollapseBehavior::Flex);
         assert_eq!(c.row_wrap_basis, 200.0);
+        assert_eq!(c.expander_indent, 10.0);
         // The unknown section is ignored (not a warning) and reported for a settings tool.
         assert!(c.warnings().is_empty(), "{:?}", c.warnings());
         assert_eq!(
@@ -1059,12 +1083,13 @@ thing=1
     #[test]
     fn density_and_rows_feed_the_metrics() {
         let c = Config::from_keyfile(
-            "[appearance]\ndensity=compact\n[rows]\ncollapse=flex\nwrap-basis=90\n",
+            "[appearance]\ndensity=compact\n[rows]\ncollapse=flex\nwrap-basis=90\nexpander-indent=0\n",
         );
         let m = c.metrics();
         assert_eq!(m.button_min_height, Metrics::compact().button_min_height);
         assert_eq!(m.row_collapse, CollapseBehavior::Flex);
         assert_eq!(m.row_wrap_basis, 90.0);
+        assert_eq!(m.expander_indent, 0.0);
     }
 
     #[test]

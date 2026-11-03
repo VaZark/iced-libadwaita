@@ -23,6 +23,8 @@ Formatting is handled by the local pre-commit hooks: dprint formats configured J
 
 ```text
 GALLERY_SIZE=WxH        GALLERY_DETAIL=textinput     GALLERY_PAGE=inputs
+GALLERY_SHOT_ONLY=treegrouped   # with --screenshot: that one page only
+GALLERY_SHOT_DELAY_MS=2500      # with --screenshot: wait longer per page (slow debug builds)
 GALLERY_SIDEBAR_MODE=parent-page   GALLERY_MENU=page|dropdown
 GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push|breakpoint
 GALLERY_DARK=1          # dark scheme for GALLERY_ANIM captures
@@ -49,6 +51,14 @@ How the gallery is organized, and when a component gets a nested page: [examples
 3. Show its states (including disabled) in the gallery.
 4. Record deviations from the reference in its _iced mapping_ section.
 5. Anything that wraps a child widget must forward `overlay()`; test popovers inside it.
+
+**Adding a property to an existing component** is not done until it works end to end. The property is added **to the library** (never only to an example or an app; the gallery is a client of it), and every new builder method gets, in the same change:
+
+- its entry in `src/catalog.rs` (`props`, `slots` or `events`), and the catalog regenerated;
+- a **control in the component's gallery playground** (`examples/gallery/plays.rs`: the `specs` control, its use in `build`, and its line in the generated code), so the property can be tried and its code read. A property whose default comes from the toolkit or the desktop config is a **plain value that starts at that default** and is overridden by its builder method, not an `Option` with a `None` case; its control shows the default, and the generated code only mentions it once it is changed;
+- a line in its `docs/hig-inferences/widgets/` page, and in `docs/lib/desktop-config.md` plus `desktop.conf.example` if a desktop config key backs the default.
+
+A property that is missing from the catalog or the playground is invisible to everyone using the gallery or a declarative layer, so treat that as unfinished work.
 
 #### Docs
 

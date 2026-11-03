@@ -31,6 +31,8 @@ mod reorder_demo;
 mod resizable_demo;
 mod sections_demo;
 mod stepper_demo;
+mod tree_demo;
+mod virtual_demo;
 
 use nav::{Detail, Entry, Inline, Page};
 
@@ -167,6 +169,8 @@ struct Gallery {
     stepper: stepper_demo::State,
     data: data_demo::State,
     resizable: resizable_demo::State,
+    tree_demo: tree_demo::State,
+    virtual_demo: virtual_demo::State,
     /// The playground of each component page that has one.
     plays: std::collections::HashMap<Detail, playground::Playground>,
     reorder: reorder_demo::State,
@@ -276,6 +280,8 @@ enum Message {
     Stepper(stepper_demo::Msg),
     Data(data_demo::Msg),
     Resizable(resizable_demo::Msg),
+    Tree(tree_demo::Msg),
+    Virtual(virtual_demo::Msg),
     /// A control of a component page's playground.
     Play(Detail, playground::Msg),
     Reorder(reorder_demo::Msg),
@@ -406,9 +412,11 @@ impl Gallery {
         };
         // A daemon opens its windows itself: the main one now, the preferences window on demand.
         let (main, open_main) = window::open(Self::main_settings());
+        let (virtual_demo, virtual_boot) = virtual_demo::State::start();
         let boot = Task::batch([
             open_main.map(|_| Message::Noop),
             boot,
+            virtual_boot.map(Message::Virtual),
             autocomplete_demo::script().map(Message::Autocomplete),
         ]);
         (
@@ -480,6 +488,8 @@ impl Gallery {
                 stepper: stepper_demo::State::default(),
                 data: data_demo::State::default(),
                 resizable: resizable_demo::State::default(),
+                tree_demo: tree_demo::State::default(),
+                virtual_demo,
                 plays: Detail::all()
                     .into_iter()
                     .map(|d| (d, playground::Playground::new(plays::specs(d))))
@@ -714,9 +724,14 @@ impl Gallery {
             Message::Stepper(m) => self.stepper.update(m),
             Message::Data(m) => return self.data.update(m).map(Message::Data),
             Message::Resizable(m) => return self.resizable.update(m).map(Message::Resizable),
+            Message::Tree(m) => return self.tree_demo.update(m).map(Message::Tree),
+            Message::Virtual(m) => return self.virtual_demo.update(m).map(Message::Virtual),
             Message::Play(d, m) => {
                 if let Some(p) = self.plays.get_mut(&d) {
                     p.update(m);
+                    if d == Detail::Tree {
+                        self.tree_demo.sync(p);
+                    }
                 }
             }
             Message::Reorder(m) => self.reorder.update(m),
@@ -1043,13 +1058,23 @@ impl Gallery {
             };
         }
         // Every group page, then every component page (light), then the groups again (dark).
+        // GALLERY_SHOT_ONLY=<detail name> captures that one page (light) and exits.
+        let only = std::env::var("GALLERY_SHOT_ONLY").ok();
         let views: Vec<(Page, Option<Detail>)> = Page::ALL
             .iter()
             .map(|p| (*p, None))
             .chain(Detail::all().into_iter().map(|d| (d.page(), Some(d))))
+            .filter(|(_, d)| {
+                only.as_ref()
+                    .is_none_or(|o| d.is_some_and(|d| format!("{d:?}").eq_ignore_ascii_case(o)))
+            })
             .collect();
-        let total = views.len() + Page::ALL.len();
-        if i > total {
+        let total = if only.is_some() {
+            views.len()
+        } else {
+            views.len() + Page::ALL.len()
+        };
+        if i > total || (only.is_some() && i == total) {
             return iced::exit();
         }
         if i == total {
@@ -1102,9 +1127,16 @@ impl Gallery {
         if let Some(s) = &mut self.shots {
             s.index = i;
         }
-        Task::perform(tokio::time::sleep(Duration::from_millis(900)), move |_| {
-            Message::Capture(i)
-        })
+        // Slow debug builds need longer before a page has really switched and laid out:
+        // GALLERY_SHOT_DELAY_MS (default 900).
+        let delay = std::env::var("GALLERY_SHOT_DELAY_MS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(900);
+        Task::perform(
+            tokio::time::sleep(Duration::from_millis(delay)),
+            move |_| Message::Capture(i),
+        )
     }
 
     fn subscription(&self) -> Subscription<Message> {
@@ -1544,7 +1576,10 @@ impl Gallery {
                 .header_suffix(w::flat_button(text("Reset")).on_press(Message::Noop))
                 .metrics(m)
                 .push(
-                    w::ExpanderRow::new("Notifications", self.expanded, Message::Expanded)
+                    w::TreeRow::new("Notifications")
+                        .metrics(m)
+                        .expanded(self.expanded)
+                        .on_toggle(Message::Expanded)
                         .subtitle("Expand for details")
                         .push(
                             w::SwitchRow::new("Sounds", self.notifications, Message::Notifications)

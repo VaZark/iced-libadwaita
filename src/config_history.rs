@@ -375,6 +375,15 @@ pub const PROPERTIES: &[Property] = &[
         },
         "128",
     ),
+    p(
+        "rows",
+        "expander-indent",
+        Number {
+            min: 0.0,
+            max: 200.0,
+        },
+        "24",
+    ),
     p("icons", "theme", Text, "system"),
     p("policy", "allow-app-overrides", Bool, "true"),
 ];

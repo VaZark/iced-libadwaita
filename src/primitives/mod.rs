@@ -22,6 +22,9 @@
 //! * [`selection`]: which keys are on (single, required single, multiple);
 //! * [`sorting`]: sort keys with the asc / desc / unsorted cycle, multi-column, a stable sort and comparators;
 //! * [`tabs`]: which tab a click or an arrow key activates, skipping disabled ones (Radix Tabs); shared by `Tabs` and the segmented control;
+//! * [`virtualize`]: which rows of a long fixed-height list to build for a scroll offset, and the spacers around them (shared by `Tree` and `ResponsiveTable`);
+//! * [`loading`]: keys being loaded (with their errors and retry), and a list fetched in chunks with placeholders for what has not arrived (shared by `Tree` and the tables);
+//! * [`tree`]: nodes, open branches, selection, checking, search / filter and keyboard navigation (Mantine's `useTree`, GTK's tree expander keys);
 //! * [`stepper`]: step statuses from an `active` index, click rules, next / back, connector fill;
 //! * [`validation`]: when a field shows valid / invalid, and chaining validators;
 //! * [`meta`]: which variant of a meta component shows, and its [`Trigger`] (breakpoint or select);
@@ -35,6 +38,7 @@ pub mod calendar;
 pub mod date;
 pub mod form;
 pub mod infinite;
+pub mod loading;
 pub mod lookup;
 pub mod meta;
 pub mod meta_parent;
@@ -51,7 +55,9 @@ pub mod sorting;
 pub mod stepper;
 pub mod tabs;
 pub mod transition;
+pub mod tree;
 pub mod validation;
+pub mod virtualize;
 
 pub use form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
 pub use infinite::{Infinite, Page as InfinitePage, ScrollMetrics};

@@ -27,6 +27,17 @@
 //! Sorting the data and paging it are the app's job; [`ResponsiveTable::footer`] is where a
 //! [`Pagination`](super::Pagination) goes.
 //!
+//! **Virtualization.** A table of thousands of rows builds only the ones in view:
+//! [`virtualized`](ResponsiveTable::virtualized)`(total, first, row_height)` says the rows you
+//! pass are `first..first + rows.len()` of `total` rows of a fixed height, and the table pads
+//! the scrolled area above and below with exact spacers so the scrollbar is true to the whole
+//! list. Feed it from [`on_scroll`](ResponsiveTable::on_scroll): keep a
+//! [`Viewport`](crate::primitives::virtualize::Viewport), ask it for the
+//! [`window`](crate::primitives::virtualize::Viewport::window) and pass that slice. Rows that
+//! are fetched as the list is scrolled are [`Chunks`](crate::primitives::loading::Chunks): a
+//! row whose chunk has not arrived is a placeholder your cell closures draw, a failed one an
+//! error row with Retry. Cards have no fixed height, so a virtualized table is always a table.
+//!
 //! `ResponsiveTable` is a [`MetaComponent`](super::MetaComponent) with two variants, a table
 //! and cards; the choice is [`ResponsiveTable::when`]. Like [`responsive`](iced::widget::responsive),
 //! it fills its container and scrolls vertically by itself; give it a bounded height.
@@ -36,6 +47,7 @@ use super::meta_component::MetaComponent;
 use crate::breakpoints::WidthClass;
 use crate::primitives::When;
 use crate::primitives::sorting::{Direction, SortState};
+use crate::primitives::virtualize::{self, Viewport};
 use crate::style::button as sb;
 use crate::{Icon, Metrics, Theme};
 use iced::alignment::Vertical;
@@ -110,6 +122,16 @@ impl<'a, T, M> Column<'a, T, M> {
 type DirOf<'a> = Rc<dyn Fn(&dyn Any) -> Option<(Direction, Option<usize>)> + 'a>;
 type Fire<'a, M> = Rc<dyn Fn(&dyn Any) -> M + 'a>;
 type Footer<'a, M> = Rc<dyn Fn() -> Element<'a, M> + 'a>;
+type Scroll<'a, M> = Rc<dyn Fn(Viewport) -> M + 'a>;
+
+/// The rows passed in are a window of a longer list: `total` rows of `row_height`, the first
+/// passed being row `first`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Window {
+    total: usize,
+    first: usize,
+    row_height: f32,
+}
 
 /// Rows of `T` as a table or as cards, by the width of the container. See the
 /// [module](self).
@@ -123,6 +145,8 @@ pub struct ResponsiveTable<'a, T, M> {
     sort: Option<(TypeId, DirOf<'a>)>,
     on_sort: Option<(TypeId, Fire<'a, M>)>,
     footer: Option<Footer<'a, M>>,
+    window: Option<Window>,
+    on_scroll: Option<Scroll<'a, M>>,
 }
 
 impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
@@ -137,6 +161,8 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
             sort: None,
             on_sort: None,
             footer: None,
+            window: None,
+            on_scroll: None,
         }
     }
     pub fn column(mut self, c: Column<'a, T, M>) -> Self {
@@ -183,6 +209,29 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
             Rc::new(move |any| f(any.downcast_ref::<K>().expect("checked by type id").clone())),
         ));
         self
+    }
+    /// The rows passed to [`new`](Self::new) are a window of a long list: `total` rows, each
+    /// `row_height` pixels tall (plus a 1 px hairline), the first one passed being row `first`.
+    /// Only those are built; spacers stand in for the rest. See
+    /// [`primitives::virtualize`](crate::primitives::virtualize).
+    pub fn virtualized(mut self, total: usize, first: usize, row_height: f32) -> Self {
+        self.window = Some(Window {
+            total,
+            first,
+            row_height: row_height.max(1.0),
+        });
+        self
+    }
+    /// The table scrolled: its [`Viewport`] (offset and height), to update the one the window
+    /// comes from.
+    pub fn on_scroll(mut self, f: impl Fn(Viewport) -> M + 'a) -> Self {
+        self.on_scroll = Some(Rc::new(f));
+        self
+    }
+    /// The height of one row in a virtualized table plus its hairline: what to give
+    /// [`Viewport::window`] as the pitch.
+    pub fn pitch(row_height: f32) -> f32 {
+        row_height.max(1.0) + 1.0
     }
     /// Content below the rows, outside the scrolling part: a [`Pagination`](super::Pagination)
     /// bar, a count. A closure, since the table is built once per presentation.
@@ -236,6 +285,10 @@ impl<'a, T: 'a, M: Clone + 'a> ResponsiveTable<'a, T, M> {
     /// The condition under which the table (rather than cards) is shown, per [`Mode`].
     pub fn when(&self) -> Option<When> {
         let needed = self.needed_width();
+        if self.window.is_some() {
+            // Cards have no fixed height, so they cannot be windowed.
+            return Some(When::always());
+        }
         match self.mode {
             Mode::Table => Some(When::always()),
             Mode::Cards => None,
@@ -281,6 +334,9 @@ fn table_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Elemen
         .spacing(m.row_spacing)
     };
     let header = line(t.columns.iter().map(|c| header_cell(t, c)).collect());
+    if let Some(w) = t.window {
+        return virtual_table_view(t, w, header);
+    }
     let mut rows = t
         .rows
         .iter()
@@ -294,6 +350,61 @@ fn table_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Elemen
         super::scrolled_window(card).height(Length::Fill),
     ]
     .spacing(m.space_s);
+    if let Some(footer) = &t.footer {
+        body = body.push(footer());
+    }
+    container(body).padding(m.page_padding).into()
+}
+
+/// The table of a long list: the header, then the window's rows at a fixed height with a
+/// hairline each, between two spacers that keep the scrollable as long as the whole list.
+fn virtual_table_view<'a, T: 'a, M: Clone + 'a>(
+    t: &ResponsiveTable<'a, T, M>,
+    w: Window,
+    header: iced::widget::Row<'a, M, Theme>,
+) -> Element<'a, M> {
+    let m = &t.metrics;
+    let pitch = ResponsiveTable::<T, M>::pitch(w.row_height);
+    let range = w.first..(w.first + t.rows.len()).min(w.total);
+    let fill = virtualize::spacers(w.total, &range, pitch);
+    let mut rows = column![space().height(fill.above)];
+    for item in t.rows.iter().take(range.len()) {
+        let cells = row(t
+            .columns
+            .iter()
+            .map(|col| container((col.cell)(item)).width(col.width).into()))
+        .spacing(m.row_spacing);
+        rows = rows.push(column![
+            container(cells)
+                .height(w.row_height)
+                .center_y(Length::Fixed(w.row_height))
+                .padding(
+                    Padding::ZERO
+                        .left(m.card_padding.left)
+                        .right(m.card_padding.right)
+                ),
+            container(space().height(1))
+                .width(Length::Fill)
+                .style(crate::style::container::card_separator),
+        ]);
+    }
+    rows = rows.push(space().height(fill.below));
+    let list = super::card_shadow(
+        container(rows)
+            .width(Length::Fill)
+            .clip(true)
+            .style(crate::style::container::card_surface),
+    );
+    let mut scroll = super::scrolled_window(list).height(Length::Fill);
+    if let Some(f) = &t.on_scroll {
+        let f = f.clone();
+        scroll = scroll.on_scroll(move |vp| {
+            let mut v = Viewport::default();
+            v.set(vp.absolute_offset().y, vp.bounds().height);
+            f(v)
+        });
+    }
+    let mut body = column![container(header).padding(m.card_padding), scroll].spacing(m.space_s);
     if let Some(footer) = &t.footer {
         body = body.push(footer());
     }
@@ -573,5 +684,35 @@ mod tests {
         fn max_if(self, _: u8) -> Key {
             self
         }
+    }
+
+    #[test]
+    fn a_virtualized_table_is_always_a_table_and_has_a_row_pitch() {
+        let rows = [()];
+        let t = ResponsiveTable::<(), ()>::new(&rows)
+            .column(Column::new("a", |_| space().into()).min_width(2000.0))
+            .mode(Mode::Cards)
+            .virtualized(10_000, 40, 32.0);
+        // Cards cannot be windowed (no fixed height): the table wins, even when narrow.
+        assert_eq!(*t.into_meta().pick(300.0, &B).unwrap(), Presentation::Table);
+        assert_eq!(
+            ResponsiveTable::<(), ()>::pitch(32.0),
+            33.0,
+            "the row plus its hairline"
+        );
+    }
+
+    #[test]
+    fn a_virtualized_table_builds_only_the_rows_it_is_given() {
+        use crate::primitives::virtualize::Viewport;
+        let rows: Vec<u32> = (40..60).collect();
+        let mut vp = Viewport::new(600.0);
+        vp.set(40.0 * 33.0, 600.0);
+        let w = vp.window(10_000, ResponsiveTable::<u32, ()>::pitch(32.0), 2);
+        assert_eq!(w, 38..61, "40..59 in view, two rows of overscan each side");
+        let t = ResponsiveTable::<u32, ()>::new(&rows)
+            .column(Column::new("n", |_| space().into()))
+            .virtualized(10_000, 40, 32.0);
+        let _: Element<'_, ()> = t.into();
     }
 }

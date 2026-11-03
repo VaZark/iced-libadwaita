@@ -316,7 +316,6 @@ impl Gallery {
             Detail::CheckButton => self.inline(Inline::CheckButton),
             Detail::RadioButton => self.inline(Inline::RadioButton),
             Detail::Scale => self.inline(Inline::Scale),
-            Detail::ExpanderRow => self.inline(Inline::ExpanderRow),
             Detail::ButtonRow => self.inline(Inline::ButtonRow),
             Detail::Clamp => self.inline(Inline::Clamp),
             Detail::StatusPage => self.inline(Inline::StatusPage),
@@ -344,7 +343,13 @@ impl Gallery {
             ]
             .into(),
             // Shown by its playground (see `plays.rs`).
-            Detail::Tabs => column![].into(),
+            Detail::Tabs | Detail::Tree | Detail::TreeRow => column![].into(),
+            Detail::TableVirtual => self.virtual_demo.virtual_view(m).map(Message::Virtual),
+            Detail::TableAsync => self.virtual_demo.async_view(m).map(Message::Virtual),
+            Detail::TreeAsync => self.tree_demo.async_view(m).map(Message::Tree),
+            Detail::TreeVirtualized => self.tree_demo.virtual_view(m).map(Message::Tree),
+            Detail::TreeFiles => self.tree_demo.files_view(m).map(Message::Tree),
+            Detail::TreeDocs => self.tree_demo.docs_view(m).map(Message::Tree),
             Detail::Stepper => self.stepper.view(m).map(Message::Stepper),
             Detail::Data => self.data.view(m).map(Message::Data),
             Detail::Autocomplete => self.autocomplete.view(m).map(Message::Autocomplete),
@@ -706,15 +711,6 @@ impl Gallery {
                 ]);
                 column![g("Scale").push(w::card(scale))].into()
             }
-            Inline::ExpanderRow => column![
-                g("Expander row").push(
-                    w::ExpanderRow::new("Notifications", self.expanded, Message::Expanded)
-                        .subtitle("Expand for details")
-                        .push(w::SwitchRow::new("Sounds", self.notifications, Message::Notifications).metrics(m))
-                        .push(w::ActionRow::new("Do Not Disturb").subtitle("Until tomorrow").metrics(m)),
-                ),
-            ]
-            .into(),
             Inline::ButtonRow => column![
                 g("Button rows")
                     .push(w::ButtonRow::new("Neutral").on_activate(Message::Noop))

@@ -42,6 +42,10 @@ pub enum Icon {
     Home,
     /// A funnel: filter a list (`funnel-symbolic` / `view-filter`).
     Filter,
+    /// A folder (`folder-symbolic`).
+    Folder,
+    /// A document (`text-x-generic-symbolic`).
+    Document,
     /// Three bars: the grip of a draggable row (`list-drag-handle-symbolic`).
     DragHandle,
 }
@@ -93,6 +97,12 @@ impl Icon {
                 r#"<circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6L5 5M11 11l1.4 1.4M12.4 3.6L11 5M5 11l-1.4 1.4"/>"#
             }
             Icon::Filter => r#"<path d="M2 3h12l-4.5 5.5V13l-3-1.5V8.5z"/>"#,
+            Icon::Folder => {
+                r#"<path d="M2 4.5a1 1 0 011-1h3l1.5 1.7H13a1 1 0 011 1V12a1 1 0 01-1 1H3a1 1 0 01-1-1z"/>"#
+            }
+            Icon::Document => {
+                r#"<path d="M4 2h5l3 3v8.2a.8.8 0 01-.8.8H4.8a.8.8 0 01-.8-.8V2.8A.8.8 0 014.8 2zM9 2v3h3"/>"#
+            }
             Icon::DragHandle => r#"<path d="M3 4.5h10M3 8h10M3 11.5h10"/>"#,
             Icon::Home => r#"<path d="M2 8l6-5.5L14 8M3.5 7v6.5h3.2V10h2.6v3.5h3.2V7"/>"#,
         }

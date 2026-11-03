@@ -57,6 +57,14 @@ GALLERY_PAGE=inputs GALLERY_DETAIL=textinput cargo run --example gallery
 
 Other environment switches: `GALLERY_SIZE=WxH`, `GALLERY_SIDEBAR_MODE=parent-page`, `GALLERY_SIDEBAR=1` (start on the sidebar when collapsed), `GALLERY_MENU=page|dropdown`, `GALLERY_DIALOG=alert|about|shortcuts|preferences`, `GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push`. `GALLERY_AUTOCOMPLETE=idle|loading|results|empty|error|disabled` opens that state of the Autocomplete page (`GALLERY_DETAIL=autocomplete`); `GALLERY_AUTOCOMPLETE=type:san>sant` types into its live entry (see `autocomplete_demo.rs`).
 
+#### The Data group
+
+Everything about large or remote data is on one page, *Data*: the tables (responsive, sorting and pagination, a 100,000-row virtualized table, a table whose rows load asynchronously in chunks) and the trees (with async branches, virtualization, a files tree and a docs editor). The virtualization and async pages are the two primitives, `primitives::virtualize` and `primitives::loading`, used on a table; the tree uses the same ones.
+
+#### Adding a property
+
+When a component gets a new property, add it to its playground in `plays.rs` in the same change: a control in `specs`, its use in `build`, and its line in the generated code. A property with a toolkit default is a plain value that starts at it and that the builder overrides (see Expander row > Indent, default 24 px from `[rows] expander-indent`): its control shows the default, and the generated code only adds the call once the value is changed. The catalog (`src/catalog.rs`) and the component's docs page are updated with it; see [CONTRIBUTING.md](../../CONTRIBUTING.md#working-on-a-component).
+
 #### Preview / Code on every page
 
 Every nested page has a **Preview | Code** tabs (separate buttons with an accent underline, as in Mantine's docs) above its content; `GALLERY_CODE=1` starts on Code. On a playground page the code is generated from its controls (the Properties panel stays visible on both tabs); a page without a playground shows its own demo as the Preview and a fixed snippet (`plays::snippet`) of the calls it makes as the Code. Dialogs, the bottom sheet and the AppShell are nested pages too: an Open button and their code. Add a snippet whenever a page is added.
