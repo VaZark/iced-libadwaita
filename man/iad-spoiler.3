@@ -26,6 +26,9 @@ Whether the whole content shows (controlled).
 .TP
 .B \&.labels(show: impl Into<String>, hide: impl Into<String>)
 .TP
+.B \&.width(w: impl Into<Length>)
+The width: \fBFill\fR (the default) or a fixed width. The clamp cannot shrink to its content, so \fBShrink\fR fills too.
+.TP
 .B \&.metrics(m: Metrics)
 .SH EVENTS
 Callbacks that produce the application's message.

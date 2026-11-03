@@ -375,6 +375,10 @@ impl Gallery {
             Detail::MetaComponent => self.sections.meta_view(m).map(Message::Sections),
             Detail::MetaParent => self.reorder.parent_view(m).map(Message::Reorder),
             Detail::Composed => self.composed.view(m).map(Message::Composed),
+            Detail::VirtualList => self.upstream.virtual_view(m).map(Message::Upstream),
+            Detail::EditableText => self.upstream.editable_view(m).map(Message::Upstream),
+            Detail::PageHeader => self.upstream.header_view(m).map(Message::Upstream),
+            Detail::Icons => self.upstream.icons_view(m).map(Message::Upstream),
             Detail::SyncedText => self.synced.view(m).map(Message::Synced),
             Detail::Reorderable => self.reorder.view(m).map(Message::Reorder),
             Detail::Resizable => self.resizable.view(m).map(Message::Resizable),
@@ -961,6 +965,10 @@ impl Gallery {
                             .section([
                                 w::MenuItem::action("Edit tags", Message::Noop).icon(Icon::Edit),
                                 w::MenuItem::action("Add to list", Message::Noop).icon(Icon::ListAdd),
+                                // Your own SVG works anywhere an icon does.
+                                w::MenuItem::action("Rate", Message::Noop).icon(iad::IconSource::svg(
+                                    r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.2 4.4 13l.7-4L2.2 6.3l4-.6z"/></svg>"#,
+                                )),
                             ])
                             .section([w::MenuItem::check("Compact", true, Message::Noop)]),
                     )

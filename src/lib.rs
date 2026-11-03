@@ -36,7 +36,7 @@ pub use primitives::animation;
 /// The ordered-transition coordinator, a [primitive](primitives::transition); kept at its old path.
 pub use primitives::transition;
 
-pub use icon::Icon;
+pub use icon::{Icon, IconSource};
 pub use metrics::{CollapseBehavior, Metrics, Typography};
 pub use palette::{AccentColor, Palette, Scheme};
 pub use semantic::{Opacity, Role, Semantic, Surface, Swatch};

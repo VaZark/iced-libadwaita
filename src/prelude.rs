@@ -24,6 +24,7 @@ pub use crate::widget::typography::{
 };
 pub use crate::widget::*;
 pub use crate::{
-    AccentColor, CollapseBehavior, Icon, Metrics, Role, Scheme, Shadows, Theme, Typography, config,
+    AccentColor, CollapseBehavior, Icon, IconSource, Metrics, Role, Scheme, Shadows, Theme,
+    Typography, config,
 };
 pub use iced::widget::{column, container, responsive, row, space, text};

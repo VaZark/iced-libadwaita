@@ -86,6 +86,7 @@ pub struct Column<'a, T, M> {
     cell: Cell<'a, T, M>,
     width: Length,
     min_width: f32,
+    align_y: Vertical,
     sort_key: Option<Rc<dyn Any>>,
 }
 
@@ -96,6 +97,7 @@ impl<'a, T, M> Column<'a, T, M> {
             cell: Rc::new(cell),
             width: Length::Fill,
             min_width: 100.0,
+            align_y: Vertical::Center,
             sort_key: None,
         }
     }
@@ -108,6 +110,12 @@ impl<'a, T, M> Column<'a, T, M> {
     /// The column's share of the table width (default `Fill`).
     pub fn width(mut self, w: impl Into<Length>) -> Self {
         self.width = w.into();
+        self
+    }
+    /// Where a cell sits in the height of its row: `Top`, `Center` (the default) or `Bottom`. The
+    /// cell is given the row's height, so a cell that fills its height no longer collapses.
+    pub fn align_y(mut self, align: Vertical) -> Self {
+        self.align_y = align;
         self
     }
     /// The narrowest this column may be before the table gives way to cards (default 100).
@@ -369,11 +377,15 @@ fn virtual_table_view<'a, T: 'a, M: Clone + 'a>(
     let fill = virtualize::spacers(w.total, &range, pitch);
     let mut rows = column![space().height(fill.above)];
     for item in t.rows.iter().take(range.len()) {
-        let cells = row(t
-            .columns
-            .iter()
-            .map(|col| container((col.cell)(item)).width(col.width).into()))
-        .spacing(m.row_spacing);
+        let cells = row(t.columns.iter().map(|col| {
+            container((col.cell)(item))
+                .width(col.width)
+                .height(Length::Fill)
+                .align_y(col.align_y)
+                .into()
+        }))
+        .spacing(m.row_spacing)
+        .height(Length::Fill);
         rows = rows.push(column![
             container(cells)
                 .height(w.row_height)

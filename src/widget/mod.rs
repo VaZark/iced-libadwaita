@@ -22,9 +22,11 @@ mod container;
 mod content_area;
 mod date_input;
 mod date_range_input;
+mod detail_header;
 mod divider;
 mod dock;
 mod dropdown;
+mod editable_text;
 mod elevated;
 mod extra;
 mod field;
@@ -72,6 +74,7 @@ mod toolbar;
 mod tree;
 mod tree_row;
 pub mod typography;
+mod virtual_list;
 
 pub use crate::primitives::anchor::{
     self, Align as AnchorAlign, Dim, Placed, Placement, Side, place,
@@ -112,12 +115,12 @@ pub use accordion::{Accordion, AccordionItem};
 pub use anchored::{Anchored, Indicator};
 pub use autocomplete::Autocomplete;
 pub use avatar::{Avatar, avatar};
-pub use badge::{Badge, Chip};
+pub use badge::{Badge, Chip, RoundBadge};
 pub use banner::{Banner, banner};
 pub use button::{
     ButtonContent, ToggleGroup, ToggleItem, circular_button, destructive_button, flat_button,
-    icon_button, pill_button, progress_bar, raised_button, suggested_button, suggested_pill_button,
-    toggle_group,
+    icon_button, pill_button, progress_bar, raised_button, suggested_button,
+    suggested_circular_button, suggested_pill_button, toggle_group,
 };
 pub use carousel::{Carousel, CarouselIndicator, carousel};
 pub use chart::{
@@ -130,9 +133,11 @@ pub use container::{Container, ContainerSize};
 pub use content_area::{ContentArea, content_area};
 pub use date_input::DateInput;
 pub use date_range_input::DateRangeInput;
+pub use detail_header::DetailHeader;
 pub use divider::{Divider, DividerTone, DividerVariant, LabelPosition, divider};
 pub use dock::{Dock, DockMode, DockScope, DockSize};
 pub use dropdown::{dropdown, dropdown_disabled, menu_item, menu_item_disabled};
+pub use editable_text::EditableText;
 pub use elevated::{Elevated, card_shadow};
 pub use extra::{
     breakpoint_bin, carousel_indicator_dots, carousel_indicator_lines, inline_view_switcher,
@@ -212,6 +217,7 @@ pub use toast::{
 pub use toolbar::{ActionBar, BarStyle, ToolbarView, action_bar, toolbar_view};
 pub use tree::{DragMode, Payload as TreeNodePayload, ROW_HEIGHT as TREE_ROW_HEIGHT, Tree};
 pub use tree_row::TreeRow;
+pub use virtual_list::VirtualList;
 
 /// Shorthand for an iced element using this crate's [`Theme`](crate::Theme).
 pub type Element<'a, Message> = iced::Element<'a, Message, crate::Theme>;

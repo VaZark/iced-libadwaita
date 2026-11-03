@@ -215,3 +215,25 @@ pub fn sidebar_separator(theme: &Theme) -> Style {
 pub fn thumbnail(theme: &Theme) -> Style {
     surface(theme.semantic.thumbnail, theme.metrics.radius_m)
 }
+
+/// How strong a [`wash`] is at its top edge.
+pub const WASH_STRENGTH: f32 = 0.42;
+
+/// A wash of `tint` that fades down from the top edge to nothing: the backdrop of a detail page's
+/// header, tinted by its cover. Layers over the page, so the surface under it still shows.
+pub fn wash(tint: Color) -> impl Fn(&Theme) -> Style + Copy {
+    wash_with(tint, WASH_STRENGTH)
+}
+
+/// [`wash`] with its own opacity at the top edge (`0..=1`).
+pub fn wash_with(tint: Color, strength: f32) -> impl Fn(&Theme) -> Style + Copy {
+    move |_| Style {
+        background: Some(Background::Gradient(
+            iced::gradient::Linear::new(iced::Radians(std::f32::consts::PI))
+                .add_stop(0.0, alpha(tint, strength.clamp(0.0, 1.0)))
+                .add_stop(1.0, alpha(tint, 0.0))
+                .into(),
+        )),
+        ..Style::default()
+    }
+}

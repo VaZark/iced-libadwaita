@@ -65,6 +65,9 @@ A variant shown while \fBkey\fR itself is selected: \fBvariant(key, Trigger::sel
 .B \&.actions()
 The actions this component announces when it registers with a \fBMetaParentComponent\fR: the keys its variants are selected by, once each, in variant order.
 .TP
+.B \&.flow(width: f32)
+Builds the variant a container of \fBwidth\fR gets, \fBwithout measuring the container\fR, so the result takes its content's size and flows with the page. The normal conversion is built on \fBresponsive\fR, which fills its container and cannot shrink to its content's height. Use this where the content decides the height (a paragraph that swaps to an entry) and the width is known to the application, or irrelevant because the variants answer to \fBselected\fR rather than to a breakpoint: pass the window or pane width, or 0.
+.TP
 .B \&.pick(width: f32, scale: &Breakpoints)
 The key of the variant a container of \fBwidth\fR gets.
 .SH SOURCE

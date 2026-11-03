@@ -132,6 +132,17 @@ pub fn circular_button<'a, M: 'a>(icon: Icon) -> Button<'a, M, Theme> {
         .style(sb::circular_flat)
 }
 
+/// A round `.suggested-action` button around any content: the play button of a player, a
+/// primary action that is only an icon. [`circular_button`] is the flat one.
+pub fn suggested_circular_button<'a, M: 'a>(
+    content: impl Into<Element<'a, M>>,
+) -> Button<'a, M, Theme> {
+    let m = Metrics::desktop();
+    button(container(content.into()).center(Length::Fixed(m.button_min_height)))
+        .padding(Padding::from(0.0))
+        .style(sb::circular_suggested)
+}
+
 /// A flat icon button with a rounded-rect hover (`.flat` + icon-only).
 pub fn icon_button<'a, M: 'a>(icon: Icon) -> Button<'a, M, Theme> {
     let m = Metrics::desktop();

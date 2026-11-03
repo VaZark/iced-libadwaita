@@ -49,6 +49,97 @@ pub enum Icon {
     Document,
     /// Three bars: the grip of a draggable row (`list-drag-handle-symbolic`).
     DragHandle,
+    /// A filled triangle pointing right (`media-playback-start-symbolic`).
+    Play,
+    /// Two bars (`media-playback-pause-symbolic`).
+    Pause,
+    /// A bar and a triangle pointing left (`media-skip-backward-symbolic`).
+    SkipBackward,
+    /// A bar and a triangle pointing right (`media-skip-forward-symbolic`).
+    SkipForward,
+    /// Two crossing arrows (`media-playlist-shuffle-symbolic`).
+    Shuffle,
+    /// Two arrows in a loop (`media-playlist-repeat-symbolic`).
+    Repeat,
+    /// Lines with a play mark: what plays next.
+    Queue,
+    /// A beamed note (`audio-x-generic-symbolic`).
+    MusicNote,
+    Heart,
+    Moon,
+    /// A lightning bolt.
+    Bolt,
+    Globe,
+    /// A price tag: tags and labels.
+    Tag,
+    Star,
+    /// A speech box with lines: lyrics, captions.
+    Lyrics,
+    /// A circle with a needle: explore, discover.
+    Compass,
+    /// A four-pointed star: new, magic, suggestions.
+    Sparkle,
+    Clock,
+    /// A bullseye.
+    Target,
+    Smile,
+}
+
+impl Icon {
+    /// Every built-in icon, in declaration order (for galleries and pickers).
+    pub const ALL: &'static [Icon] = &[
+        Icon::GoNext,
+        Icon::GoPrevious,
+        Icon::GoDown,
+        Icon::GoUp,
+        Icon::GoUpDown,
+        Icon::GoFirst,
+        Icon::GoLast,
+        Icon::Check,
+        Icon::WindowClose,
+        Icon::WindowMinimize,
+        Icon::WindowMaximize,
+        Icon::WindowRestore,
+        Icon::Window,
+        Icon::Sidebar,
+        Icon::OpenMenu,
+        Icon::ListAdd,
+        Icon::ListRemove,
+        Icon::Search,
+        Icon::ViewMore,
+        Icon::DialogInformation,
+        Icon::DialogWarning,
+        Icon::DialogError,
+        Icon::Edit,
+        Icon::Delete,
+        Icon::Settings,
+        Icon::Home,
+        Icon::Calendar,
+        Icon::Filter,
+        Icon::Folder,
+        Icon::Document,
+        Icon::DragHandle,
+        Icon::Play,
+        Icon::Pause,
+        Icon::SkipBackward,
+        Icon::SkipForward,
+        Icon::Shuffle,
+        Icon::Repeat,
+        Icon::Queue,
+        Icon::MusicNote,
+        Icon::Heart,
+        Icon::Moon,
+        Icon::Bolt,
+        Icon::Globe,
+        Icon::Tag,
+        Icon::Star,
+        Icon::Lyrics,
+        Icon::Compass,
+        Icon::Sparkle,
+        Icon::Clock,
+        Icon::Target,
+        Icon::Smile,
+    ];
 }
 
 const HEAD: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">"#;
@@ -109,6 +200,56 @@ impl Icon {
                 r#"<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/>"#
             }
             Icon::Home => r#"<path d="M2 8l6-5.5L14 8M3.5 7v6.5h3.2V10h2.6v3.5h3.2V7"/>"#,
+            Icon::Play => {
+                r#"<path d="M2.5 2.8v10.4c0 1.2 1.2 1.9 2.2 1.3l8.6-5.2c.9-.5.9-1.9 0-2.5L4.7 1.5c-1-.6-2.2.1-2.2 1.3z" fill="black" stroke="none"/>"#
+            }
+            Icon::Pause => r#"<path d="M5 3v10M11 3v10" stroke-width="2.6"/>"#,
+            Icon::SkipBackward => {
+                r#"<rect x="2" y="2.5" width="2" height="11" rx=".8" fill="black" stroke="none"/><path d="M14 3.4v9.2c0 .9-1 1.4-1.7.9L6.2 9.1c-.6-.5-.6-1.7 0-2.2l6.1-4.4c.7-.5 1.7 0 1.7.9z" fill="black" stroke="none"/>"#
+            }
+            Icon::SkipForward => {
+                r#"<rect x="12" y="2.5" width="2" height="11" rx=".8" fill="black" stroke="none"/><path d="M2 3.4v9.2c0 .9 1 1.4 1.7.9l6.1-4.4c.6-.5.6-1.7 0-2.2L3.7 2.5C3 2 2 2.5 2 3.4z" fill="black" stroke="none"/>"#
+            }
+            Icon::Shuffle => {
+                r#"<path d="M2 4.5h2.5c3 0 4 7 7 7H14M2 11.5h2.5c1 0 1.8-1 2.6-2.2M9 6.2c.7-1 1.4-1.7 2.5-1.7H14M12 2.5l2 2-2 2M12 9.5l2 2-2 2"/>"#
+            }
+            Icon::Repeat => {
+                r#"<path d="M3 7V6a2 2 0 012-2h8M11 2l2 2-2 2M13 9v1a2 2 0 01-2 2H3M5 14l-2-2 2-2"/>"#
+            }
+            Icon::Queue => r#"<path d="M2 4h9M2 8h9M2 12h5M12 10v4l3-2z"/>"#,
+            Icon::MusicNote => {
+                r#"<path d="M6 11.5V3l7-1.5v8.5"/><circle cx="4.5" cy="11.5" r="1.8"/><circle cx="11.5" cy="10" r="1.8"/>"#
+            }
+            Icon::Heart => {
+                r#"<path d="M8 13.5S2.3 10.2 2.3 6.2A3 3 0 018 4.6a3 3 0 015.7 1.6c0 4-5.7 7.3-5.7 7.3z"/>"#
+            }
+            Icon::Moon => r#"<path d="M12.7 9.6A5.2 5.2 0 016.4 3.3a5.2 5.2 0 106.3 6.3z"/>"#,
+            Icon::Bolt => r#"<path d="M9.2 1.5L3.5 9h4.3l-1 5.5L12.5 7H8.2z"/>"#,
+            Icon::Globe => {
+                r#"<circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2.2 2.2 2.2 9.8 0 12M8 2c-2.2 2.2-2.2 9.8 0 12"/>"#
+            }
+            Icon::Tag => {
+                r#"<path d="M2.5 2.5h5l6 6-5 5-6-6z"/><circle cx="5.3" cy="5.3" r=".8" fill="black"/>"#
+            }
+            Icon::Star => {
+                r#"<path d="M8 2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.2 4.4 13l.7-4L2.2 6.3l4-.6z"/>"#
+            }
+            Icon::Lyrics => {
+                r#"<path d="M2.5 3h11v7.5h-6.2L4.5 13v-2.5h-2z"/><path d="M5 6h6M5 8.2h4"/>"#
+            }
+            Icon::Compass => {
+                r#"<circle cx="8" cy="8" r="6"/><path d="M10.8 5.2L9.2 9.2 5.2 10.8 6.8 6.8z"/>"#
+            }
+            Icon::Sparkle => {
+                r#"<path d="M8 1.5l1.5 4.5 4.5 1.5-4.5 1.5L8 13.5 6.5 9 2 7.5 6.5 6z"/>"#
+            }
+            Icon::Clock => r#"<circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.6"/>"#,
+            Icon::Target => {
+                r#"<circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3"/><circle cx="8" cy="8" r=".8" fill="black"/>"#
+            }
+            Icon::Smile => {
+                r#"<circle cx="8" cy="8" r="6"/><path d="M5.4 9.6a3.2 3.2 0 005.2 0"/><circle cx="5.9" cy="6.6" r=".8" fill="black"/><circle cx="10.1" cy="6.6" r=".8" fill="black"/>"#
+            }
         }
     }
 
@@ -152,6 +293,44 @@ impl Icon {
     }
 }
 
+/// Where an icon comes from: one of the built-in [`Icon`]s, or an SVG of your own (a 16 px
+/// symbolic drawing in `currentColor`-style black strokes, tinted like the built-ins). Everything
+/// that takes an icon takes `impl Into<IconSource>`, so both work: a menu item, a menu button,
+/// a chip.
+#[derive(Debug, Clone)]
+pub enum IconSource {
+    Icon(Icon),
+    Svg(svg::Handle),
+}
+
+impl From<Icon> for IconSource {
+    fn from(i: Icon) -> Self {
+        Self::Icon(i)
+    }
+}
+
+impl From<svg::Handle> for IconSource {
+    fn from(h: svg::Handle) -> Self {
+        Self::Svg(h)
+    }
+}
+
+impl IconSource {
+    /// An icon from SVG text, e.g. `IconSource::svg(include_str!("star.svg"))`.
+    pub fn svg(source: impl Into<String>) -> Self {
+        Self::Svg(svg::Handle::from_memory(source.into().into_bytes()))
+    }
+    /// Renders the icon at `size`, tinted with the window foreground.
+    pub fn view<'a>(&self, size: f32) -> Svg<'a, Theme> {
+        match self {
+            Self::Icon(i) => i.view(size),
+            Self::Svg(h) => svg(h.clone())
+                .width(Length::Fixed(size))
+                .height(Length::Fixed(size)),
+        }
+    }
+}
+
 fn svg<'a>(handle: svg::Handle) -> Svg<'a, Theme> {
     iced::widget::svg(handle)
 }
@@ -175,8 +354,33 @@ mod tests {
     }
 
     #[test]
+    fn an_icon_source_is_a_builtin_or_your_own_svg() {
+        let a: IconSource = Icon::Star.into();
+        assert!(matches!(a, IconSource::Icon(Icon::Star)));
+        assert!(matches!(IconSource::svg("<svg/>"), IconSource::Svg(_)));
+    }
+
+    #[test]
+    fn all_lists_every_icon_once_and_each_draws() {
+        let mut seen = std::collections::HashSet::new();
+        for i in Icon::ALL {
+            assert!(seen.insert(*i));
+            assert!(i.source().contains("<svg"));
+        }
+        assert!(Icon::ALL.len() > 50);
+    }
+
+    #[test]
     fn every_icon_has_a_drawing() {
-        for i in [Icon::WindowRestore, Icon::Window, Icon::WindowClose] {
+        for i in [
+            Icon::WindowRestore,
+            Icon::Window,
+            Icon::WindowClose,
+            Icon::Play,
+            Icon::Clock,
+            Icon::Sparkle,
+            Icon::Smile,
+        ] {
             assert!(i.source().contains("<svg") && i.source().ends_with("</svg>"));
         }
     }

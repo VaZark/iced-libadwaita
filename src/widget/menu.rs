@@ -20,7 +20,7 @@ use super::popover::{
 };
 use super::{Element, boxed_list, clamp, scrolled_window};
 use crate::style::{button as sb, container as sc, text as st};
-use crate::{Icon, Metrics, Theme, Typography};
+use crate::{Icon, IconSource, Metrics, Theme, Typography};
 use iced::Length;
 use iced::alignment::Vertical;
 use iced::widget::{button, column, container, row, space, text, tooltip};
@@ -92,7 +92,7 @@ enum Kind<M> {
 pub struct MenuItem<M> {
     label: String,
     accel: Option<String>,
-    icon: Option<Icon>,
+    icon: Option<IconSource>,
     icon_side: Option<MenuIconSide>,
     labels: Option<(String, String)>,
     destructive: bool,
@@ -132,10 +132,10 @@ impl<M> MenuItem<M> {
         self.accel = Some(accel.into());
         self
     }
-    /// An icon, at the end of the item unless [`Menu::icon_side`] or
+    /// An icon (a built-in [`Icon`] or your own SVG, see [`IconSource`]), at the end of the item unless [`Menu::icon_side`] or
     /// [`icon_side`](Self::icon_side) says otherwise.
-    pub fn icon(mut self, icon: Icon) -> Self {
-        self.icon = Some(icon);
+    pub fn icon(mut self, icon: impl Into<IconSource>) -> Self {
+        self.icon = Some(icon.into());
         self
     }
     /// The words a check item shows for on and off, in place of `On` and `Off`
@@ -221,7 +221,7 @@ impl<M> Menu<M> {
 
 /// `GtkMenuButton`: an icon button that opens a [`Menu`].
 pub struct MenuButton<M> {
-    icon: Icon,
+    icon: IconSource,
     menu: Menu<M>,
     presentation: MenuPresentation,
     tooltip: Option<String>,
@@ -231,9 +231,9 @@ pub struct MenuButton<M> {
 }
 
 /// An icon button opening `menu`.
-pub fn menu_button<M>(icon: Icon, menu: Menu<M>) -> MenuButton<M> {
+pub fn menu_button<M>(icon: impl Into<IconSource>, menu: Menu<M>) -> MenuButton<M> {
     MenuButton {
-        icon,
+        icon: icon.into(),
         menu,
         presentation: MenuPresentation::Dropdown,
         tooltip: None,
@@ -343,6 +343,7 @@ fn row_content<'a, M: 'a>(
         });
     let icon: Option<(MenuIconSide, Element<'a, M>)> = item
         .icon
+        .as_ref()
         .map(|i| (item.icon_side.unwrap_or(side), i.view(m.icon_size).into()));
 
     let mut lbl = super::typography::label(item.label.clone()).width(Length::Fill);

@@ -48,6 +48,7 @@ pub struct Spoiler<'a, M> {
     on_toggle: Option<Rc<dyn Fn(bool) -> M + 'a>>,
     show: String,
     hide: String,
+    width: Length,
     metrics: Metrics,
 }
 
@@ -61,6 +62,7 @@ impl<'a, M: Clone + 'a> Spoiler<'a, M> {
             on_toggle: None,
             show: "Show more".into(),
             hide: "Hide".into(),
+            width: Length::Fill,
             metrics: Metrics::desktop(),
         }
     }
@@ -97,6 +99,12 @@ impl<'a, M: Clone + 'a> Spoiler<'a, M> {
         self.hide = hide.into();
         self
     }
+    /// The width: `Fill` (the default) or a fixed width. The clamp cannot shrink to its content,
+    /// so `Shrink` fills too.
+    pub fn width(mut self, w: impl Into<Length>) -> Self {
+        self.width = w.into();
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -109,6 +117,7 @@ struct Clamp<'a, M> {
     max_height: f32,
     expanded: bool,
     gap: f32,
+    width: Length,
 }
 
 struct State {
@@ -137,7 +146,13 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Clamp<'a, M> {
         tree.diff_children(&self.children);
     }
     fn size(&self) -> Size<Length> {
-        Size::new(Length::Fill, Length::Shrink)
+        Size::new(
+            match self.width {
+                Length::Fixed(px) => Length::Fixed(px),
+                _ => Length::Fill,
+            },
+            Length::Shrink,
+        )
     }
 
     fn layout(
@@ -146,7 +161,10 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Clamp<'a, M> {
         renderer: &iced::Renderer,
         limits: &layout::Limits,
     ) -> layout::Node {
-        let width = limits.max().width;
+        let width = match self.width {
+            Length::Fixed(px) => px.min(limits.max().width),
+            _ => limits.max().width,
+        };
         let content = self.children[0].as_widget_mut().layout(
             &mut tree.children[0],
             renderer,
@@ -389,6 +407,7 @@ impl<'a, M: Clone + 'a> From<Spoiler<'a, M>> for Element<'a, M> {
             max_height: s.max_height,
             expanded: s.expanded,
             gap: s.metrics.space_xs,
+            width: s.width,
         })
     }
 }

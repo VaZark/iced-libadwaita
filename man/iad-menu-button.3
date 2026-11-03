@@ -4,14 +4,14 @@
 menu_button \- an icon button that opens a Menu
 .SH SYNOPSIS
 .nf
-menu_button(icon: Icon, menu: Menu<M>)
+menu_button(icon: impl Into<IconSource>, menu: Menu<M>)
 .fi
 .SH DESCRIPTION
 .PP
 \fBGtkMenuButton\fR: an icon button that opens a \fBMenu\fR.
 .SH FUNCTIONS
 .TP
-.B menu_button(icon: Icon, menu: Menu<M>)
+.B menu_button(icon: impl Into<IconSource>, menu: Menu<M>)
 An icon button opening \fBmenu\fR.
 .TP
 .B primary_menu(menu: Menu<M>)

@@ -35,6 +35,7 @@ mod sections_demo;
 mod stepper_demo;
 mod synced_demo;
 mod tree_demo;
+mod upstream_demo;
 mod virtual_demo;
 mod widgets_demo;
 
@@ -195,6 +196,7 @@ struct Gallery {
     range: range_demo::State,
     composed: composed_demo::State,
     synced: synced_demo::State,
+    upstream: upstream_demo::State,
     stepper: stepper_demo::State,
     data: data_demo::State,
     resizable: resizable_demo::State,
@@ -317,6 +319,7 @@ enum Message {
     Range(range_demo::Msg),
     Composed(composed_demo::Msg),
     Synced(synced_demo::Msg),
+    Upstream(upstream_demo::Msg),
     Stepper(stepper_demo::Msg),
     Data(data_demo::Msg),
     Resizable(resizable_demo::Msg),
@@ -556,6 +559,7 @@ impl Gallery {
             range: range_demo::State::default(),
             composed: composed_demo::State::default(),
             synced: synced_demo::State::default(),
+            upstream: upstream_demo::State::default(),
             stepper: stepper_demo::State::default(),
             data: data_demo::State::default(),
             resizable: resizable_demo::State::default(),
@@ -851,6 +855,7 @@ impl Gallery {
             Message::Sections(m) => self.sections.update(m),
             Message::Range(m) => self.range.update(m),
             Message::Composed(m) => self.composed.update(m),
+            Message::Upstream(m) => self.upstream.update(m),
             Message::Synced(m) => return self.synced.update(m).map(Message::Synced),
             Message::Stepper(m) => self.stepper.update(m),
             Message::Data(m) => return self.data.update(m).map(Message::Data),

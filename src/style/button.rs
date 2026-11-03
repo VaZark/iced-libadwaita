@@ -198,6 +198,11 @@ pub fn circular(theme: &Theme, status: Status) -> Style {
     pill(theme, status)
 }
 
+/// `.circular.suggested-action`: use with equal width/height.
+pub fn circular_suggested(theme: &Theme, status: Status) -> Style {
+    suggested_pill(theme, status)
+}
+
 /// `.circular.flat`.
 pub fn circular_flat(theme: &Theme, status: Status) -> Style {
     tinted(

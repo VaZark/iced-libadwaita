@@ -198,7 +198,8 @@ impl State {
         let table = ResponsiveTable::new(&self.vrows)
             .column(
                 Column::new("#", |p: &Person| ty::body(p.n.to_string()).into())
-                    .width(Length::Fixed(80.0)),
+                    .width(Length::Fixed(80.0))
+                    .align_y(iced::alignment::Vertical::Top),
             )
             .column(
                 Column::new("Name", |p: &Person| ty::heading(p.name.clone()).into())
@@ -207,7 +208,8 @@ impl State {
             .column(Column::new("City", |p: &Person| ty::body(p.city).into()).min_width(100.0))
             .column(
                 Column::new("Score", |p: &Person| ty::body(p.score.to_string()).into())
-                    .min_width(80.0),
+                    .min_width(80.0)
+                    .align_y(iced::alignment::Vertical::Bottom),
             )
             .virtualized(TOTAL, self.vfirst, ROW)
             .on_scroll(Msg::Scroll)

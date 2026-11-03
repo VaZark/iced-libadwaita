@@ -92,9 +92,13 @@ impl Page {
                     vec![n(Button), n(ButtonContent), n(LinkButton), n(CardButton)],
                 ),
                 ("Groups", vec![n(ToggleGroup)]),
+                ("Icons", vec![n(Icons)]),
             ],
             Page::Inputs => vec![
-                ("Text", vec![n(TextInput), n(TextView), n(Autocomplete)]),
+                (
+                    "Text",
+                    vec![n(TextInput), n(TextView), n(EditableText), n(Autocomplete)],
+                ),
                 (
                     "Forms",
                     vec![
@@ -146,7 +150,7 @@ impl Page {
                         n(TreeDocs),
                     ],
                 ),
-                ("Timed", vec![n(SyncedText)]),
+                ("Timed", vec![n(SyncedText), n(VirtualList)]),
                 (
                     "Charts",
                     vec![
@@ -165,6 +169,7 @@ impl Page {
                     vec![
                         n(AppShell),
                         n(Container),
+                        n(PageHeader),
                         n(Card),
                         n(Clamp),
                         n(StatusPage),
@@ -320,6 +325,10 @@ pub enum Detail {
     DateRange,
     MetaParent,
     Container,
+    VirtualList,
+    EditableText,
+    PageHeader,
+    Icons,
     Composed,
     SyncedText,
     LineChart,
@@ -484,6 +493,10 @@ impl Detail {
             Detail::Reorderable => "Reorderable list",
             Detail::MetaParent => "Meta parent",
             Detail::Container => "Container",
+            Detail::VirtualList => "Virtual list",
+            Detail::EditableText => "Editable text",
+            Detail::PageHeader => "Detail header",
+            Detail::Icons => "Icons",
             Detail::Composed => "Composed component",
             Detail::LineChart => "Line chart",
             Detail::BarChart => "Bar chart",
@@ -585,6 +598,10 @@ impl Detail {
             Detail::Funnel => "Stages that narrow",
             Detail::Sankey => "Flows between nodes",
             Detail::Sunburst => "A tree as rings",
+            Detail::VirtualList => "Fixed-height rows, only those in view are built",
+            Detail::EditableText => "Clamped text that swaps to an entry",
+            Detail::PageHeader => "Cover, title, facts and actions, wide or narrow",
+            Detail::Icons => "The built-in symbolic icons",
             Detail::Container => "Centered content at a named maximum width",
             Detail::Composed => "Several components editing one shared state, as one widget",
             Detail::SyncedText => "Timed lines with the current one highlighted",

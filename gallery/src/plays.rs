@@ -8,6 +8,18 @@ use super::*;
 use crate::playground::{Msg as PMsg, Spec};
 use iced::widget::{column, container, row};
 
+/// The icon of a playground's icon choice: none, built-ins, or an SVG of its own.
+fn icon_source(choice: usize) -> Option<iad::IconSource> {
+    match choice {
+        1 => Some(Icon::Check.into()),
+        2 => Some(Icon::Star.into()),
+        3 => Some(iad::IconSource::svg(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l5 6-5 6-5-6z"/></svg>"#,
+        )),
+        _ => None,
+    }
+}
+
 /// A preview sits in the playground's plain frame: no card of its own.
 fn stage<'a>(e: impl Into<Element<'a>>) -> Element<'a> {
     e.into()
@@ -111,7 +123,12 @@ pub fn specs(d: Detail) -> Vec<Spec> {
         Detail::ButtonContent => vec![
             S::text("label", "Label", "Open"),
             S::choice("icon", "Icon", &["None", "Home", "Add", "Search"], 1),
-            S::choice("style", "Style", &["Default", "Suggested"], 0),
+            S::choice(
+                "style",
+                "Style",
+                &["Default", "Suggested", "Circular suggested"],
+                0,
+            ),
             S::bool("disabled", "Disabled", false),
         ],
         Detail::ToggleGroup => vec![
@@ -413,6 +430,7 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::choice("mode", "Part of", &["The height", "The data"], 0),
             S::number("max_height", "Maximum height", 40.0..=240.0, 80.0),
             S::bool("expanded", "Expanded", false),
+            S::choice("width", "Width", &["Fill", "Fixed 240 px"], 0),
             S::number("initial", "Items shown first", 1.0..=10.0, 3.0),
             S::choice("step", "A press reveals", &["All", "5 more", "10 more"], 2),
         ],
@@ -474,8 +492,21 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::choice("role", "Role", &ROLES, 0),
         ],
         Detail::BadgeChip => vec![
-            S::choice("kind", "Kind", &["Badge", "Count badge", "Chip"], 0),
+            S::choice(
+                "kind",
+                "Kind",
+                &["Badge", "Count badge", "Chip", "Round badge"],
+                0,
+            ),
             S::text("label", "Label", "New"),
+            S::choice(
+                "icon",
+                "Icon (chip, round badge)",
+                &["None", "Check", "Star", "Own SVG"],
+                0,
+            ),
+            S::choice("color", "Color (chip)", &["From the role", "Own color"], 0),
+            S::number("size", "Round badge size (px)", 14.0..=48.0, 24.0),
             S::choice("role", "Role", &ROLES, 0),
             S::bool("solid", "Solid", false),
             S::number("count", "Count", 0.0..=150.0, 7.0),
@@ -533,7 +564,11 @@ pub fn build<'a>(
                 content = content.icon(i);
             }
             let press = (!p.bool("disabled")).then_some(Message::Noop);
-            let button: Element<'a> = if p.choice("style") == 1 {
+            let button: Element<'a> = if p.choice("style") == 2 {
+                w::suggested_circular_button(icon.unwrap_or(Icon::Play).view(m.icon_size))
+                    .on_press_maybe(press)
+                    .into()
+            } else if p.choice("style") == 1 {
                 w::suggested_button(Element::from(content))
                     .on_press_maybe(press)
                     .into()
@@ -542,12 +577,20 @@ pub fn build<'a>(
                     .on_press_maybe(press)
                     .into()
             };
-            let code = Code::new(&format!("ButtonContent::new(\"{}\")", p.text("label")))
-                .add(
-                    icon.is_some(),
-                    &format!(".icon(Icon::{:?})", icon.unwrap_or(Icon::Home)),
+            let code = if p.choice("style") == 2 {
+                format!(
+                    "suggested_circular_button(Icon::{:?}.view(16.0))   // round, around any content\n    .on_press(Msg::Play)",
+                    icon.unwrap_or(Icon::Play)
                 )
-                .done();
+            } else {
+                Code::new(&format!("ButtonContent::new(\"{}\")", p.text("label")))
+                    .add(
+                        icon.is_some(),
+                        &format!(".icon(Icon::{:?})", icon.unwrap_or(Icon::Home)),
+                    )
+                    .add(p.choice("style") == 1, "// in suggested_button(..)")
+                    .done()
+            };
             (button, code)
         }
         Detail::ToggleGroup => {
@@ -1502,12 +1545,19 @@ pub fn build<'a>(
             } else {
                 let open = p.bool("expanded");
                 let paragraph = "A spoiler shows the start of something long and keeps the rest out of the way. The control under it only appears when the content is taller than the maximum height, and the cut fades into the page. Press it to slide the rest open, and again to hide it. ".repeat(3);
+                let fixed = p.choice("width") == 1;
                 let s = w::Spoiler::new(ty::body(paragraph))
+                    .width(if fixed {
+                        Length::Fixed(240.0)
+                    } else {
+                        Length::Fill
+                    })
                     .max_height(p.number("max_height"))
                     .expanded(open)
                     .on_toggle(on_bool(d, "expanded"))
                     .metrics(m);
                 let code = Code::new("Spoiler::new(long_text)")
+                    .add(fixed, ".width(Length::Fixed(240.0))")
                     .add(
                         p.changed("max_height"),
                         &format!(".max_height({:.0}.0)", p.number("max_height")),
@@ -1737,16 +1787,54 @@ pub fn build<'a>(
                         .add(p.bool("solid"), ".solid(true)")
                         .done(),
                 ),
+                3 => {
+                    let size = p.number("size");
+                    let icon = icon_source(p.choice("icon"));
+                    let content: Element<'a> = match &icon {
+                        Some(i) => i.view(size * 0.55).into(),
+                        None => ty::caption(label.clone()).into(),
+                    };
+                    (
+                        w::RoundBadge::new(content)
+                            .role(role)
+                            .solid(p.bool("solid"))
+                            .size(size)
+                            .into(),
+                        Code::new("RoundBadge::new(content)   // any element")
+                            .add(true, &format!(".role(Role::{role:?})"))
+                            .add(p.bool("solid"), ".solid(true)")
+                            .add(size != 20.0, &format!(".size({size:.0}.0)"))
+                            .done(),
+                    )
+                }
                 _ => (
-                    w::Chip::new(label.clone())
-                        .role(role)
-                        .selected(p.bool("selected"))
-                        .disabled(p.bool("disabled"))
-                        .on_press(Message::Noop)
-                        .on_remove(Message::Noop)
-                        .into(),
+                    {
+                        let mut c = w::Chip::new(label.clone())
+                            .role(role)
+                            .selected(p.bool("selected"))
+                            .disabled(p.bool("disabled"))
+                            .on_press(Message::Noop)
+                            .on_remove(Message::Noop);
+                        if let Some(i) = icon_source(p.choice("icon")) {
+                            c = c.icon(i);
+                        }
+                        if p.choice("color") == 1 {
+                            c = c.color(iced::Color::from_rgb8(0xc0, 0x4a, 0x9a));
+                        }
+                        c.into()
+                    },
                     Code::new(&format!("Chip::new(\"{label}\")"))
-                        .add(true, &format!(".role(Role::{role:?})"))
+                        .add(p.choice("icon") == 1, ".icon(Icon::Check)")
+                        .add(p.choice("icon") == 2, ".icon(Icon::Star)")
+                        .add(
+                            p.choice("icon") == 3,
+                            ".icon(IconSource::svg(include_str!(\"star.svg\")))   // your own",
+                        )
+                        .add(
+                            p.choice("color") == 1,
+                            ".color(tag_color)   // in place of the role's",
+                        )
+                        .add(p.choice("color") == 0, &format!(".role(Role::{role:?})"))
                         .add(p.bool("selected"), ".selected(true)")
                         .add(p.bool("disabled"), ".disabled(true)")
                         .add(true, ".on_press(Msg::Press).on_remove(Msg::Remove)")
@@ -1806,7 +1894,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "Indicator::new(avatar(48.0, \"Ada\"), Badge::count(3, 99).role(Role::Error).solid(true))\n    .corner(Side::Bottom, Align::End)\n    .offset(4.0)\n    .show(unread > 0)"
         }
         Detail::ResponsiveTable => {
-            "ResponsiveTable::<Person, Msg>::new(&PEOPLE)\n    .column(Column::new(\"Name\", |p| heading(p.name).into()).min_width(110.0))\n    .column(Column::new(\"Role\", |p| body(p.role).into()).min_width(90.0))\n    .mode(TableMode::Auto) // Auto (default), Table, Cards"
+            "ResponsiveTable::<Person, Msg>::new(&PEOPLE)\n    .column(Column::new(\"Name\", |p| heading(p.name).into()).min_width(110.0))\n    .column(Column::new(\"Role\", |p| body(p.role).into()).min_width(90.0).align_y(Vertical::Top))   // Top, Center (default), Bottom\n    .mode(TableMode::Auto) // Auto (default), Table, Cards"
         }
         Detail::Accordion => {
             "Accordion::new(&self.open, Msg::Open)\n    .selection(Selection::Single)   // or Multiple\n    .item(AccordionItem::new(0u8, \"Shipping\", body).subtitle(\"2-4 days\"))\n    .item(AccordionItem::new(1u8, \"Returns\", body))"
@@ -1822,6 +1910,18 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
         }
         Detail::RangeSlider => {
             "range_slider(0.0..=100.0, self.value, Msg::Range)\n\nRangeSliderRow::new(\"Volume\", self.value, 0.0..=100.0, Msg::Range)"
+        }
+        Detail::VirtualList => {
+            "// the app keeps the viewport; the list builds only the rows in it\nVirtualList::new(10_000, 40.0, &self.viewport, |i| row_for(i))\n    .on_scroll(Msg::Scroll)   // Msg::Scroll(vp) => self.viewport = vp\n    .overscan(4)               // rows built past each edge\n    .id(LIST)                  // for scroll_to / snap_to"
+        }
+        Detail::EditableText => {
+            "EditableText::new(&self.bio, Msg::Input)\n    .placeholder(\"Add a description\")\n    .editing(self.editing)        // controlled: the entry shows\n    .expanded(self.expanded)      // a long text shows whole\n    .max_height(60.0)\n    .on_edit(Msg::Edit)\n    .on_done(Msg::Done)\n    .on_expand(Msg::Expand)"
+        }
+        Detail::PageHeader => {
+            "DetailHeader::new(\"Evening drive\")\n    .kind(\"Playlist\")\n    .cover(cover)\n    .description(body(\"Slow songs for a long road.\"))\n    .facts(caption(\"24 songs, 1 hr 32 min\"))\n    .primary(suggested_circular_button(Icon::Play.view(16.0)).on_press(Msg::Play))\n    .action(icon_button(Icon::Heart))\n    .end(flat_button(text(\"Share\")))\n    .tint(cover_color)            // the wash: style::container::wash(color)\n    .narrow(width < 576.0)        // the arrangement, from the app's width"
+        }
+        Detail::Icons => {
+            "Icon::Star.view(16.0)                 // a built-in\n\n// anything that takes an icon takes your own SVG too\nlet mine = IconSource::svg(include_str!(\"vinyl.svg\"));\nMenuItem::action(\"Rate\", Msg::Rate).icon(mine.clone())\nmenu_button(mine, menu)\nChip::new(\"Jazz\").icon(mine).color(tag_color)"
         }
         Detail::Composed => {
             "// DEFINE a component with ComposedComponent: data + callback, and a conversion\npub struct HistogramRangeSlider<'a, M> {\n    histogram: &'a Histogram,\n    range: (f32, f32),                       // the shared state\n    on_change: Box<dyn Fn((f32, f32)) -> M + 'a>,\n}\n\nimpl<'a, M: 'a> From<HistogramRangeSlider<'a, M>> for Element<'a, M> {\n    fn from(c: HistogramRangeSlider<'a, M>) -> Self {\n        let h = c.histogram;\n        ComposedComponent::new(c.range, c.on_change)   // state + one message for every part\n            // each part is built from the state and answers with the NEXT state\n            .part(move |r| BarChart::histogram(h)\n                .minimal()                                  // only the bars, as a range picker\n                .selected(move |i| h.selected(i, *r))      // bars inside the range\n                .on_pick(move |i| h.bin_range(i))           // a pressed bar is a range\n                .into())\n            .part(|r| range_slider(0.0..=100.0, *r, |moved| moved).into())\n            .normalize(|(lo, hi)| (lo.min(hi), lo.max(hi))) // the rule, in one place\n            .into()\n    }\n}\n\n// USE it like any component\nHistogramRangeSlider::new(&self.histogram, self.range, Msg::Range)"
@@ -1860,7 +1960,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "// desktop config\n[menus]\npresentation=dropdown      # or full-page\n[navigation]\nmobile-sidebar=parent-page # or drawer\n\nprimary_menu(menu).presentation(MenuPresentation::Dropdown)"
         }
         Detail::MetaComponent => {
-            "MetaComponent::new()\n    .selected(self.searching.then_some(Bar::Search))      // on-select trigger\n    .when_selected(Bar::Search, |_| search_entry())\n    .variant(Bar::Compact, Trigger::selected(Bar::Menu) | !wide, |_| menu())\n    .variant(Bar::Path, When::always(), |_| path_bar())   // fallback"
+            "// the content decides the height? build the variant without measuring the container\nMetaComponent::new()\n    .selected(editing.then_some(Mode::Entry))\n    .when_selected(Mode::Entry, |_| entry())\n    .variant(Mode::Text, When::always(), |_| text())\n    .flow(0.0)   // instead of .into(): takes its content's size, not the container's\n\n// the usual form: chosen by the container's width, fills it\nMetaComponent::new()\n    .selected(self.searching.then_some(Bar::Search))      // on-select trigger\n    .when_selected(Bar::Search, |_| search_entry())\n    .variant(Bar::Compact, Trigger::selected(Bar::Menu) | !wide, |_| menu())\n    .variant(Bar::Path, When::always(), |_| path_bar())   // fallback"
         }
         Detail::Resizable => {
             "Resizable::new(meta_component, self.frame)       // frame: iced::Size\n    .on_resize(Msg::Frame)\n    .constraints(Constraints::new(Size::new(220.0, 120.0), Size::new(900.0, 500.0))\n        .snap_to(breakpoints, 8.0))"

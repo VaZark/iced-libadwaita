@@ -135,6 +135,20 @@ impl<'a, P: PartialEq + 'a, M: 'a> MetaComponent<'a, P, M> {
         )
     }
 
+    /// Builds the variant a container of `width` gets, **without measuring the container**, so the
+    /// result takes its content's size and flows with the page. The normal conversion is built on
+    /// [`responsive`](iced::widget::responsive), which fills its container and cannot shrink to
+    /// its content's height. Use this where the content decides the height (a paragraph that
+    /// swaps to an entry) and the width is known to the application, or irrelevant because the
+    /// variants answer to [`selected`](Self::selected) rather than to a breakpoint: pass the
+    /// window or pane width, or 0.
+    pub fn flow(self, width: f32) -> Element<'a, M> {
+        match self.index(width, &Breakpoints::current()) {
+            Some(i) => (self.variants[i].build)(Size::new(width, 0.0)),
+            None => iced::widget::space().into(),
+        }
+    }
+
     /// The key of the variant a container of `width` gets.
     pub fn pick(&self, width: f32, scale: &Breakpoints) -> Option<&P> {
         self.index(width, scale).map(|i| &self.variants[i].key)
@@ -184,6 +198,23 @@ mod tests {
         assert_eq!(m.pick(1000.0, &B), Some(&"wide"));
         assert_eq!(m.pick(800.0, &B), Some(&"mid"));
         assert_eq!(m.pick(400.0, &B), Some(&"narrow"));
+    }
+
+    #[test]
+    fn flow_builds_the_chosen_variant_without_a_container() {
+        use std::cell::Cell;
+        let built = Cell::new(None);
+        let m: MetaComponent<'_, &str, ()> = MetaComponent::new()
+            .variant("wide", When::min_width(900.0), |_| {
+                built.set(Some("wide"));
+                iced::widget::space().into()
+            })
+            .variant("narrow", When::always(), |_| {
+                built.set(Some("narrow"));
+                iced::widget::space().into()
+            });
+        let _ = m.flow(1000.0);
+        assert_eq!(built.get(), Some("wide"));
     }
 
     #[test]
