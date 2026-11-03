@@ -210,6 +210,66 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             ),
             S::bool("locked", "Lock the “locked” folder", false),
         ],
+        Detail::Divider => vec![
+            S::choice("orientation", "Orientation", &["Horizontal", "Vertical"], 0),
+            S::text("label", "Label", "Label"),
+            S::choice(
+                "position",
+                "Label position",
+                &["Left", "Center", "Right"],
+                1,
+            ),
+            S::choice("variant", "Variant", &["Solid", "Dashed", "Dotted"], 0),
+            S::number("size", "Size", 1.0..=8.0, 1.0),
+            S::choice(
+                "tone",
+                "Color",
+                &["Border", "Card", "Bar", "Popover", "Sidebar"],
+                0,
+            ),
+            S::number("spacing", "Spacing", 0.0..=24.0, 8.0),
+        ],
+        Detail::Splitter => vec![
+            S::choice("orientation", "Orientation", &["Horizontal", "Vertical"], 0),
+            S::choice("panes", "Panes", &["Two", "Three"], 0),
+            S::bool("fixed", "First pane fixed (240 px)", false),
+            S::bool("limits", "First pane limits (120 px to 60%)", false),
+            S::bool("collapsible", "First pane collapsible", false),
+            S::choice("redistribute", "Redistribute", &["Adjacent", "Nearest"], 0),
+            S::bool("grip", "Grip", true),
+            S::number("line", "Line size", 1.0..=6.0, 1.0),
+        ],
+        Detail::ColorPicker => vec![
+            S::choice("kind", "As", &["Picker", "Input"], 0),
+            S::bool("alpha", "Alpha slider", false),
+            S::choice(
+                "format",
+                "Format",
+                &["Hex", "Hexa", "Rgb", "Rgba", "Hsl", "Hsla", "Hsv", "Hsva"],
+                0,
+            ),
+            S::bool("swatches", "Swatches", true),
+            S::bool("readout", "Readout (picker)", true),
+            S::number("width", "Width (picker)", 160.0..=320.0, 240.0),
+        ],
+        Detail::Timeline => vec![
+            S::number("active", "Active item", 0.0..=5.0, 2.0),
+            S::number("count", "Items", 2.0..=6.0, 4.0),
+            S::choice("align", "Align", &["Left", "Right"], 0),
+            S::bool("reverse", "Reverse active", false),
+            S::number("bullet", "Bullet size", 16.0..=40.0, 24.0),
+            S::number("line_width", "Line width", 1.0..=6.0, 2.0),
+            S::choice("variant", "Line", &["Solid", "Dashed", "Dotted"], 0),
+            S::bool("loading", "Last item loading", false),
+            S::bool("invalid", "Second item failed", false),
+        ],
+        Detail::Spoiler => vec![
+            S::choice("mode", "Part of", &["The height", "The data"], 0),
+            S::number("max_height", "Maximum height", 40.0..=240.0, 80.0),
+            S::bool("expanded", "Expanded", false),
+            S::number("initial", "Items shown first", 1.0..=10.0, 3.0),
+            S::choice("step", "A press reveals", &["All", "5 more", "10 more"], 2),
+        ],
         Detail::Tabs => vec![
             S::choice(
                 "variant",
@@ -745,6 +805,195 @@ pub fn build<'a>(
         Detail::Tree => {
             let (el, code) = g.tree_demo.play(p, m);
             (el.map(Message::Tree), code)
+        }
+        Detail::Divider => {
+            let variant = [
+                w::DividerVariant::Solid,
+                w::DividerVariant::Dashed,
+                w::DividerVariant::Dotted,
+            ][p.choice("variant")];
+            let tone = [
+                w::DividerTone::Border,
+                w::DividerTone::Card,
+                w::DividerTone::Bar,
+                w::DividerTone::Popover,
+                w::DividerTone::Sidebar,
+            ][p.choice("tone")];
+            let position = [
+                w::LabelPosition::Left,
+                w::LabelPosition::Center,
+                w::LabelPosition::Right,
+            ][p.choice("position")];
+            let vertical = p.choice("orientation") == 1;
+            let label = p.text("label").to_string();
+            let mut div = w::divider::<Message>()
+                .variant(variant)
+                .tone(tone)
+                .size(p.number("size"))
+                .spacing(p.number("spacing"));
+            if vertical {
+                div = div.vertical();
+            } else if !label.is_empty() {
+                div = div.label(ty::body(label.clone())).label_position(position);
+            }
+            let preview: Element<'a> = if vertical {
+                container(
+                    row![ty::body("Left"), Element::from(div), ty::body("Right")]
+                        .spacing(m.space_s)
+                        .align_y(iced::Alignment::Center),
+                )
+                .height(48)
+                .into()
+            } else {
+                column![
+                    ty::body("Above the divider"),
+                    Element::from(div),
+                    ty::body("Below the divider")
+                ]
+                .into()
+            };
+            let code = Code::new("divider()")
+                .add(vertical, ".vertical()")
+                .add(
+                    !vertical && !label.is_empty(),
+                    &format!(".label(body(\"{label}\"))"),
+                )
+                .add(
+                    !vertical && !label.is_empty() && p.choice("position") != 1,
+                    &format!(".label_position(LabelPosition::{:?})", position),
+                )
+                .add(
+                    p.choice("variant") > 0,
+                    &format!(".variant(DividerVariant::{variant:?})"),
+                )
+                .add(
+                    p.changed("size"),
+                    &format!(".size({:.0}.0)", p.number("size")),
+                )
+                .add(
+                    p.choice("tone") > 0,
+                    &format!(".tone(DividerTone::{tone:?})"),
+                )
+                .add(
+                    p.changed("spacing"),
+                    &format!(".spacing({:.0}.0)", p.number("spacing")),
+                )
+                .done();
+            (preview, code)
+        }
+        Detail::Splitter => {
+            let (el, code) = g.widgets_demo.split_play(p, m);
+            (el.map(Message::Widgets), code)
+        }
+        Detail::ColorPicker => {
+            let (el, code) = g.widgets_demo.color_play(p, m);
+            (el.map(Message::Widgets), code)
+        }
+        Detail::Timeline => {
+            let n = p.number("count") as usize;
+            let variant = [
+                w::DividerVariant::Solid,
+                w::DividerVariant::Dashed,
+                w::DividerVariant::Dotted,
+            ][p.choice("variant")];
+            let titles = [
+                "Created", "Assigned", "Reviewed", "Approved", "Merged", "Released",
+            ];
+            let mut t = w::Timeline::new((p.number("active") as usize).min(n - 1))
+                .bullet_size(p.number("bullet"))
+                .line_width(p.number("line_width"))
+                .reverse_active(p.bool("reverse"))
+                .align(if p.choice("align") == 1 {
+                    w::TimelineAlign::Right
+                } else {
+                    w::TimelineAlign::Left
+                })
+                .metrics(m);
+            for (i, title) in titles.iter().enumerate().take(n) {
+                let mut item = w::TimelineItem::new(*title)
+                    .body(
+                        ty::caption(format!("{} min ago", (n - i) * 12))
+                            .style(adw::style::text::dim),
+                    )
+                    .line(variant);
+                if p.bool("loading") && i + 1 == n {
+                    item = item.loading(true);
+                }
+                if p.bool("invalid") && i == 1 {
+                    item = item.invalid(true);
+                }
+                t = t.item(item);
+            }
+            let code = Code::new(&format!(
+                "Timeline::new({})",
+                (p.number("active") as usize).min(n - 1)
+            ))
+            .add(
+                p.changed("bullet"),
+                &format!(".bullet_size({:.0}.0)", p.number("bullet")),
+            )
+            .add(
+                p.changed("line_width"),
+                &format!(".line_width({:.0}.0)", p.number("line_width")),
+            )
+            .add(p.bool("reverse"), ".reverse_active(true)")
+            .add(p.choice("align") == 1, ".align(TimelineAlign::Right)")
+            .add(
+                true,
+                ".item(TimelineItem::new(\"Created\").body(caption(\"12 min ago\")))",
+            )
+            .add(
+                p.choice("variant") > 0,
+                &format!(
+                    ".item(TimelineItem::new(\"Assigned\").line(DividerVariant::{variant:?}))"
+                ),
+            )
+            .add(
+                p.bool("invalid"),
+                ".item(TimelineItem::new(\"Reviewed\").invalid(true))",
+            )
+            .add(
+                p.bool("loading"),
+                ".item(TimelineItem::new(\"Merged\").loading(true))",
+            )
+            .done();
+            (Element::from(t), code)
+        }
+        Detail::Spoiler => {
+            if p.choice("mode") == 1 {
+                let el: adw::Element<'a, crate::widgets_demo::Msg> = column![
+                    ty::caption(g.widgets_demo.spoiler_caption()),
+                    g.widgets_demo.spoiler_items(m)
+                ]
+                .spacing(m.space_s)
+                .into();
+                let step = ["", ".step(5)", ".step(10)"][p.choice("step")];
+                let code = format!(
+                    "// state: 100 items, the first {} shown\nSpoilerState::new(100, {}){step}\n\n// view: only the shown items are built\nSpoiler::items(&self.shown, |i| row_for(&self.data[i]))\n    .on_event(Msg::Spoiler)\n\n// update: Msg::Spoiler(e) => {{ self.shown.apply(e); }}",
+                    p.number("initial") as usize,
+                    p.number("initial") as usize
+                );
+                (el.map(Message::Widgets), code)
+            } else {
+                let open = p.bool("expanded");
+                let paragraph = "A spoiler shows the start of something long and keeps the rest out of the way. The control under it only appears when the content is taller than the maximum height, and the cut fades into the page. Press it to slide the rest open, and again to hide it. ".repeat(3);
+                let s = w::Spoiler::new(ty::body(paragraph))
+                    .max_height(p.number("max_height"))
+                    .expanded(open)
+                    .on_toggle(on_bool(d, "expanded"))
+                    .metrics(m);
+                let code = Code::new("Spoiler::new(long_text)")
+                    .add(
+                        p.changed("max_height"),
+                        &format!(".max_height({:.0}.0)", p.number("max_height")),
+                    )
+                    .add(
+                        true,
+                        ".expanded(self.open).on_toggle(Msg::Open)   // controlled",
+                    )
+                    .done();
+                (Element::from(s), code)
+            }
         }
         Detail::Tabs => {
             let names = [

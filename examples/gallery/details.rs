@@ -342,7 +342,14 @@ impl Gallery {
             ]
             .into(),
             // Shown by its playground (see `plays.rs`).
-            Detail::Tabs | Detail::Tree | Detail::TreeRow => column![].into(),
+            Detail::Tabs
+            | Detail::Tree
+            | Detail::TreeRow
+            | Detail::Divider
+            | Detail::Splitter
+            | Detail::ColorPicker
+            | Detail::Timeline
+            | Detail::Spoiler => column![].into(),
             Detail::TableVirtual => self.virtual_demo.virtual_view(m).map(Message::Virtual),
             Detail::TableAsync => self.virtual_demo.async_view(m).map(Message::Virtual),
             Detail::TreeAsync => self.tree_demo.async_view(m).map(Message::Tree),

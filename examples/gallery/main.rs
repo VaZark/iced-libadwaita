@@ -33,6 +33,7 @@ mod sections_demo;
 mod stepper_demo;
 mod tree_demo;
 mod virtual_demo;
+mod widgets_demo;
 
 use nav::{Detail, Entry, Inline, Page};
 
@@ -171,6 +172,7 @@ struct Gallery {
     resizable: resizable_demo::State,
     tree_demo: tree_demo::State,
     virtual_demo: virtual_demo::State,
+    widgets_demo: widgets_demo::State,
     /// The playground of each component page that has one.
     plays: std::collections::HashMap<Detail, playground::Playground>,
     reorder: reorder_demo::State,
@@ -282,6 +284,7 @@ enum Message {
     Resizable(resizable_demo::Msg),
     Tree(tree_demo::Msg),
     Virtual(virtual_demo::Msg),
+    Widgets(widgets_demo::Msg),
     /// A control of a component page's playground.
     Play(Detail, playground::Msg),
     Reorder(reorder_demo::Msg),
@@ -413,6 +416,12 @@ impl Gallery {
         // A daemon opens its windows itself: the main one now, the preferences window on demand.
         let (main, open_main) = window::open(Self::main_settings());
         let (virtual_demo, virtual_boot) = virtual_demo::State::start();
+        let plays: std::collections::HashMap<Detail, playground::Playground> = Detail::all()
+            .into_iter()
+            .map(|d| (d, playground::Playground::new(plays::specs(d))))
+            .collect();
+        let mut widgets_demo = widgets_demo::State::default();
+        widgets_demo.sync(plays.get(&Detail::Splitter), plays.get(&Detail::Spoiler));
         let boot = Task::batch([
             open_main.map(|_| Message::Noop),
             boot,
@@ -490,10 +499,8 @@ impl Gallery {
                 resizable: resizable_demo::State::default(),
                 tree_demo: tree_demo::State::default(),
                 virtual_demo,
-                plays: Detail::all()
-                    .into_iter()
-                    .map(|d| (d, playground::Playground::new(plays::specs(d))))
-                    .collect(),
+                widgets_demo,
+                plays,
                 reorder: reorder_demo::State::default(),
                 field: {
                     let mut f = field_demo::State::default();
@@ -726,12 +733,19 @@ impl Gallery {
             Message::Resizable(m) => return self.resizable.update(m).map(Message::Resizable),
             Message::Tree(m) => return self.tree_demo.update(m).map(Message::Tree),
             Message::Virtual(m) => return self.virtual_demo.update(m).map(Message::Virtual),
+            Message::Widgets(m) => return self.widgets_demo.update(m).map(Message::Widgets),
             Message::Play(d, m) => {
                 if let Some(p) = self.plays.get_mut(&d) {
                     p.update(m);
                     if d == Detail::Tree {
                         self.tree_demo.sync(p);
                     }
+                }
+                if matches!(d, Detail::Splitter | Detail::Spoiler) {
+                    self.widgets_demo.sync(
+                        self.plays.get(&Detail::Splitter),
+                        self.plays.get(&Detail::Spoiler),
+                    );
                 }
             }
             Message::Reorder(m) => self.reorder.update(m),

@@ -15,6 +15,7 @@ mod banner;
 mod button;
 mod carousel;
 mod collapsible;
+mod color_picker;
 mod content_area;
 mod date_input;
 mod date_range_input;
@@ -51,10 +52,13 @@ mod slots;
 mod spinner;
 mod split;
 mod split_view;
+mod splitter;
+mod spoiler;
 mod status_page;
 mod stepper;
 mod switch;
 mod tabs;
+mod timeline;
 mod toast;
 mod toolbar;
 mod tree;
@@ -63,12 +67,18 @@ pub mod typography;
 
 pub use crate::primitives::anchor::{self, Align as AnchorAlign, Placed, Placement, Side, place};
 pub use crate::primitives::calendar::{CalendarView, Dir as NavDir, Level};
+pub use crate::primitives::color_picker::{Format as ColorFormat, Hsva};
 pub use crate::primitives::date::{Date, days_in_month, is_leap_year, validate as validate_date};
 pub use crate::primitives::form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
 pub use crate::primitives::meta_parent::Registry as MetaRegistry;
 pub use crate::primitives::meta_parent::{ChildEvent, Emitted};
 pub use crate::primitives::range::{Collide, DateRange, DayRole, Edge, Range, Thumb, Track};
 pub use crate::primitives::reorder::{Event as ReorderEvent, Mode, ReorderState};
+pub use crate::primitives::splitter::{
+    Event as SplitterEvent, Limit as SplitterLimit, Pane as SplitterPane, Redistribute,
+    Size as SplitterSize, SplitterState,
+};
+pub use crate::primitives::spoiler::{Event as SpoilerEvent, SpoilerState};
 pub use crate::primitives::stepper::{Fill as StepperFill, Status as StepperStatus, StepperState};
 pub use crate::primitives::tree::{
     Effect as TreeEffect, Event as TreeEvent, Position as DropPosition, TreeNode, TreeState,
@@ -96,10 +106,11 @@ pub use button::{
 };
 pub use carousel::{Carousel, CarouselIndicator, carousel};
 pub use collapsible::Collapsible;
+pub use color_picker::{ColorInput, ColorPicker};
 pub use content_area::{ContentArea, content_area};
 pub use date_input::DateInput;
 pub use date_range_input::DateRangeInput;
-pub use divider::{Divider, DividerTone, divider};
+pub use divider::{Divider, DividerTone, DividerVariant, LabelPosition, divider};
 pub use dropdown::{dropdown, dropdown_disabled, menu_item, menu_item_disabled};
 pub use elevated::{Elevated, card_shadow};
 pub use extra::{
@@ -157,10 +168,13 @@ pub use shortcut_scope::shortcuts;
 pub use spinner::{Spinner, spinner};
 pub use split::{SplitAction, SplitButton, SplitButtonAction, split_button};
 pub use split_view::{AdaptiveSplit, adaptive_split};
+pub use splitter::{Splitter, SplitterOrientation};
+pub use spoiler::{Spoiler, SpoilerList};
 pub use status_page::{Card, Page, StatusPage, bin, card, clamp, page, status_page};
 pub use stepper::{Stepper, StepperIconPosition, StepperOrientation, StepperSize, StepperStep};
 pub use switch::{Switch, switch};
 pub use tabs::{TabItem, Tabs, TabsVariant};
+pub use timeline::{Timeline, TimelineAlign, TimelineItem};
 pub use toast::{
     Toast, ToastPosition, ToastTarget, toast_overlay, toast_stack, toast_stack_from, toast_target,
 };

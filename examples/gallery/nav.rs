@@ -94,7 +94,7 @@ impl Page {
             ],
             Page::Inputs => vec![
                 ("Text", vec![n(TextInput), n(TextView), n(Autocomplete)]),
-                ("Forms", vec![n(Field), n(Form), n(Stepper)]),
+                ("Forms", vec![n(Field), n(Form), n(Stepper), n(ColorPicker)]),
                 ("Toggles", vec![n(Switch), n(CheckButton), n(RadioButton)]),
                 (
                     "Ranges & choosers",
@@ -140,9 +140,12 @@ impl Page {
             Page::Layout => vec![
                 (
                     "Containers",
-                    vec![n(AppShell), n(Card), n(Clamp), n(StatusPage)],
+                    vec![n(AppShell), n(Card), n(Clamp), n(StatusPage), n(Splitter)],
                 ),
-                ("Flow", vec![n(WrapBox), n(Collapse)]),
+                (
+                    "Flow",
+                    vec![n(WrapBox), n(Collapse), n(Divider), n(Spoiler)],
+                ),
                 (
                     "Meta",
                     vec![
@@ -172,6 +175,7 @@ impl Page {
                         n(BadgeChip),
                         n(Indicator),
                         n(Docked),
+                        n(Timeline),
                     ],
                 ),
             ],
@@ -227,6 +231,12 @@ pub enum Detail {
     Card,
     // Feedback
     Toast,
+    Divider,
+    Splitter,
+    ColorPicker,
+    Timeline,
+    Spoiler,
+
     TableVirtual,
     TableAsync,
     Tree,
@@ -366,6 +376,11 @@ impl Detail {
             Detail::PreferencesGroup => "Preferences group",
             Detail::Card => "Card",
             Detail::Toast => "Toast",
+            Detail::Divider => "Divider",
+            Detail::Splitter => "Splitter",
+            Detail::ColorPicker => "Color picker",
+            Detail::Timeline => "Timeline",
+            Detail::Spoiler => "Spoiler",
             Detail::TableVirtual => "Table: virtualization",
             Detail::TableAsync => "Table: async chunks",
             Detail::Tree => "Tree",
@@ -442,6 +457,11 @@ impl Detail {
             Detail::PreferencesGroup => "Title, description and a header suffix",
             Detail::Card => "Padding, chained children, separators and size",
             Detail::Toast => "Call to action, status dot, radius, placement and colors",
+            Detail::Divider => "Orientation, label, variant and size",
+            Detail::Splitter => "Resizable panes: fixed and flexible, limits, collapsing",
+            Detail::ColorPicker => "Saturation, hue and alpha, swatches, formats and an input",
+            Detail::Timeline => "Events along a line, sharing the stepper primitive",
+            Detail::Spoiler => "Part of the height or of the data, the rest on request",
             Detail::TableVirtual => "100,000 rows, only the ones in view built",
             Detail::TableAsync => {
                 "5,000 rows fetched in chunks as you scroll, with placeholders and Retry"

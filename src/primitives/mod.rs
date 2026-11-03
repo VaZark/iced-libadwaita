@@ -7,6 +7,7 @@
 //!
 //! * [`anchor`]: where a floating surface sits against an anchor (flip, shift);
 //! * [`calendar`]: calendar navigation by level (month, year, decade);
+//! * [`color_picker`]: a color as hue / saturation / value / alpha, its conversions and text forms (hex, rgb, hsl, hsv), parsing (Mantine's ColorPicker);
 //! * [`date`]: calendar dates and month math;
 //! * [`form`]: submit / reset / next / back gating and when a form's fields reveal errors (steps);
 //! * [`infinite`]: a list that grows page by page (offset or cursor): one request in flight, stale responses discarded, the scroll rule;
@@ -22,6 +23,8 @@
 //! * [`selection`]: which keys are on (single, required single, multiple);
 //! * [`sorting`]: sort keys with the asc / desc / unsorted cycle, multi-column, a stable sort and comparators;
 //! * [`tabs`]: which tab a click or an arrow key activates, skipping disabled ones (Radix Tabs); shared by `Tabs` and the segmented control;
+//! * [`spoiler`]: show part of the height or of the data and reveal the rest; only the visible items are built (Mantine's Spoiler);
+//! * [`splitter`]: panes along an axis with draggable handles: fixed and flexible sizes, limits, collapsing, redistribution (Mantine's Splitter);
 //! * [`virtualize`]: which rows of a long fixed-height list to build for a scroll offset, and the spacers around them (shared by `Tree` and `ResponsiveTable`);
 //! * [`loading`]: keys being loaded (with their errors and retry), and a list fetched in chunks with placeholders for what has not arrived (shared by `Tree` and the tables);
 //! * [`tree`]: nodes, open branches, selection, checking, search / filter and keyboard navigation (Mantine's `useTree`, GTK's tree expander keys);
@@ -35,6 +38,7 @@
 pub mod anchor;
 pub mod animation;
 pub mod calendar;
+pub mod color_picker;
 pub mod date;
 pub mod form;
 pub mod infinite;
@@ -52,6 +56,8 @@ pub mod responsive;
 pub mod sections;
 pub mod selection;
 pub mod sorting;
+pub mod splitter;
+pub mod spoiler;
 pub mod stepper;
 pub mod tabs;
 pub mod transition;
