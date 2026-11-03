@@ -21,6 +21,7 @@
 //! * [`transition`]: ordered close / open transitions between layouts (`Sequence`, `Transitions`);
 //! * [`selection`]: which keys are on (single, required single, multiple);
 //! * [`sorting`]: sort keys with the asc / desc / unsorted cycle, multi-column, a stable sort and comparators;
+//! * [`tabs`]: which tab a click or an arrow key activates, skipping disabled ones (Radix Tabs); shared by `Tabs` and the segmented control;
 //! * [`stepper`]: step statuses from an `active` index, click rules, next / back, connector fill;
 //! * [`validation`]: when a field shows valid / invalid, and chaining validators;
 //! * [`meta`]: which variant of a meta component shows, and its [`Trigger`] (breakpoint or select);
@@ -48,6 +49,7 @@ pub mod sections;
 pub mod selection;
 pub mod sorting;
 pub mod stepper;
+pub mod tabs;
 pub mod transition;
 pub mod validation;
 

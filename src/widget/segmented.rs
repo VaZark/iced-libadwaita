@@ -20,6 +20,7 @@
 //!   every segment that has one switches, so the control is never half icons, half
 //!   labels.
 
+use crate::primitives::tabs::TabList;
 use crate::style::button as sb;
 use crate::style::button::Position;
 use crate::{Metrics, Theme};
@@ -43,8 +44,9 @@ pub struct Segmented<'a, T, M> {
     /// (icon-only) variant, or a placeholder when it has none.
     children: Vec<Element<'a, M, Theme>>,
     has_compact: Vec<bool>,
-    /// Segments that cannot be chosen: drawn dimmed, never hovered or pressed.
-    disabled: Vec<bool>,
+    /// Which segments can be chosen (the tabs primitive): the others are drawn dimmed, never
+    /// hovered or pressed.
+    tabs: TabList,
     active: Option<usize>,
     on_select: Box<dyn Fn(T) -> M + 'a>,
     width: Length,
@@ -83,7 +85,7 @@ impl<'a, T: Clone, M: 'a> Segmented<'a, T, M> {
             values,
             children: full,
             has_compact,
-            disabled: vec![false; n],
+            tabs: TabList::new(n),
             active,
             on_select: Box::new(on_select),
             width: Length::Shrink,
@@ -119,9 +121,7 @@ impl<'a, T: Clone, M: 'a> Segmented<'a, T, M> {
 
     /// Which segments are disabled (one flag per segment, in order).
     pub fn disabled(mut self, flags: Vec<bool>) -> Self {
-        if flags.len() == self.values.len() {
-            self.disabled = flags;
-        }
+        self.tabs = TabList::with_disabled(self.values.len(), flags);
         self
     }
 
@@ -144,7 +144,7 @@ impl<'a, T: Clone, M: 'a> Segmented<'a, T, M> {
         self.rects
             .iter()
             .enumerate()
-            .position(|(i, r)| r.contains(p) && !self.disabled[i])
+            .position(|(i, r)| r.contains(p) && self.tabs.is_enabled(i))
     }
 }
 
@@ -442,7 +442,7 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
                 if state.pressed.is_some() =>
             {
                 if hit == state.pressed
-                    && let Some(i) = hit
+                    && let Some(i) = hit.and_then(|i| self.tabs.activate(i))
                 {
                     shell.publish((self.on_select)(self.values[i].clone()));
                 }
@@ -519,7 +519,7 @@ impl<'a, T: Clone, M: 'a> Widget<M, Theme, iced::Renderer> for Segmented<'a, T, 
                 Status::Active
             };
             let mut st = sb::toggle(self.active == Some(i), Self::position(i, n))(theme, status);
-            if self.disabled[i] {
+            if !self.tabs.is_enabled(i) {
                 st.text_color = crate::color::fade(st.text_color, theme.semantic.opacity.disabled);
             }
             if let Some(bg) = st.background {

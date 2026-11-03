@@ -41,26 +41,16 @@ impl Gallery {
     }
 
     /// Level 1: the group's components. Components with two or more significantly different
-    /// properties open a nested page; single-trigger ones get a button on their row; the rest
-    /// show their one demo right here (see `README.md`).
+    /// properties open a nested page; single-trigger ones get a button on their row (see
+    /// `README.md`).
     fn group_page(&self, page: Page) -> Element<'_> {
         let m = self.metrics();
         let mut col = column![].spacing(m.group_spacing);
         let mut first = true;
         for (title, entries) in page.sections() {
-            // Consecutive rows (nested / action) share one list; inline demos are their own groups.
+            // Consecutive rows (nested / action) share one list.
             let mut list: Option<w::PreferencesGroup<'_, Message>> = None;
-            // GALLERY_ONLY=<inline name>: show only that demo (screenshots of long pages).
-            let only = std::env::var("GALLERY_ONLY").ok();
             for entry in entries {
-                if let (Some(o), Entry::Inline(i)) = (&only, entry)
-                    && !format!("{i:?}").eq_ignore_ascii_case(o)
-                {
-                    continue;
-                }
-                if only.is_some() && !matches!(entry, Entry::Inline(_)) {
-                    continue;
-                }
                 match entry {
                     Entry::Nested(d) => {
                         let row = w::ActionRow::new(d.title())
@@ -79,29 +69,6 @@ impl Gallery {
                         g = g.push(row);
                         list = Some(g);
                     }
-                    Entry::Action(a) => {
-                        let row = w::ActionRow::new(a.title())
-                            .subtitle(a.description())
-                            .suffix(
-                                w::raised_button(text(a.button())).on_press(self.action_message(a)),
-                            )
-                            .metrics(m);
-                        let mut g = list.take().unwrap_or_else(|| {
-                            let g = self.group(title);
-                            if std::mem::take(&mut first) {
-                                g.description(page.description())
-                            } else {
-                                g
-                            }
-                        });
-                        g = g.push(row);
-                        list = Some(g);
-                    }
-                    Entry::Inline(inl) => {
-                        col = flush(col, &mut list);
-                        first = false;
-                        col = col.push(self.inline(inl));
-                    }
                 }
             }
             col = flush(col, &mut list);
@@ -109,15 +76,17 @@ impl Gallery {
         self.page_frame(col)
     }
 
-    fn action_message(&self, a: Action) -> Message {
-        match a {
-            Action::AlertDialog => Message::OpenDialog(Dialog::Alert),
-            Action::AboutDialog => Message::OpenDialog(Dialog::About),
-            Action::ShortcutsDialog => Message::OpenDialog(Dialog::Shortcuts),
-            Action::PreferencesDialog => Message::OpenDialog(Dialog::Preferences),
-            Action::BottomSheet => Message::Sheet(true),
-            Action::AppShell => Message::OpenShell,
-        }
+    /// What the Open button of a dialog, sheet or shell page sends.
+    fn open_message(d: Detail) -> Option<Message> {
+        Some(match d {
+            Detail::AlertDialog => Message::OpenDialog(Dialog::Alert),
+            Detail::AboutDialog => Message::OpenDialog(Dialog::About),
+            Detail::ShortcutsDialog => Message::OpenDialog(Dialog::Shortcuts),
+            Detail::PreferencesDialog => Message::OpenDialog(Dialog::Preferences),
+            Detail::BottomSheet => Message::Sheet(true),
+            Detail::AppShell => Message::OpenShell,
+            _ => return None,
+        })
     }
 
     /// Level 2: one component, grouped by property.
@@ -128,7 +97,15 @@ impl Gallery {
         let sp = m.space_m;
         let g = |t| self.group(t);
 
-        let body: Element<'_> = match d {
+        // A page with a playground shows it: one live component, its controls and its code.
+        let played = self.plays.get(&d).and_then(|p| {
+            plays::build(self, d, p, m)
+                .map(|(el, code)| p.view(m, el, code, move |x| Message::Play(d, x)))
+        });
+        let body: Element<'_> = if let Some(b) = played {
+            b
+        } else {
+            match d {
             Detail::Button => {
                 let enabled = row![
                     w::raised_button(lbl("Default")).on_press(Message::Noop),
@@ -334,6 +311,40 @@ impl Gallery {
             Detail::MetaParent => self.reorder.parent_view(m).map(Message::Reorder),
             Detail::Reorderable => self.reorder.view(m).map(Message::Reorder),
             Detail::Resizable => self.resizable.view(m).map(Message::Resizable),
+            Detail::LinkButton => self.inline(Inline::LinkButton),
+            Detail::Switch => self.inline(Inline::Switch),
+            Detail::CheckButton => self.inline(Inline::CheckButton),
+            Detail::RadioButton => self.inline(Inline::RadioButton),
+            Detail::Scale => self.inline(Inline::Scale),
+            Detail::ExpanderRow => self.inline(Inline::ExpanderRow),
+            Detail::ButtonRow => self.inline(Inline::ButtonRow),
+            Detail::Clamp => self.inline(Inline::Clamp),
+            Detail::StatusPage => self.inline(Inline::StatusPage),
+            Detail::WrapBox => self.inline(Inline::WrapBox),
+            Detail::Collapse => self.inline(Inline::Collapse),
+            Detail::ViewSwitcher => self.inline(Inline::ViewSwitcher),
+            Detail::TabBar => self.inline(Inline::TabBar),
+            Detail::Avatar => self.inline(Inline::Avatar),
+            Detail::Tag => self.inline(Inline::Tag),
+            Detail::ShortcutLabel => self.inline(Inline::ShortcutLabel),
+            Detail::MultiSelect => self.inline(Inline::MultiSelect),
+            Detail::AnchoredPopover => self.inline(Inline::AnchoredPopover),
+            Detail::Surfaces => self.inline(Inline::Surfaces),
+            Detail::AlertDialog
+            | Detail::AboutDialog
+            | Detail::ShortcutsDialog
+            | Detail::PreferencesDialog
+            | Detail::BottomSheet
+            | Detail::AppShell => column![
+                g(d.title())
+                    .description(d.description())
+                    .push(w::card(row![
+                        w::raised_button(text("Open")).on_press_maybe(Self::open_message(d))
+                    ])),
+            ]
+            .into(),
+            // Shown by its playground (see `plays.rs`).
+            Detail::Tabs => column![].into(),
             Detail::Stepper => self.stepper.view(m).map(Message::Stepper),
             Detail::Data => self.data.view(m).map(Message::Data),
             Detail::Autocomplete => self.autocomplete.view(m).map(Message::Autocomplete),
@@ -642,6 +653,15 @@ impl Gallery {
                 .spacing(m.group_spacing)
                 .into()
             }
+        }
+        };
+        // A page without controls still has the Preview / Code switch: its demo is the preview,
+        // the snippet of the calls it makes is the code.
+        let body: Element<'_> = match (plays::snippet(d), self.plays.get(&d)) {
+            (Some(code), Some(p)) => {
+                p.view(m, body, code.to_string(), move |x| Message::Play(d, x))
+            }
+            _ => body,
         };
         self.page_frame(body)
     }
@@ -1175,7 +1195,11 @@ impl Gallery {
         self.page_frame(
             column![
                 self.group("Text styles").push(w::card(typo)),
-                self.group("Text colors").push(w::card(colors))
+                self.group("Text colors").push(w::card(colors)),
+                playground::code_block(
+                    m,
+                    "title_1(\"Title 1\")   // title_2, title_3, title_4, heading\nbody(\"Body text\")\ncaption(\"Caption\")   // caption_heading, monospace, dim_label\n\nbody(\"Accent\").style(style::text::accent) // success, warning, error, destructive".to_string(),
+                ),
             ]
             .spacing(m.group_spacing),
         )

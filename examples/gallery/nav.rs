@@ -77,34 +77,27 @@ impl Page {
     /// The components of this group, in labeled sections. Empty: the page is the content.
     /// How each entry is presented follows the rule in `README.md`.
     pub fn sections(self) -> Vec<(&'static str, Vec<Entry>)> {
-        use Action::*;
         use Detail::*;
-        use Inline as I;
         let n = Entry::Nested;
-        let a = Entry::Action;
-        let i = Entry::Inline;
         match self {
             Page::Buttons => vec![
                 (
                     "Buttons",
-                    vec![n(Button), n(ButtonContent), i(I::LinkButton), n(CardButton)],
+                    vec![n(Button), n(ButtonContent), n(LinkButton), n(CardButton)],
                 ),
                 ("Groups", vec![n(ToggleGroup)]),
             ],
             Page::Inputs => vec![
                 ("Text", vec![n(TextInput), n(TextView), n(Autocomplete)]),
                 ("Forms", vec![n(Field), n(Form), n(Stepper)]),
-                (
-                    "Toggles",
-                    vec![i(I::Switch), i(I::CheckButton), i(I::RadioButton)],
-                ),
+                ("Toggles", vec![n(Switch), n(CheckButton), n(RadioButton)]),
                 (
                     "Ranges & choosers",
                     vec![
-                        i(I::Scale),
+                        n(Scale),
                         n(RangeSlider),
                         n(Dropdown),
-                        i(I::MultiSelect),
+                        n(MultiSelect),
                         n(DateInput),
                         n(DateRange),
                     ],
@@ -117,8 +110,8 @@ impl Page {
                         n(ActionRow),
                         n(SwitchAndComboRows),
                         n(EntryRow),
-                        i(I::ExpanderRow),
-                        i(I::ButtonRow),
+                        n(ExpanderRow),
+                        n(ButtonRow),
                     ],
                 ),
                 ("Groups", vec![n(PreferencesGroup), n(Accordion)]),
@@ -127,9 +120,9 @@ impl Page {
             Page::Layout => vec![
                 (
                     "Containers",
-                    vec![a(AppShell), n(Card), i(I::Clamp), i(I::StatusPage)],
+                    vec![n(AppShell), n(Card), n(Clamp), n(StatusPage)],
                 ),
-                ("Flow", vec![i(I::WrapBox), i(I::Collapse)]),
+                ("Flow", vec![n(WrapBox), n(Collapse)]),
                 (
                     "Meta",
                     vec![
@@ -143,12 +136,12 @@ impl Page {
             Page::Navigation => vec![
                 (
                     "Switchers",
-                    vec![i(I::ViewSwitcher), i(I::TabBar), n(PathBar)],
+                    vec![n(Tabs), n(ViewSwitcher), n(TabBar), n(PathBar)],
                 ),
                 ("Paging", vec![n(Carousel)]),
                 (
                     "Menus & shortcuts",
-                    vec![n(MenuButton), i(I::ShortcutLabel), i(I::AnchoredPopover)],
+                    vec![n(MenuButton), n(ShortcutLabel), n(AnchoredPopover)],
                 ),
             ],
             Page::Feedback => vec![
@@ -157,8 +150,8 @@ impl Page {
                     "Status",
                     vec![
                         n(Progress),
-                        i(I::Avatar),
-                        i(I::Tag),
+                        n(Avatar),
+                        n(Tag),
                         n(BadgeChip),
                         n(Indicator),
                         n(Docked),
@@ -168,17 +161,17 @@ impl Page {
             Page::Dialogs => vec![(
                 "Overlays",
                 vec![
-                    a(AlertDialog),
-                    a(AboutDialog),
-                    a(ShortcutsDialog),
-                    a(PreferencesDialog),
-                    a(BottomSheet),
+                    n(AlertDialog),
+                    n(AboutDialog),
+                    n(ShortcutsDialog),
+                    n(PreferencesDialog),
+                    n(BottomSheet),
                 ],
             )],
             Page::Theming => vec![
                 ("Look", vec![n(ThemeColors), n(ThemeShape)]),
                 ("Behavior", vec![n(ThemeMotion), n(ThemeWindow)]),
-                ("Reference", vec![i(I::Surfaces)]),
+                ("Reference", vec![n(Surfaces)]),
             ],
             Page::Typography => vec![],
         }
@@ -190,10 +183,6 @@ impl Page {
 pub enum Entry {
     /// Opens a nested page: the component has two or more significantly different properties.
     Nested(Detail),
-    /// A single trigger: a button on the row instead of a chevron.
-    Action(Action),
-    /// A single demo, shown directly on the group page.
-    Inline(Inline),
 }
 
 /// A level-2 page: a component with two or more significantly different properties.
@@ -221,6 +210,34 @@ pub enum Detail {
     Card,
     // Feedback
     Toast,
+    Tabs,
+    AlertDialog,
+    AboutDialog,
+    ShortcutsDialog,
+    PreferencesDialog,
+    BottomSheet,
+    AppShell,
+
+    LinkButton,
+    Switch,
+    CheckButton,
+    RadioButton,
+    Scale,
+    ExpanderRow,
+    ButtonRow,
+    Clamp,
+    StatusPage,
+    WrapBox,
+    Collapse,
+    ViewSwitcher,
+    TabBar,
+    Avatar,
+    Tag,
+    ShortcutLabel,
+    MultiSelect,
+    AnchoredPopover,
+    Surfaces,
+
     MetaComponent,
     Reorderable,
     Resizable,
@@ -285,54 +302,14 @@ pub enum Inline {
     Surfaces,
 }
 
-/// A component whose whole demo is one trigger.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Action {
-    AlertDialog,
-    AboutDialog,
-    ShortcutsDialog,
-    PreferencesDialog,
-    BottomSheet,
-    /// Opens the AppShell demo in a window of its own.
-    AppShell,
-}
-
-impl Action {
-    pub fn title(self) -> &'static str {
-        match self {
-            Action::AlertDialog => "Alert dialog",
-            Action::AboutDialog => "About dialog",
-            Action::ShortcutsDialog => "Shortcuts dialog",
-            Action::PreferencesDialog => "Preferences dialog",
-            Action::BottomSheet => "Bottom sheet",
-            Action::AppShell => "AppShell",
-        }
-    }
-    pub fn description(self) -> &'static str {
-        match self {
-            Action::AlertDialog => "A question with Cancel, Save and Discard responses",
-            Action::AboutDialog => "Application name, version, links and license",
-            Action::ShortcutsDialog => "Keyboard shortcuts in sections",
-            Action::PreferencesDialog => "A page of preference rows in a dialog",
-            Action::BottomSheet => "A panel sliding up from the bottom",
-            Action::AppShell => "A header, navbar and drawer that adapt to the window width",
-        }
-    }
-    /// The label of the button on the row.
-    pub fn button(self) -> &'static str {
-        "Open"
-    }
-}
-
 impl Detail {
     pub fn all() -> Vec<Detail> {
         Page::ALL
             .iter()
             .flat_map(|p| p.sections())
             .flat_map(|(_, e)| e)
-            .filter_map(|e| match e {
-                Entry::Nested(d) => Some(d),
-                _ => None,
+            .map(|e| match e {
+                Entry::Nested(d) => d,
             })
             .collect()
     }
@@ -367,6 +344,32 @@ impl Detail {
             Detail::PreferencesGroup => "Preferences group",
             Detail::Card => "Card",
             Detail::Toast => "Toast",
+            Detail::Tabs => "Tabs",
+            Detail::AlertDialog => "Alert dialog",
+            Detail::AboutDialog => "About dialog",
+            Detail::ShortcutsDialog => "Shortcuts dialog",
+            Detail::PreferencesDialog => "Preferences dialog",
+            Detail::BottomSheet => "Bottom sheet",
+            Detail::AppShell => "AppShell",
+            Detail::LinkButton => "Link button",
+            Detail::Switch => "Switch",
+            Detail::CheckButton => "Check button",
+            Detail::RadioButton => "Radio button",
+            Detail::Scale => "Scale",
+            Detail::ExpanderRow => "Expander row",
+            Detail::ButtonRow => "Button row",
+            Detail::Clamp => "Clamp",
+            Detail::StatusPage => "Status page",
+            Detail::WrapBox => "Wrap box",
+            Detail::Collapse => "Collapse behavior",
+            Detail::ViewSwitcher => "View switcher",
+            Detail::TabBar => "Tab bar",
+            Detail::Avatar => "Avatar",
+            Detail::Tag => "Tag",
+            Detail::ShortcutLabel => "Shortcut label",
+            Detail::MultiSelect => "Multi select",
+            Detail::AnchoredPopover => "Anchored popover",
+            Detail::Surfaces => "Surfaces",
             Detail::PathBar => "Path bar",
             Detail::MenuButton => "Menu button",
             Detail::Banner => "Banner",
@@ -411,6 +414,32 @@ impl Detail {
             Detail::PreferencesGroup => "Title, description and a header suffix",
             Detail::Card => "Padding, chained children, separators and size",
             Detail::Toast => "Call to action, status dot, radius, placement and colors",
+            Detail::Tabs => "Variants, icons, disabled tabs and panels",
+            Detail::AlertDialog => "A question with Cancel, Save and Discard responses",
+            Detail::AboutDialog => "Application name, version, links and license",
+            Detail::ShortcutsDialog => "Keyboard shortcuts in sections",
+            Detail::PreferencesDialog => "A page of preference rows in a dialog",
+            Detail::BottomSheet => "A panel sliding up from the bottom",
+            Detail::AppShell => "A header, navbar and drawer that adapt to the window width",
+            Detail::LinkButton => "Label, uri and disabled",
+            Detail::Switch => "On, off and disabled",
+            Detail::CheckButton => "Checked, label and disabled",
+            Detail::RadioButton => "A choice among options, with disabled",
+            Detail::Scale => "Value and range",
+            Detail::ExpanderRow => "Expanded, subtitle and nested rows",
+            Detail::ButtonRow => "Neutral, suggested and destructive",
+            Detail::Clamp => "Maximum width",
+            Detail::StatusPage => "Icon, title, description and action",
+            Detail::WrapBox => "Spacing and wrapping children",
+            Detail::Collapse => "Stacked and flex controls in a row",
+            Detail::ViewSwitcher => "Icons and labels",
+            Detail::TabBar => "Tabs and a close button",
+            Detail::Avatar => "Size, name and initials",
+            Detail::Tag => "Roles",
+            Detail::ShortcutLabel => "Key combinations",
+            Detail::MultiSelect => "Several choices in a dropdown",
+            Detail::AnchoredPopover => "Side, flip and shift",
+            Detail::Surfaces => "The semantic surfaces and status colors",
             Detail::PathBar => "Path and search variants",
             Detail::MenuButton => "Menu, primary menu and popover presentations",
             Detail::Banner => "Roles, buttons and revealing",

@@ -23,6 +23,7 @@ mod elevated;
 mod extra;
 mod field;
 mod flex;
+mod floating_indicator;
 mod form;
 mod forms;
 mod header_bar;
@@ -51,6 +52,7 @@ mod split_view;
 mod status_page;
 mod stepper;
 mod switch;
+mod tabs;
 mod toast;
 mod toolbar;
 pub mod typography;
@@ -103,6 +105,7 @@ pub use extra::{
 };
 pub use field::{Field, FieldLayout, outlined as field_outline};
 pub use flex::FlexRow;
+pub use floating_indicator::FloatingIndicator;
 pub use form::{Form, FormActions, Step, StepIndicator};
 pub use forms::{
     Entry, EntryState, TextView, accent_picker, card_button, check_button, color_swatch, entry,
@@ -149,6 +152,7 @@ pub use split_view::{AdaptiveSplit, adaptive_split};
 pub use status_page::{Card, Page, StatusPage, bin, card, clamp, page, status_page};
 pub use stepper::{Stepper, StepperIconPosition, StepperOrientation, StepperSize, StepperStep};
 pub use switch::{Switch, switch};
+pub use tabs::{TabItem, Tabs, TabsVariant};
 pub use toast::{
     Toast, ToastPosition, ToastTarget, toast_overlay, toast_stack, toast_stack_from, toast_target,
 };

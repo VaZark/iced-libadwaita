@@ -309,6 +309,22 @@ pub static COMPONENTS: &[Component] = &[
         ],
     ),
     c(
+        "tabs",
+        "-",
+        "Tabs::new(active, on_change)",
+        &["variant", "grow", "metrics"],
+        &["tab"],
+        &["on_change"],
+    ),
+    c(
+        "floating_indicator",
+        "-",
+        "FloatingIndicator::new(children, active)",
+        &["spacing", "radius", "color"],
+        &["children"],
+        &[],
+    ),
+    c(
         "badge",
         "-",
         "Badge::new(label)",

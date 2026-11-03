@@ -36,9 +36,9 @@ Examples: Text input (validation, password, color override, width) is nested; a 
 
 #### Playgrounds
 
-A nested page for a component whose properties a single instance can express is a **playground** (`playground.rs`, after Mantine's docs configurators): one live component, a **Properties** panel (a switch per boolean, a toggle group per choice, a slider per number, with Reset) and the **Code** that builds what is shown, which follows the controls. Do not replicate the component once per property value. Keep separate static demos only where a playground cannot show it: several states at once (disabled next to enabled), a different layout per size, or anything that needs more than one instance to make sense.
+A nested page for a component whose properties a single instance can express is a **playground** (`playground.rs`, after Mantine's docs configurators): one live component in a plain bordered frame (no card, no shadow), a **Properties** panel (a switch per boolean, a toggle group per choice, a slider per number, with Reset) and the **Code** that builds what is shown, which follows the controls. Do not replicate the component once per property value. Keep separate static demos only where a playground cannot show it: several states at once (disabled next to enabled), a different layout per size, or anything that needs more than one instance to make sense.
 
-Pages so far: Layout > Reorderable list, Layout > Meta parent. The other nested pages still show static groups and move to a playground when touched.
+Every nested page has a playground except those that cannot be expressed by one instance: Form, Field, Stepper, Autocomplete, Sorting and pagination, Text view, Carousel, Docked, Indicator, Responsive table, Accordion, Card button, Date input and range, Range slider, Multi select, Anchored popover, Surfaces, Toast, the Theming pages, Meta component and Resizable (these show their own demos).
 
 Guidelines:
 
@@ -56,3 +56,7 @@ GALLERY_PAGE=inputs GALLERY_DETAIL=textinput cargo run --example gallery
 ```
 
 Other environment switches: `GALLERY_SIZE=WxH`, `GALLERY_SIDEBAR_MODE=parent-page`, `GALLERY_SIDEBAR=1` (start on the sidebar when collapsed), `GALLERY_MENU=page|dropdown`, `GALLERY_DIALOG=alert|about|shortcuts|preferences`, `GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push`. `GALLERY_AUTOCOMPLETE=idle|loading|results|empty|error|disabled` opens that state of the Autocomplete page (`GALLERY_DETAIL=autocomplete`); `GALLERY_AUTOCOMPLETE=type:san>sant` types into its live entry (see `autocomplete_demo.rs`).
+
+#### Preview / Code on every page
+
+Every nested page has a **Preview | Code** tabs (separate buttons with an accent underline, as in Mantine's docs) above its content; `GALLERY_CODE=1` starts on Code. On a playground page the code is generated from its controls (the Properties panel stays visible on both tabs); a page without a playground shows its own demo as the Preview and a fixed snippet (`plays::snippet`) of the calls it makes as the Code. Dialogs, the bottom sheet and the AppShell are nested pages too: an Open button and their code. Add a snippet whenever a page is added.

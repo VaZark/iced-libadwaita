@@ -25,13 +25,14 @@ mod field_demo;
 mod form_demo;
 mod nav;
 mod playground;
+mod plays;
 mod range_demo;
 mod reorder_demo;
 mod resizable_demo;
 mod sections_demo;
 mod stepper_demo;
 
-use nav::{Action, Detail, Entry, Inline, Page};
+use nav::{Detail, Entry, Inline, Page};
 
 /// The motions the Theming page can play: libadwaita easings and the sheet spring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,6 +167,8 @@ struct Gallery {
     stepper: stepper_demo::State,
     data: data_demo::State,
     resizable: resizable_demo::State,
+    /// The playground of each component page that has one.
+    plays: std::collections::HashMap<Detail, playground::Playground>,
     reorder: reorder_demo::State,
     chips: Vec<&'static str>,
     acc_single: Vec<u8>,
@@ -273,6 +276,8 @@ enum Message {
     Stepper(stepper_demo::Msg),
     Data(data_demo::Msg),
     Resizable(resizable_demo::Msg),
+    /// A control of a component page's playground.
+    Play(Detail, playground::Msg),
     Reorder(reorder_demo::Msg),
     ChipRemove(&'static str),
     AccSingle(Vec<u8>),
@@ -475,6 +480,10 @@ impl Gallery {
                 stepper: stepper_demo::State::default(),
                 data: data_demo::State::default(),
                 resizable: resizable_demo::State::default(),
+                plays: Detail::all()
+                    .into_iter()
+                    .map(|d| (d, playground::Playground::new(plays::specs(d))))
+                    .collect(),
                 reorder: reorder_demo::State::default(),
                 field: {
                     let mut f = field_demo::State::default();
@@ -705,6 +714,11 @@ impl Gallery {
             Message::Stepper(m) => self.stepper.update(m),
             Message::Data(m) => return self.data.update(m).map(Message::Data),
             Message::Resizable(m) => return self.resizable.update(m).map(Message::Resizable),
+            Message::Play(d, m) => {
+                if let Some(p) = self.plays.get_mut(&d) {
+                    p.update(m);
+                }
+            }
             Message::Reorder(m) => self.reorder.update(m),
             Message::AccSingle(v) => self.acc_single = v,
             Message::AccMulti(v) => self.acc_multi = v,
