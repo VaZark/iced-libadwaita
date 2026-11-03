@@ -24,6 +24,8 @@ pub struct Sunburst {
     width: Length,
     height: Length,
     format: Option<Formatter>,
+    tooltip: bool,
+    labels: bool,
     cells: Vec<Cell>,
 }
 
@@ -38,6 +40,8 @@ impl Sunburst {
             width: Length::Fill,
             height: Length::Fixed(300.0),
             format: None,
+            tooltip: true,
+            labels: true,
             cells,
         }
     }
@@ -57,6 +61,16 @@ impl Sunburst {
     }
     pub fn height(mut self, h: impl Into<Length>) -> Self {
         self.height = h.into();
+        self
+    }
+    /// The tooltip that follows the pointer (on by default).
+    pub fn tooltip(mut self, show: bool) -> Self {
+        self.tooltip = show;
+        self
+    }
+    /// The text on the marks (on by default).
+    pub fn labels(mut self, show: bool) -> Self {
+        self.labels = show;
         self
     }
     /// How values are written in the tooltip and the middle.
@@ -165,7 +179,7 @@ impl<M> canvas::Program<M, Theme> for Sunburst {
             // The name, when the arc is long enough to hold it.
             let mid_r = (r_in + r_out) / 2.0;
             let chord = (c.x1 - c.x0) * TAU * mid_r;
-            if chord > text_width(&c.name) + 6.0 && g.ring >= 16.0 {
+            if self.labels && chord > text_width(&c.name) + 6.0 && g.ring >= 16.0 {
                 let p = crate::primitives::chart::pie::polar(
                     g.center,
                     mid_r,
@@ -201,7 +215,7 @@ impl<M> canvas::Program<M, Theme> for Sunburst {
                 theme.semantic.dim(),
             );
         }
-        if let (Some(i), Some(at)) = (state.hover, cursor.position_in(bounds)) {
+        if let (Some(i), Some(at), true) = (state.hover, cursor.position_in(bounds), self.tooltip) {
             let c = &self.cells[i];
             let total = self.cells[0].value;
             let rows = [

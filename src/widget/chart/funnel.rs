@@ -23,6 +23,8 @@ pub struct Funnel {
     width: Length,
     height: Length,
     format: Option<Formatter>,
+    tooltip: bool,
+    labels: bool,
 }
 
 const INSET: f32 = 8.0;
@@ -37,6 +39,8 @@ impl Funnel {
             width: Length::Fill,
             height: Length::Fixed(260.0),
             format: None,
+            tooltip: true,
+            labels: true,
         }
     }
     /// One outline that narrows, or blocks as wide as their own value.
@@ -55,6 +59,16 @@ impl Funnel {
     }
     pub fn height(mut self, h: impl Into<Length>) -> Self {
         self.height = h.into();
+        self
+    }
+    /// The tooltip that follows the pointer (on by default).
+    pub fn tooltip(mut self, show: bool) -> Self {
+        self.tooltip = show;
+        self
+    }
+    /// The text on the marks (on by default).
+    pub fn labels(mut self, show: bool) -> Self {
+        self.labels = show;
         self
     }
     /// How values are written in the labels and tooltip.
@@ -133,7 +147,10 @@ impl<M> canvas::Program<M, Theme> for Funnel {
                 self.items[s.index].0,
                 fmt_or_default(&self.format, s.value)
             );
-            if narrow > crate::components::chart::text_width(&text) && s.y1 - s.y0 >= 16.0 {
+            if self.labels
+                && narrow > crate::components::chart::text_width(&text)
+                && s.y1 - s.y0 >= 16.0
+            {
                 label(
                     &mut frame,
                     text,
@@ -143,7 +160,7 @@ impl<M> canvas::Program<M, Theme> for Funnel {
                 );
             }
         }
-        if let (Some(i), Some(at)) = (state.hover, cursor.position_in(bounds)) {
+        if let (Some(i), Some(at), true) = (state.hover, cursor.position_in(bounds), self.tooltip) {
             let stages = self.stages(bounds.size());
             let s = stages[i];
             let rows = [

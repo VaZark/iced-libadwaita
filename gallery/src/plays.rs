@@ -56,6 +56,38 @@ const ROLE_OF: [Role; 5] = [
     Role::Destructive,
 ];
 
+/// The properties every cartesian chart (line, bar) shares: which elements are drawn, and the
+/// color.
+fn cartesian_specs() -> Vec<Spec> {
+    use Spec as S;
+    vec![
+        S::bool("value_axis", "Value axis", true),
+        S::bool("category_axis", "Category axis", true),
+        S::bool("grid", "Gridlines", true),
+        S::bool("tooltip", "Tooltip", true),
+        S::bool("hover", "Hover highlight", true),
+        S::choice("color", "Color", &["Series colors", "Accent"], 0),
+        S::number("height", "Height (px)", 80.0..=420.0, 240.0),
+    ]
+}
+
+/// The code lines for the cartesian properties that are not at their defaults.
+fn cartesian_code(code: Code, p: &crate::playground::Playground) -> Code {
+    code.add(!p.bool("value_axis"), ".value_axis(false)")
+        .add(!p.bool("category_axis"), ".category_axis(false)")
+        .add(!p.bool("grid"), ".grid(false)")
+        .add(!p.bool("tooltip"), ".tooltip(false)")
+        .add(!p.bool("hover"), ".hover(false)")
+        .add(
+            p.choice("color") == 1,
+            ".colors(|theme, _| theme.palette.accent_bg_color)",
+        )
+        .add(
+            p.number("height") != 240.0,
+            &format!(".height({:.0}.0)", p.number("height")),
+        )
+}
+
 pub fn specs(d: Detail) -> Vec<Spec> {
     use Spec as S;
     match d {
@@ -221,6 +253,61 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::bool("fluid", "Fluid (no maximum)", false),
             S::number("padding", "Horizontal padding (px)", 0.0..=48.0, 12.0),
             S::number("parent", "Parent width (px)", 300.0..=1500.0, 1400.0),
+        ],
+        Detail::LineChart => {
+            let mut v = vec![
+                S::choice("curve", "Curve", &["Linear", "Step", "Smooth"], 0),
+                S::choice("fill", "Fill", &["Lines", "Area", "Stacked", "100%"], 0),
+                S::number("series", "Series", 1.0..=3.0, 3.0),
+                S::bool("points", "Points", true),
+                S::bool("legend", "Legend", true),
+            ];
+            v.extend(cartesian_specs());
+            v
+        }
+        Detail::BarChart => {
+            let mut v = vec![
+                S::choice("data", "Data", &["Months", "Histogram"], 0),
+                S::choice("layout", "Layout", &["Grouped", "Stacked", "100%"], 0),
+                S::bool("horizontal", "Horizontal", false),
+                S::number("series", "Series", 1.0..=3.0, 3.0),
+                S::number("gap", "Gap between bars", 0.0..=0.9, 0.2),
+                S::number("radius", "Corner radius", 0.0..=12.0, 2.0),
+                S::number("min_bar", "Minimum bar height (px)", 0.0..=12.0, 0.0),
+                S::number("empty_bar", "Empty bar stub (px)", 0.0..=6.0, 0.0),
+                S::bool("selection", "Highlight categories 2 to 4", false),
+                S::bool("legend", "Legend", true),
+            ];
+            v.extend(cartesian_specs());
+            v
+        }
+        Detail::PieChart => vec![
+            S::number("donut", "Hole (fraction of the radius)", 0.0..=0.9, 0.0),
+            S::number("pad", "Gap between slices (rad)", 0.0..=0.1, 0.01),
+            S::text("center", "Center text", "Browsers"),
+            S::bool("labels", "Percent labels", true),
+            S::bool("legend", "Legend", true),
+            S::bool("tooltip", "Tooltip", true),
+            S::number("height", "Height (px)", 120.0..=420.0, 260.0),
+        ],
+        Detail::Funnel => vec![
+            S::choice("shape", "Shape", &["Continuous", "Blocks"], 0),
+            S::number("gap", "Gap between stages (px)", 0.0..=16.0, 2.0),
+            S::bool("labels", "Labels", true),
+            S::bool("tooltip", "Tooltip", true),
+            S::number("height", "Height (px)", 120.0..=420.0, 260.0),
+        ],
+        Detail::Sankey => vec![
+            S::bool("labels", "Node labels", true),
+            S::bool("tooltip", "Tooltip", true),
+            S::number("height", "Height (px)", 160.0..=480.0, 300.0),
+        ],
+        Detail::Sunburst => vec![
+            S::number("hole", "Hole (fraction of the radius)", 0.0..=0.9, 0.25),
+            S::bool("labels", "Labels", true),
+            S::bool("legend", "Legend", true),
+            S::bool("tooltip", "Tooltip", true),
+            S::number("height", "Height (px)", 160.0..=480.0, 300.0),
         ],
         Detail::Divider => vec![
             S::choice("orientation", "Orientation", &["Horizontal", "Vertical"], 0),
@@ -941,6 +1028,206 @@ pub fn build<'a>(
                 .done();
             (column![note, parent_box].spacing(m.space_s).into(), code)
         }
+        Detail::LineChart => {
+            let n = p.number("series") as usize;
+            let mut c = w::LineChart::new(
+                crate::chart_demo::MONTHS,
+                crate::chart_demo::sales().into_iter().take(n),
+            )
+            .curve([w::Curve::Linear, w::Curve::Step, w::Curve::Monotone][p.choice("curve")])
+            .points(p.bool("points"))
+            .legend(p.bool("legend"))
+            .value_axis(p.bool("value_axis"))
+            .category_axis(p.bool("category_axis"))
+            .grid(p.bool("grid"))
+            .tooltip(p.bool("tooltip"))
+            .hover(p.bool("hover"))
+            .height(p.number("height"));
+            c = match p.choice("fill") {
+                1 => c.area(true),
+                2 => c.stacked(true),
+                3 => c.normalized(true),
+                _ => c,
+            };
+            if p.choice("color") == 1 {
+                c = c.colors(|t, _| t.palette.accent_bg_color);
+            }
+            let code = Code::new("LineChart::new(months, series)")
+                .add(p.choice("curve") == 1, ".curve(Curve::Step)")
+                .add(p.choice("curve") == 2, ".curve(Curve::Monotone)")
+                .add(p.choice("fill") == 1, ".area(true)")
+                .add(p.choice("fill") == 2, ".stacked(true)")
+                .add(p.choice("fill") == 3, ".normalized(true)")
+                .add(!p.bool("points"), ".points(false)")
+                .add(!p.bool("legend"), ".legend(false)");
+            (c.into(), cartesian_code(code, p).done())
+        }
+        Detail::BarChart => {
+            let n = p.number("series") as usize;
+            let histogram = p.choice("data") == 1;
+            let hist = iad::primitives::histogram::Histogram::from_values(
+                (0..300).map(|i| 100.0 * ((i as f32 * 0.618_034).fract()).powi(2)),
+                0.0,
+                100.0,
+                12,
+            );
+            let mut c = if histogram {
+                w::BarChart::histogram(&hist)
+            } else {
+                w::BarChart::new(
+                    crate::chart_demo::MONTHS,
+                    crate::chart_demo::sales().into_iter().take(n),
+                )
+            }
+            .layout(
+                [
+                    w::BarLayout::Grouped,
+                    w::BarLayout::Stacked,
+                    w::BarLayout::Normalized,
+                ][p.choice("layout")],
+            )
+            .horizontal(p.bool("horizontal"))
+            .gap(p.number("gap"))
+            .bar_radius(p.number("radius"))
+            .min_bar_height(p.number("min_bar"))
+            .empty_bar_height(p.number("empty_bar"))
+            .legend(p.bool("legend"))
+            .value_axis(p.bool("value_axis"))
+            .category_axis(p.bool("category_axis"))
+            .grid(p.bool("grid"))
+            .tooltip(p.bool("tooltip"))
+            .hover(p.bool("hover"))
+            .height(p.number("height"));
+            if p.bool("selection") {
+                c = c.selected(|i| (1..=3).contains(&i));
+            }
+            if p.choice("color") == 1 {
+                c = c.colors(|t, _| t.palette.accent_bg_color);
+            }
+            let head = if histogram {
+                "BarChart::histogram(&histogram)"
+            } else {
+                "BarChart::new(months, series)"
+            };
+            let code = Code::new(head)
+                .add(p.choice("layout") == 1, ".layout(BarLayout::Stacked)")
+                .add(p.choice("layout") == 2, ".layout(BarLayout::Normalized)")
+                .add(p.bool("horizontal"), ".horizontal(true)")
+                .add(
+                    p.number("gap") != 0.2,
+                    &format!(".gap({:.2})", p.number("gap")),
+                )
+                .add(
+                    p.number("radius") != 2.0,
+                    &format!(".bar_radius({:.0}.0)", p.number("radius")),
+                )
+                .add(
+                    p.number("min_bar") > 0.0,
+                    &format!(".min_bar_height({:.0}.0)", p.number("min_bar")),
+                )
+                .add(
+                    p.number("empty_bar") > 0.0,
+                    &format!(".empty_bar_height({:.0}.0)", p.number("empty_bar")),
+                )
+                .add(p.bool("selection"), ".selected(|i| (1..=3).contains(&i))")
+                .add(!p.bool("legend"), ".legend(false)");
+            (c.into(), cartesian_code(code, p).done())
+        }
+        Detail::PieChart => {
+            let c = w::PieChart::new(crate::chart_demo::browsers())
+                .donut(p.number("donut"))
+                .pad(p.number("pad"))
+                .labels(p.bool("labels"))
+                .legend(p.bool("legend"))
+                .tooltip(p.bool("tooltip"))
+                .height(p.number("height"));
+            let donut = p.number("donut") > 0.0;
+            let c = if donut && !p.text("center").is_empty() {
+                c.center(p.text("center").to_string())
+            } else {
+                c
+            };
+            let code = Code::new("PieChart::new(items)")
+                .add(donut, &format!(".donut({:.2})", p.number("donut")))
+                .add(
+                    donut && !p.text("center").is_empty(),
+                    &format!(".center({:?})", p.text("center")),
+                )
+                .add(
+                    p.number("pad") != 0.01,
+                    &format!(".pad({:.3})", p.number("pad")),
+                )
+                .add(!p.bool("labels"), ".labels(false)")
+                .add(!p.bool("legend"), ".legend(false)")
+                .add(!p.bool("tooltip"), ".tooltip(false)")
+                .add(
+                    p.number("height") != 260.0,
+                    &format!(".height({:.0}.0)", p.number("height")),
+                )
+                .done();
+            (c.into(), code)
+        }
+        Detail::Funnel => {
+            let blocks = p.choice("shape") == 1;
+            let c = w::Funnel::new(crate::chart_demo::stages())
+                .shape(if blocks {
+                    w::FunnelShape::Blocks
+                } else {
+                    w::FunnelShape::Continuous
+                })
+                .gap(p.number("gap"))
+                .labels(p.bool("labels"))
+                .tooltip(p.bool("tooltip"))
+                .height(p.number("height"));
+            let code = Code::new("Funnel::new(stages)")
+                .add(blocks, ".shape(FunnelShape::Blocks)")
+                .add(
+                    p.number("gap") != 2.0,
+                    &format!(".gap({:.0}.0)", p.number("gap")),
+                )
+                .add(!p.bool("labels"), ".labels(false)")
+                .add(!p.bool("tooltip"), ".tooltip(false)")
+                .add(
+                    p.number("height") != 260.0,
+                    &format!(".height({:.0}.0)", p.number("height")),
+                )
+                .done();
+            (c.into(), code)
+        }
+        Detail::Sankey => {
+            let c = crate::chart_demo::budget()
+                .labels(p.bool("labels"))
+                .tooltip(p.bool("tooltip"))
+                .height(p.number("height"));
+            let code = Code::new("Sankey::new()   // nodes are made as links name them\n    .link(\"Salary\", \"Income\", 5000.0)\n    .link(\"Income\", \"Savings\", 2400.0)")
+                .add(!p.bool("labels"), ".labels(false)")
+                .add(!p.bool("tooltip"), ".tooltip(false)")
+                .add(p.number("height") != 300.0, &format!(".height({:.0}.0)", p.number("height")))
+                .done();
+            (c.into(), code)
+        }
+        Detail::Sunburst => {
+            let c = w::Sunburst::new(crate::chart_demo::disk())
+                .hole(p.number("hole"))
+                .labels(p.bool("labels"))
+                .legend(p.bool("legend"))
+                .tooltip(p.bool("tooltip"))
+                .height(p.number("height"));
+            let code = Code::new("Sunburst::new(TreeValue::branch(\"Disk\", [..]))")
+                .add(
+                    p.number("hole") != 0.25,
+                    &format!(".hole({:.2})", p.number("hole")),
+                )
+                .add(!p.bool("labels"), ".labels(false)")
+                .add(!p.bool("legend"), ".legend(false)")
+                .add(!p.bool("tooltip"), ".tooltip(false)")
+                .add(
+                    p.number("height") != 300.0,
+                    &format!(".height({:.0}.0)", p.number("height")),
+                )
+                .done();
+            (c.into(), code)
+        }
         Detail::Divider => {
             let variant = [
                 w::DividerVariant::Solid,
@@ -1535,24 +1822,6 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
         }
         Detail::RangeSlider => {
             "range_slider(0.0..=100.0, self.value, Msg::Range)\n\nRangeSliderRow::new(\"Volume\", self.value, 0.0..=100.0, Msg::Range)"
-        }
-        Detail::LineChart => {
-            "let series = [Series::new(\"Web\", [12.0, 19.0, 15.0]), Series::new(\"Store\", [8.0, 11.0, 14.0])];\n\nLineChart::new([\"Jan\", \"Feb\", \"Mar\"], series)\n    .curve(Curve::Monotone)   // Linear, Step or Monotone\n    .area(true)               // fill under the lines\n    .stacked(true)            // on each other; .normalized(true) for 100%\n    .format(|v| format!(\"{v} k\"))"
-        }
-        Detail::BarChart => {
-            "BarChart::new([\"Jan\", \"Feb\", \"Mar\"], series)\n    .layout(BarLayout::Stacked)   // Grouped, Stacked or Normalized\n    .horizontal(true)\n    .gap(0.2)\n    .grid(false)        // switch off any element: .axes(false), .value_axis(..),\n    .tooltip(false)     // .category_axis(..), .grid(..), .tooltip(..), .hover(..)\n    .colors(|theme, i| theme.palette.accent_bg_color)\n    .minimal()          // only the bars\n\n// counts per bin, bars touching\nBarChart::histogram(&Histogram::from_values(values, 0.0, 100.0, 12))"
-        }
-        Detail::PieChart => {
-            "PieChart::new([(\"Chrome\", 62.0), (\"Firefox\", 21.0), (\"Safari\", 9.0)])\n    .donut(0.6)            // the hole, as a fraction of the radius\n    .center(\"Browsers\")\n    .pad(0.01)             // radians between slices\n    .labels(true)"
-        }
-        Detail::Funnel => {
-            "Funnel::new([(\"Visits\", 5000.0), (\"Sign-ups\", 2400.0), (\"Paid\", 420.0)])\n    .shape(FunnelShape::Continuous)   // or Blocks\n    .gap(2.0)"
-        }
-        Detail::Sankey => {
-            "Sankey::new()                       // nodes are made as links name them\n    .link(\"Salary\", \"Income\", 5000.0)\n    .link(\"Income\", \"Housing\", 1800.0)\n    .link(\"Income\", \"Savings\", 2400.0)"
-        }
-        Detail::Sunburst => {
-            "Sunburst::new(TreeValue::branch(\"Disk\", [\n    TreeValue::branch(\"Media\", [TreeValue::leaf(\"Photos\", 40.0), TreeValue::leaf(\"Video\", 90.0)]),\n    TreeValue::leaf(\"System\", 35.0),\n]))\n.hole(0.25)"
         }
         Detail::Composed => {
             "// DEFINE a component with ComposedComponent: data + callback, and a conversion\npub struct HistogramRangeSlider<'a, M> {\n    histogram: &'a Histogram,\n    range: (f32, f32),                       // the shared state\n    on_change: Box<dyn Fn((f32, f32)) -> M + 'a>,\n}\n\nimpl<'a, M: 'a> From<HistogramRangeSlider<'a, M>> for Element<'a, M> {\n    fn from(c: HistogramRangeSlider<'a, M>) -> Self {\n        let h = c.histogram;\n        ComposedComponent::new(c.range, c.on_change)   // state + one message for every part\n            // each part is built from the state and answers with the NEXT state\n            .part(move |r| BarChart::histogram(h)\n                .minimal()                                  // only the bars, as a range picker\n                .selected(move |i| h.selected(i, *r))      // bars inside the range\n                .on_pick(move |i| h.bin_range(i))           // a pressed bar is a range\n                .into())\n            .part(|r| range_slider(0.0..=100.0, *r, |moved| moved).into())\n            .normalize(|(lo, hi)| (lo.min(hi), lo.max(hi))) // the rule, in one place\n            .into()\n    }\n}\n\n// USE it like any component\nHistogramRangeSlider::new(&self.histogram, self.range, Msg::Range)"

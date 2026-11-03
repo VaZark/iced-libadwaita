@@ -25,6 +25,8 @@ pub struct Sankey {
     width: Length,
     height: Length,
     format: Option<Formatter>,
+    tooltip: bool,
+    labels: bool,
 }
 
 impl Default for Sankey {
@@ -41,6 +43,8 @@ impl Sankey {
             width: Length::Fill,
             height: Length::Fixed(300.0),
             format: None,
+            tooltip: true,
+            labels: true,
         }
     }
     fn index(&mut self, name: &str) -> usize {
@@ -69,6 +73,16 @@ impl Sankey {
     }
     pub fn height(mut self, h: impl Into<Length>) -> Self {
         self.height = h.into();
+        self
+    }
+    /// The tooltip that follows the pointer (on by default).
+    pub fn tooltip(mut self, show: bool) -> Self {
+        self.tooltip = show;
+        self
+    }
+    /// The text on the marks (on by default).
+    pub fn labels(mut self, show: bool) -> Self {
+        self.labels = show;
         self
     }
     /// How values are written in the tooltip.
@@ -194,15 +208,17 @@ impl<M> canvas::Program<M, Theme> for Sankey {
             } else {
                 (b.x1 + 6.0, Anchor::Start)
             };
-            label(
-                &mut frame,
-                self.names[b.index].as_str(),
-                Point::new(x, mid.y),
-                anchor,
-                text,
-            );
+            if self.labels {
+                label(
+                    &mut frame,
+                    self.names[b.index].as_str(),
+                    Point::new(x, mid.y),
+                    anchor,
+                    text,
+                );
+            }
         }
-        if let (Some(h), Some(at)) = (state.hover, cursor.position_in(bounds)) {
+        if let (Some(h), Some(at), true) = (state.hover, cursor.position_in(bounds), self.tooltip) {
             if h < n {
                 let b = l.nodes[h];
                 let rows = [Row::new(

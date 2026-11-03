@@ -25,6 +25,7 @@ pub struct PieChart {
     width: Length,
     height: Length,
     format: Option<Formatter>,
+    tooltip: bool,
 }
 
 impl PieChart {
@@ -40,6 +41,7 @@ impl PieChart {
             width: Length::Fill,
             height: Length::Fixed(260.0),
             format: None,
+            tooltip: true,
         }
     }
     /// A donut: the hole is this fraction of the radius (`0..1`).
@@ -73,6 +75,11 @@ impl PieChart {
     }
     pub fn height(mut self, h: impl Into<Length>) -> Self {
         self.height = h.into();
+        self
+    }
+    /// The tooltip that follows the pointer (on by default).
+    pub fn tooltip(mut self, show: bool) -> Self {
+        self.tooltip = show;
         self
     }
     /// How values are written in the tooltip.
@@ -169,7 +176,7 @@ impl<M> canvas::Program<M, Theme> for PieChart {
                 theme.semantic.window.fg,
             );
         }
-        if let (Some(i), Some(at)) = (state.hover, cursor.position_in(bounds)) {
+        if let (Some(i), Some(at), true) = (state.hover, cursor.position_in(bounds), self.tooltip) {
             let s = g.slices[i];
             let rows = [
                 Row::new(

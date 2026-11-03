@@ -27,6 +27,12 @@ A flow of \fBvalue\fR from the node \fBfrom\fR to the node \fBto\fR. Nodes are m
 .TP
 .B \&.height(h: impl Into<Length>)
 .TP
+.B \&.tooltip(show: bool)
+The tooltip that follows the pointer (on by default).
+.TP
+.B \&.labels(show: bool)
+The text on the marks (on by default).
+.TP
 .B \&.format(f: impl Fn(f32) \-> String + 'static)
 How values are written in the tooltip.
 .SH SOURCE

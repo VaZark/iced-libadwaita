@@ -375,12 +375,6 @@ impl Gallery {
             Detail::MetaComponent => self.sections.meta_view(m).map(Message::Sections),
             Detail::MetaParent => self.reorder.parent_view(m).map(Message::Reorder),
             Detail::Composed => self.composed.view(m).map(Message::Composed),
-            Detail::LineChart => chart_demo::line(m),
-            Detail::BarChart => chart_demo::bar(m),
-            Detail::PieChart => chart_demo::pie(m),
-            Detail::Funnel => chart_demo::funnel(m),
-            Detail::Sankey => chart_demo::sankey(m),
-            Detail::Sunburst => chart_demo::sunburst(m),
             Detail::SyncedText => self.synced.view(m).map(Message::Synced),
             Detail::Reorderable => self.reorder.view(m).map(Message::Reorder),
             Detail::Resizable => self.resizable.view(m).map(Message::Resizable),
@@ -416,6 +410,12 @@ impl Gallery {
             // Shown by its playground (see `plays.rs`).
             Detail::Tabs
             | Detail::Container
+            | Detail::LineChart
+            | Detail::BarChart
+            | Detail::PieChart
+            | Detail::Funnel
+            | Detail::Sankey
+            | Detail::Sunburst
             | Detail::Docked
             | Detail::Tree
             | Detail::TreeRow
