@@ -27,20 +27,53 @@
 //! // in view
 //! MetaParentComponent::new(&modes)
 //!     .meta("bar", search_bar())                // switched, if it announced the action
-//!     .listener("list", |mode| {
-//!         ReorderableList::new(items, row).editing(mode == Some(&Mode::Edit)).into()
+//!     .on_child_event(Msg::Child)               // what children report: (id, ChildEvent)
+//!     .listener("list", |mode, report| {
+//!         ReorderableList::of(&self.order, row)
+//!             .editing(mode == Some(&Mode::Edit))
+//!             .on_event(Msg::List)              // the list's own message
+//!             .on_change(report.on_change())    // and the parent's, independently
+//!             .into()
 //!     })
 //!     .child(title_text)                        // never notified
 //! ```
 
 use super::{Element, MetaComponent};
-use crate::primitives::meta_parent::Registry;
+use crate::primitives::meta_parent::{ChildEvent, Registry};
 use iced::Length;
 use iced::widget::{Column, Row};
+use std::rc::Rc;
+
+type Report<'a, Id, M> = Rc<dyn Fn(Id, ChildEvent) -> M + 'a>;
+
+/// Turns what one child did into the parent's message. A parent hands one to each
+/// [`listener`](MetaParentComponent::listener); the child's own callbacks stay its own.
+pub struct Reporter<'a, Id, M> {
+    id: Id,
+    report: Option<Report<'a, Id, M>>,
+}
+
+impl<'a, Id: Clone, M> Reporter<'a, Id, M> {
+    /// The message for `event`, or `None` when the parent has no
+    /// [`on_child_event`](MetaParentComponent::on_child_event) callback.
+    pub fn report(&self, event: ChildEvent) -> Option<M> {
+        self.report.as_ref().map(|f| f(self.id.clone(), event))
+    }
+    /// For [`ReorderableList::on_change`](super::ReorderableList::on_change): the message for a
+    /// row that moved. `None` (no callback) is turned into nothing by [`Reporter::on_change`].
+    pub fn on_change(self) -> impl Fn(usize, usize) -> Option<M> + 'a
+    where
+        Id: 'a,
+        M: 'a,
+    {
+        move |from, to| self.report(ChildEvent::Reordered { from, to })
+    }
+}
 
 /// See the [module](self).
 pub struct MetaParentComponent<'a, Id, K, M> {
     registry: &'a Registry<Id, K>,
+    on_child_event: Option<Report<'a, Id, M>>,
     children: Vec<Element<'a, M>>,
     spacing: f32,
     horizontal: bool,
@@ -52,6 +85,7 @@ impl<'a, Id: PartialEq, K: PartialEq + Clone + 'a, M: 'a> MetaParentComponent<'a
     pub fn new(registry: &'a Registry<Id, K>) -> Self {
         Self {
             registry,
+            on_child_event: None,
             children: Vec::new(),
             spacing: 0.0,
             horizontal: false,
@@ -78,8 +112,32 @@ impl<'a, Id: PartialEq, K: PartialEq + Clone + 'a, M: 'a> MetaParentComponent<'a
 
     /// A registered child that is not a `MetaComponent` but has modes of its own: `build`
     /// gets the action it was last switched to (`None` before any).
-    pub fn listener(mut self, id: Id, build: impl FnOnce(Option<&K>) -> Element<'a, M>) -> Self {
-        self.children.push(build(self.registry.current(&id)));
+    ///
+    /// It also gets a [`Reporter`] to wire the child's own events to the parent's
+    /// [`on_child_event`](Self::on_child_event) callback.
+    pub fn listener(
+        mut self,
+        id: Id,
+        build: impl FnOnce(Option<&K>, Reporter<'a, Id, M>) -> Element<'a, M>,
+    ) -> Self
+    where
+        Id: Clone,
+    {
+        let reporter = Reporter {
+            id: id.clone(),
+            report: self.on_child_event.clone(),
+        };
+        self.children
+            .push(build(self.registry.current(&id), reporter));
+        self
+    }
+
+    /// The parent's own callback for what its children report (a list's order changing): it
+    /// gets the child's id and the [`ChildEvent`]. Set it *before* the listeners that report.
+    /// Independent of the callbacks the children carry themselves; the app can run
+    /// [`Registry::emit`] on it and react, e.g. by notifying other children.
+    pub fn on_child_event(mut self, f: impl Fn(Id, ChildEvent) -> M + 'a) -> Self {
+        self.on_child_event = Some(Rc::new(f));
         self
     }
 
@@ -160,17 +218,44 @@ mod tests {
     }
 
     #[test]
+    fn a_listener_reports_to_the_parents_callback_and_without_one_to_nobody() {
+        let mut r = Reg::new();
+        r.register("list", ["edit"]);
+        let mut got = Vec::new();
+        let _: Element<'_, (&'static str, ChildEvent)> =
+            MetaParentComponent::<&str, &str, _>::new(&r)
+                .on_child_event(|id, e| (id, e))
+                .listener("list", |_, rep| {
+                    got.push(rep.on_change()(0, 2));
+                    iced::widget::space().into()
+                })
+                .into();
+        assert_eq!(
+            got,
+            vec![Some(("list", ChildEvent::Reordered { from: 0, to: 2 }))]
+        );
+        let mut none = Vec::new();
+        let _: Element<'_, ()> = P::new(&r)
+            .listener("list", |_, rep| {
+                none.push(rep.on_change()(0, 2));
+                iced::widget::space().into()
+            })
+            .into();
+        assert_eq!(none, vec![None]);
+    }
+
+    #[test]
     fn listeners_get_what_they_were_switched_to_and_plain_children_nothing() {
         let mut r = Reg::new();
         r.register("list", ["edit", "preview"]);
         r.notify(&"edit");
         let mut seen = Vec::new();
         let _: Element<'_, ()> = P::new(&r)
-            .listener("list", |a| {
+            .listener("list", |a, _| {
                 seen.push(a.copied());
                 iced::widget::space().into()
             })
-            .listener("stranger", |a| {
+            .listener("stranger", |a, _| {
                 seen.push(a.copied());
                 iced::widget::space().into()
             })

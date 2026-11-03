@@ -111,7 +111,6 @@ impl Icon {
             Icon::WindowMinimize => "window-minimize-symbolic",
             Icon::WindowMaximize => "window-maximize-symbolic",
             Icon::WindowRestore => "window-restore-symbolic",
-            Icon::DragHandle => "list-drag-handle-symbolic",
             _ => return None,
         })
     }

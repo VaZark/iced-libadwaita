@@ -13,15 +13,15 @@
 use iced_libadwaita as adw;
 
 use adw::widget::{
-    self as w, MetaComponent, MetaParentComponent, MetaRegistry, Mode, ReorderState,
-    ReorderableList, When, typography as ty,
+    self as w, ChildEvent, MetaComponent, MetaParentComponent, MetaRegistry, Mode, ReorderEvent,
+    ReorderState, ReorderableList, When, typography as ty,
 };
 use adw::{Element, Metrics};
 use iced::Length;
 use iced::widget::column;
 
 #[derive(Debug, Clone, PartialEq)]
-enum Part {
+pub enum Part {
     List,
     Hint,
     Search,
@@ -35,18 +35,25 @@ enum Key {
 
 #[derive(Debug, Clone)]
 pub enum Msg {
-    Edit,
-    Reorder(usize, usize),
-    Submit,
-    Cancel,
+    /// The standalone list: all it needs is `apply`.
+    Plain(ReorderEvent),
+    /// The list inside the meta parent (its own state).
+    List(ReorderEvent),
     /// Switch the children that announced `Search` (nobody reacts but the search child).
     Search,
+    /// What a child reported to the parent: (child, event).
+    Child(Part, ChildEvent),
 }
 
 pub struct State {
+    plain: ReorderState<&'static str>,
     order: ReorderState<&'static str>,
     modes: MetaRegistry<Part, Key>,
+    /// The parent's reaction, shown under the list.
+    last: String,
 }
+
+const TOOLS: [&str; 4] = ["Pencil", "Brush", "Eraser", "Ruler"];
 
 const NAMES: [&str; 5] = ["Inbox", "Drafts", "Sent", "Archive", "Trash"];
 
@@ -102,27 +109,40 @@ impl Default for State {
             order.edit();
             modes.notify(&Key::Mode(Mode::Edit));
         }
-        Self { order, modes }
+        Self {
+            plain: ReorderState::new(TOOLS.to_vec()),
+            order,
+            modes,
+            last: "No order change yet.".into(),
+        }
     }
 }
 
 impl State {
     pub fn update(&mut self, m: Msg) {
         match m {
-            Msg::Edit => {
-                self.order.edit();
-                self.modes.notify(&Key::Mode(Mode::Edit));
+            Msg::Plain(event) => {
+                self.plain.apply(event);
             }
-            Msg::Reorder(from, to) => {
-                self.order.reorder(from, to);
+            Msg::List(event) => {
+                self.order.apply(event);
+                // The parent's other children follow the list's mode.
+                match event {
+                    ReorderEvent::Edit => {
+                        self.modes.notify(&Key::Mode(Mode::Edit));
+                    }
+                    ReorderEvent::Submit | ReorderEvent::Cancel => {
+                        self.modes.notify(&Key::Mode(Mode::Preview));
+                    }
+                    ReorderEvent::Reorder { .. } => {}
+                }
             }
-            Msg::Submit => {
-                self.order.submit();
-                self.modes.notify(&Key::Mode(Mode::Preview));
-            }
-            Msg::Cancel => {
-                self.order.cancel();
-                self.modes.notify(&Key::Mode(Mode::Preview));
+            Msg::Child(id, event) => {
+                // Independent of the list's own `Reorder`: only registered children count.
+                if let Some(e) = self.modes.emit(&id, event) {
+                    let ChildEvent::Reordered { from, to } = e.event;
+                    self.last = format!("Parent: {:?} moved row {from} to {to}.", e.child);
+                }
             }
             Msg::Search => {
                 self.modes.notify(&Key::Search);
@@ -132,17 +152,15 @@ impl State {
 
     pub fn view(&self, m: Metrics) -> Element<'_, Msg> {
         let sp = m.space_m;
-        let items = self.order.items();
         let parent = MetaParentComponent::new(&self.modes)
             .spacing(sp)
-            .listener(Part::List, |mode| {
-                ReorderableList::new(items, |name| w::action_row(*name).into())
+            .on_child_event(Msg::Child)
+            .listener(Part::List, |mode, report| {
+                ReorderableList::of(&self.order, |name| w::action_row(*name).into())
                     .title("Folders")
                     .editing(mode == Some(&Key::Mode(Mode::Edit)))
-                    .on_edit(Msg::Edit)
-                    .on_reorder(Msg::Reorder)
-                    .on_submit(Msg::Submit)
-                    .on_cancel(Msg::Cancel)
+                    .on_event(Msg::List)
+                    .on_change(report.on_change())
                     .metrics(m)
                     .into()
             })
@@ -151,27 +169,34 @@ impl State {
             .child(ty::caption(
                 "A plain child: it never registered, so nothing reaches it.",
             ));
-        let disabled = ReorderableList::new(&NAMES[..3], |name| w::action_row(*name).into())
-            .title("Disabled")
-            .disabled(true)
-            .on_edit(Msg::Edit)
+        let plain = ReorderableList::of(&self.plain, |name| w::action_row(*name).into())
+            .title("Tools")
+            .on_event(Msg::Plain)
             .metrics(m);
+        let disabled =
+            ReorderableList::<_, Msg>::new(&TOOLS[..3], |name| w::action_row(*name).into())
+                .title("Disabled")
+                .disabled(true)
+                .metrics(m);
         column![
             group(
                 m,
-                "Reorderable list in a meta parent",
+                "Reorderable list",
                 "Edit shows the grips; drag a row by its grip; Done keeps the order, Cancel restores it.",
-                parent.into()
-            ),
-            group(
-                m,
-                "Notify an unrelated action",
-                "Search is announced by the search child only; the list and the hint do not move.",
-                w::raised_button(ty::label("Notify Search"))
-                    .on_press(Msg::Search)
-                    .into()
+                plain.into()
             ),
             group(m, "Disabled", "A disabled list cannot enter edit mode.", disabled.into()),
+            group(
+                m,
+                "In a meta parent",
+                "Its own list, registry and children: Edit also switches the hint; Search is announced by the search child only, so nothing else moves.",
+                column![
+                    parent,
+                    w::raised_button(ty::label("Notify Search")).on_press(Msg::Search)
+                ]
+                .spacing(sp)
+                .into()
+            ),
         ]
         .spacing(m.group_spacing)
         .into()

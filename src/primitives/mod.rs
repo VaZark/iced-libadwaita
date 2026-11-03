@@ -57,7 +57,7 @@ pub use lookup::{Highlight, Lookup, Query, Request, RequestId, Status as LookupS
 pub use meta::Trigger;
 pub use pagination::{PageItem, Pagination};
 pub use relative::Relative;
-pub use reorder::{Mode as ReorderMode, ReorderState};
+pub use reorder::{Event as ReorderEvent, Mode as ReorderMode, ReorderState};
 pub use responsive::When;
 pub use selection::Selection;
 pub use sorting::{Cycle as SortCycle, Direction as SortDirection, SortState};

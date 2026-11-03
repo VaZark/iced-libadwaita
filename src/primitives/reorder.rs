@@ -28,6 +28,20 @@ impl Mode {
     }
 }
 
+/// What happens to a reorderable list: the single message a list emits, applied to a
+/// [`ReorderState`] with [`apply`](ReorderState::apply).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Event {
+    /// Edit was pressed: start a draft.
+    Edit,
+    /// A row was dropped: it was at `from` and now belongs at `to`.
+    Reorder { from: usize, to: usize },
+    /// Done was pressed: keep the draft.
+    Submit,
+    /// Cancel was pressed: throw the draft away.
+    Cancel,
+}
+
 /// Moves the item at `from` so that it ends up at index `to`, shifting those in between.
 /// Returns whether anything moved; out-of-range indices change nothing.
 pub fn move_item<T>(items: &mut Vec<T>, from: usize, to: usize) -> bool {
@@ -112,6 +126,22 @@ impl<T: Clone> ReorderState<T> {
     pub fn cancel(&mut self) {
         self.draft = None;
     }
+    /// Applies a list's [`Event`]: the whole `update` of a reorderable list. Returns whether the
+    /// *committed* order changed (only `Submit` can).
+    pub fn apply(&mut self, event: Event) -> bool
+    where
+        T: PartialEq,
+    {
+        match event {
+            Event::Edit => self.edit(),
+            Event::Reorder { from, to } => {
+                self.reorder(from, to);
+            }
+            Event::Submit => return self.submit(),
+            Event::Cancel => self.cancel(),
+        }
+        false
+    }
     /// Replaces the committed items (a row added or removed elsewhere). Any draft is dropped.
     pub fn set(&mut self, items: Vec<T>) {
         self.committed = items;
@@ -155,6 +185,22 @@ pub fn shift(j: usize, from: usize, to: usize, step: f32) -> f32 {
     } else {
         0.0
     }
+}
+
+/// Where the top of the slot `to` is once row `from` is dropped there: the rows keep their
+/// order and the gap between them (`gap`), the dragged one slotted in at index `to`.
+pub fn slot_top(rows: &[Span], from: usize, to: usize, gap: f32) -> f32 {
+    let Some(first) = rows.first() else {
+        return 0.0;
+    };
+    first.top
+        + rows
+            .iter()
+            .enumerate()
+            .filter(|(j, _)| *j != from)
+            .take(to)
+            .map(|(_, r)| r.height + gap)
+            .sum::<f32>()
 }
 
 #[cfg(test)]
@@ -208,6 +254,20 @@ mod tests {
     }
 
     #[test]
+    fn apply_runs_the_whole_edit_cycle() {
+        let mut s = ReorderState::new(vec![1, 2, 3]);
+        assert!(!s.apply(Event::Edit));
+        s.apply(Event::Reorder { from: 0, to: 2 });
+        assert_eq!(s.items(), [2, 3, 1]);
+        assert!(s.apply(Event::Submit));
+        assert_eq!(s.committed(), [2, 3, 1]);
+        s.apply(Event::Edit);
+        s.apply(Event::Reorder { from: 0, to: 1 });
+        assert!(!s.apply(Event::Cancel));
+        assert_eq!((s.items(), s.mode()), (&[2, 3, 1][..], Mode::Preview));
+    }
+
+    #[test]
     fn cancel_restores_the_committed_order() {
         let mut s = ReorderState::new(vec![1, 2, 3]);
         s.edit();
@@ -253,6 +313,16 @@ mod tests {
         let r = rows(&[100.0, 20.0, 20.0]); // middles 50, 111, 132
         assert_eq!(target(&r, 2, 60.0), 1);
         assert_eq!(target(&r, 2, 40.0), 0);
+    }
+
+    #[test]
+    fn the_target_slot_sits_where_the_dragged_row_would_land() {
+        let r = rows(&[40.0, 20.0, 60.0]); // tops 0, 41, 62
+        assert_eq!(slot_top(&r, 0, 0, 1.0), 0.0);
+        assert_eq!(slot_top(&r, 0, 2, 1.0), 20.0 + 1.0 + 60.0 + 1.0);
+        assert_eq!(slot_top(&r, 2, 0, 1.0), 0.0);
+        assert_eq!(slot_top(&r, 2, 1, 1.0), 41.0);
+        assert_eq!(slot_top(&r, 1, 1, 1.0), 41.0, "unmoved: its own place");
     }
 
     #[test]

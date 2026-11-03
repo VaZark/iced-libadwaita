@@ -8,8 +8,27 @@
 //! * a child that did not announce it is *unrelated* and is left as it is;
 //! * a child that never registered (any non-meta widget) is never notified.
 //!
+//! The other direction: a child **reports** what it did ([`ChildEvent`]); [`Registry::emit`]
+//! keeps the report of a registered child and drops the rest, and the app reacts on its own
+//! (for instance by notifying other children).
+//!
 //! Controlled like every primitive: the app owns the registry and calls `notify` from its
 //! `update`; the widget only reads [`Registry::current`].
+
+/// What a child reports back to its parent: the other direction from a notification, so the
+/// parent can react to what a child did without the child knowing who is listening.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChildEvent {
+    /// A reorderable child's row moved: it was at `from` and now belongs at `to`.
+    Reordered { from: usize, to: usize },
+}
+
+/// A [`ChildEvent`] from a child that is registered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Emitted<'a, Id> {
+    pub child: &'a Id,
+    pub event: ChildEvent,
+}
 
 /// One registered child.
 #[derive(Debug, Clone, PartialEq)]
@@ -126,6 +145,14 @@ impl<Id: PartialEq, K: PartialEq> Registry<Id, K> {
             None => false,
         }
     }
+    /// A child's report, kept only when the child registered: an event from an unregistered
+    /// child (a plain widget) is ignored, the mirror of it never being notified. The app calls
+    /// this from `update` and runs its independent reaction on `Some`; the reaction may
+    /// [`notify`](Self::notify) other children.
+    pub fn emit<'a>(&'a self, id: &'a Id, event: ChildEvent) -> Option<Emitted<'a, Id>> {
+        let child = &self.entries.iter().find(|e| e.id == *id)?.id;
+        Some(Emitted { child, event })
+    }
     /// Takes every child back to no action (each shows its fallback).
     pub fn reset(&mut self) {
         for e in &mut self.entries {
@@ -209,6 +236,15 @@ mod tests {
         assert_eq!(r.notify(&"edit"), vec![&"table"]);
         r.register("table", ["edit"]);
         assert_eq!(r.current(&"table"), Some(&"edit"), "still announced: kept");
+    }
+
+    #[test]
+    fn only_registered_children_can_report() {
+        let r = reg();
+        let ev = ChildEvent::Reordered { from: 0, to: 2 };
+        let e = r.emit(&"list", ev).expect("registered");
+        assert_eq!((e.child, e.event), (&"list", ev));
+        assert!(r.emit(&"plain", ev).is_none());
     }
 
     #[test]

@@ -60,8 +60,9 @@ pub use crate::primitives::calendar::{CalendarView, Dir as NavDir, Level};
 pub use crate::primitives::date::{Date, days_in_month, is_leap_year, validate as validate_date};
 pub use crate::primitives::form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
 pub use crate::primitives::meta_parent::Registry as MetaRegistry;
+pub use crate::primitives::meta_parent::{ChildEvent, Emitted};
 pub use crate::primitives::range::{Collide, DateRange, DayRole, Edge, Range, Thumb, Track};
-pub use crate::primitives::reorder::{Mode, ReorderState};
+pub use crate::primitives::reorder::{Event as ReorderEvent, Mode, ReorderState};
 pub use crate::primitives::stepper::{Fill as StepperFill, Status as StepperStatus, StepperState};
 pub use crate::primitives::validation::{
     self, Interaction, Presentation as ValidationState, Validity,
@@ -112,7 +113,7 @@ pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent
 pub use infinite::{InfiniteList, LoadTrigger};
 pub use menu::{Menu, MenuButton, MenuItem, MenuPresentation, menu_button, primary_menu};
 pub use meta_component::MetaComponent;
-pub use meta_parent_component::MetaParentComponent;
+pub use meta_parent_component::{MetaParentComponent, Reporter};
 pub use motion::{
     DrawerLayer, Entrance, Highlight, PageTransition, PushStack, Reveal, drawer_layer, entrance,
     highlight, layered, page_transition, push_stack, reveal,

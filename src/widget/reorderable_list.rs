@@ -1,51 +1,49 @@
-//! `ReorderableList`: a list that has a **preview** view and an **edit** view, where editing
-//! means dragging the rows into a new order. The API follows Chakra UI's
-//! [Editable](https://chakra-ui.com/docs/components/editable) (a value with a preview, an
-//! input, and Edit / Submit / Cancel controls); the drag follows libadwaita's draggable rows
-//! (`GtkDragSource` on a `GtkListBox` row, `list-drag-handle-symbolic` as the grip).
-//!
-//! | Chakra `Editable`       | here                                              |
-//! | ----------------------- | ------------------------------------------------- |
-//! | `isEditing`             | [`editing`](ReorderableList::editing) (controlled) |
-//! | `EditablePreview`       | the rows as they are                              |
-//! | `EditableInput`         | the rows with a drag handle each                  |
-//! | `EditableControls`      | the Edit / Cancel / Done buttons ([`controls`](ReorderableList::controls)) |
-//! | `onEdit` `onSubmit` `onCancel` | [`on_edit`](ReorderableList::on_edit), [`on_submit`](ReorderableList::on_submit), [`on_cancel`](ReorderableList::on_cancel) |
-//! | `onChange`              | [`on_reorder`](ReorderableList::on_reorder) `(from, to)` |
-//! | `isDisabled`            | [`disabled`](ReorderableList::disabled)           |
-//!
-//! The two views are the variants of a [`MetaComponent`](super::MetaComponent) keyed by
-//! [`Mode`] with `Trigger::selected(Mode::Edit)`; they are picked with the same
-//! `primitives::meta::pick`, called directly because `MetaComponent` is built on iced's
-//! `responsive`, which cannot shrink to its content's height (as [`Form`](super::Form) does).
-//! Only the view being shown is built.
-//!
-//! A list can also be switched by a [`MetaParentComponent`](super::MetaParentComponent): register
-//! it with [`actions`](ReorderableList::actions) and build it from the action the parent gives.
-//!
-//! The app owns the order. [`ReorderState`](crate::primitives::reorder::ReorderState) keeps the
-//! committed order and the draft that edit mode works on:
+//! `ReorderableList`: a list that you declare once with its two views, **preview** and
+//! **edit**, and that owns the switching between them; editing means dragging the rows into a
+//! new order (libadwaita's draggable rows: a grip, `list-drag-handle-symbolic`, at the end of
+//! each). Declared the way Chakra's `Editable` is (a preview, an edit view and their controls
+//! in one container), but controlled, like every component here: the order and the mode live in
+//! a [`ReorderState`], and the list speaks **one** message, [`ReorderEvent`].
 //!
 //! ```ignore
-//! ReorderableList::new(self.order.items(), |item| action_row(*item).into())
+//! // view
+//! ReorderableList::of(&self.order, |item| action_row(*item).into())
 //!     .title("Sidebar")
-//!     .editing(self.order.is_editing())
-//!     .on_edit(Msg::Edit)
-//!     .on_reorder(Msg::Reorder)           // (from, to): self.order.reorder(from, to)
-//!     .on_submit(Msg::Submit)             // self.order.submit()
-//!     .on_cancel(Msg::Cancel)             // self.order.cancel()
+//!     .on_event(Msg::List)
+//!
+//! // update
+//! Msg::List(event) => { self.order.apply(event); }
 //! ```
 //!
-//! **Dragging.** Press a row's handle (the grip at its end) and move: the row lifts and follows
-//! the pointer, the others move out of its way, and releasing drops it in the slot it is over
-//! (`on_reorder(from, to)`). Escape while dragging puts it back. Rows keep their own pointer
-//! behavior (buttons, entries) in edit mode; only the handle starts a drag. Moving rows with
-//! the keyboard is not included: iced has no focus model to hang it on yet.
+//! That is the whole wiring: `of` takes the items and the mode from the state, the Edit /
+//! Cancel / Done buttons and the drag all come out as `on_event`, and `apply` handles every
+//! one (the draft, submit, cancel). The state can sit anywhere in the model.
+//!
+//! * **Views.** One row builder serves both; [`edit_row`](ReorderableList::edit_row) gives the
+//!   edit view its own (a compact row, say). The edit view adds the grips. Only the view being
+//!   shown is built.
+//! * **Controls.** [`controls(false)`](ReorderableList::controls) drops the bar when the app
+//!   has its own Edit button (send it `ReorderEvent::Edit`); [`disabled`](ReorderableList::disabled)
+//!   dims Edit; [`labels`](ReorderableList::labels) renames the buttons.
+//! * **Switching.** The views are picked like the variants of a
+//!   [`MetaComponent`](super::MetaComponent) keyed by [`Mode`] (`Trigger::selected(Mode::Edit)`,
+//!   the same `primitives::meta::pick`, called directly because `responsive` cannot shrink to
+//!   its content's height; [`Form`](super::Form) does the same). A
+//!   [`MetaParentComponent`](super::MetaParentComponent) can switch a list as well: register
+//!   it with [`actions`](ReorderableList::actions) and call [`editing`](ReorderableList::editing)
+//!   with the mode it is given.
+//!
+//! **Dragging.** Press a row's grip and move: the row lifts and follows the pointer, the others
+//! move out of its way, and releasing drops it in the slot it is over (`Reorder { from, to }`).
+//! Escape puts it back. Rows keep their own pointer behavior (buttons, entries) in edit mode;
+//! only the grip starts a drag. Moving rows with the keyboard is not included: iced has no focus
+//! model to hang it on yet.
 
-use super::motion::draw_translated;
 use super::{Element, Mode, card_shadow, flat_button, raised_button, suggested_button};
+use crate::color::alpha;
+use crate::primitives::animation::{Progress, Spec, Trigger as Motion};
 use crate::primitives::meta::{self, Trigger};
-use crate::primitives::reorder::{self, Span};
+use crate::primitives::reorder::{self, Event as ReorderEvent, ReorderState, Span};
 use crate::style::container as sc;
 use crate::widget::typography::label;
 use crate::{Icon, Metrics, Theme};
@@ -56,13 +54,20 @@ use iced::advanced::{Clipboard, Shell, overlay};
 use iced::alignment::Vertical;
 use iced::widget::{column, container, row, space};
 use iced::{
-    Background, Border, Event, Length, Point, Rectangle, Shadow, Size, Vector, keyboard, mouse,
+    Background, Border, Color, Event, Length, Point, Rectangle, Shadow, Size, Transformation,
+    Vector, keyboard, mouse,
 };
+use std::rc::Rc;
 
 /// Width of the grip's hit area, at the end of each row in edit mode.
 const HANDLE_WIDTH: f32 = 48.0;
 /// The hairline between rows.
 const SEPARATOR: f32 = 1.0;
+/// The held row's default hover: 2% bigger.
+const DEFAULT_LIFT: f32 = 1.02;
+
+/// A drop callback that may have nothing to say.
+type Change<'a, M> = Box<dyn Fn(usize, usize) -> Option<M> + 'a>;
 
 type Build<'a, T, M> = Box<dyn Fn(&T) -> Element<'a, M> + 'a>;
 
@@ -70,14 +75,14 @@ type Build<'a, T, M> = Box<dyn Fn(&T) -> Element<'a, M> + 'a>;
 pub struct ReorderableList<'a, T, M> {
     items: &'a [T],
     row: Build<'a, T, M>,
+    edit_row: Option<Build<'a, T, M>>,
     title: Option<String>,
     editing: bool,
     disabled: bool,
     controls: bool,
-    on_edit: Option<M>,
-    on_submit: Option<M>,
-    on_cancel: Option<M>,
-    on_reorder: Option<Box<dyn Fn(usize, usize) -> M + 'a>>,
+    on_event: Option<Rc<dyn Fn(ReorderEvent) -> M + 'a>>,
+    on_change: Option<Change<'a, M>>,
+    lift: f32,
     edit_label: String,
     submit_label: String,
     cancel_label: String,
@@ -95,15 +100,28 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
             editing: false,
             disabled: false,
             controls: true,
-            on_edit: None,
-            on_submit: None,
-            on_cancel: None,
-            on_reorder: None,
+            edit_row: None,
+            on_event: None,
+            on_change: None,
+            lift: DEFAULT_LIFT,
             edit_label: "Edit".into(),
             submit_label: "Done".into(),
             cancel_label: "Cancel".into(),
             metrics: Metrics::desktop(),
         }
+    }
+    /// A list over a [`ReorderState`]: its items, and edit mode while it has a draft. The usual
+    /// way to build one.
+    pub fn of(state: &'a ReorderState<T>, row: impl Fn(&T) -> Element<'a, M> + 'a) -> Self
+    where
+        T: Clone,
+    {
+        Self::new(state.items(), row).editing(state.is_editing())
+    }
+    /// The row of the edit view, when it should differ from the preview's.
+    pub fn edit_row(mut self, row: impl Fn(&T) -> Element<'a, M> + 'a) -> Self {
+        self.edit_row = Some(Box::new(row));
+        self
     }
     /// A heading at the start of the controls bar.
     pub fn title(mut self, title: impl Into<String>) -> Self {
@@ -126,24 +144,25 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
         self.controls = show;
         self
     }
-    /// Pressing Edit.
-    pub fn on_edit(mut self, msg: M) -> Self {
-        self.on_edit = Some(msg);
+    /// The list's one message: Edit, Submit and Cancel from the buttons, and `Reorder` from a
+    /// drop. Feed it to [`ReorderState::apply`].
+    pub fn on_event(mut self, f: impl Fn(ReorderEvent) -> M + 'a) -> Self {
+        self.on_event = Some(Rc::new(f));
         self
     }
-    /// Pressing Done: keep the new order.
-    pub fn on_submit(mut self, msg: M) -> Self {
-        self.on_submit = Some(msg);
+    /// A second, independent callback for the same drop, for whoever watches the list from
+    /// outside: a [`MetaParentComponent`](super::MetaParentComponent) hands one out
+    /// ([`Reporter::on_change`](super::Reporter::on_change)) so it can react to its child's order changing while the
+    /// app's own `on_event` still edits the order. Both messages are published, `on_event`
+    /// first.
+    pub fn on_change(mut self, f: impl Fn(usize, usize) -> Option<M> + 'a) -> Self {
+        self.on_change = Some(Box::new(f));
         self
     }
-    /// Pressing Cancel: back to the order from before editing.
-    pub fn on_cancel(mut self, msg: M) -> Self {
-        self.on_cancel = Some(msg);
-        self
-    }
-    /// A row was dropped: it was at index `from` and now belongs at index `to`.
-    pub fn on_reorder(mut self, f: impl Fn(usize, usize) -> M + 'a) -> Self {
-        self.on_reorder = Some(Box::new(f));
+    /// How much bigger the held row grows while it is dragged, as a scale (default 1.02, a
+    /// tiny hover; 1.0 turns it off). The row is always opaque and drawn above the others.
+    pub fn lift(mut self, scale: f32) -> Self {
+        self.lift = scale.max(1.0);
         self
     }
     /// The labels of the three buttons (defaults: Edit, Done, Cancel).
@@ -186,6 +205,10 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
         .map_or(Mode::Preview, |i| variants[i].0)
     }
 
+    fn send(&self, e: ReorderEvent) -> Option<M> {
+        self.on_event.as_ref().map(|f| f(e))
+    }
+
     fn bar(&self, mode: Mode) -> Element<'a, M> {
         let m = &self.metrics;
         let mut bar = row![].spacing(m.space_s).align_y(Vertical::Center);
@@ -195,19 +218,22 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
         bar = bar.push(space().width(Length::Fill));
         match mode {
             Mode::Preview => {
-                let edit = flat_button(label(self.edit_label.clone()))
-                    .on_press_maybe((!self.disabled).then(|| self.on_edit.clone()).flatten());
+                let edit = flat_button(label(self.edit_label.clone())).on_press_maybe(
+                    (!self.disabled)
+                        .then(|| self.send(ReorderEvent::Edit))
+                        .flatten(),
+                );
                 bar = bar.push(edit);
             }
             Mode::Edit => {
                 bar = bar
                     .push(
                         raised_button(label(self.cancel_label.clone()))
-                            .on_press_maybe(self.on_cancel.clone()),
+                            .on_press_maybe(self.send(ReorderEvent::Cancel)),
                     )
                     .push(
                         suggested_button(label(self.submit_label.clone()))
-                            .on_press_maybe(self.on_submit.clone()),
+                            .on_press_maybe(self.send(ReorderEvent::Submit)),
                     );
             }
         }
@@ -224,14 +250,24 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
                 .width(Length::Fixed(HANDLE_WIDTH))
                 .align_x(iced::alignment::Horizontal::Center);
             Element::from(
-                row![container((self.row)(item)).width(Length::Fill), grip]
-                    .align_y(Vertical::Center),
+                row![
+                    container((self.edit_row.as_ref().unwrap_or(&self.row))(item))
+                        .width(Length::Fill),
+                    grip
+                ]
+                .align_y(Vertical::Center),
             )
         });
         let mut list = DragList::new(rows.collect());
-        if let Some(f) = self.on_reorder.take() {
-            list = list.on_reorder(f);
-        }
+        // Cloned, not taken: the Cancel and Done buttons are built from the same callback.
+        list.on_reorder = self
+            .on_event
+            .clone()
+            .map(|f| -> Box<dyn Fn(usize, usize) -> M + 'a> {
+                Box::new(move |from, to| f(ReorderEvent::Reorder { from, to }))
+            });
+        list.on_change = self.on_change.take();
+        list.lift = self.lift;
         let list: Element<'a, M> = Element::new(list);
         card_shadow(
             container(list)
@@ -269,6 +305,8 @@ impl<'a, T, M: Clone + 'a> From<ReorderableList<'a, T, M>> for Element<'a, M> {
 struct DragList<'a, M, R = iced::Renderer> {
     rows: Vec<iced::Element<'a, M, Theme, R>>,
     on_reorder: Option<Box<dyn Fn(usize, usize) -> M + 'a>>,
+    on_change: Option<Change<'a, M>>,
+    lift: f32,
 }
 
 impl<'a, M, R: iced::advanced::Renderer> DragList<'a, M, R> {
@@ -276,11 +314,12 @@ impl<'a, M, R: iced::advanced::Renderer> DragList<'a, M, R> {
         Self {
             rows,
             on_reorder: None,
+            on_change: None,
+            lift: DEFAULT_LIFT,
         }
     }
-    fn on_reorder(mut self, f: impl Fn(usize, usize) -> M + 'a) -> Self {
-        self.on_reorder = Some(Box::new(f));
-        self
+    fn draggable(&self) -> bool {
+        self.on_reorder.is_some() || self.on_change.is_some()
     }
 }
 
@@ -298,6 +337,8 @@ struct Drag {
 #[derive(Default)]
 struct State {
     drag: Option<Drag>,
+    /// How far each row has slid out of the held row's way (px), eased toward `shift`.
+    slide: Vec<Progress>,
 }
 
 fn spans(layout: Layout<'_>) -> Vec<Span> {
@@ -376,13 +417,30 @@ impl<'a, M: 'a, R: iced::advanced::Renderer + 'a> Widget<M, Theme, R> for DragLi
     ) {
         let state = tree.state.downcast_mut::<State>();
 
-        if let Some(d) = &mut state.drag {
+        if let Some(mut d) = state.drag {
             match event {
+                // The rows slide toward where the held row would land.
+                Event::Window(iced::window::Event::RedrawRequested(now)) => {
+                    let rows = spans(layout);
+                    let to = drop_slot(&d, &rows);
+                    let step = rows[d.from].height + SEPARATOR;
+                    let spec = Motion::Selection.spec(Spec::STYLE);
+                    state.slide.resize_with(rows.len(), || Progress::new(0.0));
+                    let mut moving = false;
+                    for (j, p) in state.slide.iter_mut().enumerate() {
+                        moving |= p.drive(reorder::shift(j, d.from, to, step), *now, spec);
+                    }
+                    if moving {
+                        shell.request_redraw();
+                    }
+                    return;
+                }
                 Event::Mouse(mouse::Event::CursorMoved { .. }) => {
                     // The pointer from `cursor`, not from the event: a scrollable parent shifts
                     // it by its scroll offset (see `Resizable`).
                     if let Some(p) = cursor.position() {
                         d.y = p.y;
+                        state.drag = Some(d);
                     }
                     shell.request_redraw();
                 }
@@ -391,12 +449,16 @@ impl<'a, M: 'a, R: iced::advanced::Renderer + 'a> Widget<M, Theme, R> for DragLi
                         d.y = p.y;
                     }
                     let rows = spans(layout);
-                    let (from, to) = (d.from, drop_slot(d, &rows));
+                    let (from, to) = (d.from, drop_slot(&d, &rows));
                     state.drag = None;
-                    if from != to
-                        && let Some(f) = &self.on_reorder
-                    {
-                        shell.publish(f(from, to));
+                    state.slide.clear();
+                    if from != to {
+                        if let Some(f) = &self.on_reorder {
+                            shell.publish(f(from, to));
+                        }
+                        if let Some(m) = self.on_change.as_ref().and_then(|f| f(from, to)) {
+                            shell.publish(m);
+                        }
                     }
                     shell.request_redraw();
                 }
@@ -405,6 +467,7 @@ impl<'a, M: 'a, R: iced::advanced::Renderer + 'a> Widget<M, Theme, R> for DragLi
                     ..
                 }) => {
                     state.drag = None;
+                    state.slide.clear();
                     shell.request_redraw();
                 }
                 _ => {}
@@ -414,7 +477,7 @@ impl<'a, M: 'a, R: iced::advanced::Renderer + 'a> Widget<M, Theme, R> for DragLi
             return;
         }
 
-        if self.on_reorder.is_some()
+        if self.draggable()
             && let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event
             && let Some(p) = cursor.position()
             && let Some((i, row)) = layout
@@ -454,7 +517,7 @@ impl<'a, M: 'a, R: iced::advanced::Renderer + 'a> Widget<M, Theme, R> for DragLi
         if tree.state.downcast_ref::<State>().drag.is_some() {
             return mouse::Interaction::Grabbing;
         }
-        if self.on_reorder.is_some()
+        if self.draggable()
             && layout
                 .children()
                 .any(|c| cursor.is_over(handle_rect(c.bounds())))
@@ -506,6 +569,35 @@ impl<'a, M: 'a, R: iced::advanced::Renderer + 'a> Widget<M, Theme, R> for DragLi
         }
 
         let slot = drag.as_ref().map(|d| (d, drop_slot(d, &rows)));
+        let accent = theme.semantic.accent.bg;
+        let slide = &tree.state.downcast_ref::<State>().slide;
+
+        // The target: the slot the held row would land in, tinted in the accent color, with an
+        // accent line on the edge it is moving toward (Spotify's insertion line, GNOME's
+        // `drop-active` row). Where the row started it is the same tinted slot, without a line.
+        if let Some((d, to)) = slot {
+            let h = rows[d.from].height;
+            let top = reorder::slot_top(&rows, d.from, to, SEPARATOR);
+            let b = layout.bounds();
+            let fill = |renderer: &mut R, y: f32, height: f32, color: Color| {
+                renderer.fill_quad(
+                    Quad {
+                        bounds: Rectangle::new(Point::new(b.x, y), Size::new(b.width, height)),
+                        border: Border::default(),
+                        shadow: Shadow::default(),
+                        snap: true,
+                    },
+                    color,
+                );
+            };
+            fill(renderer, top, h, alpha(accent, 0.14));
+            const LINE: f32 = 2.0;
+            if to > d.from {
+                fill(renderer, top + h - LINE, LINE, accent);
+            } else if to < d.from {
+                fill(renderer, top, LINE, accent);
+            }
+        }
         for (j, ((row, t), l)) in self
             .rows
             .iter()
@@ -516,25 +608,25 @@ impl<'a, M: 'a, R: iced::advanced::Renderer + 'a> Widget<M, Theme, R> for DragLi
             match slot {
                 // The held row is drawn last, on top.
                 Some((d, _)) if d.from == j => {}
-                Some((d, to)) => {
-                    let dy = reorder::shift(j, d.from, to, rows[d.from].height + SEPARATOR);
-                    draw_translated(
-                        renderer,
-                        l.bounds(),
-                        viewport,
-                        Vector::new(0.0, dy),
-                        |r, vp| {
-                            row.as_widget().draw(
-                                t,
-                                r,
-                                theme,
-                                style,
-                                l,
-                                mouse::Cursor::Unavailable,
-                                vp,
-                            );
-                        },
-                    );
+                Some((_, _)) => {
+                    let dy = slide.get(j).map_or(0.0, |p| p.shown);
+                    // Clip to what the viewport shows *after* the shift: the row moves into a
+                    // neighbor's slot, so clipping to its own slot would cut it off.
+                    let vp = Rectangle {
+                        y: viewport.y - dy,
+                        ..*viewport
+                    };
+                    renderer.with_translation(Vector::new(0.0, dy), |r| {
+                        row.as_widget().draw(
+                            t,
+                            r,
+                            theme,
+                            style,
+                            l,
+                            mouse::Cursor::Unavailable,
+                            &vp,
+                        );
+                    });
                 }
                 None => row
                     .as_widget()
@@ -552,34 +644,58 @@ impl<'a, M: 'a, R: iced::advanced::Renderer + 'a> Widget<M, Theme, R> for DragLi
             let b = l.bounds();
             let dy = dragged_top(d, &rows, b.height) - b.y;
             let lift = theme.shadows.popover();
-            renderer.with_layer(layout.bounds(), |renderer| {
+            // Scaled about its own center: the tiny hover.
+            let (cx, cy) = (b.x + b.width / 2.0, b.y + b.height / 2.0);
+            let grow = Transformation::translate(cx, cy)
+                * Transformation::scale(self.lift)
+                * Transformation::translate(-cx, -cy);
+            // The card color is translucent in libadwaita (the rows below would show through),
+            // so the held row gets the opaque view color under it.
+            let solid = |c: Color| Color { a: 1.0, ..c };
+            renderer.with_layer(layout.bounds().expand(24.0), |renderer| {
                 renderer.with_translation(Vector::new(0.0, dy), |renderer| {
-                    renderer.fill_quad(
-                        Quad {
-                            bounds: b,
-                            border: Border::default(),
-                            shadow: Shadow {
-                                color: lift.shadow.color,
-                                offset: Vector::new(0.0, 2.0),
-                                blur_radius: lift.shadow.blur_radius,
+                    renderer.with_transformation(grow, |renderer| {
+                        renderer.fill_quad(
+                            Quad {
+                                bounds: b,
+                                // The held row: lifted, and ringed in the accent color.
+                                border: Border {
+                                    color: accent,
+                                    width: 2.0,
+                                    radius: theme.metrics.radius_s.into(),
+                                },
+                                shadow: Shadow {
+                                    color: lift.shadow.color,
+                                    offset: Vector::new(0.0, 2.0),
+                                    blur_radius: lift.shadow.blur_radius,
+                                },
+                                snap: false,
                             },
-                            snap: false,
-                        },
-                        Background::Color(theme.semantic.card.bg),
-                    );
-                    let vp = Rectangle {
-                        y: viewport.y - dy,
-                        ..*viewport
-                    };
-                    row.as_widget().draw(
-                        t,
-                        renderer,
-                        theme,
-                        style,
-                        l,
-                        mouse::Cursor::Unavailable,
-                        &vp,
-                    );
+                            Background::Color(solid(theme.semantic.view.bg)),
+                        );
+                        renderer.fill_quad(
+                            Quad {
+                                bounds: b,
+                                border: Border::default().rounded(theme.metrics.radius_s),
+                                shadow: Shadow::default(),
+                                snap: false,
+                            },
+                            Background::Color(theme.semantic.card.bg),
+                        );
+                        let vp = Rectangle {
+                            y: viewport.y - dy,
+                            ..*viewport
+                        };
+                        row.as_widget().draw(
+                            t,
+                            renderer,
+                            theme,
+                            style,
+                            l,
+                            mouse::Cursor::Unavailable,
+                            &vp,
+                        );
+                    });
                 });
             });
         }
@@ -645,9 +761,9 @@ mod tests {
         let rows: Vec<E> = (0..3)
             .map(|_| space().width(Length::Fill).height(40).into())
             .collect();
-        DragList::<_, ()>::new(rows)
-            .on_reorder(|a, b| (a, b))
-            .into()
+        let mut l = DragList::<_, ()>::new(rows);
+        l.on_reorder = Some(Box::new(|a, b| (a, b)));
+        l.into()
     }
 
     /// Presses at `press`, moves to `to` and releases there; returns what was published.
@@ -754,6 +870,74 @@ mod tests {
             drag(Point::new(GRIP_X, 100.0), Point::new(GRIP_X, -5000.0)),
             vec![(2, 0)]
         );
+    }
+
+    #[test]
+    fn the_rows_slide_out_of_the_way_and_settle_and_clear_on_drop() {
+        use std::time::{Duration, Instant};
+        let mut el = list();
+        let mut tree = Tree::new(&el);
+        let node = el.as_widget_mut().layout(
+            &mut tree,
+            &(),
+            &layout::Limits::new(Size::ZERO, Size::new(300.0, 600.0)),
+        );
+        let layout = Layout::new(&node);
+        let mut messages = Vec::new();
+        let mut shell = Shell::new(&mut messages);
+        let view = Rectangle::new(Point::ORIGIN, Size::new(300.0, 600.0));
+        let mut send = |tree: &mut Tree, e: Event, at: Point| {
+            el.as_widget_mut().update(
+                tree,
+                &e,
+                layout,
+                mouse::Cursor::Available(at),
+                &(),
+                &mut clipboard::Null,
+                &mut shell,
+                &view,
+            );
+        };
+        let at = Point::new(GRIP_X, 120.0);
+        send(
+            &mut tree,
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            Point::new(GRIP_X, 20.0),
+        );
+        send(
+            &mut tree,
+            Event::Mouse(mouse::Event::CursorMoved { position: at }),
+            at,
+        );
+        let t0 = Instant::now();
+        let redraw = |t| Event::Window(iced::window::Event::RedrawRequested(t));
+        send(&mut tree, redraw(t0), at);
+        send(&mut tree, redraw(t0 + Duration::from_secs(2)), at);
+        let slid: Vec<f32> = tree
+            .state
+            .downcast_ref::<State>()
+            .slide
+            .iter()
+            .map(|p| p.shown)
+            .collect();
+        // Row 0 is held; rows 1 and 2 each moved up by the held row's height and a hairline.
+        assert_eq!(slid, vec![0.0, -41.0, -41.0]);
+        send(
+            &mut tree,
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+            at,
+        );
+        assert!(tree.state.downcast_ref::<State>().slide.is_empty());
+    }
+
+    #[test]
+    fn building_the_edit_view_leaves_the_buttons_their_callback() {
+        let items = [1, 2, 3];
+        let mut l = ReorderableList::<i32, u8>::new(&items, |_| iced::widget::space().into())
+            .on_event(|_| 7);
+        let _ = l.edit();
+        assert_eq!(l.send(ReorderEvent::Submit), Some(7));
+        assert_eq!(l.send(ReorderEvent::Cancel), Some(7));
     }
 
     #[test]

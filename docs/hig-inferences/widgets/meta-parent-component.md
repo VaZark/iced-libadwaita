@@ -14,6 +14,7 @@ Every child registers separately and announces the actions it implements. `regis
 - **Registration.** `MetaParentComponent::register(&mut registry, id, &meta)` announces a `MetaComponent`'s actions (the keys its variants are selected by, `MetaComponent::actions()`); `registry.register(id, actions)` announces those of any other component, e.g. `ReorderableList::actions()`.
 - **Notification.** `notify(&action)` (everyone who announced it), `notify_one(&id, &action)`, `reset()`.
 - **Display.** `.meta(id, MetaComponent)` selects the last action it was switched to; `.listener(id, |current| element)` hands it to any other builder; `.child(element)` adds a plain child.
+- **Reports.** The other direction: a child's own events reach the parent through `on_child_event(|id, ChildEvent| msg)`. `.listener(id, |current, reporter| ..)` hands the child a `Reporter`; `ReorderableList::on_change(reporter.on_change())` fires it when a row moves, independently of the list's own `on_reorder`. The app runs `registry.emit(&id, event)` (kept only for registered children) and reacts, e.g. by notifying other children.
 - **Controlled.** The app owns the `Registry` and calls `notify` from `update`; the parent only reads it.
 
 ## iced mapping
