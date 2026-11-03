@@ -118,6 +118,38 @@ pub fn bar<'a, M: 'a>(m: Metrics) -> Element<'a, M> {
                     .height(300.0),
             ),
             group(
+                "Without a grid",
+                "Every element can be switched off: `.grid(false)`.",
+                m,
+                BarChart::new(MONTHS, sales()).grid(false),
+            ),
+            group(
+                "Without axes",
+                "`.axes(false)`: the plot fills the chart. `.value_axis(true)` brings one back.",
+                m,
+                BarChart::new(MONTHS, [sales()[0].clone()])
+                    .axes(false)
+                    .grid(false)
+                    .height(120.0),
+            ),
+            group(
+                "Colors",
+                "`.color(..)` for one color, `.colors(|theme, i| ..)` per series, `.unselected_color(..)` and `.dim(..)` outside a selection.",
+                m,
+                BarChart::new(MONTHS, [sales()[0].clone()])
+                    .colors(|t, _| t.palette.accent_bg_color)
+                    .selected(|i| (1..=3).contains(&i))
+                    .unselected_color(|t| iad::color::alpha(t.semantic.window.fg, 0.22))
+                    .bar_radius(6.0)
+                    .height(140.0),
+            ),
+            group(
+                "Bare",
+                "`.minimal()`: only the bars, a minimum height and a stub for an empty bin.",
+                m,
+                BarChart::histogram(&h).minimal().height(64.0),
+            ),
+            group(
                 "Histogram",
                 "Counts of values per bin: the same bars, touching.",
                 m,

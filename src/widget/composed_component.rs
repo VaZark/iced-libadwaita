@@ -10,8 +10,13 @@
 //!
 //! ```ignore
 //! ComposedComponent::new(self.range, Msg::Range)
-//!     .part(|&r| HistogramRange::new(&self.histogram, r, |picked| picked).into())
-//!     .part(|&r| range_slider(0.0..=100.0, r, |moved| moved).into())
+//!     .part(|r| {
+//!         BarChart::histogram(&self.histogram)
+//!             .selected(|i| self.histogram.selected(i, *r))   // the bars inside the range
+//!             .on_pick(|i| self.histogram.bin_range(i))        // a pressed bar is a range
+//!             .into()
+//!     })
+//!     .part(|r| range_slider(0.0..=100.0, *r, |moved| moved).into())
 //!     .normalize(|(lo, hi)| (lo.min(hi), lo.max(hi)))
 //! ```
 //!

@@ -3,6 +3,7 @@
 //!
 //! * [`color`]: the categorical series colors, by theme;
 //! * [`path`]: path commands to a canvas path;
+//! * [`style`]: which elements a chart draws and in which colors ([`ChartStyle`](style::ChartStyle));
 //! * [`axis`]: gridlines, a value axis and a band axis;
 //! * [`tooltip`]: the box that follows the pointer;
 //! * [`legend`]: swatches with names (an element, not a canvas drawing).
@@ -11,6 +12,7 @@ pub mod axis;
 pub mod color;
 pub mod legend;
 pub mod path;
+pub mod style;
 pub mod tooltip;
 
 use crate::Theme;

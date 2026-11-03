@@ -3,8 +3,9 @@
 
 use super::{Cartesian, Formatter, State, assemble, finite, fmt_or_default, track};
 use crate::Theme;
+use crate::components::chart::style::{ChartStyle, style_methods};
 use crate::components::chart::tooltip::{self, Row};
-use crate::components::chart::{axis, color, ink};
+use crate::components::chart::{axis, ink};
 use crate::primitives::chart::Series;
 use crate::primitives::chart::scale::{Band, format_tick};
 use crate::primitives::chart::stack::{Offset, extent, stack};
@@ -28,7 +29,7 @@ pub enum BarLayout {
 }
 
 /// See the [module](self).
-pub struct BarChart {
+pub struct BarChart<'a, M> {
     categories: Vec<String>,
     series: Vec<Series>,
     layout: BarLayout,
@@ -38,9 +39,12 @@ pub struct BarChart {
     width: Length,
     height: Length,
     format: Option<Formatter>,
+    selected: Option<Vec<bool>>,
+    style: ChartStyle,
+    on_pick: Option<Box<dyn Fn(usize) -> M + 'a>>,
 }
 
-impl BarChart {
+impl<'a, M> BarChart<'a, M> {
     /// One label per category and one [`Series`] per bar of a group.
     pub fn new(
         categories: impl IntoIterator<Item = impl Into<String>>,
@@ -56,6 +60,9 @@ impl BarChart {
             width: Length::Fill,
             height: Length::Fixed(240.0),
             format: None,
+            selected: None,
+            style: ChartStyle::default(),
+            on_pick: None,
         }
     }
     /// A histogram: one series of counts, bars that (almost) touch, labeled by where each bin
@@ -96,6 +103,54 @@ impl BarChart {
         self.height = h.into();
         self
     }
+    /// Highlights the categories `i` for which `is_selected(i)` holds and dims the rest. For a
+    /// histogram with a chosen range: `.selected(|i| h.selected(i, range))`.
+    pub fn selected(mut self, is_selected: impl Fn(usize) -> bool) -> Self {
+        let n = self.categories.len();
+        self.selected = Some((0..n).map(is_selected).collect());
+        self
+    }
+    /// Makes the bars pressable: `on_pick` gets the index of the pressed category.
+    pub fn on_pick(mut self, on_pick: impl Fn(usize) -> M + 'a) -> Self {
+        self.on_pick = Some(Box::new(on_pick));
+        self
+    }
+    /// Draws only the bars: no axes, grid, tooltip or hover highlight, accented, the bars outside
+    /// a [`selected`](Self::selected) range in a dim text color, a minimum bar height and a stub
+    /// for an empty bin. [`BarChart::histogram`] plus this is a range picker's histogram. Any
+    /// element can be switched back on after it.
+    pub fn minimal(mut self) -> Self {
+        self.style = ChartStyle::minimal();
+        self
+    }
+    /// The color of the bars outside a selection, in place of the bar's color at
+    /// [`dim`](Self::dim) opacity.
+    pub fn unselected_color(mut self, paint: impl Fn(&Theme) -> iced::Color + 'static) -> Self {
+        self.style.unselected = Some(Rc::new(paint));
+        self
+    }
+    /// The opacity of bars outside a selection (default 0.3), when there is no
+    /// [`unselected_color`](Self::unselected_color).
+    pub fn dim(mut self, opacity: f32) -> Self {
+        self.style.dim = opacity.clamp(0.0, 1.0);
+        self
+    }
+    /// The corner radius of the bars (default 2).
+    pub fn bar_radius(mut self, radius: f32) -> Self {
+        self.style.radius = radius.max(0.0);
+        self
+    }
+    /// A bar with a value is at least this tall in px, so small values stay visible.
+    pub fn min_bar_height(mut self, px: f32) -> Self {
+        self.style.min_bar = px.max(0.0);
+        self
+    }
+    /// A bar with no value is this tall in px (a stub; 0 draws nothing).
+    pub fn empty_bar_height(mut self, px: f32) -> Self {
+        self.style.empty_bar = px.max(0.0);
+        self
+    }
+    style_methods!();
     /// How values are written on the axis and in the tooltip.
     pub fn format(mut self, f: impl Fn(f32) -> String + 'static) -> Self {
         self.format = Some(Rc::new(f));
@@ -110,7 +165,7 @@ struct Geo {
     layers: Option<Vec<Vec<(f32, f32)>>>,
 }
 
-impl BarChart {
+impl<'a, M> BarChart<'a, M> {
     fn geo(&self, size: Size) -> Geo {
         let values: Vec<Vec<f32>> = self
             .series
@@ -139,7 +194,14 @@ impl BarChart {
         } else {
             self.format.clone()
         };
-        let cart = Cartesian::new(size, (lo, hi), self.horizontal, &self.categories, &fmt);
+        let cart = Cartesian::new(
+            size,
+            (lo, hi),
+            self.horizontal,
+            &self.categories,
+            &fmt,
+            &self.style,
+        );
         let n = self
             .categories
             .len()
@@ -176,6 +238,19 @@ impl BarChart {
             ),
         };
         let (a, b) = (g.cart.scale.map(v0), g.cart.scale.map(v1));
+        // Small values stay visible and empty ones can keep a stub, growing from the baseline
+        // in the direction the value points.
+        let want = if v1 == v0 {
+            self.style.empty_bar
+        } else {
+            self.style.min_bar
+        };
+        let dir = if self.horizontal { 1.0 } else { -1.0 } * if v1 >= v0 { 1.0 } else { -1.0 };
+        let b = if (b - a).abs() < want {
+            a + dir * want
+        } else {
+            b
+        };
         let (lo, hi) = (a.min(b), a.max(b));
         if self.horizontal {
             Rectangle {
@@ -195,7 +270,7 @@ impl BarChart {
     }
 }
 
-impl<M> canvas::Program<M, Theme> for BarChart {
+impl<'a, M> canvas::Program<M, Theme> for BarChart<'a, M> {
     type State = State;
 
     fn update(
@@ -205,6 +280,14 @@ impl<M> canvas::Program<M, Theme> for BarChart {
         bounds: Rectangle,
         cursor: Cursor,
     ) -> Option<canvas::Action<M>> {
+        if let (
+            Some(pick),
+            canvas::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
+            Some(i),
+        ) = (&self.on_pick, event, state.hover)
+        {
+            return Some(canvas::Action::publish(pick(i)).and_capture());
+        }
         track(&mut state.hover, event, || {
             let p = cursor.position_in(bounds)?;
             let g = self.geo(bounds.size());
@@ -226,28 +309,42 @@ impl<M> canvas::Program<M, Theme> for BarChart {
         let g = self.geo(bounds.size());
         let mut frame = Frame::new(renderer, bounds.size());
         let plot = g.cart.plot;
+        let show = axis::Show {
+            grid: self.style.grid,
+            labels: self.style.value_axis,
+        };
         if self.horizontal {
-            axis::value_axis_bottom(
-                &mut frame,
-                theme,
-                plot,
-                &g.cart.scale,
-                &g.cart.ticks,
-                &g.cart.labels,
-            );
-            axis::band_axis_left(&mut frame, theme, plot, &g.band, &self.categories);
+            if show.grid || show.labels {
+                axis::value_axis_bottom(
+                    &mut frame,
+                    theme,
+                    plot,
+                    &g.cart.scale,
+                    &g.cart.ticks,
+                    &g.cart.labels,
+                    show,
+                );
+            }
+            if self.style.category_axis {
+                axis::band_axis_left(&mut frame, theme, plot, &g.band, &self.categories);
+            }
         } else {
-            axis::value_axis(
-                &mut frame,
-                theme,
-                plot,
-                &g.cart.scale,
-                &g.cart.ticks,
-                &g.cart.labels,
-            );
-            axis::band_axis(&mut frame, theme, plot, &g.band, &self.categories);
+            if show.grid || show.labels {
+                axis::value_axis(
+                    &mut frame,
+                    theme,
+                    plot,
+                    &g.cart.scale,
+                    &g.cart.ticks,
+                    &g.cart.labels,
+                    show,
+                );
+            }
+            if self.style.category_axis {
+                axis::band_axis(&mut frame, theme, plot, &g.band, &self.categories);
+            }
         }
-        if let Some(i) = state.hover {
+        if let (Some(i), true) = (state.hover, self.style.hover) {
             let (text, _) = ink(theme);
             let (p, s) = if self.horizontal {
                 (
@@ -268,14 +365,20 @@ impl<M> canvas::Program<M, Theme> for BarChart {
                 if r.width <= 0.0 || r.height <= 0.0 {
                     continue;
                 }
-                let col = color::series(theme, j);
+                let col = if self.selected.as_ref().is_some_and(|s| !s[i]) {
+                    self.style.dimmed(theme, j)
+                } else {
+                    self.style.color(theme, j)
+                };
                 frame.fill(
-                    &Path::rounded_rectangle(r.position(), r.size(), 2.0.into()),
+                    &Path::rounded_rectangle(r.position(), r.size(), self.style.radius.into()),
                     Fill::from(col),
                 );
             }
         }
-        if let (Some(i), Some(at)) = (state.hover, cursor.position_in(bounds)) {
+        if let (Some(i), Some(at), true) =
+            (state.hover, cursor.position_in(bounds), self.style.tooltip)
+        {
             let rows: Vec<Row> = self
                 .series
                 .iter()
@@ -283,7 +386,7 @@ impl<M> canvas::Program<M, Theme> for BarChart {
                 .filter_map(|(j, s)| {
                     s.values.get(i).map(|v| {
                         Row::new(
-                            Some(color::series(theme, j)),
+                            Some(self.style.color(theme, j)),
                             s.name.as_str(),
                             fmt_or_default(&self.format, *v),
                         )
@@ -302,8 +405,8 @@ impl<M> canvas::Program<M, Theme> for BarChart {
     }
 }
 
-impl<'a, M: 'a> From<BarChart> for Element<'a, M> {
-    fn from(c: BarChart) -> Self {
+impl<'a, M: 'a> From<BarChart<'a, M>> for Element<'a, M> {
+    fn from(c: BarChart<'a, M>) -> Self {
         let names = (c.legend && c.series.len() > 1)
             .then(|| c.series.iter().map(|s| s.name.clone()).collect());
         let (w, h) = (c.width, c.height);
@@ -315,7 +418,7 @@ impl<'a, M: 'a> From<BarChart> for Element<'a, M> {
 mod tests {
     use super::*;
 
-    fn chart() -> BarChart {
+    fn chart() -> BarChart<'static, ()> {
         BarChart::new(
             ["a", "b"],
             [Series::new("x", [4.0, 2.0]), Series::new("y", [1.0, 3.0])],
@@ -354,9 +457,54 @@ mod tests {
     }
 
     #[test]
+    fn small_values_keep_a_minimum_and_empty_ones_a_stub() {
+        let mut c: BarChart<'_, ()> =
+            BarChart::new(["a", "b", "c"], [Series::new("x", [100.0, 0.5, 0.0])])
+                .min_bar_height(4.0)
+                .empty_bar_height(2.0);
+        let g = c.geo(SIZE);
+        let base = g.cart.scale.map(0.0);
+        let (tall, small, empty) = (c.bar(&g, 0, 0), c.bar(&g, 1, 0), c.bar(&g, 2, 0));
+        assert!(tall.height > 50.0);
+        assert_eq!(small.height, 4.0);
+        assert_eq!(empty.height, 2.0);
+        // They all grow upwards from the baseline.
+        assert!((small.y + small.height - base).abs() < 1e-3);
+        assert!((empty.y + empty.height - base).abs() < 1e-3);
+        // Without the options a zero is nothing.
+        c.style = ChartStyle::default();
+        assert_eq!(c.bar(&c.geo(SIZE), 2, 0).height, 0.0);
+    }
+
+    #[test]
+    fn every_element_can_be_switched_off() {
+        let c = chart().axes(false).grid(false).tooltip(false).hover(false);
+        assert!(!c.style.axes() && !c.style.grid && !c.style.tooltip && !c.style.hover);
+        let g = c.geo(SIZE);
+        assert_eq!(g.cart.plot.width, 400.0);
+        assert_eq!(g.cart.plot.height, 240.0);
+        let c = chart().axes(false).value_axis(true);
+        assert!(c.style.value_axis && !c.style.category_axis);
+    }
+
+    #[test]
+    fn minimal_is_the_bare_style() {
+        let c = chart().minimal();
+        assert!(!c.style.axes() && c.style.min_bar > 0.0);
+        // Elements come back one at a time.
+        assert!(c.tooltip(true).style.tooltip);
+    }
+
+    #[test]
+    fn selected_bins_are_remembered() {
+        let c = chart().selected(|i| i == 1);
+        assert_eq!(c.selected, Some(vec![false, true]));
+    }
+
+    #[test]
     fn a_histogram_is_one_series_of_counts() {
         let h = Histogram::from_counts(0.0, 30.0, [3, 5, 2]);
-        let c = BarChart::histogram(&h);
+        let c: BarChart<'_, ()> = BarChart::histogram(&h);
         assert_eq!(c.series[0].values, vec![3.0, 5.0, 2.0]);
         assert_eq!(c.categories, vec!["0", "10", "20"]);
         assert!(c.gap < 0.1);

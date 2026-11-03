@@ -1,5 +1,5 @@
 //! Histogram: values counted into evenly spaced bins over `min..max`, and the rules that tie
-//! bins to a selected range. Pure; the drawing is [`HistogramRange`](crate::widget::HistogramRange).
+//! bins to a selected range. Pure; the drawing is [`BarChart::histogram`](crate::widget::BarChart::histogram).
 
 /// Counts per bin. Bin `i` covers `[min + i·w, min + (i+1)·w)`, with `w = (max - min) / bins`.
 #[derive(Debug, Clone, PartialEq)]

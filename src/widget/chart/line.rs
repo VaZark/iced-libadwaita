@@ -4,8 +4,9 @@
 use super::{Cartesian, Formatter, State, assemble, finite, fmt_or_default, track};
 use crate::Theme;
 use crate::components::chart::path::to_path;
+use crate::components::chart::style::{ChartStyle, style_methods};
 use crate::components::chart::tooltip::{self, Row};
-use crate::components::chart::{axis, color, ink};
+use crate::components::chart::{axis, ink};
 use crate::primitives::chart::Series;
 use crate::primitives::chart::scale::Band;
 use crate::primitives::chart::shape::{Curve, Pt, area, line};
@@ -29,6 +30,7 @@ pub struct LineChart {
     width: Length,
     height: Length,
     format: Option<Formatter>,
+    style: ChartStyle,
 }
 
 impl LineChart {
@@ -49,6 +51,7 @@ impl LineChart {
             width: Length::Fill,
             height: Length::Fixed(240.0),
             format: None,
+            style: ChartStyle::default(),
         }
     }
     /// How points are joined: straight, stepped or smooth.
@@ -90,6 +93,7 @@ impl LineChart {
         self.height = h.into();
         self
     }
+    style_methods!();
     /// How values are written on the axis and in the tooltip.
     pub fn format(mut self, f: impl Fn(f32) -> String + 'static) -> Self {
         self.format = Some(Rc::new(f));
@@ -138,7 +142,7 @@ impl LineChart {
         } else {
             self.format.clone()
         };
-        let cart = Cartesian::new(size, domain, false, &[], &fmt);
+        let cart = Cartesian::new(size, domain, false, &[], &fmt, &self.style);
         let n = self.categories.len().max(
             self.series
                 .iter()
@@ -184,15 +188,24 @@ impl<M> canvas::Program<M, Theme> for LineChart {
         let g = c.geo(bounds.size());
         let mut frame = Frame::new(renderer, bounds.size());
         let plot = g.cart.plot;
-        axis::value_axis(
-            &mut frame,
-            theme,
-            plot,
-            &g.cart.scale,
-            &g.cart.ticks,
-            &g.cart.labels,
-        );
-        axis::band_axis(&mut frame, theme, plot, &g.band, &c.categories);
+        let show = axis::Show {
+            grid: c.style.grid,
+            labels: c.style.value_axis,
+        };
+        if show.grid || show.labels {
+            axis::value_axis(
+                &mut frame,
+                theme,
+                plot,
+                &g.cart.scale,
+                &g.cart.ticks,
+                &g.cart.labels,
+                show,
+            );
+        }
+        if c.style.category_axis {
+            axis::band_axis(&mut frame, theme, plot, &g.band, &c.categories);
+        }
 
         let zero = g
             .cart
@@ -200,7 +213,7 @@ impl<M> canvas::Program<M, Theme> for LineChart {
             .map(0.0f32.clamp(g.cart.scale.domain().0, g.cart.scale.domain().1));
         let dots = c.points.unwrap_or(g.band.len() <= 24);
         for (j, s) in c.series.iter().enumerate() {
-            let col = color::series(theme, j);
+            let col = c.style.color(theme, j);
             let n = g.band.len().min(s.values.len());
             let (top, bottom): (Vec<Pt>, Vec<Pt>) = (0..n)
                 .map(|i| {
@@ -238,7 +251,11 @@ impl<M> canvas::Program<M, Theme> for LineChart {
             }
         }
 
-        if let (Some(i), Some(at)) = (state.hover, cursor.position_in(bounds)) {
+        if let (Some(i), Some(at), true) = (
+            state.hover,
+            cursor.position_in(bounds),
+            c.style.tooltip || c.style.hover,
+        ) {
             let x = g.band.center(i);
             let (text, _) = ink(theme);
             frame.stroke(
@@ -250,7 +267,7 @@ impl<M> canvas::Program<M, Theme> for LineChart {
             let mut rows = Vec::new();
             for (j, s) in c.series.iter().enumerate() {
                 let Some(v) = s.values.get(i) else { continue };
-                let col = color::series(theme, j);
+                let col = c.style.color(theme, j);
                 let y = match &g.layers {
                     Some(l) => l[j][i].1,
                     None => finite(*v),
@@ -267,7 +284,9 @@ impl<M> canvas::Program<M, Theme> for LineChart {
                 ));
             }
             let title = c.categories.get(i).map(String::as_str);
-            tooltip::draw(&mut frame, theme, at, title, &rows);
+            if c.style.tooltip {
+                tooltip::draw(&mut frame, theme, at, title, &rows);
+            }
         }
         vec![frame.into_geometry()]
     }

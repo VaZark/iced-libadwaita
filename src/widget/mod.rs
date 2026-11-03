@@ -34,7 +34,6 @@ mod focus;
 mod form;
 mod forms;
 mod header_bar;
-mod histogram_range;
 mod infinite;
 mod menu;
 mod meta_component;
@@ -151,7 +150,6 @@ pub use forms::{
     text_view,
 };
 pub use header_bar::{HeaderBar, WindowControls, header_bar, window_title};
-pub use histogram_range::HistogramRange;
 pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent};
 pub use infinite::{InfiniteList, LoadTrigger};
 pub use menu::{

@@ -37,8 +37,34 @@ The legend under the chart (on by default; hidden for a single series).
 .TP
 .B \&.height(h: impl Into<Length>)
 .TP
+.B \&.selected(is_selected: impl Fn(usize) \-> bool)
+Highlights the categories \fBi\fR for which \fBis_selected(i)\fR holds and dims the rest. For a histogram with a chosen range: \fB.selected(|i| h.selected(i, range))\fR.
+.TP
+.B \&.minimal()
+Draws only the bars: no axes, grid, tooltip or hover highlight, accented, the bars outside a \fBselected\fR range in a dim text color, a minimum bar height and a stub for an empty bin. \fBBarChart::histogram\fR plus this is a range picker's histogram. Any element can be switched back on after it.
+.TP
+.B \&.unselected_color(paint: impl Fn(&Theme) \-> iced::Color + 'static)
+The color of the bars outside a selection, in place of the bar's color at \fBdim\fR opacity.
+.TP
+.B \&.dim(opacity: f32)
+The opacity of bars outside a selection (default 0.3), when there is no \fBunselected_color\fR.
+.TP
+.B \&.bar_radius(radius: f32)
+The corner radius of the bars (default 2).
+.TP
+.B \&.min_bar_height(px: f32)
+A bar with a value is at least this tall in px, so small values stay visible.
+.TP
+.B \&.empty_bar_height(px: f32)
+A bar with no value is this tall in px (a stub; 0 draws nothing).
+.TP
 .B \&.format(f: impl Fn(f32) \-> String + 'static)
 How values are written on the axis and in the tooltip.
+.SH EVENTS
+Callbacks that produce the application's message.
+.TP
+.B \&.on_pick(on_pick: impl Fn(usize) \-> M + 'a)
+Makes the bars pressable: \fBon_pick\fR gets the index of the pressed category.
 .SH SOURCE
 src/widget/chart/bar.rs
 .SH SEE ALSO

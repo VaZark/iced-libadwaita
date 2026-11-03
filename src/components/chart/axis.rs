@@ -6,6 +6,13 @@ use crate::primitives::chart::scale::{Band, Linear};
 use iced::widget::canvas::{Frame, Path, Stroke};
 use iced::{Point, Rectangle};
 
+/// Which parts of a value axis to draw.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Show {
+    pub grid: bool,
+    pub labels: bool,
+}
+
 /// Horizontal gridlines at `ticks`, and the value labels to the left of `plot`.
 pub fn value_axis(
     frame: &mut Frame,
@@ -14,21 +21,26 @@ pub fn value_axis(
     scale: &Linear,
     ticks: &[f32],
     labels: &[String],
+    show: Show,
 ) {
     let (text, grid) = ink(theme);
     for (t, l) in ticks.iter().zip(labels) {
         let y = scale.map(*t);
-        frame.stroke(
-            &Path::line(Point::new(plot.x, y), Point::new(plot.x + plot.width, y)),
-            Stroke::default().with_width(1.0).with_color(grid),
-        );
-        label(
-            frame,
-            l.as_str(),
-            Point::new(plot.x - 8.0, y),
-            Anchor::End,
-            text,
-        );
+        if show.grid {
+            frame.stroke(
+                &Path::line(Point::new(plot.x, y), Point::new(plot.x + plot.width, y)),
+                Stroke::default().with_width(1.0).with_color(grid),
+            );
+        }
+        if show.labels {
+            label(
+                frame,
+                l.as_str(),
+                Point::new(plot.x - 8.0, y),
+                Anchor::End,
+                text,
+            );
+        }
     }
 }
 
@@ -40,21 +52,26 @@ pub fn value_axis_bottom(
     scale: &Linear,
     ticks: &[f32],
     labels: &[String],
+    show: Show,
 ) {
     let (text, grid) = ink(theme);
     for (t, l) in ticks.iter().zip(labels) {
         let x = scale.map(*t);
-        frame.stroke(
-            &Path::line(Point::new(x, plot.y), Point::new(x, plot.y + plot.height)),
-            Stroke::default().with_width(1.0).with_color(grid),
-        );
-        label(
-            frame,
-            l.as_str(),
-            Point::new(x, plot.y + plot.height + LABEL_SIZE + 2.0),
-            Anchor::Middle,
-            text,
-        );
+        if show.grid {
+            frame.stroke(
+                &Path::line(Point::new(x, plot.y), Point::new(x, plot.y + plot.height)),
+                Stroke::default().with_width(1.0).with_color(grid),
+            );
+        }
+        if show.labels {
+            label(
+                frame,
+                l.as_str(),
+                Point::new(x, plot.y + plot.height + LABEL_SIZE + 2.0),
+                Anchor::Middle,
+                text,
+            );
+        }
     }
 }
 

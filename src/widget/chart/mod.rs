@@ -30,6 +30,7 @@ pub use pie::PieChart;
 pub use sankey::Sankey;
 pub use sunburst::Sunburst;
 
+use crate::components::chart::style::ChartStyle;
 use crate::components::chart::{axis, legend::legend};
 use crate::primitives::chart::Margin;
 use crate::primitives::chart::scale::{Linear, format_tick, ticks};
@@ -115,6 +116,7 @@ impl Cartesian {
         horizontal: bool,
         category_labels: &[String],
         fmt: &Option<Formatter>,
+        style: &ChartStyle,
     ) -> Self {
         let count = if horizontal {
             size.width / 80.0
@@ -133,12 +135,33 @@ impl Cartesian {
                 None => format_tick(*v, step),
             })
             .collect();
-        let left = if horizontal {
-            axis::label_margin(category_labels)
+        // Room only for the axes that are drawn: with none, the plot fills the chart.
+        let (value, category) = (style.value_axis, style.category_axis);
+        let (left, bottom) = if horizontal {
+            (
+                if category {
+                    axis::label_margin(category_labels)
+                } else {
+                    0.0
+                },
+                if value { 28.0 } else { 0.0 },
+            )
         } else {
-            axis::label_margin(&labels)
+            (
+                if value {
+                    axis::label_margin(&labels)
+                } else {
+                    0.0
+                },
+                if category { 28.0 } else { 0.0 },
+            )
         };
-        let (x, y, w, h) = Margin::new(12.0, 16.0, 28.0, left).inner(size.width, size.height);
+        let (top, right) = if style.axes() {
+            (12.0, 16.0)
+        } else {
+            (0.0, 0.0)
+        };
+        let (x, y, w, h) = Margin::new(top, right, bottom, left).inner(size.width, size.height);
         let plot = Rectangle {
             x,
             y,
@@ -179,12 +202,40 @@ mod tests {
 
     #[test]
     fn the_plot_leaves_room_for_the_axis() {
-        let c = Cartesian::new(Size::new(400.0, 200.0), (0.0, 97.0), false, &[], &None);
+        let c = Cartesian::new(
+            Size::new(400.0, 200.0),
+            (0.0, 97.0),
+            false,
+            &[],
+            &None,
+            &ChartStyle::default(),
+        );
         assert_eq!(c.scale.domain(), (0.0, 100.0));
         assert!(c.plot.x > 20.0 && c.plot.width < 400.0);
         assert_eq!(c.ticks.len(), c.labels.len());
         // The value 0 is at the bottom of the plot.
         assert_eq!(c.scale.map(0.0), c.plot.y + c.plot.height);
+    }
+
+    #[test]
+    fn a_bare_chart_fills_its_area() {
+        let c = Cartesian::new(
+            Size::new(400.0, 200.0),
+            (0.0, 10.0),
+            false,
+            &[],
+            &None,
+            &ChartStyle::minimal(),
+        );
+        assert_eq!(
+            c.plot,
+            Rectangle {
+                x: 0.0,
+                y: 0.0,
+                width: 400.0,
+                height: 200.0
+            }
+        );
     }
 
     #[test]

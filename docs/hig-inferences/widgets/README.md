@@ -37,7 +37,6 @@ One file per libadwaita element. Each ends with an **iced mapping** section.
 - [MetaParentComponent (notifies meta children to switch mode)](meta-parent-component.md)
 - [ComposedComponent (several components, one shared state, one widget)](composed-component.md)
 - [SyncedText (timed lines, the current one highlighted)](synced-text.md)
-- [HistogramRange (a histogram that picks a range)](histogram-range.md)
 - [ResponsiveTable (virtualized and async rows)](responsive-table.md)
 - [TreeRow (rows or any elements nested in a row, within a page)](tree-row.md)
 - [Tree (hierarchical rows, search, drag and drop, virtualization)](tree.md)
