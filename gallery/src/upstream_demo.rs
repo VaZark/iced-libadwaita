@@ -4,6 +4,7 @@
 use iced_adaptive_design as iad;
 
 use iad::primitives::history::History;
+use iad::primitives::reorder::{Event as ReorderEvent, ReorderState};
 use iad::primitives::sorting::{Direction, SortState, cmp_str};
 use iad::primitives::virtualize::Viewport;
 use iad::widget::{
@@ -40,6 +41,9 @@ pub enum Msg {
     Back,
     Flow(bool),
     FlowText(String),
+    CardsCompact(bool),
+    Queue(ReorderEvent),
+    Remove(usize),
 }
 
 /// The columns of the media list.
@@ -86,6 +90,8 @@ pub struct State {
     history: History<&'static str>,
     flow_editing: bool,
     flow_text: String,
+    cards_compact: bool,
+    queue: ReorderState<&'static str>,
     viewport: Viewport,
     bio: String,
     editing: bool,
@@ -120,6 +126,14 @@ impl Default for State {
             query: String::new(),
             history: History::new("Home"),
             flow_editing: false,
+            cards_compact: false,
+            queue: ReorderState::live(vec![
+                "Winter Barn",
+                "Long Road",
+                "Low Light",
+                "Second Take",
+                "Harbor",
+            ]),
             flow_text: "A paragraph the content decides the height of.".into(),
         }
     }
@@ -159,6 +173,13 @@ impl State {
             Msg::Query(q) => self.query = q,
             Msg::Open(p) => self.history.open(p),
             Msg::Go(p) => self.history.go(p),
+            Msg::CardsCompact(c) => self.cards_compact = c,
+            Msg::Queue(e) => {
+                self.queue.apply(e);
+            }
+            Msg::Remove(i) => {
+                self.queue.remove(i);
+            }
             Msg::Flow(e) => self.flow_editing = e,
             Msg::FlowText(t) => self.flow_text = t,
             Msg::Back => {
@@ -338,8 +359,10 @@ impl State {
             .compact(compact)
             .title(Col::Title, "Title")
             .subtitle(Col::Artist, "Artist")
-            .column(Col::Album, "Album", Length::FillPortion(2))
-            .column(Col::Time, "Time", Length::Fixed(w::TIME_WIDTH))
+            .column(Col::Album, "Album")
+            .width(Length::Fixed(160.0))
+            .column(Col::Time, "Time")
+            .width(Length::Fixed(w::TIME_WIDTH))
             .align(iced::alignment::Horizontal::Right)
             .suffix(true);
         let tracks = &self.tracks;
@@ -419,26 +442,51 @@ impl State {
     }
 
     pub fn grid_view(&self, m: Metrics) -> Element<'_, Msg> {
+        let compact = self.cards_compact;
         let cards = (0..9).map(|i| {
             let name = ALBUMS[i % ALBUMS.len()];
-            w::card(
-                column![
-                    Avatar::new(72.0, format!("{name}{i}"))
+            w::MediaCard::new(format!("{name} {}", i + 1))
+                .subtitle(ARTISTS[i % ARTISTS.len()])
+                .picture(
+                    Avatar::new(if compact { 36.0 } else { 72.0 }, format!("{name}{i}"))
                         .icon(Icon::MusicNote)
                         .shape(AvatarShape::Rounded),
-                    text(format!("{name} {}", i + 1)),
-                    text(ARTISTS[i % ARTISTS.len()]).size(12),
-                ]
-                .spacing(m.space_xs),
-            )
+                )
+                .compact(compact)
+                .on_press(Msg::Noop)
+                .into()
         });
         column![
             SectionHeading::new("Recently played")
-                .subtitle("Cards fill the width, as many columns as fit")
+                .subtitle("A media card is a card, or a tight row when compact")
                 .link("View all", Msg::Noop),
-            CardGrid::new(cards).max_width(180.0),
+            w::SwitchRow::new("Compact", compact, Msg::CardsCompact).metrics(m),
+            CardGrid::new(cards).max_width(180.0).compact(compact),
         ]
         .spacing(m.space_m)
+        .into()
+    }
+
+    /// A queue: always editable, every drop committed, a delete button before the grip.
+    pub fn queue_view(&self, m: Metrics) -> Element<'_, Msg> {
+        let items = self.queue.items();
+        let list = w::ReorderableList::of(&self.queue, move |name| {
+            w::ActionRow::new(*name).metrics(m).into()
+        })
+        .row_action(|name| {
+            let i = items.iter().position(|n| n == name).unwrap_or(0);
+            w::icon_button(Icon::Delete).on_press(Msg::Remove(i)).into()
+        })
+        .on_event(Msg::Queue);
+        Self::group(
+            "Live list",
+            "Always editable: no Edit, Cancel or Done. Every drop is committed, and a delete button sits before the grip.",
+            m,
+        )
+        .push(w::card(column![
+            list,
+            text(format!("Committed: {}", self.queue.committed().join(", "))).size(12),
+        ].spacing(m.space_s)))
         .into()
     }
 
@@ -525,6 +573,61 @@ impl State {
         .push(w::card(
             column![flowing, text("Content below the variant").size(12)].spacing(m.space_m),
         ))
+        .into()
+    }
+
+    /// The page surfaces: the gutter is in one place (`Metrics::gutter`).
+    pub fn surface_view(&self, m: Metrics) -> Element<'_, Msg> {
+        use iad::widget::surface;
+        let tint = |t: &iad::Theme| container::Style {
+            background: Some(iad::color::alpha(t.semantic.accent.bg, 0.25).into()),
+            border: iced::Border::default().rounded(4),
+            ..Default::default()
+        };
+        let sample = |label: &'static str| -> Element<'static, Msg> {
+            container(text(label).size(12))
+                .padding(6)
+                .width(Length::Fill)
+                .style(tint)
+                .into()
+        };
+        let frame = |content: Element<'static, Msg>, h: f32| -> Element<'static, Msg> {
+            container(content)
+                .height(Length::Fixed(h))
+                .width(Length::Fill)
+                .style(|t: &iad::Theme| container::Style {
+                    border: iced::Border::default()
+                        .rounded(6)
+                        .width(1)
+                        .color(t.semantic.border),
+                    ..Default::default()
+                })
+                .into()
+        };
+        let case = |title: &'static str, body: Element<'static, Msg>| {
+            PreferencesGroup::<Msg>::new()
+                .title(title)
+                .metrics(m)
+                .push(w::card(body))
+        };
+        column![
+            Self::group(
+                "Page surfaces",
+                "Every page keeps the same distance from the window edge, because nothing else writes a gutter: a page is built from these. The gutter is the `gutter` token (16 px, 12 compact).",
+                m,
+            )
+            .push(w::card(text(format!(
+                "gutter {} px, band air {} px",
+                surface::gutter(),
+                Metrics::desktop().band_air
+            )))),
+            case("scrolling", frame(surface::scrolling(sample("The gutter on every side, inside the scrollable")), 90.0)),
+            case("full", frame(surface::full(sample("The gutter on every side, no scrolling")), 90.0)),
+            case("band", frame(surface::band(sample("The side gutter: a heading, a section")), 50.0)),
+            case("toolbar", frame(surface::toolbar(sample("The side gutter and a little air")), 60.0)),
+            case("row", frame(surface::row(sample("Inset so a row's hover surface starts on the gutter")), 50.0)),
+        ]
+        .spacing(m.group_spacing)
         .into()
     }
 }

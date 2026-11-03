@@ -17,6 +17,7 @@ mod card_grid;
 mod carousel;
 mod chart;
 mod chip_group;
+mod clip_window;
 mod collapsible;
 mod color_picker;
 mod composed_component;
@@ -41,6 +42,7 @@ mod header_bar;
 mod histogram_range_slider;
 mod icon_toggle;
 mod infinite;
+mod media_card;
 mod media_row;
 mod menu;
 mod meta_component;
@@ -72,6 +74,7 @@ mod splitter;
 mod spoiler;
 mod status_page;
 mod stepper;
+pub mod surface;
 mod switch;
 mod synced_text;
 mod tabs;
@@ -125,9 +128,9 @@ pub use avatar::{Avatar, AvatarShape, avatar};
 pub use badge::{Badge, Chip, ChipSize, RoundBadge};
 pub use banner::{Banner, banner};
 pub use button::{
-    ButtonContent, ToggleGroup, ToggleItem, circular_button, destructive_button, flat_button,
-    icon_button, pill_button, progress_bar, raised_button, suggested_button,
-    suggested_circular_button, suggested_pill_button, toggle_group,
+    ButtonContent, SuggestedCircularButton, ToggleGroup, ToggleItem, circular_button,
+    destructive_button, flat_button, icon_button, pill_button, progress_bar, raised_button,
+    suggested_button, suggested_circular_button, suggested_pill_button, toggle_group,
 };
 pub use card_grid::CardGrid;
 pub use carousel::{Carousel, CarouselIndicator, carousel};
@@ -136,6 +139,7 @@ pub use chart::{
 };
 pub use chart::{BubbleChart, BubblePoint, BubbleSeries, ComboChart, DonutChart};
 pub use chip_group::{ChipGroup, ChipOption};
+pub use clip_window::{Anchor as ClipAnchor, ClipWindow};
 pub use collapsible::Collapsible;
 pub use color_picker::{ColorInput, ColorPicker};
 pub use composed_component::{ComposeAxis, ComposedComponent};
@@ -169,6 +173,7 @@ pub use histogram_range_slider::HistogramRangeSlider;
 pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent};
 pub use icon_toggle::IconToggleButton;
 pub use infinite::{InfiniteList, LoadTrigger};
+pub use media_card::MediaCard;
 pub use media_row::{MediaColumns, MediaRow, PICTURE_WIDTH, SUFFIX_WIDTH, TIME_WIDTH};
 pub use menu::{
     Menu, MenuButton, MenuCheckStyle, MenuIconSide, MenuItem, MenuPresentation, menu_button,

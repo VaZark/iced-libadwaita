@@ -64,6 +64,9 @@ APPSHELL_PIN=mobile|tablet|desktop
 APPSHELL_SIDEBAR_MODE=parent-page
 APPSHELL_CONTENT=1  APPSHELL_DRAWER=1  APPSHELL_EDGE=right|bottom
 ICED_ADAPTIVE_DESIGN_CONFIG=path.conf  try a desktop config
+ICED_ADAPTIVE_DESIGN_SCREENSHOT=f.png  an app using iad::dev saves a screenshot to f.png
+ICED_ADAPTIVE_DESIGN_SHOT_DELAY_MS=2500 ... after this delay (default 1500)
+ICED_ADAPTIVE_DESIGN_HOLD_ANIMATIONS=0.5 hold every animation half way, for a known frame
 ```
 
 `gallery --appshell` runs only the AppShell, in its own process. The gallery's "Open" on that page starts it that way.

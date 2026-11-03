@@ -129,6 +129,7 @@ pub fn specs(d: Detail) -> Vec<Spec> {
                 &["Default", "Suggested", "Circular suggested"],
                 0,
             ),
+            S::number("circ_size", "Circular diameter (px)", 24.0..=64.0, 34.0),
             S::bool("disabled", "Disabled", false),
         ],
         Detail::ToggleGroup => vec![
@@ -545,6 +546,11 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::choice("page", "Page", &["Light", "Dark"], 1),
             S::number("ratio", "Minimum contrast", 1.0..=7.0, 4.5),
         ],
+        Detail::ClipWindow => vec![
+            S::number("height", "Window height (px)", 0.0..=220.0, 90.0),
+            S::choice("anchor", "Anchor", &["Top", "Bottom"], 1),
+            S::bool("compare", "Compare with a squeezed container", true),
+        ],
         Detail::IconToggle => vec![
             S::choice(
                 "icon",
@@ -668,6 +674,7 @@ pub fn build<'a>(
             let press = (!p.bool("disabled")).then_some(Message::Noop);
             let button: Element<'a> = if p.choice("style") == 2 {
                 w::suggested_circular_button(icon.unwrap_or(Icon::Play).view(m.icon_size))
+                    .size(p.number("circ_size"))
                     .on_press_maybe(press)
                     .into()
             } else if p.choice("style") == 1 {
@@ -681,8 +688,9 @@ pub fn build<'a>(
             };
             let code = if p.choice("style") == 2 {
                 format!(
-                    "suggested_circular_button(Icon::{:?}.view(16.0))   // round, around any content\n    .on_press(Msg::Play)",
-                    icon.unwrap_or(Icon::Play)
+                    "suggested_circular_button(Icon::{:?}.view(16.0))   // round, around any content\n    .size({:.0}.0)   // the diameter\n    .on_press(Msg::Play)",
+                    icon.unwrap_or(Icon::Play),
+                    p.number("circ_size")
                 )
             } else {
                 Code::new(&format!("ButtonContent::new(\"{}\")", p.text("label")))
@@ -2053,6 +2061,59 @@ pub fn build<'a>(
             );
             (stage(Element::from(el)), code)
         }
+        Detail::ClipWindow => {
+            use iced::widget::{container as ct, row};
+            let height = p.number("height");
+            let anchor = if p.choice("anchor") == 0 {
+                w::ClipAnchor::Top
+            } else {
+                w::ClipAnchor::Bottom
+            };
+            let content = || -> Element<'a> {
+                column![
+                    w::avatar(64.0, "Queue").shape(w::AvatarShape::Rounded),
+                    ty::heading("Up next"),
+                    ty::body("The content keeps its size"),
+                    ty::caption("and slides into view"),
+                ]
+                .spacing(m.space_xs)
+                .align_x(iced::Alignment::Center)
+                .width(Length::Fill)
+                .into()
+            };
+            let clipped = ct(Element::from(
+                w::ClipWindow::new(content()).height(height).anchor(anchor),
+            ))
+            .width(Length::Fill)
+            .style(iad::style::container::card_surface);
+            let squeezed = ct(content())
+                .height(Length::Fixed(height))
+                .width(Length::Fill)
+                .style(iad::style::container::card_surface);
+            let el: Element<'a> = if p.bool("compare") {
+                row![
+                    column![ty::caption("ClipWindow: translated"), clipped]
+                        .spacing(m.space_xs)
+                        .width(Length::Fill),
+                    column![
+                        ty::caption("A container of that height: reflowed"),
+                        squeezed
+                    ]
+                    .spacing(m.space_xs)
+                    .width(Length::Fill),
+                ]
+                .spacing(m.space_m)
+                .into()
+            } else {
+                clipped.into()
+            };
+            let code = Code::new("ClipWindow::new(content)")
+                .add(true, &format!(".height({height:.0}.0)   // animate this: the window follows"))
+                .add(p.choice("anchor") == 1, ".anchor(ClipAnchor::Bottom)   // the bottom stays, the top is cut")
+                .add(true, "// a container with a smaller Fixed height reflows its child: a cover shrinks.\n// ClipWindow measures the content at full size and moves it.")
+                .done();
+            (el, code)
+        }
         Detail::IconToggle => {
             let icon = [
                 Icon::Shuffle,
@@ -2316,13 +2377,19 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "// 1. declare the tokens of the app's own objects, with their defaults\nlet schema = Schema::new()\n    .color(\"cover\", \"background\", \"#9c4ad1\", \"Behind a missing cover\")\n    .number(\"cover\", \"size\", 88.0, \"The cover edge in px\");\n\n// 2. load: hardcoded > app theme file > toolkit theme file > declared default\n//    ~/.config/<app-id>/theme.conf and ~/.config/iced-adaptive-design/theme.conf are written\n//    from the declared defaults (every line commented) when missing: delete them to reset\nlet cfg = ThemeConfig::builder(\"org.example.Player\")\n    .schema(schema)\n    // .hardcode(\"cover\", \"size\", Value::Number(64.0))   // extremely discouraged\n    .build();\n\n// 3. install: metric tokens reach every widget, palette and typography tokens the theme\ntheme_config::install(cfg.clone());\nconfig::install(Config::load().with_theme_config(&cfg));\nlet theme = Theme::from_config(&config::current()).with_theme_config(&cfg);\n\n// 4. read the app's own tokens anywhere a Theme is given\nlet bg = theme.token_color(\"cover\", \"background\");\nlet size = theme.token_number(\"cover\", \"size\");"
         }
         Detail::CardGrid => {
-            "CardGrid::new(albums.iter().map(album_card))\n    .max_width(180.0)   // as many columns as fit, each at most this wide\n    .spacing(12.0)\n\n// cards fill their cells and keep their own height; rows are as tall as the tallest card"
+            "// one pattern, two densities\nCardGrid::new(albums.iter().map(|a| {\n    MediaCard::new(&a.name)\n        .subtitle(format!(\"{} · {}\", a.artist, a.year))\n        .picture(cover(a.id, if compact { 36.0 } else { 88.0 }))\n        .compact(compact)        // a card, or a tight MediaRow\n        .on_press(Msg::Open(a.id))\n        .into()\n}))\n.max_width(180.0)             // as many columns as fit, each at most this wide\n.compact(compact)            // compact cards are rows: one column, tight"
+        }
+        Detail::Surface => {
+            "// the gutter is a token (Metrics::gutter, [metrics] gutter in the theme config), written once\nsurface::scrolling(page)      // a page that scrolls: the gutter on every side\nsurface::full(sheet_body)     // a page that does not scroll as a whole\nsurface::band(heading)        // a section: the side gutter\nsurface::toolbar(play_row)    // the side gutter and a little air\nsurface::row(track)           // a row of a flat list, hover starting on the gutter\nsurface::bar_padding()        // the padding of a bar\n\n// enforce it: nothing but surface writes a gutter\n//   cargo xtask lint-gutters src      (a line marked `// gutter-ok` is allowed)"
+        }
+        Detail::Reorderable => {
+            "// a live list: always editable, every drop committed, no Edit / Cancel / Done\nlet queue = ReorderState::live(items);\n\nReorderableList::of(&self.queue, |track| track_row(track))   // no controls bar: it is live\n    .row_action(|track| icon_button(Icon::Delete).on_press(Msg::Remove(track.id)).into())   // before the grip\n    .on_event(Msg::Queue)\n\n// update\nMsg::Queue(e) => { self.queue.apply(e); }      // each Reorder is committed\nMsg::Remove(i) => { self.queue.remove(i); }"
         }
         Detail::SectionHeading => {
             "SectionHeading::new(\"Recently played\")\n    .subtitle(\"Fresh this week\")\n    .link(\"View all\", Msg::OpenHistory)   // \"View all ›\" at the far end"
         }
         Detail::MediaRow => {
-            "// the columns, written ONCE: the header and every row take their widths from them\nlet cols = MediaColumns::new()\n    .picture(true)                                   // room for the cover (PICTURE_WIDTH)\n    .title(Col::Title, \"Title\")\n    .subtitle(Col::Artist, \"Artist\")                  // its own column in compact mode\n    .column(Col::Album, \"Album\", Length::FillPortion(2))\n    .column(Col::Time, \"Time\", Length::Fixed(TIME_WIDTH)).align(Horizontal::Right)\n    .suffix(true)                                    // room for the menu (SUFFIX_WIDTH)\n    .compact(self.compact);\n\ncols.header(&self.sort, Msg::Sort)                   // Msg::Sort(c) => self.sort.activate(c, false)\n\nVirtualList::new(n, 56.0, &self.viewport, |i| {\n    cols.row(&t.title)                               // compact as the columns are\n        .subtitle(&t.artist)\n        .picture(Avatar::new(PICTURE_WIDTH, &t.title).icon(Icon::MusicNote).shape(AvatarShape::Rounded))\n        .cell(caption(&t.album))                     // the next column's width and alignment\n        .cell(caption(t.time()))\n        .suffix(menu_button(Icon::ViewMore, menu))\n        .height(Length::Fill)                        // centered in the row the list gives it\n        .on_press(Msg::Play(i))\n        .into()\n})\n\n// or without the shared spec: MediaRow::new(..).column(width, cell).align(Horizontal::Right)"
+            "// the columns, written ONCE: the header and every row take their widths from them\nlet cols = MediaColumns::new()\n    .picture(true)                                   // room for the cover (PICTURE_WIDTH)\n    .title(Col::Title, \"Title\")                       // grows\n    .subtitle(Col::Artist, \"Artist\")                  // its own column in compact mode\n    .column(Col::Album, \"Album\")                     // every column grows by default...\n        .width(Length::Fixed(160.0))                 // ...or is given a width\n    .column(Col::Time, \"Time\").width(Length::Fixed(TIME_WIDTH)).align(Horizontal::Right)\n    .suffix(true)                                    // room for the menu (SUFFIX_WIDTH)\n    .compact(self.compact);\n\ncols.header(&self.sort, Msg::Sort)                   // Msg::Sort(c) => self.sort.activate(c, false)\n\nVirtualList::new(n, 56.0, &self.viewport, |i| {\n    cols.row(&t.title)                               // compact as the columns are\n        .subtitle(&t.artist)\n        .picture(Avatar::new(PICTURE_WIDTH, &t.title).icon(Icon::MusicNote).shape(AvatarShape::Rounded))\n        .cell(caption(&t.album))                     // the next column's width and alignment\n        .cell(caption(t.time()))\n        .suffix(menu_button(Icon::ViewMore, menu))\n        .height(Length::Fill)                        // centered in the row the list gives it\n        .on_press(Msg::Play(i))\n        .into()\n})\n\n// or without the shared spec: MediaRow::new(..).column(width, cell).align(Horizontal::Right)"
         }
         Detail::ChipGroup => {
             "ChipGroup::new(\n    tags.iter().map(|t| ChipOption::new(t.id, &t.name).color(t.color).icon(Icon::Tag)),\n    &self.selected,\n    Msg::Toggle,                    // gets the key of the pressed chip\n)\n.search(&self.query, Msg::Query)    // an entry above filters by label as you type\n// or filter without drawing an entry (two groups sharing one field):\n.query(&self.query)\n.on_color(Color::WHITE)             // selected chips with their own color\n.size(ChipSize::Small)"

@@ -17,6 +17,7 @@ pub struct CardGrid<'a, M> {
     items: Vec<Element<'a, M>>,
     max_width: f32,
     spacing: f32,
+    compact: bool,
 }
 
 impl<'a, M: 'a> CardGrid<'a, M> {
@@ -25,11 +26,18 @@ impl<'a, M: 'a> CardGrid<'a, M> {
             items: items.into_iter().collect(),
             max_width: 200.0,
             spacing: 12.0,
+            compact: false,
         }
     }
     /// The widest a card may be; the number of columns follows from it (default 200).
     pub fn max_width(mut self, px: f32) -> Self {
         self.max_width = px.max(1.0);
+        self
+    }
+    /// Lays the items out as a **list**: one column, tight, for compact [`MediaCard`](super::MediaCard)s
+    /// (rows). The width of a column of rows is the whole width, so there is nothing to pick.
+    pub fn compact(mut self, compact: bool) -> Self {
+        self.compact = compact;
         self
     }
     /// The space between cards (default 12).
@@ -41,6 +49,12 @@ impl<'a, M: 'a> CardGrid<'a, M> {
 
 impl<'a, M: 'a> From<CardGrid<'a, M>> for Element<'a, M> {
     fn from(g: CardGrid<'a, M>) -> Self {
+        if g.compact {
+            return iced::widget::column(g.items)
+                .spacing(g.spacing.min(2.0))
+                .width(Length::Fill)
+                .into();
+        }
         Grid::with_children(g.items)
             .fluid(g.max_width)
             .spacing(g.spacing)
@@ -55,7 +69,10 @@ mod tests {
 
     #[test]
     fn the_builder_keeps_its_sizes() {
-        let g: CardGrid<'_, ()> = CardGrid::new([]).max_width(160.0).spacing(8.0);
-        assert_eq!((g.max_width, g.spacing), (160.0, 8.0));
+        let g: CardGrid<'_, ()> = CardGrid::new([])
+            .max_width(160.0)
+            .spacing(8.0)
+            .compact(true);
+        assert_eq!((g.max_width, g.spacing, g.compact), (160.0, 8.0, true));
     }
 }

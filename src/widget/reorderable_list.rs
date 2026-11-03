@@ -76,6 +76,7 @@ pub struct ReorderableList<'a, T, M> {
     items: &'a [T],
     row: Build<'a, T, M>,
     edit_row: Option<Build<'a, T, M>>,
+    row_action: Option<Build<'a, T, M>>,
     title: Option<String>,
     editing: bool,
     disabled: bool,
@@ -101,6 +102,7 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
             disabled: false,
             controls: true,
             edit_row: None,
+            row_action: None,
             on_event: None,
             on_change: None,
             lift: DEFAULT_LIFT,
@@ -116,11 +118,21 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
     where
         T: Clone,
     {
-        Self::new(state.items(), row).editing(state.is_editing())
+        // A live list is always editing and has no Edit / Cancel / Done to show.
+        Self::new(state.items(), row)
+            .editing(state.is_editing())
+            .controls(!state.is_live())
     }
     /// The row of the edit view, when it should differ from the preview's.
     pub fn edit_row(mut self, row: impl Fn(&T) -> Element<'a, M> + 'a) -> Self {
         self.edit_row = Some(Box::new(row));
+        self
+    }
+    /// A control at the end of every row of the edit view, **before the grip**: a delete button,
+    /// a menu. It is built from the item like the row, and keeps its own pointer behavior (only
+    /// the grip starts a drag). The list's [`ReorderState::remove`] is what a delete button wants.
+    pub fn row_action(mut self, action: impl Fn(&T) -> Element<'a, M> + 'a) -> Self {
+        self.row_action = Some(Box::new(action));
         self
     }
     /// A heading at the start of the controls bar.
@@ -249,14 +261,14 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
             let grip = container(Icon::DragHandle.view(self.metrics.icon_size))
                 .width(Length::Fixed(HANDLE_WIDTH))
                 .align_x(iced::alignment::Horizontal::Center);
-            Element::from(
-                row![
-                    container((self.edit_row.as_ref().unwrap_or(&self.row))(item))
-                        .width(Length::Fill),
-                    grip
-                ]
-                .align_y(Vertical::Center),
-            )
+            let mut line = row![
+                container((self.edit_row.as_ref().unwrap_or(&self.row))(item)).width(Length::Fill)
+            ]
+            .align_y(Vertical::Center);
+            if let Some(action) = &self.row_action {
+                line = line.push(action(item));
+            }
+            Element::from(line.push(grip))
         });
         let mut list = DragList::new(rows.collect());
         // Cloned, not taken: the Cancel and Done buttons are built from the same callback.

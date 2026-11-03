@@ -1818,6 +1818,8 @@ fn main() -> iced::Result {
         });
     }
     iad::config::install(cfg);
+    // ICED_ADAPTIVE_DESIGN_HOLD_ANIMATIONS=0.5 holds every animation half way (see `iad::dev`).
+    iad::dev::Switches::from_env().apply();
     // A daemon, so the preferences dialog can be a window of its own.
     iced::daemon(Gallery::new, Gallery::update, Gallery::view)
         .title(Gallery::title)

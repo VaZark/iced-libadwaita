@@ -117,6 +117,13 @@ pub struct Metrics {
     pub sidebar_row_height: f32,
     /// Horizontal padding inside a sidebar row.
     pub sidebar_row_padding: f32,
+
+    // Surfaces.
+    /// The distance headings, cards and the edges of lists keep from the window edge: the one
+    /// gutter every page surface ([`surface`](crate::widget::surface)) is built from.
+    pub gutter: f32,
+    /// Air above and below a toolbar band.
+    pub band_air: f32,
 }
 
 impl Default for Metrics {
@@ -178,6 +185,9 @@ impl Default for Metrics {
             sidebar_spacing: 2.0,
             sidebar_row_height: 36.0,
             sidebar_row_padding: 12.0,
+
+            gutter: 16.0,
+            band_air: 8.0,
         }
     }
 }
@@ -228,6 +238,8 @@ impl Metrics {
             group_spacing: 16.0,
             sidebar_row_height: 30.0,
             page_padding: Padding::from([16.0, 10.0]),
+            gutter: 12.0,
+            band_air: 6.0,
             ..d
         }
     }

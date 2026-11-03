@@ -73,6 +73,9 @@ Builder methods that take children.
 .TP
 .B \&.edit_row(row: impl Fn(&T) \-> Element<'a, M> + 'a)
 The row of the edit view, when it should differ from the preview's.
+.TP
+.B \&.row_action(action: impl Fn(&T) \-> Element<'a, M> + 'a)
+A control at the end of every row of the edit view, \fBbefore the grip\fR: a delete button, a menu. It is built from the item like the row, and keeps its own pointer behavior (only the grip starts a drag). The list's \fBReorderState::remove\fR is what a delete button wants.
 .SH EVENTS
 Callbacks that produce the application's message.
 .TP

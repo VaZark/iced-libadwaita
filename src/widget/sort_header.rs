@@ -9,18 +9,18 @@
 //! ```ignore
 //! SortHeader::new(&self.sort, Msg::Sort)
 //!     .space(Length::Fixed(40.0))                          // over the cover
-//!     .column(Col::Title, "Title", Length::FillPortion(3))
-//!     .column(Col::Album, "Album", Length::FillPortion(2))
-//!     .column(Col::Time, "Time", Length::Fixed(44.0))
+//!     .column(Col::Title, "Title")                              // every column grows by default
+//!     .column(Col::Album, "Album").width(Length::Fixed(160.0))  // or is given a width
+//!     .column(Col::Time, "Time").width(Length::Fixed(44.0))
 //!     .space(Length::Fixed(36.0))                          // over the menu
 //! ```
 
-use super::{Element, flat_button, typography as ty};
+use super::{Element, typography as ty};
 use crate::primitives::sorting::{Direction, SortState};
 use crate::style::text as st;
 use crate::{Icon, Metrics};
 use iced::alignment::Horizontal;
-use iced::widget::{container, row, space};
+use iced::widget::{button, container, row, space};
 use iced::{Alignment, Length, Padding};
 
 enum Cell<K> {
@@ -55,20 +55,31 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> SortHeader<'a, K, M> {
             metrics: Metrics::desktop(),
         }
     }
-    /// A sortable column: its `key`, label and width.
-    pub fn column(mut self, key: K, label: impl Into<String>, width: impl Into<Length>) -> Self {
+    /// A sortable column: its `key` and label. Like every column it **grows** to cover as much
+    /// width as the others leave (`flex-grow: 1`); [`width`](Self::width) fixes it instead.
+    pub fn column(mut self, key: K, label: impl Into<String>) -> Self {
         self.cells.push(Cell::Sortable(
             key,
             label.into(),
-            width.into(),
+            Length::Fill,
             Horizontal::Left,
         ));
         self
     }
-    /// A label that does not sort.
-    pub fn label(mut self, label: impl Into<String>, width: impl Into<Length>) -> Self {
+    /// A label that does not sort. It grows like any column.
+    pub fn label(mut self, label: impl Into<String>) -> Self {
         self.cells
-            .push(Cell::Plain(label.into(), width.into(), Horizontal::Left));
+            .push(Cell::Plain(label.into(), Length::Fill, Horizontal::Left));
+        self
+    }
+    /// The width of the cell just added, in place of growing: a fixed width (a time, a count), or
+    /// a `FillPortion` to share the free width.
+    pub fn width(mut self, width: impl Into<Length>) -> Self {
+        let w = width.into();
+        match self.cells.last_mut() {
+            Some(Cell::Space(x) | Cell::Plain(_, x, _) | Cell::Sortable(_, _, x, _)) => *x = w,
+            None => {}
+        }
         self
     }
     /// Aligns the label of the column or label just added: `Right` over right-aligned cells (a
@@ -130,18 +141,28 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<SortHeader<'a, K, M>> fo
                         ty::caption(label).style(st::dim)
                     };
                     let msg = (h.on_sort)(key);
+                    // The label is the click target over **the whole column**, not just its text,
+                    // and it does not highlight: a header is not a button to look at.
                     line.push(
-                        container(
-                            flat_button(
+                        button(
+                            container(
                                 row![label, icon.view(12.0)]
                                     .spacing(m.space_xs)
                                     .align_y(Alignment::Center),
                             )
-                            .padding(0)
-                            .on_press(msg),
+                            .width(Length::Fill)
+                            .align_x(align),
                         )
                         .width(w)
-                        .align_x(align),
+                        .padding(0)
+                        .style(|t: &crate::Theme, _| button::Style {
+                            background: None,
+                            text_color: t.semantic.window.fg,
+                            border: iced::Border::default(),
+                            shadow: iced::Shadow::default(),
+                            snap: false,
+                        })
+                        .on_press(msg),
                     )
                 }
             };
@@ -166,9 +187,13 @@ mod tests {
         let s = SortState::<u8>::new();
         let h: SortHeader<'_, u8, u8> = SortHeader::new(&s, |k| k)
             .space(Length::Fixed(40.0))
-            .column(1, "Title", Length::Fill)
-            .label("Plain", Length::Fixed(40.0));
+            .column(1, "Title")
+            .label("Plain")
+            .width(Length::Fixed(40.0));
         assert_eq!(h.cells.len(), 3);
+        // Columns grow unless given a width.
+        assert!(matches!(h.cells[1], Cell::Sortable(1, _, Length::Fill, _)));
+        assert!(matches!(h.cells[2], Cell::Plain(_, Length::Fixed(_), _)));
         assert!(matches!(h.cells[1], Cell::Sortable(1, _, _, _)));
     }
 }

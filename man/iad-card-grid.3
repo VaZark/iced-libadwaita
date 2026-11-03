@@ -28,6 +28,9 @@ Builder methods, chained after the constructor.
 .B \&.max_width(px: f32)
 The widest a card may be; the number of columns follows from it (default 200).
 .TP
+.B \&.compact(compact: bool)
+Lays the items out as a \fBlist\fR: one column, tight, for compact \fBMediaCard\fRs (rows). The width of a column of rows is the whole width, so there is nothing to pick.
+.TP
 .B \&.spacing(px: f32)
 The space between cards (default 12).
 .SH SOURCE

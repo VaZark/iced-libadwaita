@@ -22,4 +22,6 @@ default-members = ["."]
 
 [dependencies]
 iced = { version = "0.14", features = ["advanced", "svg", "image", "tokio", "canvas"] }
+# Only to write the PNG of a development screenshot ([`dev`]).
+image = { version = "0.25", default-features = false, features = ["png"] }
 

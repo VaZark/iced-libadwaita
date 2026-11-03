@@ -12,7 +12,7 @@ See the module.
 .PP
 \fBMediaRow\fR: one row of a music, podcast, video or file list. A flat, rounded, whole\-row button holding a picture, a title with a subtitle, optional extra columns, and a trailing part (a time, a menu). Together with \fBVirtualList\fR and a \fBSortHeader\fR it is the list component.
 .IP \(bu 2
-\fBRegular\fR: picture, then the title over its subtitle.
+\fBRegular\fR: picture, then the title over its subtitle. The title column \fBgrows\fR (\fBflex\-grow: 1\fR): it covers all the width the picture, the extra columns and the suffix leave, so give the other columns fixed widths.
 .IP \(bu 2
 \fBCompact\fR (\fBcompact\fR): no picture, and the title and subtitle share the line, each in its own column, for dense lists.
 .IP \(bu 2
@@ -25,7 +25,7 @@ The whole row is the target, rounded, with a hover that reads on a plain page (\
 MediaRow::new(&track.title)
     .subtitle(&track.artist)
     .picture(cover(track.id, 40.0))
-    .column(Length::FillPortion(2), caption(&track.album))
+    .column(Length::Fixed(160.0), caption(&track.album))
     .column(Length::Fixed(44.0), caption(track.time()))
     .suffix(menu_button(Icon::ViewMore, menu))
     .on_press(Msg::Play(track.id))

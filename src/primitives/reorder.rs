@@ -70,6 +70,7 @@ pub fn move_item<T>(items: &mut Vec<T>, from: usize, to: usize) -> bool {
 pub struct ReorderState<T> {
     committed: Vec<T>,
     draft: Option<Vec<T>>,
+    live: bool,
 }
 
 impl<T: Clone> ReorderState<T> {
@@ -77,7 +78,22 @@ impl<T: Clone> ReorderState<T> {
         Self {
             committed: items,
             draft: None,
+            live: false,
         }
+    }
+    /// A **live** list: always editable, and every drop is committed at once. There is no draft
+    /// to keep, no Cancel and no Done: a queue the user shuffles while it plays. [`apply`](Self::apply)
+    /// commits each `Reorder` and reports it.
+    pub fn live(items: Vec<T>) -> Self {
+        Self {
+            draft: Some(items.clone()),
+            committed: items,
+            live: true,
+        }
+    }
+    /// Whether this list is live (see [`live`](Self::live)).
+    pub fn is_live(&self) -> bool {
+        self.live
     }
     pub fn mode(&self) -> Mode {
         Mode::from_editing(self.draft.is_some())
@@ -99,6 +115,19 @@ impl<T: Clone> ReorderState<T> {
         T: PartialEq,
     {
         self.draft.as_ref().is_some_and(|d| *d != self.committed)
+    }
+    /// Takes the row at `index` out of the order the list shows (the draft while editing) and
+    /// returns it. In a live list it is committed at once. `None` for an index that is not there.
+    pub fn remove(&mut self, index: usize) -> Option<T> {
+        let shown = self.draft.as_mut().unwrap_or(&mut self.committed);
+        if index >= shown.len() {
+            return None;
+        }
+        let item = shown.remove(index);
+        if self.live {
+            self.committed = shown.clone();
+        }
+        Some(item)
     }
     /// Starts a draft. Does nothing when already editing.
     pub fn edit(&mut self) {
@@ -135,8 +164,15 @@ impl<T: Clone> ReorderState<T> {
         match event {
             Event::Edit => self.edit(),
             Event::Reorder { from, to } => {
-                self.reorder(from, to);
+                let moved = self.reorder(from, to);
+                if self.live {
+                    // Every drop is the commit: the list stays editable.
+                    self.committed = self.items().to_vec();
+                    return moved;
+                }
             }
+            // A live list has no draft to submit or cancel.
+            Event::Submit | Event::Cancel if self.live => {}
             Event::Submit => return self.submit(),
             Event::Cancel => self.cancel(),
         }
@@ -144,8 +180,9 @@ impl<T: Clone> ReorderState<T> {
     }
     /// Replaces the committed items (a row added or removed elsewhere). Any draft is dropped.
     pub fn set(&mut self, items: Vec<T>) {
+        // A live list stays editing, with the new items.
+        self.draft = self.live.then(|| items.clone());
         self.committed = items;
-        self.draft = None;
     }
 }
 
@@ -339,5 +376,54 @@ mod tests {
         assert_eq!(shift(0, 3, 1, 41.0), 0.0);
         // Not moved: nothing shifts.
         assert_eq!(shift(2, 2, 2, 41.0), 0.0);
+    }
+
+    #[test]
+    fn a_live_list_commits_every_drop_and_stays_editable() {
+        let mut s = ReorderState::live(vec!["a", "b", "c"]);
+        assert!(s.is_live() && s.is_editing());
+        // A drop is committed at once, and reported as a change of the committed order.
+        assert!(s.apply(Event::Reorder { from: 0, to: 2 }));
+        assert_eq!(s.committed(), ["b", "c", "a"]);
+        assert!(s.is_editing());
+        // Moving a row onto itself changes nothing.
+        assert!(!s.apply(Event::Reorder { from: 1, to: 1 }));
+        // Done and Cancel have nothing to do.
+        assert!(!s.apply(Event::Submit));
+        s.apply(Event::Cancel);
+        assert!(s.is_editing());
+        assert_eq!(s.items(), ["b", "c", "a"]);
+    }
+
+    #[test]
+    fn a_row_is_removed_from_what_the_list_shows() {
+        let mut s = ReorderState::live(vec![1, 2, 3]);
+        assert_eq!(s.remove(1), Some(2));
+        assert_eq!(s.committed(), [1, 3]);
+        assert_eq!(s.remove(9), None);
+        // A draft list removes from the draft only, until it is submitted.
+        let mut d = ReorderState::new(vec![1, 2, 3]);
+        d.edit();
+        assert_eq!(d.remove(0), Some(1));
+        assert_eq!(d.items(), [2, 3]);
+        assert_eq!(d.committed(), [1, 2, 3]);
+        d.submit();
+        assert_eq!(d.committed(), [2, 3]);
+        // Outside edit mode it removes from the committed order.
+        let mut p = ReorderState::new(vec![1, 2]);
+        assert_eq!(p.remove(0), Some(1));
+        assert_eq!(p.committed(), [2]);
+    }
+
+    #[test]
+    fn setting_the_items_of_a_live_list_keeps_it_editing() {
+        let mut s = ReorderState::live(vec![1]);
+        s.set(vec![5, 6]);
+        assert!(s.is_editing());
+        assert_eq!(s.items(), [5, 6]);
+        let mut d = ReorderState::new(vec![1]);
+        d.edit();
+        d.set(vec![2]);
+        assert!(!d.is_editing());
     }
 }

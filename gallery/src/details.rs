@@ -401,6 +401,7 @@ impl Gallery {
             Detail::EditableText => self.upstream.editable_view(m).map(Message::Upstream),
             Detail::PageHeader => self.upstream.header_view(m).map(Message::Upstream),
             Detail::ThemeConfig => self.theme_cfg.view(m).map(Message::ThemeCfg),
+            Detail::Surface => self.upstream.surface_view(m).map(Message::Upstream),
             Detail::CardGrid => self.upstream.grid_view(m).map(Message::Upstream),
             Detail::SectionHeading => self.upstream.heading_view(m).map(Message::Upstream),
             Detail::MediaRow => self.upstream.media_view(m).map(Message::Upstream),
@@ -412,7 +413,12 @@ impl Gallery {
                 self.upstream.icons_view(m, revealed).map(Message::Upstream)
             }
             Detail::SyncedText => self.synced.view(m).map(Message::Synced),
-            Detail::Reorderable => self.reorder.view(m).map(Message::Reorder),
+            Detail::Reorderable => column![
+                self.reorder.view(m).map(Message::Reorder),
+                self.upstream.queue_view(m).map(Message::Upstream),
+            ]
+            .spacing(m.group_spacing)
+            .into(),
             Detail::Resizable => self.resizable.view(m).map(Message::Resizable),
             Detail::LinkButton => self.inline(Inline::LinkButton),
             Detail::Switch => self.inline(Inline::Switch),
@@ -448,6 +454,7 @@ impl Gallery {
             | Detail::Container
             | Detail::ColorHelpers
             | Detail::IconToggle
+            | Detail::ClipWindow
             | Detail::LineChart
             | Detail::BarChart
             | Detail::PieChart

@@ -347,6 +347,8 @@ metrics! {
     "group-spacing", "Space between groups", |m| m.group_spacing, |m, v| m.group_spacing = v;
     "clamp-maximum", "The readable width of a page", |m| m.clamp_maximum, |m, v| m.clamp_maximum = v;
     "headerbar-height", "Header bar height", |m| m.headerbar_height, |m, v| m.headerbar_height = v;
+    "gutter", "The distance page content keeps from the window edge", |m| m.gutter, |m, v| m.gutter = v;
+    "band-air", "Air above and below a toolbar band", |m| m.band_air, |m, v| m.band_air = v;
     "sidebar-width", "Sidebar width", |m| m.sidebar_width, |m, v| m.sidebar_width = v;
     "sidebar-row-height", "Sidebar row height", |m| m.sidebar_row_height, |m, v| m.sidebar_row_height = v;
     "scrollbar-width", "Scrollbar width", |m| m.scrollbar_width, |m, v| m.scrollbar_width = v;

@@ -3,7 +3,9 @@
 //! part (a time, a menu). Together with [`VirtualList`](super::VirtualList) and a
 //! [`SortHeader`](super::SortHeader) it is the list component.
 //!
-//! * **Regular**: picture, then the title over its subtitle.
+//! * **Regular**: picture, then the title over its subtitle. The title column **grows**
+//!   (`flex-grow: 1`): it covers all the width the picture, the extra columns and the suffix leave,
+//!   so give the other columns fixed widths.
 //! * **Compact** ([`compact`](MediaRow::compact)): no picture, and the title and subtitle share
 //!   the line, each in its own column, for dense lists.
 //! * [`column`](MediaRow::column) adds a cell of a given width (an album, a BPM, a time);
@@ -16,7 +18,7 @@
 //! MediaRow::new(&track.title)
 //!     .subtitle(&track.artist)
 //!     .picture(cover(track.id, 40.0))
-//!     .column(Length::FillPortion(2), caption(&track.album))
+//!     .column(Length::Fixed(160.0), caption(&track.album))
 //!     .column(Length::Fixed(44.0), caption(track.time()))
 //!     .suffix(menu_button(Icon::ViewMore, menu))
 //!     .on_press(Msg::Play(track.id))
@@ -133,9 +135,9 @@ impl<'a, M: Clone + 'a> From<MediaRow<'a, M>> for Element<'a, M> {
         let m = r.metrics;
         let mut line = row![].spacing(m.space_m).align_y(Alignment::Center);
         if r.compact {
-            line = line.push(ty::body(r.title).width(Length::FillPortion(3)));
+            line = line.push(ty::body(r.title).width(Length::Fill));
             if let Some(s) = r.subtitle {
-                line = line.push(ty::caption(s).style(st::dim).width(Length::FillPortion(2)));
+                line = line.push(ty::caption(s).style(st::dim).width(Length::Fill));
             }
         } else {
             if let Some(p) = r.picture {
@@ -145,7 +147,7 @@ impl<'a, M: Clone + 'a> From<MediaRow<'a, M>> for Element<'a, M> {
             if let Some(s) = r.subtitle {
                 text = text.push(ty::caption(s).style(st::dim));
             }
-            line = line.push(text.width(Length::FillPortion(3)));
+            line = line.push(text.width(Length::Fill));
         }
         for (width, align, cell) in r.columns {
             line = line.push(container(cell).width(width).align_x(align));
@@ -187,8 +189,8 @@ struct Def<K> {
 /// let cols = MediaColumns::new()
 ///     .picture(true)                                   // PICTURE_WIDTH, over the cover
 ///     .title(Col::Title, "Title")
-///     .column(Col::Album, "Album", Length::FillPortion(2))
-///     .column(Col::Time, "Time", Length::Fixed(TIME_WIDTH)).align(Horizontal::Right)
+///     .column(Col::Album, "Album").width(Length::Fixed(160.0))
+///     .column(Col::Time, "Time").width(Length::Fixed(TIME_WIDTH)).align(Horizontal::Right)
 ///     .suffix(true);                                   // SUFFIX_WIDTH, over the menu
 ///
 /// cols.header(&self.sort, Msg::Sort)                   // the header
@@ -233,24 +235,34 @@ impl<K> MediaColumns<K> {
         self.subtitle = Some((Some(key), label.into()));
         self
     }
-    /// An extra column after the title, sortable under `key`.
-    pub fn column(mut self, key: K, label: impl Into<String>, width: impl Into<Length>) -> Self {
+    /// An extra column after the title, sortable under `key`. Like the title it **grows** to
+    /// cover as much width as the others leave (`flex-grow: 1`), so the free width is shared;
+    /// [`width`](Self::width) fixes it instead.
+    pub fn column(mut self, key: K, label: impl Into<String>) -> Self {
         self.cols.push(Def {
             key: Some(key),
             label: label.into(),
-            width: width.into(),
+            width: Length::Fill,
             align: Horizontal::Left,
         });
         self
     }
-    /// An extra column whose label does not sort.
-    pub fn label(mut self, label: impl Into<String>, width: impl Into<Length>) -> Self {
+    /// An extra column whose label does not sort. It grows like any column.
+    pub fn label(mut self, label: impl Into<String>) -> Self {
         self.cols.push(Def {
             key: None,
             label: label.into(),
-            width: width.into(),
+            width: Length::Fill,
             align: Horizontal::Left,
         });
+        self
+    }
+    /// The width of the column just added, in place of growing: fixed (a time, a count), or a
+    /// `FillPortion` to take more or less of the free width.
+    pub fn width(mut self, width: impl Into<Length>) -> Self {
+        if let Some(last) = self.cols.last_mut() {
+            last.width = width.into();
+        }
         self
     }
     /// Aligns the column just added, header label and cells alike.
@@ -299,16 +311,16 @@ impl<K: PartialEq + Clone> MediaColumns<K> {
             h = h.space(Length::Fixed(PICTURE_WIDTH));
         }
         let put = |h: SortHeader<'a, K, M>, def: &(Option<K>, String), w: Length| match &def.0 {
-            Some(k) => h.column(k.clone(), def.1.clone(), w),
-            None => h.label(def.1.clone(), w),
+            Some(k) => h.column(k.clone(), def.1.clone()).width(w),
+            None => h.label(def.1.clone()).width(w),
         };
         if let Some(t) = &self.title {
-            h = put(h, t, Length::FillPortion(3));
+            h = put(h, t, Length::Fill);
         }
         if self.compact
             && let Some(s) = &self.subtitle
         {
-            h = put(h, s, Length::FillPortion(2));
+            h = put(h, s, Length::Fill);
         }
         for c in &self.cols {
             let def = (c.key.clone(), c.label.clone());
@@ -342,8 +354,10 @@ mod tests {
     fn rows_take_their_widths_from_the_shared_columns() {
         let cols = MediaColumns::<u8>::new()
             .title(0, "Title")
-            .column(1, "Album", Length::FillPortion(2))
-            .column(2, "Time", Length::Fixed(TIME_WIDTH))
+            .column(1, "Album")
+            .width(Length::FillPortion(2))
+            .column(2, "Time")
+            .width(Length::Fixed(TIME_WIDTH))
             .align(Horizontal::Right);
         let r: MediaRow<'_, ()> = cols
             .row("Song")

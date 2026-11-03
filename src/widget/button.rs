@@ -134,13 +134,67 @@ pub fn circular_button<'a, M: 'a>(icon: Icon) -> Button<'a, M, Theme> {
 
 /// A round `.suggested-action` button around any content: the play button of a player, a
 /// primary action that is only an icon. [`circular_button`] is the flat one.
+///
+/// The diameter is the metrics' button height by default; [`size`](SuggestedCircularButton::size)
+/// sets it (a player's play button is bigger than a toolbar's).
+pub struct SuggestedCircularButton<'a, M> {
+    content: Element<'a, M>,
+    size: f32,
+    on_press: Option<M>,
+}
+
+/// See [`SuggestedCircularButton`].
 pub fn suggested_circular_button<'a, M: 'a>(
     content: impl Into<Element<'a, M>>,
-) -> Button<'a, M, Theme> {
-    let m = Metrics::desktop();
-    button(container(content.into()).center(Length::Fixed(m.button_min_height)))
-        .padding(Padding::from(0.0))
-        .style(sb::circular_suggested)
+) -> SuggestedCircularButton<'a, M> {
+    SuggestedCircularButton {
+        content: content.into(),
+        size: Metrics::desktop().button_min_height,
+        on_press: None,
+    }
+}
+
+impl<'a, M: 'a> SuggestedCircularButton<'a, M> {
+    /// The diameter in px.
+    pub fn size(mut self, px: f32) -> Self {
+        self.size = px.max(1.0);
+        self
+    }
+    pub fn on_press(mut self, msg: M) -> Self {
+        self.on_press = Some(msg);
+        self
+    }
+    /// Pressable only when there is a message; disabled otherwise.
+    pub fn on_press_maybe(mut self, msg: Option<M>) -> Self {
+        self.on_press = msg;
+        self
+    }
+}
+
+impl<'a, M: Clone + 'a> From<SuggestedCircularButton<'a, M>> for Element<'a, M> {
+    fn from(b: SuggestedCircularButton<'a, M>) -> Self {
+        button(container(b.content).center(Length::Fixed(b.size)))
+            .padding(Padding::from(0.0))
+            .style(sb::circular_suggested)
+            .on_press_maybe(b.on_press)
+            .into()
+    }
+}
+
+#[cfg(test)]
+mod circular_tests {
+    use super::*;
+
+    #[test]
+    fn the_diameter_is_settable_and_a_message_makes_it_pressable() {
+        let b: SuggestedCircularButton<'_, u8> = suggested_circular_button(iced::widget::space())
+            .size(44.0)
+            .on_press(1);
+        assert_eq!((b.size, b.on_press), (44.0, Some(1)));
+        let d: SuggestedCircularButton<'_, u8> =
+            suggested_circular_button(iced::widget::space()).on_press_maybe(None);
+        assert!(d.on_press.is_none());
+    }
 }
 
 /// A flat icon button with a rounded-rect hover (`.flat` + icon-only).

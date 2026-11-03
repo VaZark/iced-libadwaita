@@ -545,6 +545,26 @@ pub mod presets {
 /// 0 = follow the system, 1 = forced on, 2 = forced off.
 static OVERRIDE: AtomicU8 = AtomicU8::new(0);
 
+thread_local! {
+    /// The fixed point animations are held at, or none. Per thread: animations are driven on the
+    /// UI thread, where an app calls [`set_hold`] at startup (and a test that holds one does not
+    /// hold the others).
+    static HOLD: std::cell::Cell<Option<f32>> = const { std::cell::Cell::new(None) };
+}
+
+/// Holds every [`Progress`] **a fraction of the way** between where it was and where it is
+/// heading, and stops it from moving: the way to screenshot a slide, a reveal or a transition at
+/// a known frame (`Some(0.5)` is half way). `None` releases them. Call it on the UI thread.
+/// Development only: see [`dev`](crate::dev).
+pub fn set_hold(fraction: Option<f32>) {
+    HOLD.with(|h| h.set(fraction.map(|f| f.clamp(0.0, 1.0))));
+}
+
+/// The fraction animations are held at, if any.
+pub fn hold() -> Option<f32> {
+    HOLD.with(std::cell::Cell::get)
+}
+
 /// Forces animations on/off for the whole process; `None` follows the system again.
 pub fn set_enabled(enabled: Option<bool>) {
     OVERRIDE.store(
@@ -1061,6 +1081,35 @@ mod tests {
     }
 
     #[test]
+    fn a_held_animation_sits_a_fraction_of_the_way_and_does_not_move() {
+        let t0 = Instant::now();
+        let mut p = Progress::new(0.0);
+        set_hold(Some(0.5));
+        p.drive(
+            1.0,
+            t0,
+            Spec::Timed(Duration::from_millis(250), Easing::Ease),
+        );
+        assert_eq!(p.shown, 0.5);
+        // Later frames do not move it, and nothing reports motion.
+        assert!(!p.drive(
+            1.0,
+            t0 + Duration::from_secs(5),
+            Spec::Timed(Duration::from_millis(250), Easing::Ease)
+        ));
+        assert_eq!(p.shown, 0.5);
+        // A new target is a fraction of the way from the old one.
+        p.drive(
+            0.0,
+            t0,
+            Spec::Timed(Duration::from_millis(250), Easing::Ease),
+        );
+        assert_eq!(p.shown, 0.5);
+        set_hold(None);
+        assert_eq!(hold(), None);
+    }
+
+    #[test]
     fn presets_match_libadwaita() {
         assert!(approx(presets::navigation().stiffness, 1000.0));
         assert!(approx(presets::sidebar().mass, 0.5));
@@ -1082,6 +1131,8 @@ mod tests {
 pub struct Progress {
     tween: Tween,
     pub shown: f32,
+    /// `(from, to)` while held at a fraction by [`set_hold`].
+    held: Option<(f32, f32)>,
 }
 
 impl Progress {
@@ -1089,12 +1140,28 @@ impl Progress {
         Self {
             tween: Tween::new(initial),
             shown: initial,
+            held: None,
         }
     }
 
     /// Moves toward `target` and advances to `now`. Returns whether it changed or is still
     /// moving (the caller then requests a redraw / relayout).
     pub fn drive(&mut self, target: f32, now: Instant, spec: Spec) -> bool {
+        if let Some(f) = hold() {
+            // Held: the value is a fixed fraction of the way from where it was to the target,
+            // and nothing moves, so a screenshot is the same every time.
+            let (from, to) = match self.held {
+                Some((from, to)) if to == target => (from, to),
+                _ => (self.held.map_or(self.tween.target(), |h| h.1), target),
+            };
+            self.held = Some((from, to));
+            let v = from + (to - from) * f;
+            let changed = (v - self.shown).abs() > f32::EPSILON;
+            self.shown = v;
+            self.tween.set_immediate(v);
+            return changed;
+        }
+        self.held = None;
         self.tween.set_target(target, now, spec);
         self.step(now)
     }

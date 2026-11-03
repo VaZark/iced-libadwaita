@@ -28,11 +28,83 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Some("lint-gutters") => {
+            let paths: Vec<std::path::PathBuf> = args[1..]
+                .iter()
+                .filter(|a| !a.starts_with("--"))
+                .map(std::path::PathBuf::from)
+                .collect();
+            if !lint_gutters(&paths) {
+                std::process::exit(1);
+            }
+        }
         _ => {
-            eprintln!("usage: cargo xtask man [--check]");
+            eprintln!(
+                "usage: cargo xtask man [--check]\n       cargo xtask lint-gutters [path...]"
+            );
             std::process::exit(2);
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Lint: hard-coded gutters
+// ---------------------------------------------------------------------------------------------
+
+/// Whether `line` writes a padding as a number: `.padding(16)`, `.padding([8, 12])`,
+/// `Padding::from(12.0)`, `Padding { .. }`. A padding taken from a variable (`m.gutter`,
+/// `surface::bar_padding()`) is fine, and so is a line marked `// gutter-ok`.
+fn hardcoded_padding(line: &str) -> bool {
+    if line.contains("gutter-ok") || line.trim_start().starts_with("//") {
+        return false;
+    }
+    let after = |needle: &str| -> Option<char> {
+        line.find(needle)
+            .and_then(|i| line[i + needle.len()..].trim_start().chars().next())
+    };
+    let numeric = |c: Option<char>| c.is_some_and(|c| c.is_ascii_digit() || c == '[');
+    numeric(after(".padding(")) || numeric(after("Padding::from(")) || line.contains("Padding {")
+}
+
+/// Every hard-coded padding under `paths` (default `src`): the rule that a page's edge distance
+/// is written once, in `widget::surface`, not in each page. Returns whether there were none.
+fn lint_gutters(paths: &[std::path::PathBuf]) -> bool {
+    let roots: Vec<std::path::PathBuf> = if paths.is_empty() {
+        vec![std::path::PathBuf::from("src")]
+    } else {
+        paths.to_vec()
+    };
+    let mut found = 0;
+    for root in roots {
+        let mut stack = vec![root];
+        while let Some(p) = stack.pop() {
+            if p.is_dir() {
+                if p.file_name().is_some_and(|n| n == "target" || n == ".git") {
+                    continue;
+                }
+                if let Ok(rd) = std::fs::read_dir(&p) {
+                    stack.extend(rd.flatten().map(|e| e.path()));
+                }
+            } else if p.extension().is_some_and(|e| e == "rs")
+                && let Ok(text) = std::fs::read_to_string(&p)
+            {
+                for (i, line) in text.lines().enumerate() {
+                    if hardcoded_padding(line) {
+                        println!("{}:{}: {}", p.display(), i + 1, line.trim());
+                        found += 1;
+                    }
+                }
+            }
+        }
+    }
+    if found > 0 {
+        eprintln!(
+            "{found} hard-coded padding(s). Use widget::surface (or add `// gutter-ok` where a number is right)."
+        );
+    } else {
+        println!("no hard-coded gutters");
+    }
+    found == 0
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -822,4 +894,28 @@ fn man(check: bool) -> bool {
     }
     println!("wrote {} man pages to {}", pages.len(), dir.display());
     true
+}
+
+#[cfg(test)]
+mod lint_tests {
+    use super::hardcoded_padding;
+
+    #[test]
+    fn numbers_are_hard_coded_and_variables_are_not() {
+        assert!(hardcoded_padding("    .padding(16)"));
+        assert!(hardcoded_padding("    .padding([8, 12])"));
+        assert!(hardcoded_padding("let p = Padding::from(12.0);"));
+        assert!(hardcoded_padding("Padding { top: 1.0, ..Padding::ZERO }"));
+        assert!(!hardcoded_padding("    .padding(m.gutter)"));
+        assert!(!hardcoded_padding("    .padding(surface::bar_padding())"));
+        assert!(!hardcoded_padding("    .padding(Padding::from(g))"));
+    }
+
+    #[test]
+    fn a_marked_line_or_a_comment_is_fine() {
+        assert!(!hardcoded_padding(
+            "    .padding(4) // gutter-ok: inside a chip"
+        ));
+        assert!(!hardcoded_padding("    // .padding(16)"));
+    }
 }
