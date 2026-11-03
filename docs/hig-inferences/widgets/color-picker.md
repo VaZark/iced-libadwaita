@@ -13,6 +13,8 @@ No libadwaita widget (`GtkColorDialog` opens a system dialog). After Mantine's [
 - **Controls.** Press or drag the square for saturation and value, the sliders for hue and alpha; a drag keeps working outside the control.
 - **Swatches.** `swatches([..])` (any text `parse` reads; the others are left out) are one-press choices.
 - **ColorInput.** The app keeps the text (so typing is not interrupted) and the color: `on_input` gets what was typed (parse it with `Hsva::parse`), `on_change` a color picked in the popover (format it with `Hsva::format`). Text that does not parse shows the error state.
+- **Input.** `ColorPicker::input(text, on_input)` adds a text entry under the controls (the swatch beside it shows the color), in the error state when the text does not parse; use it with `.readout(false)`.
+- **AccentPicker.** `accent_picker(selected, on_select).custom(text, on_text)` adds a last swatch that opens a `ColorPicker` with that input in a popover, the nine accents as its swatches; the choice is an `AccentColor::Custom`.
 - Controlled: the app owns the color.
 
 ## iced mapping

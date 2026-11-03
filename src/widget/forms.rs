@@ -4,7 +4,9 @@
 //! Each is a thin, themed wrapper with libadwaita-style properties, so a layout (code, XML or
 //! JSX-like) can use one vocabulary instead of raw iced widgets.
 
-use super::Element;
+use super::popover::{Align, Appearance, Popover, popover};
+use super::{ColorPicker, Element};
+use crate::primitives::color_picker::{Format as ColorFormat, Hsva};
 use crate::primitives::sections::{slot_width, text_padding};
 use crate::style;
 use crate::{AccentColor, Icon, Metrics, Role, Surface, Swatch, Theme};
@@ -44,6 +46,9 @@ impl From<crate::primitives::validation::Presentation> for EntryState {
 /// `GtkEntry` / `GtkPasswordEntry`.
 ///
 /// Without [`on_input`](Entry::on_input) it is read-only and drawn disabled.
+/// The text an entry shows and what typing sends.
+pub(super) type TextBinding<'a, M> = (String, std::rc::Rc<dyn Fn(String) -> M + 'a>);
+
 pub struct Entry<'a, M> {
     placeholder: String,
     value: String,
@@ -367,34 +372,118 @@ pub fn status_swatch<'a, M: 'a>(label: impl Into<String>, swatch: Swatch) -> Ele
     color_swatch(label, swatch.surface())
 }
 
-/// The system accent color chooser: a row of round swatches with a check on the selected one.
+/// The accent color chooser: a row of round swatches, one per desktop accent, with a check on
+/// the selected one. With [`custom`](AccentPicker::custom) a last swatch opens a
+/// [`ColorPicker`](super::ColorPicker) (with a text input) in a popover for any other color, and
+/// the choice is an [`AccentColor::Custom`].
+pub struct AccentPicker<'a, M> {
+    selected: AccentColor,
+    on_select: std::rc::Rc<dyn Fn(AccentColor) -> M + 'a>,
+    custom: Option<TextBinding<'a, M>>,
+    metrics: Metrics,
+}
+
 pub fn accent_picker<'a, M: Clone + 'a>(
     selected: AccentColor,
     on_select: impl Fn(AccentColor) -> M + 'a,
-) -> Element<'a, M> {
-    let m = Metrics::desktop();
-    row(AccentColor::ALL.iter().map(|a| {
-        let color = a.to_color();
-        let content: Element<'a, M> = if *a == selected {
-            Icon::Check
-                .colored(14.0, crate::color::readable_on(color))
-                .into()
-        } else {
-            iced::widget::space().into()
-        };
-        button(container(content).center(Length::Fixed(26.0)))
-            .padding(0)
-            .style(move |_: &Theme, _| iced::widget::button::Style {
-                background: Some(iced::Background::Color(color)),
-                border: iced::Border::default().rounded(999.0),
-                ..Default::default()
-            })
-            .on_press(on_select(*a))
+) -> AccentPicker<'a, M> {
+    AccentPicker {
+        selected,
+        on_select: std::rc::Rc::new(on_select),
+        custom: None,
+        metrics: Metrics::desktop(),
+    }
+}
+
+impl<'a, M: Clone + 'a> AccentPicker<'a, M> {
+    /// Adds the custom swatch. `text` is what the popover's entry shows (the app keeps it, so
+    /// typing is not interrupted); `on_text` gets what was typed. Parse it with
+    /// [`AccentColor::parse`] and select the result.
+    pub fn custom(mut self, text: impl Into<String>, on_text: impl Fn(String) -> M + 'a) -> Self {
+        self.custom = Some((text.into(), std::rc::Rc::new(on_text)));
+        self
+    }
+    pub fn metrics(mut self, m: Metrics) -> Self {
+        self.metrics = m;
+        self
+    }
+}
+
+/// A round swatch of `color`, with a check when `on`.
+fn round_swatch<'a, M: 'a>(color: iced::Color, on: bool) -> Element<'a, M> {
+    let content: Element<'a, M> = if on {
+        Icon::Check
+            .colored(14.0, crate::color::readable_on(color))
             .into()
-    }))
-    .spacing(m.space_s)
-    .wrap()
-    .into()
+    } else {
+        iced::widget::space().into()
+    };
+    container(content)
+        .center(Length::Fixed(26.0))
+        .style(move |_: &Theme| iced::widget::container::Style {
+            background: Some(iced::Background::Color(color)),
+            border: iced::Border::default().rounded(999.0),
+            ..Default::default()
+        })
+        .into()
+}
+
+impl<'a, M: Clone + 'a> From<AccentPicker<'a, M>> for Element<'a, M> {
+    fn from(p: AccentPicker<'a, M>) -> Self {
+        let m = p.metrics;
+        let mut swatches: Vec<Element<'a, M>> = AccentColor::ALL
+            .iter()
+            .map(|a| {
+                button(round_swatch(a.to_color(), *a == p.selected))
+                    .padding(0)
+                    .style(|_: &Theme, _| iced::widget::button::Style::default())
+                    .on_press((p.on_select)(*a))
+                    .into()
+            })
+            .collect();
+        if let Some((text, on_text)) = p.custom {
+            let current = p.selected.to_color();
+            let c = Hsva::from_rgba(current.r, current.g, current.b, 1.0);
+            let on_select = p.on_select.clone();
+            let picker = ColorPicker::new(c, move |h: Hsva| {
+                let [r, g, b] = h.to_rgb8();
+                on_select(AccentColor::custom(r, g, b))
+            })
+            .swatches(AccentColor::ALL.map(|a| {
+                let c = a.to_color();
+                Hsva::from_rgba(c.r, c.g, c.b, 1.0).format(ColorFormat::Hex)
+            }))
+            .input(text, move |t| on_text(t))
+            .readout(false)
+            .metrics(m);
+            let custom = matches!(p.selected, AccentColor::Custom(_));
+            // A custom accent shows its color; otherwise a plus invites choosing one.
+            let trigger: Element<'a, M> = if custom {
+                round_swatch(current, true)
+            } else {
+                container(Icon::ListAdd.view(14.0))
+                    .center(Length::Fixed(26.0))
+                    .style(|t: &Theme| iced::widget::container::Style {
+                        border: iced::Border {
+                            color: t.semantic.border,
+                            width: 1.5,
+                            radius: 999.0.into(),
+                        },
+                        ..Default::default()
+                    })
+                    .into()
+            };
+            swatches.push(
+                Popover::new(trigger, popover([Element::from(picker)], 520.0))
+                    .appearance(Appearance::Flat)
+                    .padding(0)
+                    .align(Align::End)
+                    .keep_open(true)
+                    .into(),
+            );
+        }
+        row(swatches).spacing(m.space_s).wrap().into()
+    }
 }
 
 #[cfg(test)]

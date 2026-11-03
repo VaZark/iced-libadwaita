@@ -386,6 +386,7 @@ pub struct ColorPicker<'a, M> {
     swatches: Vec<Hsva>,
     format: Format,
     readout: bool,
+    input: Option<super::forms::TextBinding<'a, M>>,
     width: Length,
     metrics: Metrics,
 }
@@ -399,6 +400,7 @@ impl<'a, M: Clone + 'a> ColorPicker<'a, M> {
             swatches: Vec::new(),
             format: Format::Hex,
             readout: true,
+            input: None,
             width: Length::Fixed(240.0),
             metrics: Metrics::desktop(),
         }
@@ -425,6 +427,13 @@ impl<'a, M: Clone + 'a> ColorPicker<'a, M> {
     /// Whether the readout (a swatch and the value as text) shows (default true).
     pub fn readout(mut self, on: bool) -> Self {
         self.readout = on;
+        self
+    }
+    /// An entry under the controls to type the color in: `text` is what it shows (the app keeps
+    /// it, so typing is not interrupted) and `on_input` gets what was typed; parse it with
+    /// [`Hsva::parse`]. Text that does not parse shows the error state. It replaces the readout.
+    pub fn input(mut self, text: impl Into<String>, on_input: impl Fn(String) -> M + 'a) -> Self {
+        self.input = Some((text.into(), std::rc::Rc::new(on_input)));
         self
     }
     pub fn width(mut self, w: impl Into<Length>) -> Self {
@@ -483,7 +492,20 @@ impl<'a, M: Clone + 'a> From<ColorPicker<'a, M>> for Element<'a, M> {
                 .collect();
             col = col.push(wrap_box(chips, m.space_xs));
         }
-        if p.readout {
+        if let Some((text, on_input)) = p.input {
+            let invalid = !text.trim().is_empty() && Hsva::parse(&text).is_none();
+            let mut entry = super::entry("Color", text)
+                .on_input(move |t| on_input(t))
+                .metrics(m);
+            if invalid {
+                entry = entry.state(super::EntryState::Error);
+            }
+            col = col.push(
+                row![chip(p.value, 20.0), Element::from(entry)]
+                    .spacing(m.space_s)
+                    .align_y(iced::Alignment::Center),
+            );
+        } else if p.readout {
             let format = if p.alpha && !p.format.has_alpha() {
                 match p.format {
                     Format::Hex => Format::Hexa,

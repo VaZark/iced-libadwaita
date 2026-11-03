@@ -34,6 +34,49 @@ impl Gallery {
         }
     }
 
+    /// The pages that match the search: a row each, opening the page.
+    pub(super) fn search_results(&self) -> Element<'_> {
+        let m = self.metrics();
+        let query = self.search.trim().to_lowercase();
+        let hint = |title: &'static str, description: &'static str| -> Element<'_> {
+            self.page_frame(
+                w::status_page::<Message>()
+                    .icon(Icon::Search.colored(64.0, self.build_theme().semantic.dim_solid()))
+                    .title(title)
+                    .description(description)
+                    .metrics(m),
+            )
+        };
+        if query.is_empty() {
+            return hint(
+                "Search the gallery",
+                "Type a component, a property or a group.",
+            );
+        }
+        let hits: Vec<Detail> = Detail::all()
+            .into_iter()
+            .filter(|d| {
+                d.title().to_lowercase().contains(&query)
+                    || d.description().to_lowercase().contains(&query)
+                    || d.page().title().to_lowercase().contains(&query)
+            })
+            .collect();
+        if hits.is_empty() {
+            return hint("No results", "Try a different search term.");
+        }
+        let mut group = self.group("Results");
+        for d in hits {
+            group = group.push(
+                w::ActionRow::new(d.title())
+                    .subtitle(format!("{} · {}", d.page().title(), d.description()))
+                    .chevron(true)
+                    .on_activate(Message::OpenResult(d))
+                    .metrics(m),
+            );
+        }
+        self.page_frame(group)
+    }
+
     fn group<'a>(&self, title: &'static str) -> w::PreferencesGroup<'a, Message> {
         w::PreferencesGroup::<Message>::new()
             .title(title)
@@ -504,7 +547,10 @@ impl Gallery {
             Detail::ThemeColors => column![
                 g("Scheme and accent").push(w::SwitchRow::new("Dark", self.scheme.is_dark(), Message::Scheme).metrics(m)).push(
                     w::ActionRow::new("Accent color")
-                        .suffix(w::accent_picker(self.accent, Message::Accent))
+                        .suffix(
+                            w::accent_picker(self.accent, Message::Accent)
+                                .custom(&self.accent_text, Message::AccentText),
+                        )
                         .metrics(m),
                 ),
                 g("Overrides")

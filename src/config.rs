@@ -268,9 +268,7 @@ fn parse_bool(v: &str) -> Option<bool> {
 }
 
 fn parse_accent(v: &str) -> Option<AccentColor> {
-    AccentColor::ALL
-        .into_iter()
-        .find(|a| format!("{a:?}").eq_ignore_ascii_case(v))
+    AccentColor::parse(v)
 }
 
 impl Config {
@@ -1207,6 +1205,15 @@ thing=1
             PopoverBounds::Content,
             "an invalid value keeps the default"
         );
+        assert!(!bad.warnings().is_empty());
+    }
+
+    #[test]
+    fn the_accent_may_be_a_hex_color() {
+        let c = Config::from_keyfile("[appearance]\naccent=#3584e4\n");
+        assert_eq!(c.accent, Pick::Fixed(AccentColor::Custom(0x3584e4)));
+        assert!(c.warnings().is_empty());
+        let bad = Config::from_keyfile("[appearance]\naccent=#35\n");
         assert!(!bad.warnings().is_empty());
     }
 

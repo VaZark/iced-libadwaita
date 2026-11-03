@@ -105,6 +105,13 @@ enum MenuMode {
     FullPage,
 }
 
+/// The header's title: the search entry, or the usual title.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HeaderTitle {
+    Search,
+    Title,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Dialog {
     Alert,
@@ -126,6 +133,7 @@ struct Gallery {
     detail: Option<Detail>,
     scheme: Scheme,
     accent: AccentColor,
+    accent_text: String,
     compact: bool,
     radius_m: f32,
     radius_l: f32,
@@ -135,6 +143,9 @@ struct Gallery {
     shadow_scale: f32,
     shadow_intensity: f32,
     path_bar_title: bool,
+    /// The header's title is a search entry and the content lists matching pages.
+    searching: bool,
+    search: String,
     anim_enabled: bool,
     demo: DemoMotion,
     demo_tween: adw::animation::Tween,
@@ -249,6 +260,7 @@ enum Message {
     SplitRun(&'static str),
     Scheme(bool),
     Accent(AccentColor),
+    AccentText(String),
     Compact(bool),
     RadiusM(f32),
     RadiusL(f32),
@@ -258,6 +270,9 @@ enum Message {
     ShadowScale(f32),
     ShadowIntensity(f32),
     PathBarTitle(bool),
+    ToggleSearch,
+    SearchInput(String),
+    OpenResult(Detail),
     Wifi(bool),
     Notifications(bool),
     Expanded(bool),
@@ -422,6 +437,10 @@ impl Gallery {
             .collect();
         let mut widgets_demo = widgets_demo::State::default();
         widgets_demo.sync(plays.get(&Detail::Splitter), plays.get(&Detail::Spoiler));
+        let accent = match cfg.accent {
+            adw::config::Pick::Fixed(a) => a,
+            adw::config::Pick::System => adw::system::accent_color().unwrap_or(AccentColor::Blue),
+        };
         let boot = Task::batch([
             open_main.map(|_| Message::Noop),
             boot,
@@ -446,12 +465,8 @@ impl Gallery {
                     .unwrap_or(Page::Buttons),
                 detail: start_detail,
                 scheme: from_cfg.scheme,
-                accent: match cfg.accent {
-                    adw::config::Pick::Fixed(a) => a,
-                    adw::config::Pick::System => {
-                        adw::system::accent_color().unwrap_or(AccentColor::Blue)
-                    }
-                },
+                accent,
+                accent_text: accent.key(),
                 compact: cfg.density == adw::config::Density::Compact,
                 radius_m: std::env::var("GALLERY_RM")
                     .ok()
@@ -467,6 +482,9 @@ impl Gallery {
                 shadow_scale: 1.0,
                 shadow_intensity: 1.0,
                 path_bar_title: std::env::var_os("GALLERY_PATHBAR").is_some(),
+                // GALLERY_SEARCH=<text> starts with the search open (screenshots).
+                searching: std::env::var_os("GALLERY_SEARCH").is_some(),
+                search: std::env::var("GALLERY_SEARCH").unwrap_or_default(),
                 anim_enabled: adw::animation::enabled(),
                 demo: DemoMotion::EaseOutCubic,
                 demo_tween: adw::animation::Tween::new(0.0),
@@ -690,7 +708,16 @@ impl Gallery {
             Message::MenuMode(m) => self.menu_mode = m,
             Message::SidebarPadding(p) => self.sidebar_padding = p,
             Message::Scheme(dark) => self.scheme = if dark { Scheme::Dark } else { Scheme::Light },
-            Message::Accent(a) => self.accent = a,
+            Message::Accent(a) => {
+                self.accent = a;
+                self.accent_text = a.key();
+            }
+            Message::AccentText(t) => {
+                if let Some(a) = AccentColor::parse(&t) {
+                    self.accent = a;
+                }
+                self.accent_text = t;
+            }
             Message::Compact(c) => self.compact = c,
             Message::RadiusM(r) => self.radius_m = r,
             Message::RadiusL(r) => self.radius_l = r,
@@ -848,8 +875,24 @@ impl Gallery {
                     self.shell = None;
                 }
             }
+            Message::ToggleSearch => {
+                self.searching = !self.searching;
+                if !self.searching {
+                    self.search.clear();
+                }
+            }
+            Message::SearchInput(t) => self.search = t,
+            Message::OpenResult(d) => {
+                self.page = d.page();
+                self.detail = Some(d);
+                self.searching = false;
+                self.search.clear();
+            }
             Message::Escape => {
-                if self.dialog.is_some() {
+                if self.searching {
+                    self.searching = false;
+                    self.search.clear();
+                } else if self.dialog.is_some() {
                     self.dialog = None;
                 } else if self.sheet {
                     self.sheet = false;
@@ -1288,13 +1331,46 @@ impl Gallery {
                 corner,
             )
             .metrics(m);
-        if self.path_bar_title {
-            // Replaces the title; the window buttons are independent of it.
-            content_bar = content_bar.title_widget(w::path_bar(
-                vec!["Home".into(), "Projects".into(), "iced-libadwaita".into()],
-                2,
-                |_| Message::Noop,
-            ));
+        // The search button sits at the end of the header, beside the window controls. Searching
+        // swaps the header's title for a search entry (an on-select trigger of a
+        // `MetaComponent`); the path bar (or the plain title) is its other variant.
+        content_bar = content_bar.pack_end(
+            w::section_button(Icon::Search, Message::ToggleSearch)
+                .active(self.searching)
+                .metrics(m),
+        );
+        if self.searching || self.path_bar_title {
+            let title = self.detail.map_or(self.page.title(), Detail::title);
+            let path = self.path_bar_title;
+            let entry_m = m;
+            content_bar = content_bar.title_widget(
+                w::MetaComponent::new()
+                    .selected(self.searching.then_some(HeaderTitle::Search))
+                    .when_selected(HeaderTitle::Search, move |_| {
+                        container(w::clamp(
+                            w::entry("Search components", &self.search)
+                                .on_input(Message::SearchInput)
+                                .left_section(Icon::Search.view(entry_m.icon_size))
+                                .metrics(entry_m),
+                            420.0,
+                        ))
+                        .center_y(Length::Fill)
+                        .into()
+                    })
+                    .variant(HeaderTitle::Title, w::When::always(), move |_| {
+                        let shown: Element<'_> = if path {
+                            w::path_bar(
+                                vec!["Home".into(), "Projects".into(), "iced-libadwaita".into()],
+                                2,
+                                |_| Message::Noop,
+                            )
+                        } else {
+                            ty::heading(title).into()
+                        };
+                        container(shown).center_y(Length::Fill).into()
+                    })
+                    .height(Length::Fixed(m.button_min_height)),
+            );
         }
         if self.detail.is_some() {
             // Inside a component page: back to the group's list.
@@ -1351,7 +1427,12 @@ impl Gallery {
         .window_radius(corner);
         let sidebar_pane = w::toolbar_view(Element::from(sidebar_list)).top_bar(sidebar_bar);
 
-        let page: Element = self.content_page();
+        // Searching lists the matching pages in place of the content, as Files lists results.
+        let page: Element = if self.searching {
+            self.search_results()
+        } else {
+            self.content_page()
+        };
 
         // Switching pages fades the new one in (as a parent page, the push slide does that job).
         let page = w::page_transition(
@@ -1483,6 +1564,7 @@ impl Gallery {
             .fullscreen(Message::ToggleFullscreen)
             .into_shortcuts()
             .bind("Esc", Message::Escape)
+            .bind("Ctrl+F", Message::ToggleSearch)
             .scope(result);
         // While the preferences window (a modal child) is open the parent is disabled: a scrim
         // that swallows input, and a click on it brings the preferences window forward.

@@ -34,6 +34,9 @@ pub enum AccentColor {
     Pink,
     Purple,
     Slate,
+    /// Any color, as `0xRRGGBB`. The ones above are the desktop's; this is for an app or a user
+    /// that picks its own (a [`ColorPicker`](crate::widget::ColorPicker)).
+    Custom(u32),
 }
 
 impl AccentColor {
@@ -49,9 +52,39 @@ impl AccentColor {
         Self::Slate,
     ];
 
+    /// A custom accent from 8-bit red, green and blue.
+    pub fn custom(r: u8, g: u8, b: u8) -> Self {
+        Self::Custom(((r as u32) << 16) | ((g as u32) << 8) | b as u32)
+    }
+
+    /// Reads an accent: a name (`teal`, any case) or a hex color (`#3584e4`).
+    pub fn parse(text: &str) -> Option<Self> {
+        let t = text.trim();
+        if let Some(a) = Self::ALL
+            .into_iter()
+            .find(|a| format!("{a:?}").eq_ignore_ascii_case(t))
+        {
+            return Some(a);
+        }
+        let h = t.strip_prefix('#')?;
+        (h.len() == 6)
+            .then(|| u32::from_str_radix(h, 16).ok())
+            .flatten()
+            .map(Self::Custom)
+    }
+
+    /// The text form: a name for the desktop's accents, `#rrggbb` for a custom one.
+    pub fn key(self) -> String {
+        match self {
+            Self::Custom(c) => format!("#{c:06x}"),
+            named => format!("{named:?}").to_lowercase(),
+        }
+    }
+
     /// The `accent_bg_color` for this accent (like `adw_accent_color_to_rgba`).
     pub fn to_color(self) -> Color {
         hex(match self {
+            Self::Custom(c) => c,
             Self::Blue => 0x3584e4,
             Self::Teal => 0x2190a4,
             Self::Green => 0x3a944a,
@@ -67,6 +100,21 @@ impl AccentColor {
     /// The `accent_color` (accent used as foreground on a view) for a scheme
     /// (like `adw_accent_color_to_standalone_rgba`).
     pub fn to_standalone_color(self, scheme: Scheme) -> Color {
+        // A custom accent has no hand-made pair: darken it for a light view, lighten it for a
+        // dark one, the way the named pairs relate to their fill.
+        if let Self::Custom(c) = self {
+            let base = hex(c);
+            let mix = |to: f32, k: f32| Color {
+                r: base.r + (to - base.r) * k,
+                g: base.g + (to - base.g) * k,
+                b: base.b + (to - base.b) * k,
+                a: 1.0,
+            };
+            return match scheme {
+                Scheme::Light => mix(0.0, 0.25),
+                Scheme::Dark => mix(1.0, 0.45),
+            };
+        }
         hex(match (self, scheme) {
             (Self::Blue, Scheme::Light) => 0x0461be,
             (Self::Blue, Scheme::Dark) => 0x81d0ff,
@@ -86,6 +134,7 @@ impl AccentColor {
             (Self::Purple, Scheme::Dark) => 0xfba7ff,
             (Self::Slate, Scheme::Light) => 0x526678,
             (Self::Slate, Scheme::Dark) => 0xbbd1e5,
+            (Self::Custom(_), _) => unreachable!("handled above"),
         })
     }
 }
@@ -347,5 +396,46 @@ mod tests {
             AccentColor::Blue.to_standalone_color(Scheme::Light),
             hex(0x0461be)
         );
+    }
+}
+
+#[cfg(test)]
+mod accent_tests {
+    use super::*;
+
+    #[test]
+    fn a_custom_accent_is_its_own_color() {
+        let a = AccentColor::custom(0x35, 0x84, 0xe4);
+        assert_eq!(a, AccentColor::Custom(0x3584e4));
+        assert_eq!(a.to_color(), AccentColor::Blue.to_color());
+        assert_eq!(a.key(), "#3584e4");
+    }
+
+    #[test]
+    fn names_and_hex_both_parse() {
+        assert_eq!(AccentColor::parse("Teal"), Some(AccentColor::Teal));
+        assert_eq!(
+            AccentColor::parse(" #9141ac "),
+            Some(AccentColor::Custom(0x9141ac))
+        );
+        assert_eq!(AccentColor::parse("#9141a"), None);
+        assert_eq!(AccentColor::parse("#gggggg"), None);
+        assert_eq!(AccentColor::parse("mauve"), None);
+        assert_eq!(AccentColor::Teal.key(), "teal");
+        for a in AccentColor::ALL {
+            assert_eq!(AccentColor::parse(&a.key()), Some(a), "{a:?} round-trips");
+        }
+    }
+
+    #[test]
+    fn the_on_view_color_of_a_custom_accent_follows_the_scheme() {
+        let a = AccentColor::Custom(0x3584e4);
+        let (light, dark) = (
+            a.to_standalone_color(Scheme::Light),
+            a.to_standalone_color(Scheme::Dark),
+        );
+        let lum = |c: Color| c.r + c.g + c.b;
+        assert!(lum(light) < lum(a.to_color()), "darker on a light view");
+        assert!(lum(dark) > lum(a.to_color()), "lighter on a dark view");
     }
 }
