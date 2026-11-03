@@ -316,6 +316,24 @@ impl Gallery {
             }
             Detail::Field => self.field.view(m).map(Message::Field),
             Detail::Form => self.form.view(m).map(Message::Form),
+            Detail::PathBar => self.inline(Inline::PathBar),
+            Detail::MenuButton => self.inline(Inline::MenuButton),
+            Detail::Banner => self.inline(Inline::Banner),
+            Detail::Progress => self.inline(Inline::Progress),
+            Detail::BadgeChip => self.inline(Inline::BadgeChip),
+            Detail::Indicator => self.inline(Inline::Indicator),
+            Detail::Docked => self.inline(Inline::Docked),
+            Detail::ResponsiveTable => self.inline(Inline::ResponsiveTable),
+            Detail::Accordion => self.inline(Inline::Accordion),
+            Detail::CardButton => self.inline(Inline::CardButton),
+            Detail::Carousel => self.inline(Inline::Carousel),
+            Detail::DateInput => self.inline(Inline::DateInput),
+            Detail::RangeSlider => self.inline(Inline::RangeSlider),
+            Detail::DateRange => self.inline(Inline::DateRange),
+            Detail::MetaComponent => self.sections.meta_view(m).map(Message::Sections),
+            Detail::MetaParent => self.reorder.parent_view(m).map(Message::Reorder),
+            Detail::Reorderable => self.reorder.view(m).map(Message::Reorder),
+            Detail::Resizable => self.resizable.view(m).map(Message::Resizable),
             Detail::Stepper => self.stepper.view(m).map(Message::Stepper),
             Detail::Data => self.data.view(m).map(Message::Data),
             Detail::Autocomplete => self.autocomplete.view(m).map(Message::Autocomplete),
@@ -1068,9 +1086,6 @@ impl Gallery {
                 .spacing(m.space_m);
                 column![g("Anchored popover").description("Side and offset against the trigger; it flips to the other side and shifts to stay inside the window.").push(w::card(sides))].into()
             }
-            Inline::MetaComponent => self.sections.meta_view(m).map(Message::Sections),
-            Inline::Reorderable => self.reorder.view(m).map(Message::Reorder),
-            Inline::Resizable => self.resizable.view(m).map(Message::Resizable),
             Inline::ResponsiveTable => {
                 let table = |mode: w::TableMode| {
                     w::ResponsiveTable::<Person, Message>::new(&PEOPLE)

@@ -24,6 +24,7 @@ mod details;
 mod field_demo;
 mod form_demo;
 mod nav;
+mod playground;
 mod range_demo;
 mod reorder_demo;
 mod resizable_demo;
