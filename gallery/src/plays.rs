@@ -123,7 +123,7 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::bool("disabled", "Disabled", false),
         ],
         Detail::Scale => vec![
-            S::number("value", "Value", 0.0..=100.0, 40.0),
+            S::slider("value", "Value", 0.0..=100.0, 40.0),
             S::bool("readout", "Show the value", true),
         ],
         Detail::Dropdown => vec![
@@ -160,7 +160,7 @@ pub fn specs(d: Detail) -> Vec<Spec> {
                 &["Rows", "Mixed elements", "Nested tree rows"],
                 0,
             ),
-            S::number("count", "How many", 1.0..=4.0, 2.0),
+            S::number("count", "Count", 1.0..=4.0, 2.0),
             S::number("indent", "Indent", 0.0..=60.0, 24.0),
         ],
         Detail::ButtonRow => vec![
@@ -185,7 +185,7 @@ pub fn specs(d: Detail) -> Vec<Spec> {
         ],
         Detail::Collapse => vec![
             S::choice("behavior", "Collapse behavior", &["Stacked", "Flex"], 0),
-            S::number("value", "Value", 0.0..=100.0, 50.0),
+            S::slider("value", "Value", 0.0..=100.0, 50.0),
         ],
         Detail::Tree => vec![
             S::bool("lines", "Connecting lines", true),
@@ -275,6 +275,12 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::number("decimals", "Decimals (0 is an integer)", 0.0..=4.0, 0.0),
             S::bool("limits", "Limits (0 to 100)", true),
             S::choice("step", "Step", &["1", "0.01", "0.1", "0.25", "5", "10"], 0),
+            S::choice(
+                "drag",
+                "Dragging",
+                &["Scrub vertically", "Scrub horizontally", "Select text"],
+                0,
+            ),
             S::bool("handles", "Handles", true),
             S::bool("disabled", "Disabled", false),
         ],
@@ -351,7 +357,7 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::bool("revealed", "Revealed", true),
         ],
         Detail::Progress => vec![
-            S::number("value", "Value", 0.0..=100.0, 60.0),
+            S::slider("value", "Value", 0.0..=100.0, 60.0),
             S::choice(
                 "role",
                 "Style",

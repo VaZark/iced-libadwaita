@@ -78,7 +78,7 @@ pub use crate::primitives::date::{Date, days_in_month, is_leap_year, validate as
 pub use crate::primitives::form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
 pub use crate::primitives::meta_parent::Registry as MetaRegistry;
 pub use crate::primitives::meta_parent::{ChildEvent, Emitted};
-pub use crate::primitives::numeric::{Decimal, Numeric};
+pub use crate::primitives::numeric::{Axis as DragAxis, Decimal, Numeric, Scrub};
 pub use crate::primitives::range::{Collide, DateRange, DayRole, Edge, Range, Thumb, Track};
 pub use crate::primitives::reorder::{Event as ReorderEvent, Mode, ReorderState};
 pub use crate::primitives::splitter::{
@@ -153,7 +153,7 @@ pub use navigation::{
     navigation_sidebar_rounded_padded, navigation_view, sidebar_row, sidebar_row_padded,
     sidebar_width_for, split_collapsed,
 };
-pub use number_input::NumberInput;
+pub use number_input::{NumberDrag, NumberInput};
 pub use overlay::{
     Layer as OverlayLayer, Overlay, closed as overlay_closed, stacked as overlay_stack,
 };

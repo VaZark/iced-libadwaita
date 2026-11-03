@@ -119,6 +119,30 @@ impl Gallery {
         self.page_frame(col)
     }
 
+    /// A radius setting: its token, the live value and a number input for it (whole pixels up
+    /// to the token's maximum).
+    fn radius_row(
+        &self,
+        i: usize,
+        label: &'static str,
+        token: &'static str,
+        max: f32,
+        m: Metrics,
+    ) -> Element<'_> {
+        let value = [self.radius_m, self.radius_l, self.radius_toast][i];
+        w::ActionRow::new(label)
+            .subtitle(format!("{token} = {value:.0}px"))
+            .suffix(
+                w::NumberInput::new(&self.radius_text[i], move |t| Message::RadiusText(i, t))
+                    .min(0)
+                    .max(max as i32)
+                    .width(100.0)
+                    .metrics(m),
+            )
+            .metrics(m)
+            .into()
+    }
+
     /// What the Open button of a dialog, sheet or shell page sends.
     fn open_message(d: Detail) -> Option<Message> {
         Some(match d {
@@ -518,9 +542,7 @@ impl Gallery {
                     g("Radius")
                         .description("A toast's corner radius is its own theme token (default: a full pill).")
                         .push(
-                            w::SliderRow::new("Toast radius", self.radius_toast, 0.0..=Metrics::MAX_RADIUS_TOAST, Message::RadiusToast)
-                                .subtitle(format!("radius_toast = {:.0}px", self.radius_toast))
-                                .metrics(m),
+                            self.radius_row(2, "Toast radius", "radius_toast", Metrics::MAX_RADIUS_TOAST, m),
                         ),
                     g("Placement")
                         .description("Where toasts appear, and the container they are placed in. Both are desktop config settings (`[toasts]`).")
@@ -628,19 +650,13 @@ impl Gallery {
                     g("Live preview").push(w::card(preview)),
                     g("Radii")
                         .push(
-                            w::SliderRow::new("Control radius", self.radius_m, 0.0..=Metrics::MAX_RADIUS_M, Message::RadiusM)
-                                .subtitle(format!("radius_m = {:.0}px", self.radius_m))
-                                .metrics(m),
+                            self.radius_row(0, "Control radius", "radius_m", Metrics::MAX_RADIUS_M, m),
                         )
                         .push(
-                            w::SliderRow::new("Card radius", self.radius_l, 0.0..=Metrics::MAX_RADIUS_L, Message::RadiusL)
-                                .subtitle(format!("radius_l = {:.0}px", self.radius_l))
-                                .metrics(m),
+                            self.radius_row(1, "Card radius", "radius_l", Metrics::MAX_RADIUS_L, m),
                         )
                         .push(
-                            w::SliderRow::new("Toast radius", self.radius_toast, 0.0..=Metrics::MAX_RADIUS_TOAST, Message::RadiusToast)
-                                .subtitle(format!("radius_toast = {:.0}px", self.radius_toast))
-                                .metrics(m),
+                            self.radius_row(2, "Toast radius", "radius_toast", Metrics::MAX_RADIUS_TOAST, m),
                         ),
                     g("Shadows")
                         .push(w::SwitchRow::new("Shadows", self.shadows_on, Message::Shadows).subtitle("Adwaita elevation: cards, popovers, dialogs").metrics(m))

@@ -7,9 +7,9 @@ use iced_libadwaita as adw;
 
 use crate::playground::Playground;
 use adw::widget::{
-    self as w, ColorFormat, ColorInput, ColorPicker, Decimal, Hsva, NumberInput, Numeric,
-    Redistribute, Splitter, SplitterEvent, SplitterLimit, SplitterOrientation, SplitterPane,
-    SplitterState, Spoiler, SpoilerEvent, SpoilerState, typography as ty,
+    self as w, ColorFormat, ColorInput, ColorPicker, Decimal, Hsva, NumberDrag, NumberInput,
+    Numeric, Redistribute, Splitter, SplitterEvent, SplitterLimit, SplitterOrientation,
+    SplitterPane, SplitterState, Spoiler, SpoilerEvent, SpoilerState, typography as ty,
 };
 use adw::{Element, Metrics};
 use iced::widget::{column, container};
@@ -270,6 +270,13 @@ impl State {
         let mut input = NumberInput::new(&self.number, Msg::Number)
             .decimals(decimals)
             .step(Decimal::new(units, digits))
+            .drag(
+                [
+                    NumberDrag::Vertical,
+                    NumberDrag::Horizontal,
+                    NumberDrag::Select,
+                ][p.choice("drag")],
+            )
             .handles(p.bool("handles"))
             .disabled(p.bool("disabled"))
             .placeholder("Number")
@@ -296,6 +303,13 @@ impl State {
                 format!("    .step({label})\n")
             } else {
                 format!("    .step(Decimal::new({units}, {digits}))   // {label}\n")
+            });
+        }
+        if p.choice("drag") != 0 {
+            code.push_str(if p.choice("drag") == 1 {
+                "    .drag(NumberDrag::Horizontal)   // drag right to raise, left to lower\n"
+            } else {
+                "    .drag(NumberDrag::Select)   // dragging selects text\n"
             });
         }
         if !p.bool("handles") {

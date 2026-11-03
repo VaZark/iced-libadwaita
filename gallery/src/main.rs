@@ -148,6 +148,8 @@ struct Gallery {
     radius_m: f32,
     radius_l: f32,
     radius_toast: f32,
+    /// What the radius number inputs show: control, card, toast.
+    radius_text: [String; 3],
     card_override: bool,
     shadows_on: bool,
     shadow_scale: f32,
@@ -277,6 +279,8 @@ enum Message {
     RadiusM(f32),
     RadiusL(f32),
     RadiusToast(f32),
+    /// A radius number input: which (control, card, toast) and what was typed.
+    RadiusText(usize, String),
     CardOverride(bool),
     Shadows(bool),
     ShadowScale(f32),
@@ -507,6 +511,7 @@ impl Gallery {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(12.0),
+            radius_text: [String::new(), String::new(), String::new()],
             card_override: false,
             shadows_on: cfg.shadows,
             shadow_scale: 1.0,
@@ -593,6 +598,11 @@ impl Gallery {
             shots,
             shot_tag: None,
         };
+        gallery.radius_text = [
+            format!("{:.0}", gallery.radius_m),
+            format!("{:.0}", gallery.radius_l),
+            format!("{:.0}", gallery.radius_toast),
+        ];
         if standalone {
             let open = gallery.open_shell();
             if let Some(c) = &gallery.shell {
@@ -767,9 +777,37 @@ impl Gallery {
                 }
                 self.transparency_text = t;
             }
-            Message::RadiusM(r) => self.radius_m = r,
-            Message::RadiusL(r) => self.radius_l = r,
-            Message::RadiusToast(r) => self.radius_toast = r,
+            Message::RadiusM(r) => {
+                self.radius_m = r;
+                self.radius_text[0] = format!("{r:.0}");
+            }
+            Message::RadiusL(r) => {
+                self.radius_l = r;
+                self.radius_text[1] = format!("{r:.0}");
+            }
+            Message::RadiusToast(r) => {
+                self.radius_toast = r;
+                self.radius_text[2] = format!("{r:.0}");
+            }
+            Message::RadiusText(i, t) => {
+                let max = [
+                    Metrics::MAX_RADIUS_M,
+                    Metrics::MAX_RADIUS_L,
+                    Metrics::MAX_RADIUS_TOAST,
+                ][i];
+                let rule = adw::widget::Numeric::integer().min(0).max(max as i32);
+                if rule.validate(&t).is_ok()
+                    && let Some(d) = rule.parse(&t)
+                {
+                    let v = d.units as f32;
+                    match i {
+                        0 => self.radius_m = v,
+                        1 => self.radius_l = v,
+                        _ => self.radius_toast = v,
+                    }
+                }
+                self.radius_text[i] = t;
+            }
             Message::CardOverride(c) => self.card_override = c,
             Message::Shadows(v) => self.shadows_on = v,
             Message::ShadowScale(v) => self.shadow_scale = v,

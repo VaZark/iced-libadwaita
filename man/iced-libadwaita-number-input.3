@@ -24,6 +24,8 @@ NumberInput::new(&self.text, Msg::Text)
 .RE
 .fi
 .PP
+\fBDragging.\fR \fBdrag\fR says what dragging on the input does: change the value continuously (the default): a vertical drag raises it going up and lowers it going down, a horizontal one raises it going right; or select text, as in any entry. A scrub moves by the \fBstep\fR, so it keeps the digits and the limits, and the text updates on every step through \fBon_input\fR. Holding Shift makes each step ten steps, Alt one unit of the last digit. A click without travel still places the caret.
+.PP
 The handles are two small buttons stacked in the right section, dimmed at a limit; \fBhandles(false)\fR hides them. Arrow keys and the wheel are not included: iced has no focus model to hang them on.
 .SH CONSTRUCTORS
 .TP
@@ -44,6 +46,9 @@ Fraction digits kept and shown; 0 (the default) is an integer.
 .TP
 .B \&.step(d: impl Into<Decimal>)
 What a handle adds or takes (default 1).
+.TP
+.B \&.drag(mode: NumberDrag)
+What dragging on the input does: change the value continuously, \fBVertical\fR (default) or \fBHorizontal\fR, or \fBSelect\fR text as in any entry. While dragging, Shift makes each step ten steps and Alt one unit of the last digit.
 .TP
 .B \&.handles(on: bool)
 Whether the step handles show (default true).

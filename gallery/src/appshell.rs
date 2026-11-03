@@ -191,8 +191,9 @@ pub enum Message {
     Hysteresis(Hyst),
     Answer(bool),
     Overlap(bool),
-    CloseMs(f32),
-    OpenMs(f32),
+    /// The budget number inputs: what was typed.
+    CloseMsText(String),
+    OpenMsText(String),
 }
 
 pub struct AppShell {
@@ -219,6 +220,8 @@ pub struct AppShell {
     answer: bool,
     close_ms: f32,
     open_ms: f32,
+    close_text: String,
+    open_text: String,
     log: Vec<String>,
 }
 
@@ -262,6 +265,8 @@ impl AppShell {
             answer: true,
             close_ms: 150.0,
             open_ms: 150.0,
+            close_text: "150".into(),
+            open_text: "150".into(),
             log: Vec::new(),
         };
         let cmds = app.adaptive.resize_with(
@@ -423,12 +428,18 @@ impl AppShell {
                 self.adaptive.set_overlap(o);
                 Vec::new()
             }
-            Message::CloseMs(v) => {
-                self.close_ms = v;
+            Message::CloseMsText(t) => {
+                if let Some(v) = budget(&t) {
+                    self.close_ms = v;
+                }
+                self.close_text = t;
                 Vec::new()
             }
-            Message::OpenMs(v) => {
-                self.open_ms = v;
+            Message::OpenMsText(t) => {
+                if let Some(v) = budget(&t) {
+                    self.open_ms = v;
+                }
+                self.open_text = t;
                 Vec::new()
             }
         };
@@ -752,12 +763,26 @@ impl AppShell {
                         .subtitle("Off: the coordinator times every step out"),
                 )
                 .push(
-                    w::SliderRow::new("Close budget", self.close_ms, 0.0..=600.0, Message::CloseMs)
-                        .subtitle(format!("{} ms", self.close_ms as u32)),
+                    w::ActionRow::new("Close budget")
+                        .subtitle("Milliseconds the old layout has to close")
+                        .suffix(
+                            w::NumberInput::new(&self.close_text, Message::CloseMsText)
+                                .min(0)
+                                .max(600)
+                                .step(10)
+                                .width(110.0),
+                        ),
                 )
                 .push(
-                    w::SliderRow::new("Open budget", self.open_ms, 0.0..=600.0, Message::OpenMs)
-                        .subtitle(format!("{} ms", self.open_ms as u32)),
+                    w::ActionRow::new("Open budget")
+                        .subtitle("Milliseconds the new layout has to open")
+                        .suffix(
+                            w::NumberInput::new(&self.open_text, Message::OpenMsText)
+                                .min(0)
+                                .max(600)
+                                .step(10)
+                                .width(110.0),
+                        ),
                 ),
             w::preferences_group()
                 .title("Log")
@@ -977,4 +1002,11 @@ fn presentation(layout: &Shell) -> (w::SidebarStyle, w::SidebarPadding) {
 enum Bottom {
     None,
     Tabs,
+}
+
+/// The milliseconds a budget number input spells (0 to 600), `None` for anything else.
+fn budget(text: &str) -> Option<f32> {
+    let rule = w::Numeric::integer().min(0).max(600);
+    rule.validate(text).is_ok().then_some(())?;
+    rule.parse(text).map(|d| d.units as f32)
 }

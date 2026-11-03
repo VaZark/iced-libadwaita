@@ -6,7 +6,8 @@
 //! [`Numeric`] is the rule an input follows: `digits` (0 is an integer), `min`, `max` and the
 //! `step` a handle moves by. Everything is pure and controlled: the application keeps the text
 //! (so typing is not interrupted), and a handle gives the new text from [`Numeric::up_text`] /
-//! [`Numeric::down_text`].
+//! [`Numeric::down_text`]. [`Scrub`] turns a drag along an axis into a number of steps, for
+//! changing a value continuously by dragging.
 
 use crate::primitives::validation::Validity;
 use std::cmp::Ordering;
@@ -255,6 +256,31 @@ impl Numeric {
         self.format(self.down(self.parse(text)))
     }
 
+    /// `start` moved by `steps` steps (negative goes down), clamped: the value a drag has reached.
+    /// With no `start` (an empty or invalid entry) it counts from the limit nearest zero.
+    pub fn offset(&self, start: Option<Decimal>, steps: i64) -> Decimal {
+        self.offset_by(start, steps, Precision::Normal)
+    }
+
+    /// Like [`offset`](Self::offset), with each step as large as `precision` says.
+    pub fn offset_by(&self, start: Option<Decimal>, steps: i64, precision: Precision) -> Decimal {
+        let from = start
+            .map(|d| d.rescale(self.digits))
+            .unwrap_or_else(|| self.clamp(Decimal::new(0, self.digits)));
+        let step = i128::from(self.step.rescale(self.digits).units.max(1));
+        let unit = match precision {
+            Precision::Normal => step,
+            Precision::Coarse => step * 10,
+            // One unit of the last digit, never more than a step.
+            Precision::Fine => 1.min(step),
+        };
+        let units = i128::from(from.units) + i128::from(steps) * unit;
+        self.clamp(Decimal::new(
+            units.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64,
+            self.digits,
+        ))
+    }
+
     /// Whether the typed text is acceptable: empty is `Ok` (use `required` for that).
     pub fn validate(&self, text: &str) -> Validity {
         if text.trim().is_empty() {
@@ -272,6 +298,87 @@ impl Numeric {
             }
             _ => Validity::Ok,
         }
+    }
+}
+
+/// How large a step of a drag is: a modifier key trades speed for precision, as in a design tool.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Precision {
+    /// One `step`.
+    #[default]
+    Normal,
+    /// Ten steps (Shift).
+    Coarse,
+    /// One unit of the last digit (Alt).
+    Fine,
+}
+
+impl Precision {
+    /// Shift is coarse and Alt fine; both, or neither, is normal.
+    pub fn from_modifiers(shift: bool, alt: bool) -> Self {
+        match (shift, alt) {
+            (true, false) => Self::Coarse,
+            (false, true) => Self::Fine,
+            _ => Self::Normal,
+        }
+    }
+}
+
+/// The direction a drag changes a value in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Axis {
+    /// Dragging right increases, left decreases.
+    Horizontal,
+    /// Dragging up increases, down decreases.
+    #[default]
+    Vertical,
+}
+
+/// A drag along an [`Axis`] as steps: `px_per_step` of travel is one step, and nothing counts as
+/// a drag until it has travelled `threshold` px along the axis (so a click stays a click).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Scrub {
+    pub axis: Axis,
+    pub px_per_step: f32,
+    pub threshold: f32,
+}
+
+impl Scrub {
+    pub fn new(axis: Axis) -> Self {
+        Self {
+            axis,
+            px_per_step: 4.0,
+            threshold: 4.0,
+        }
+    }
+    pub fn px_per_step(mut self, px: f32) -> Self {
+        self.px_per_step = px.max(0.5);
+        self
+    }
+
+    /// Travel from `from` to `to` along the axis: positive in the direction that increases.
+    pub fn travel(&self, from: (f32, f32), to: (f32, f32)) -> f32 {
+        match self.axis {
+            Axis::Horizontal => to.0 - from.0,
+            Axis::Vertical => from.1 - to.1,
+        }
+    }
+    /// Whether the pointer has moved far enough along the axis for this to be a drag.
+    pub fn started(&self, from: (f32, f32), to: (f32, f32)) -> bool {
+        self.travel(from, to).abs() >= self.threshold
+    }
+    /// Where the drag's anchor goes after `steps` steps were taken from it: moved along the axis
+    /// by the travel they used, keeping the part of the pointer's travel that is not yet a step.
+    pub fn advance(&self, anchor: (f32, f32), steps: i64) -> (f32, f32) {
+        let travel = steps as f32 * self.px_per_step;
+        match self.axis {
+            Axis::Horizontal => (anchor.0 + travel, anchor.1),
+            Axis::Vertical => (anchor.0, anchor.1 - travel),
+        }
+    }
+    /// The steps a drag from `from` to `to` has made: whole steps, towards zero.
+    pub fn steps(&self, from: (f32, f32), to: (f32, f32)) -> i64 {
+        (self.travel(from, to) / self.px_per_step).trunc() as i64
     }
 }
 
@@ -358,5 +465,71 @@ mod tests {
             n.validate("101"),
             Validity::error("Must be 100.00 or less.")
         );
+    }
+
+    #[test]
+    fn a_drag_is_steps_in_the_direction_of_its_axis() {
+        let h = Scrub::new(Axis::Horizontal).px_per_step(5.0);
+        assert_eq!(
+            h.steps((10.0, 0.0), (40.0, 90.0)),
+            6,
+            "right: up, whatever the y"
+        );
+        assert_eq!(h.steps((40.0, 0.0), (10.0, 0.0)), -6);
+        let v = Scrub::new(Axis::Vertical).px_per_step(5.0);
+        assert_eq!(v.steps((0.0, 50.0), (0.0, 20.0)), 6, "up increases");
+        assert_eq!(v.steps((0.0, 20.0), (99.0, 50.0)), -6, "down decreases");
+        assert_eq!(
+            h.steps((0.0, 0.0), (4.9, 0.0)),
+            0,
+            "less than a step is none"
+        );
+    }
+
+    #[test]
+    fn a_click_is_not_a_drag_until_it_has_travelled_along_the_axis() {
+        let h = Scrub::new(Axis::Horizontal);
+        assert!(
+            !h.started((10.0, 10.0), (12.0, 80.0)),
+            "moving across the axis is not a drag"
+        );
+        assert!(h.started((10.0, 10.0), (14.0, 10.0)));
+        assert!(h.started((10.0, 10.0), (6.0, 10.0)), "either way");
+    }
+
+    #[test]
+    fn a_scrubbed_value_steps_exactly_and_stops_at_the_limits() {
+        let n = Numeric::decimal(1).min(0).max(1).step(Decimal::new(1, 1));
+        assert_eq!(n.offset(Some(Decimal::new(2, 1)), 3).format(), "0.5");
+        assert_eq!(n.offset(Some(Decimal::new(2, 1)), -9).format(), "0.0");
+        assert_eq!(n.offset(Some(Decimal::new(2, 1)), 99).format(), "1.0");
+        assert_eq!(
+            n.offset(None, 4).format(),
+            "0.4",
+            "an empty entry counts from zero"
+        );
+    }
+
+    #[test]
+    fn shift_is_coarse_and_alt_is_fine() {
+        let n = Numeric::decimal(2).step(Decimal::new(5, 2)).min(0).max(100);
+        let from = Some(Decimal::new(100, 2));
+        assert_eq!(n.offset_by(from, 2, Precision::Normal).format(), "1.10");
+        assert_eq!(n.offset_by(from, 2, Precision::Coarse).format(), "2.00");
+        assert_eq!(n.offset_by(from, 2, Precision::Fine).format(), "1.02");
+        assert_eq!(Precision::from_modifiers(true, false), Precision::Coarse);
+        assert_eq!(Precision::from_modifiers(false, true), Precision::Fine);
+        assert_eq!(Precision::from_modifiers(true, true), Precision::Normal);
+    }
+
+    #[test]
+    fn the_anchor_keeps_the_travel_that_is_not_yet_a_step() {
+        let v = Scrub::new(Axis::Vertical).px_per_step(5.0);
+        // 12 px up from y 100 is 2 steps (10 px); the anchor moves to y 90, leaving 2 px.
+        let steps = v.steps((0.0, 100.0), (0.0, 88.0));
+        assert_eq!(steps, 2);
+        assert_eq!(v.advance((0.0, 100.0), steps), (0.0, 90.0));
+        let h = Scrub::new(Axis::Horizontal).px_per_step(5.0);
+        assert_eq!(h.advance((10.0, 7.0), -3), (-5.0, 7.0));
     }
 }
