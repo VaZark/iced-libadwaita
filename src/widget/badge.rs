@@ -79,6 +79,7 @@ impl<'a, M: 'a> From<Badge> for Element<'a, M> {
 pub struct RoundBadge<'a, M> {
     content: Element<'a, M>,
     role: Role,
+    color: Option<iced::Color>,
     solid: bool,
     size: f32,
 }
@@ -88,12 +89,18 @@ impl<'a, M: 'a> RoundBadge<'a, M> {
         Self {
             content: content.into(),
             role: Role::Neutral,
+            color: None,
             solid: false,
             size: 20.0,
         }
     }
     pub fn role(mut self, role: Role) -> Self {
         self.role = role;
+        self
+    }
+    /// A color of your own (a playlist's color), in place of the [`role`](Self::role)'s.
+    pub fn color(mut self, color: iced::Color) -> Self {
+        self.color = Some(color);
         self
     }
     /// A solid fill with contrasting content instead of a tint.
@@ -110,14 +117,23 @@ impl<'a, M: 'a> RoundBadge<'a, M> {
 
 impl<'a, M: 'a> From<RoundBadge<'a, M>> for Element<'a, M> {
     fn from(b: RoundBadge<'a, M>) -> Self {
-        let (role, solid, size) = (b.role, b.solid, b.size);
+        let (role, solid, size, custom) = (b.role, b.solid, b.size, b.color);
         container(b.content)
             .center(Length::Fixed(size))
             .style(move |t: &crate::Theme| {
-                let base = if solid {
-                    sc::role(role)(t)
-                } else {
-                    sc::tinted(role)(t)
+                let base = match (custom, solid) {
+                    (Some(c), true) => iced::widget::container::Style {
+                        text_color: Some(crate::color::readable_on(c)),
+                        background: Some(iced::Background::Color(c)),
+                        ..Default::default()
+                    },
+                    (Some(c), false) => iced::widget::container::Style {
+                        text_color: Some(c),
+                        background: Some(iced::Background::Color(crate::color::alpha(c, 0.18))),
+                        ..Default::default()
+                    },
+                    (None, true) => sc::role(role)(t),
+                    (None, false) => sc::tinted(role)(t),
                 };
                 iced::widget::container::Style {
                     border: iced::Border::default().rounded(size / 2.0),
@@ -128,11 +144,36 @@ impl<'a, M: 'a> From<RoundBadge<'a, M>> for Element<'a, M> {
     }
 }
 
+/// How big a [`Chip`] is: the text, the icon and the padding together.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum ChipSize {
+    /// About 18 px tall: tags in a dense list.
+    Small,
+    /// About 22 px tall: the default.
+    #[default]
+    Medium,
+    /// About 28 px tall: a tag that is the subject, as on a detail page.
+    Large,
+}
+
+impl ChipSize {
+    /// `(text size, icon size, vertical padding, horizontal padding)` for `m`.
+    fn dims(self, m: &Metrics) -> (f32, f32, f32, f32) {
+        match self {
+            Self::Small => (11.0, 10.0, 1.0, 8.0),
+            Self::Medium => (m.space_m + 1.0, m.icon_size - 2.0, 2.0, m.space_m - 1.0),
+            Self::Large => (15.0, 16.0, 4.0, 14.0),
+        }
+    }
+}
+
 /// An actionable pill: optional icon, a label, and optionally a remove button.
 pub struct Chip<'a, M> {
     label: String,
     icon: Option<IconSource>,
     color: Option<iced::Color>,
+    on_color: Option<iced::Color>,
+    size: ChipSize,
     role: Role,
     selected: bool,
     disabled: bool,
@@ -148,6 +189,8 @@ impl<'a, M> Chip<'a, M> {
             label: label.into(),
             icon: None,
             color: None,
+            on_color: None,
+            size: ChipSize::Medium,
             role: Role::Neutral,
             selected: false,
             disabled: false,
@@ -160,6 +203,17 @@ impl<'a, M> Chip<'a, M> {
     /// An icon: a built-in [`Icon`] or your own SVG ([`IconSource`]).
     pub fn icon(mut self, icon: impl Into<IconSource>) -> Self {
         self.icon = Some(icon.into());
+        self
+    }
+    /// The text and icon color of a selected chip that has its own [`color`](Self::color), in
+    /// place of the one picked for contrast (white on every tag, for a consistent look).
+    pub fn on_color(mut self, color: iced::Color) -> Self {
+        self.on_color = Some(color);
+        self
+    }
+    /// The size: [`ChipSize::Small`], `Medium` (default) or `Large`.
+    pub fn size(mut self, size: ChipSize) -> Self {
+        self.size = size;
         self
     }
     /// A color of your own (a tag's color), in place of the [`role`](Self::role)'s: the chip is
@@ -202,15 +256,22 @@ impl<'a, M> Chip<'a, M> {
 fn chip_colors(
     t: &Theme,
     role: Role,
-    custom: Option<iced::Color>,
+    custom: Option<(iced::Color, Option<iced::Color>)>,
     selected: bool,
     disabled: bool,
 ) -> (iced::Color, iced::Color) {
-    let (mut bg, mut fg) = if let Some(c) = custom {
+    let (mut bg, mut fg) = if let Some((c, on)) = custom {
         if selected {
-            (c, crate::color::readable_on(c))
+            (c, on.unwrap_or_else(|| crate::color::readable_on(c)))
         } else {
-            (crate::color::alpha(c, 0.18), c)
+            // The text is the chip's own color, pulled away from the page if it is too close
+            // to it to read (a dark tag color on a dark page).
+            let surface = t.semantic.window.bg;
+            let tinted = crate::color::mix(surface, c, 0.18);
+            (
+                crate::color::alpha(c, 0.18),
+                crate::color::ensure_contrast(c, tinted, 4.5),
+            )
         }
     } else if selected {
         let s = t.semantic.swatch(role).surface();
@@ -233,8 +294,9 @@ fn chip_colors(
 impl<'a, M: Clone + 'a> From<Chip<'a, M>> for Element<'a, M> {
     fn from(c: Chip<'a, M>) -> Self {
         let m = c.metrics;
-        let (role, selected, disabled, custom) = (c.role, c.selected, c.disabled, c.color);
-        let icon_size = m.icon_size - 2.0;
+        let (role, selected, disabled) = (c.role, c.selected, c.disabled);
+        let custom = c.color.map(|col| (col, c.on_color));
+        let (text_size, icon_size, pad_y, pad_x) = c.size.dims(&m);
         let tint = move |t: &Theme| chip_colors(t, role, custom, selected, disabled).1;
         // Inside the pill the buttons are transparent; hover is a faint layer of the text color.
         let inner = move |t: &Theme, status: button::Status| {
@@ -258,13 +320,9 @@ impl<'a, M: Clone + 'a> From<Chip<'a, M>> for Element<'a, M> {
                         }),
                 );
         }
-        body = body.push(
-            text(c.label)
-                .size(m.space_m + 1.0)
-                .wrapping(text::Wrapping::None),
-        );
+        body = body.push(text(c.label).size(text_size).wrapping(text::Wrapping::None));
         let main = button(body)
-            .padding(Padding::from([2.0, m.space_m - 1.0]))
+            .padding(Padding::from([pad_y, pad_x]))
             .style(inner)
             .on_press_maybe(c.on_press.filter(|_| !disabled));
         let mut pill = row![main].align_y(Vertical::Center);
@@ -293,5 +351,28 @@ impl<'a, M: Clone + 'a> From<Chip<'a, M>> for Element<'a, M> {
                 }
             })
             .into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chips_grow_with_their_size() {
+        let m = Metrics::desktop();
+        let (ts, is, py, _) = ChipSize::Small.dims(&m);
+        let (tm, im, pm, _) = ChipSize::Medium.dims(&m);
+        let (tl, il, pl, _) = ChipSize::Large.dims(&m);
+        assert!(ts < tm && tm < tl && is < im && im < il && py < pm && pm < pl);
+        assert_eq!(ChipSize::default(), ChipSize::Medium);
+    }
+
+    #[test]
+    fn a_round_badge_keeps_its_own_color() {
+        let b: RoundBadge<'_, ()> = RoundBadge::new(iced::widget::space())
+            .color(iced::Color::from_rgb(1.0, 0.0, 0.0))
+            .size(30.0);
+        assert!(b.color.is_some() && b.size == 30.0);
     }
 }

@@ -10,6 +10,12 @@ description = "Adaptive design system for iced: theme, components and behavior p
 # xtask are separate crates.
 include = ["/src/**", "/man/**", "/docs/lib/**", "/README.md", "/LICENSE*", "/Cargo.toml"]
 
+# Dependencies are optimized even in a debug build. The SVG rasterizer and the GPU stack are far
+# too slow unoptimized: a page of icons stalled for seconds the first time it drew. This costs
+# one slower first build, not rebuilds of this crate.
+[profile.dev.package."*"]
+opt-level = 2
+
 [workspace]
 members = ["gallery", "xtask"]
 default-members = ["."]

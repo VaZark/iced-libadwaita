@@ -271,14 +271,19 @@ pub fn link(theme: &Theme, status: Status) -> Style {
     }
 }
 
-/// A row inside a boxed list (`row.activatable`): flat with a subtle layer.
-pub fn list_row(theme: &Theme, status: Status) -> Style {
-    let fg = theme.semantic.card.fg;
+/// The look of a pressable row: a layer of the foreground on hover and press, `radius` corners.
+fn row_look(
+    theme: &Theme,
+    status: Status,
+    fg: Color,
+    radius: f32,
+    hover: f32,
+    press: f32,
+) -> Style {
     let o = theme.semantic.opacity;
     let layer = match status {
-        // `row.activatable:hover` 3%, `:active` 8% (libadwaita _lists.scss).
-        Status::Hovered => 0.03,
-        Status::Pressed => 0.08,
+        Status::Hovered => hover,
+        Status::Pressed => press,
         _ => 0.0,
     };
     Style {
@@ -288,9 +293,36 @@ pub fn list_row(theme: &Theme, status: Status) -> Style {
         } else {
             fg
         },
-        border: border(0.0),
+        border: border(radius),
         shadow: Shadow::default(),
         snap: false,
+    }
+}
+
+/// A row inside a boxed list (`row.activatable`): flat with a subtle layer, square corners.
+pub fn list_row(theme: &Theme, status: Status) -> Style {
+    // `row.activatable:hover` 3%, `:active` 8% (libadwaita _lists.scss).
+    row_look(theme, status, theme.semantic.card.fg, 0.0, 0.03, 0.08)
+}
+
+/// A flat pressable row on the page itself (a track in a list, a result): the whole row is the
+/// target, with `radius` corners and a layer of the window foreground at `hover` and `pressed`
+/// opacity (`0..=1`; 0.08 and 0.14 read clearly on a plain page). [`list_row`] is the same inside
+/// a boxed list, with the libadwaita values.
+///
+/// ```ignore
+/// button(row).width(Length::Fill).style(style::button::flat_row(8.0, 0.08, 0.14))
+/// ```
+pub fn flat_row(radius: f32, hover: f32, pressed: f32) -> impl Fn(&Theme, Status) -> Style + Copy {
+    move |theme, status| {
+        row_look(
+            theme,
+            status,
+            theme.semantic.window.fg,
+            radius,
+            hover,
+            pressed,
+        )
     }
 }
 
@@ -414,5 +446,30 @@ pub fn menu_item(selected: bool) -> impl Fn(&Theme, Status) -> Style + Copy {
             shadow: Shadow::default(),
             snap: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod row_tests {
+    use super::*;
+
+    #[test]
+    fn a_flat_row_has_its_own_corners_and_layers() {
+        let t = Theme::light();
+        let f = flat_row(8.0, 0.08, 0.14);
+        assert!(f(&t, Status::Active).background.is_none());
+        let hover = f(&t, Status::Hovered);
+        let press = f(&t, Status::Pressed);
+        let alpha_of = |s: Style| match s.background {
+            Some(Background::Color(c)) => c.a,
+            _ => 0.0,
+        };
+        // The layer is the foreground at that opacity (the foreground may itself be translucent).
+        let fg = t.semantic.window.fg.a;
+        assert!((alpha_of(hover) - fg * 0.08).abs() < 1e-5);
+        assert!((alpha_of(press) - fg * 0.14).abs() < 1e-5);
+        assert_eq!(hover.border.radius, 8.0.into());
+        // The boxed-list row keeps its square corners and quieter layers.
+        assert_eq!(list_row(&t, Status::Hovered).border.radius, 0.0.into());
     }
 }

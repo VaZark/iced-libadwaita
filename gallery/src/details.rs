@@ -378,7 +378,16 @@ impl Gallery {
             Detail::VirtualList => self.upstream.virtual_view(m).map(Message::Upstream),
             Detail::EditableText => self.upstream.editable_view(m).map(Message::Upstream),
             Detail::PageHeader => self.upstream.header_view(m).map(Message::Upstream),
-            Detail::Icons => self.upstream.icons_view(m).map(Message::Upstream),
+            Detail::CardGrid => self.upstream.grid_view(m).map(Message::Upstream),
+            Detail::SectionHeading => self.upstream.heading_view(m).map(Message::Upstream),
+            Detail::MediaRow => self.upstream.media_view(m).map(Message::Upstream),
+            Detail::ChipGroup => self.upstream.chips_view(m).map(Message::Upstream),
+            Detail::History => self.upstream.history_view(m).map(Message::Upstream),
+            Detail::Icons => {
+                // Screenshots want every row at once.
+                let revealed = if self.shots.is_some() { usize::MAX } else { self.icons_revealed };
+                self.upstream.icons_view(m, revealed).map(Message::Upstream)
+            }
             Detail::SyncedText => self.synced.view(m).map(Message::Synced),
             Detail::Reorderable => self.reorder.view(m).map(Message::Reorder),
             Detail::Resizable => self.resizable.view(m).map(Message::Resizable),
@@ -414,6 +423,7 @@ impl Gallery {
             // Shown by its playground (see `plays.rs`).
             Detail::Tabs
             | Detail::Container
+            | Detail::IconToggle
             | Detail::LineChart
             | Detail::BarChart
             | Detail::PieChart

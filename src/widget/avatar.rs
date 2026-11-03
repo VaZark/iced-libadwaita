@@ -1,16 +1,33 @@
-//! `AdwAvatar`.
+//! `AdwAvatar`, with an optional icon in place of the initials and a choice of shape: the round
+//! badge of a person, a playlist, a cover.
 
 use super::Element;
-use crate::style::container as sc;
+use crate::IconSource;
 use iced::widget::{container, text};
 use iced::{Color, Length};
 
-/// Background colors used for generated avatars (libadwaita picks from a
-/// fixed set by hashing the text).
-const COLORS: [u32; 12] = [
-    0x62a0ea, 0x57e389, 0xf8e45c, 0xffa348, 0xff7b63, 0xdc8add, 0xc061cb, 0x9a9996, 0x5e5c64,
-    0x99c1f1, 0x8ff0a4, 0xf66151,
-];
+/// The outline of an [`Avatar`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum AvatarShape {
+    /// A circle (libadwaita's avatar).
+    #[default]
+    Circle,
+    /// A square with rounded corners: a cover, an app icon.
+    Rounded,
+    /// A square.
+    Square,
+}
+
+impl AvatarShape {
+    /// The corner radius for an avatar of `size`.
+    fn radius(self, size: f32) -> f32 {
+        match self {
+            Self::Circle => size / 2.0,
+            Self::Rounded => size * 0.22,
+            Self::Square => 0.0,
+        }
+    }
+}
 
 /// `AdwAvatar`: round badge with initials.
 pub struct Avatar {
@@ -19,6 +36,8 @@ pub struct Avatar {
     show_initials: bool,
     color: Option<Color>,
     text_color: Option<Color>,
+    icon: Option<IconSource>,
+    shape: AvatarShape,
 }
 
 pub fn avatar(size: f32, text: impl Into<String>) -> Avatar {
@@ -33,7 +52,20 @@ impl Avatar {
             show_initials: true,
             color: None,
             text_color: None,
+            icon: None,
+            shape: AvatarShape::Circle,
         }
+    }
+    /// An icon (a built-in [`Icon`](crate::Icon) or your own SVG) in place of the initials. The
+    /// background color still comes from the text, so the same name keeps the same color.
+    pub fn icon(mut self, icon: impl Into<IconSource>) -> Self {
+        self.icon = Some(icon.into());
+        self
+    }
+    /// The outline: a circle (default), a rounded square or a square.
+    pub fn shape(mut self, shape: AvatarShape) -> Self {
+        self.shape = shape;
+        self
     }
     pub fn show_initials(mut self, show: bool) -> Self {
         self.show_initials = show;
@@ -65,30 +97,62 @@ fn initials(s: &str) -> String {
 
 impl<'a, M: 'a> From<Avatar> for Element<'a, M> {
     fn from(a: Avatar) -> Self {
-        let hash = a
-            .text
-            .bytes()
-            .fold(5381u32, |h, b| h.wrapping_mul(33).wrapping_add(b as u32));
-        let bg = a
-            .color
-            .unwrap_or_else(|| crate::color::hex(COLORS[hash as usize % COLORS.len()]));
+        let bg = a.color.unwrap_or_else(|| crate::color::from_seed(&a.text));
         let fill = crate::color::darken(bg, 0.08);
-        let label = if a.show_initials {
-            initials(&a.text)
-        } else {
-            String::new()
+        let ink = a
+            .text_color
+            .unwrap_or_else(|| crate::color::readable_on(fill));
+        let radius = a.shape.radius(a.size);
+        let content: Element<'a, M> = match &a.icon {
+            Some(icon) => icon
+                .view(a.size * 0.5)
+                .style(move |_: &crate::Theme, _| iced::widget::svg::Style { color: Some(ink) })
+                .into(),
+            None => {
+                let label = if a.show_initials {
+                    initials(&a.text)
+                } else {
+                    String::new()
+                };
+                text(label)
+                    .size(a.size * 0.4)
+                    .font(iced::Font {
+                        weight: iced::font::Weight::Bold,
+                        ..iced::Font::DEFAULT
+                    })
+                    .into()
+            }
         };
-        container(text(label).size(a.size * 0.4).font(iced::Font {
-            weight: iced::font::Weight::Bold,
-            ..iced::Font::DEFAULT
-        }))
-        .center(Length::Fixed(a.size))
-        .style(sc::avatar(
-            fill,
-            a.text_color
-                .unwrap_or_else(|| crate::color::readable_on(fill)),
-            a.size,
-        ))
-        .into()
+        container(content)
+            .center(Length::Fixed(a.size))
+            .style(move |_: &crate::Theme| iced::widget::container::Style {
+                text_color: Some(ink),
+                background: Some(iced::Background::Color(fill)),
+                border: iced::Border::default().rounded(radius),
+                ..Default::default()
+            })
+            .into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shapes_round_by_size() {
+        assert_eq!(AvatarShape::Circle.radius(40.0), 20.0);
+        assert_eq!(AvatarShape::Square.radius(40.0), 0.0);
+        assert!(
+            AvatarShape::Rounded.radius(40.0) > 0.0 && AvatarShape::Rounded.radius(40.0) < 20.0
+        );
+    }
+
+    #[test]
+    fn the_same_name_keeps_its_color() {
+        assert_eq!(
+            crate::color::from_seed("Road trip"),
+            crate::color::from_seed("Road trip")
+        );
     }
 }

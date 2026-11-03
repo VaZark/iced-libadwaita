@@ -482,10 +482,29 @@ pub fn specs(d: Detail) -> Vec<Spec> {
                 0,
             ),
         ],
+        Detail::IconToggle => vec![
+            S::choice(
+                "icon",
+                "Icon",
+                &["Shuffle", "Repeat", "Heart", "Star", "Queue"],
+                0,
+            ),
+            S::bool("active", "On", false),
+            S::bool("disabled", "Disabled", false),
+            S::bool("tooltip", "Tooltip", true),
+            S::number("size", "Icon size (px)", 12.0..=32.0, 16.0),
+        ],
         Detail::Avatar => vec![
             S::text("name", "Name", "Ada Lovelace"),
             S::number("size", "Size", 24.0..=96.0, 48.0),
             S::bool("initials", "Show initials", true),
+            S::choice(
+                "icon",
+                "Icon (replaces the initials)",
+                &["None", "Check", "Star", "Own SVG"],
+                0,
+            ),
+            S::choice("shape", "Shape", &["Circle", "Rounded", "Square"], 0),
         ],
         Detail::Tag => vec![
             S::text("label", "Label", "Accent"),
@@ -505,7 +524,14 @@ pub fn specs(d: Detail) -> Vec<Spec> {
                 &["None", "Check", "Star", "Own SVG"],
                 0,
             ),
-            S::choice("color", "Color (chip)", &["From the role", "Own color"], 0),
+            S::choice(
+                "color",
+                "Color (chip, round badge)",
+                &["From the role", "Own color"],
+                0,
+            ),
+            S::choice("chip_size", "Chip size", &["Small", "Medium", "Large"], 1),
+            S::bool("on_color", "White text when selected (own color)", false),
             S::number("size", "Round badge size (px)", 14.0..=48.0, 24.0),
             S::choice("role", "Role", &ROLES, 0),
             S::bool("solid", "Solid", false),
@@ -1741,15 +1767,62 @@ pub fn build<'a>(
                 .done();
             (stage(Element::from(bar)), code)
         }
+        Detail::IconToggle => {
+            let icon = [
+                Icon::Shuffle,
+                Icon::Repeat,
+                Icon::Heart,
+                Icon::Star,
+                Icon::Queue,
+            ][p.choice("icon")];
+            let mut b = w::IconToggleButton::new(icon, p.bool("active"))
+                .size(p.number("size"))
+                .disabled(p.bool("disabled"))
+                .on_toggle(on_bool(d, "active"));
+            if p.bool("tooltip") {
+                b = b.tooltip(format!("{icon:?}"));
+            }
+            let code = Code::new(&format!("IconToggleButton::new(Icon::{icon:?}, self.on)"))
+                .add(
+                    p.number("size") != 16.0,
+                    &format!(".size({:.0}.0)", p.number("size")),
+                )
+                .add(p.bool("disabled"), ".disabled(true)")
+                .add(p.bool("tooltip"), &format!(".tooltip(\"{icon:?}\")"))
+                .add(true, ".on_toggle(Msg::Toggle)   // gets the new state")
+                .done();
+            (stage(Element::from(b)), code)
+        }
         Detail::Avatar => {
-            let a = w::avatar(p.number("size"), p.text("name").to_string())
-                .show_initials(p.bool("initials"));
+            let shape = [
+                w::AvatarShape::Circle,
+                w::AvatarShape::Rounded,
+                w::AvatarShape::Square,
+            ][p.choice("shape")];
+            let mut a = w::avatar(p.number("size"), p.text("name").to_string())
+                .show_initials(p.bool("initials"))
+                .shape(shape);
+            if let Some(i) = icon_source(p.choice("icon")) {
+                a = a.icon(i);
+            }
             let code = Code::new(&format!(
                 "avatar({:.0}, \"{}\")",
                 p.number("size"),
                 p.text("name")
             ))
             .add(!p.bool("initials"), ".show_initials(false)")
+            .add(p.choice("icon") == 1, ".icon(Icon::Check)")
+            .add(p.choice("icon") == 2, ".icon(Icon::Star)")
+            .add(
+                p.choice("icon") == 3,
+                ".icon(IconSource::svg(include_str!(\"vinyl.svg\")))",
+            )
+            .add(p.choice("shape") == 1, ".shape(AvatarShape::Rounded)")
+            .add(p.choice("shape") == 2, ".shape(AvatarShape::Square)")
+            .add(
+                true,
+                "// the color is color::from_seed(name): the same name, the same color",
+            )
             .done();
             (stage(Element::from(a)), code)
         }
@@ -1795,14 +1868,23 @@ pub fn build<'a>(
                         None => ty::caption(label.clone()).into(),
                     };
                     (
-                        w::RoundBadge::new(content)
-                            .role(role)
-                            .solid(p.bool("solid"))
-                            .size(size)
-                            .into(),
+                        {
+                            let mut b = w::RoundBadge::new(content)
+                                .role(role)
+                                .solid(p.bool("solid"))
+                                .size(size);
+                            if p.choice("color") == 1 {
+                                b = b.color(iced::Color::from_rgb8(0xc0, 0x4a, 0x9a));
+                            }
+                            b.into()
+                        },
                         Code::new("RoundBadge::new(content)   // any element")
                             .add(true, &format!(".role(Role::{role:?})"))
                             .add(p.bool("solid"), ".solid(true)")
+                            .add(
+                                p.choice("color") == 1,
+                                ".color(playlist_color)   // in place of the role's",
+                            )
                             .add(size != 20.0, &format!(".size({size:.0}.0)"))
                             .done(),
                     )
@@ -1814,16 +1896,25 @@ pub fn build<'a>(
                             .selected(p.bool("selected"))
                             .disabled(p.bool("disabled"))
                             .on_press(Message::Noop)
-                            .on_remove(Message::Noop);
+                            .on_remove(Message::Noop)
+                            .size(
+                                [w::ChipSize::Small, w::ChipSize::Medium, w::ChipSize::Large]
+                                    [p.choice("chip_size")],
+                            );
                         if let Some(i) = icon_source(p.choice("icon")) {
                             c = c.icon(i);
                         }
                         if p.choice("color") == 1 {
                             c = c.color(iced::Color::from_rgb8(0xc0, 0x4a, 0x9a));
+                            if p.bool("on_color") {
+                                c = c.on_color(iced::Color::WHITE);
+                            }
                         }
                         c.into()
                     },
                     Code::new(&format!("Chip::new(\"{label}\")"))
+                        .add(p.choice("chip_size") == 0, ".size(ChipSize::Small)")
+                        .add(p.choice("chip_size") == 2, ".size(ChipSize::Large)")
                         .add(p.choice("icon") == 1, ".icon(Icon::Check)")
                         .add(p.choice("icon") == 2, ".icon(Icon::Star)")
                         .add(
@@ -1833,6 +1924,10 @@ pub fn build<'a>(
                         .add(
                             p.choice("color") == 1,
                             ".color(tag_color)   // in place of the role's",
+                        )
+                        .add(
+                            p.choice("color") == 1 && p.bool("on_color"),
+                            ".on_color(Color::WHITE)   // the selected text",
                         )
                         .add(p.choice("color") == 0, &format!(".role(Role::{role:?})"))
                         .add(p.bool("selected"), ".selected(true)")
@@ -1911,8 +2006,23 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
         Detail::RangeSlider => {
             "range_slider(0.0..=100.0, self.value, Msg::Range)\n\nRangeSliderRow::new(\"Volume\", self.value, 0.0..=100.0, Msg::Range)"
         }
+        Detail::CardGrid => {
+            "CardGrid::new(albums.iter().map(album_card))\n    .max_width(180.0)   // as many columns as fit, each at most this wide\n    .spacing(12.0)\n\n// cards fill their cells and keep their own height; rows are as tall as the tallest card"
+        }
+        Detail::SectionHeading => {
+            "SectionHeading::new(\"Recently played\")\n    .subtitle(\"Fresh this week\")\n    .link(\"View all\", Msg::OpenHistory)   // \"View all ›\" at the far end"
+        }
+        Detail::MediaRow => {
+            "// the list: a sort header over a virtual list of media rows\nSortHeader::new(&self.sort, Msg::Sort)         // Msg::Sort(c) => self.sort.activate(c, false)\n    .space(Length::Fixed(40.0))                // over the picture\n    .column(Col::Title, \"Title\", Length::FillPortion(3))\n    .column(Col::Time, \"Time\", Length::Fixed(44.0))\n\nVirtualList::new(n, 56.0, &self.viewport, |i| {\n    MediaRow::new(&t.title)\n        .subtitle(&t.artist)\n        .picture(Avatar::new(40.0, &t.title).icon(Icon::MusicNote).shape(AvatarShape::Rounded))\n        .column(Length::Fixed(44.0), caption(t.time()))\n        .suffix(menu_button(Icon::ViewMore, menu))\n        .compact(false)            // no picture, subtitle on the title's line\n        .height(Length::Fill)      // centered in the row the list gives it\n        .on_press(Msg::Play(i))\n        .into()\n})"
+        }
+        Detail::ChipGroup => {
+            "ChipGroup::new(\n    tags.iter().map(|t| ChipOption::new(t.id, &t.name).color(t.color).icon(Icon::Tag)),\n    &self.selected,\n    Msg::Toggle,                    // gets the key of the pressed chip\n)\n.search(&self.query, Msg::Query)    // an entry above filters by label as you type\n.on_color(Color::WHITE)             // selected chips with their own color\n.size(ChipSize::Small)"
+        }
+        Detail::History => {
+            "let mut history = History::new(Place::Home);\n\nhistory.open(Place::Album(7));    // pushes the place you leave\nhistory.back();                  // returns to it: not a fixed parent\nhistory.go(Place::Library);      // a sidebar entry: forgets the trail\nhistory.can_back();              // enable the back button"
+        }
         Detail::VirtualList => {
-            "// the app keeps the viewport; the list builds only the rows in it\nVirtualList::new(10_000, 40.0, &self.viewport, |i| row_for(i))\n    .on_scroll(Msg::Scroll)   // Msg::Scroll(vp) => self.viewport = vp\n    .overscan(4)               // rows built past each edge\n    .id(LIST)                  // for scroll_to / snap_to"
+            "// the app keeps the viewport; the list builds only the rows in it\nVirtualList::new(10_000, 40.0, &self.viewport, |i| {\n    // the whole row is the target: rounded, with a hover you can see on a plain page\n    button(row_for(i)).width(Length::Fill).style(style::button::flat_row(8.0, 0.08, 0.14)).on_press(Msg::Play(i)).into()\n})\n    .on_scroll(Msg::Scroll)   // Msg::Scroll(vp) => self.viewport = vp\n    .overscan(4)               // rows built past each edge\n    .id(LIST)                  // for scroll_to / snap_to"
         }
         Detail::EditableText => {
             "EditableText::new(&self.bio, Msg::Input)\n    .placeholder(\"Add a description\")\n    .editing(self.editing)        // controlled: the entry shows\n    .expanded(self.expanded)      // a long text shows whole\n    .max_height(60.0)\n    .on_edit(Msg::Edit)\n    .on_done(Msg::Done)\n    .on_expand(Msg::Expand)"
@@ -1924,7 +2034,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "Icon::Star.view(16.0)                 // a built-in\n\n// anything that takes an icon takes your own SVG too\nlet mine = IconSource::svg(include_str!(\"vinyl.svg\"));\nMenuItem::action(\"Rate\", Msg::Rate).icon(mine.clone())\nmenu_button(mine, menu)\nChip::new(\"Jazz\").icon(mine).color(tag_color)"
         }
         Detail::Composed => {
-            "// DEFINE a component with ComposedComponent: data + callback, and a conversion\npub struct HistogramRangeSlider<'a, M> {\n    histogram: &'a Histogram,\n    range: (f32, f32),                       // the shared state\n    on_change: Box<dyn Fn((f32, f32)) -> M + 'a>,\n}\n\nimpl<'a, M: 'a> From<HistogramRangeSlider<'a, M>> for Element<'a, M> {\n    fn from(c: HistogramRangeSlider<'a, M>) -> Self {\n        let h = c.histogram;\n        ComposedComponent::new(c.range, c.on_change)   // state + one message for every part\n            // each part is built from the state and answers with the NEXT state\n            .part(move |r| BarChart::histogram(h)\n                .minimal()                                  // only the bars, as a range picker\n                .selected(move |i| h.selected(i, *r))      // bars inside the range\n                .on_pick(move |i| h.bin_range(i))           // a pressed bar is a range\n                .into())\n            .part(|r| range_slider(0.0..=100.0, *r, |moved| moved).into())\n            .normalize(|(lo, hi)| (lo.min(hi), lo.max(hi))) // the rule, in one place\n            .into()\n    }\n}\n\n// USE it like any component\nHistogramRangeSlider::new(&self.histogram, self.range, Msg::Range)"
+            "// HistogramRangeSlider is in the library; this is how it is DEFINED with ComposedComponent:\n// data + callback, and a conversion\npub struct HistogramRangeSlider<'a, M> {\n    histogram: &'a Histogram,\n    range: (f32, f32),                       // the shared state\n    on_change: Box<dyn Fn((f32, f32)) -> M + 'a>,\n}\n\nimpl<'a, M: 'a> From<HistogramRangeSlider<'a, M>> for Element<'a, M> {\n    fn from(c: HistogramRangeSlider<'a, M>) -> Self {\n        let h = c.histogram;\n        ComposedComponent::new(c.range, c.on_change)   // state + one message for every part\n            // each part is built from the state and answers with the NEXT state\n            .part(move |r| BarChart::histogram(h)\n                .minimal()                                  // only the bars, as a range picker\n                .selected(move |i| h.selected(i, *r))      // bars inside the range\n                .on_pick(move |i| h.bin_range(i))           // a pressed bar is a range\n                .into())\n            .part(|r| range_slider(0.0..=100.0, *r, |moved| moved).into())\n            .normalize(|(lo, hi)| (lo.min(hi), lo.max(hi))) // the rule, in one place\n            .into()\n    }\n}\n\n// USE it like any component; the slider's bounds are the histogram's own\nHistogramRangeSlider::new(&self.histogram, self.range, Msg::Range).step(1.0)"
         }
         Detail::SyncedText => {
             "SyncedText::new(LYRICS, &self.lines, Msg::Seek).position(self.pos)\n\n// update: when the current line changes, scroll to it\nif synced::current(&self.lines, self.pos) != before {\n    return follow_synced_text(LYRICS, now, self.lines.len());\n}"

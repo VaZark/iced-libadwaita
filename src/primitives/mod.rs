@@ -14,6 +14,7 @@
 //! * [`focus`]: keyboard focus rules: a Tab trap that wraps and its initial focus, returning focus when a scope closes, whether focus is within a scope (Mantine's use-focus-trap, use-focus-return, use-focus-within);
 //! * [`form`]: submit / reset / next / back gating and when a form's fields reveal errors (steps);
 //! * [`histogram`]: values counted into bins over a range, and which bins a selection covers;
+//! * [`history`]: where Back goes: open pushes the place you leave, go forgets the trail, back pops;
 //! * [`infinite`]: a list that grows page by page (offset or cursor): one request in flight, stale responses discarded, the scroll rule;
 //! * [`lookup`]: a query answered asynchronously: debounce, stale-response discarding, cache;
 //! * [`notifications`]: the queue behind stacked toasts: ids, a limit, in-place update, auto-dismiss from an explicit `now`;
@@ -52,6 +53,7 @@ pub mod dock;
 pub mod focus;
 pub mod form;
 pub mod histogram;
+pub mod history;
 pub mod infinite;
 pub mod loading;
 pub mod lookup;

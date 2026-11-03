@@ -236,6 +236,9 @@ struct Gallery {
     toast_target: w::ToastTarget,
     banner: bool,
     angle: f32,
+    /// Rows of the Icons page drawn so far. They are revealed one a frame, so no single frame
+    /// rasterizes them all.
+    icons_revealed: usize,
 
     shots: Option<Shots>,
     shot_tag: Option<&'static str>,
@@ -608,6 +611,7 @@ impl Gallery {
             toast_target: cfg.toast_target,
             banner: true,
             angle: 0.0,
+            icons_revealed: 0,
             shots,
             shot_tag: None,
         };
@@ -728,6 +732,11 @@ impl Gallery {
             Message::OpenDetail(d) => {
                 self.page = d.page();
                 self.detail = Some(d);
+                // Drawing an icon rasterizes its SVG the first time, which blocks the frame. The
+                // page reveals its rows one a frame instead of all at once.
+                if d == Detail::Icons {
+                    self.icons_revealed = 0;
+                }
             }
             Message::CloseDetail => self.detail = None,
             Message::Banner(v) => self.banner = v,
@@ -947,6 +956,9 @@ impl Gallery {
             Message::ClearToasts => self.toasts.clear(),
             Message::Frame(now) => {
                 self.angle += 0.12;
+                if self.detail == Some(Detail::Icons) {
+                    self.icons_revealed += 1;
+                }
                 self.demo_value = self.demo_tween.tick(now);
             }
             Message::Animations(on) => {
@@ -1277,6 +1289,7 @@ impl Gallery {
     fn subscription(&self) -> Subscription<Message> {
         let frames = if self.page == Page::Feedback
             || self.shots.is_some()
+            || (self.detail == Some(Detail::Icons) && self.icons_revealed < Icon::ALL.len())
             || self.demo_tween.is_animating()
         {
             window::frames().map(Message::Frame)

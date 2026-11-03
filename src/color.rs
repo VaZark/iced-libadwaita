@@ -143,9 +143,79 @@ pub fn readable_on(bg: Color) -> Color {
     color_contrast(bg, &[LIGHT_TEXT, DARK_TEXT])
 }
 
+/// A color from the GNOME avatar palette for `index` (wraps). Stable: the same index is the
+/// same color, so a list keeps its colors from one run to the next.
+pub fn from_index(index: usize) -> Color {
+    hex(AVATAR_COLORS[index % AVATAR_COLORS.len()])
+}
+
+/// A stable, theme-friendly color for any text: the same seed is always the same color, and
+/// seeds spread over the avatar palette (a playlist's name, a user's id).
+pub fn from_seed(seed: impl AsRef<str>) -> Color {
+    let hash = seed
+        .as_ref()
+        .bytes()
+        .fold(5381u32, |h, b| h.wrapping_mul(33).wrapping_add(b as u32));
+    from_index(hash as usize)
+}
+
+/// The palette [`from_index`] and [`from_seed`] draw from.
+const AVATAR_COLORS: [u32; 12] = [
+    0x62a0ea, 0x57e389, 0xf8e45c, 0xffa348, 0xff7b63, 0xdc8add, 0xc061cb, 0x9a9996, 0x5e5c64,
+    0x99c1f1, 0x8ff0a4, 0xf66151,
+];
+
+/// `fg` moved towards white or black, whichever the `bg` calls for, until it has at least
+/// `min_ratio` of contrast against `bg` (4.5 is the WCAG minimum for text). Colors that already
+/// pass are returned unchanged, so a light tag color stays itself on a light page and only a color
+/// too close to its surface is pulled away from it.
+pub fn ensure_contrast(fg: Color, bg: Color, min_ratio: f32) -> Color {
+    if contrast_ratio(fg, bg) >= min_ratio {
+        return fg;
+    }
+    let target = if relative_luminance(bg) > 0.18 {
+        Color::BLACK
+    } else {
+        Color::WHITE
+    };
+    for step in 1..=20 {
+        let c = Color {
+            a: fg.a,
+            ..mix(fg, target, step as f32 / 20.0)
+        };
+        if contrast_ratio(c, bg) >= min_ratio {
+            return c;
+        }
+    }
+    Color { a: fg.a, ..target }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_seed_is_always_the_same_color() {
+        assert_eq!(from_seed("Evening drive"), from_seed("Evening drive"));
+        assert_eq!(from_index(1), from_index(13));
+        assert_ne!(from_seed("a"), from_seed("b"));
+    }
+
+    #[test]
+    fn contrast_is_raised_only_when_it_is_missing() {
+        let dark_bg = hex(0x242424);
+        let navy = hex(0x3b4a7a);
+        assert!(contrast_ratio(navy, dark_bg) < 4.5);
+        let fixed = ensure_contrast(navy, dark_bg, 4.5);
+        assert!(contrast_ratio(fixed, dark_bg) >= 4.5);
+        // Already readable: untouched.
+        let white = Color::WHITE;
+        assert_eq!(ensure_contrast(white, dark_bg, 4.5), white);
+        // On a light page a pale color is darkened instead.
+        let pale = hex(0xf8e45c);
+        let light_bg = hex(0xfafafa);
+        assert!(contrast_ratio(ensure_contrast(pale, light_bg, 4.5), light_bg) >= 4.5);
+    }
 
     #[test]
     fn alpha_multiplies_like_gtk() {

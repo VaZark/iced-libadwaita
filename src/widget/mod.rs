@@ -13,8 +13,10 @@ mod avatar;
 mod badge;
 mod banner;
 mod button;
+mod card_grid;
 mod carousel;
 mod chart;
+mod chip_group;
 mod collapsible;
 mod color_picker;
 mod composed_component;
@@ -36,7 +38,10 @@ mod focus;
 mod form;
 mod forms;
 mod header_bar;
+mod histogram_range_slider;
+mod icon_toggle;
 mod infinite;
+mod media_row;
 mod menu;
 mod meta_component;
 mod meta_parent_component;
@@ -54,10 +59,12 @@ mod resizable;
 mod responsive_table;
 mod rows;
 mod scrolled;
+mod section_heading;
 mod sections;
 mod segmented;
 mod shortcut_scope;
 mod slots;
+mod sort_header;
 mod spinner;
 mod split;
 mod split_view;
@@ -114,18 +121,20 @@ pub use crate::window::dialog::{
 pub use accordion::{Accordion, AccordionItem};
 pub use anchored::{Anchored, Indicator};
 pub use autocomplete::Autocomplete;
-pub use avatar::{Avatar, avatar};
-pub use badge::{Badge, Chip, RoundBadge};
+pub use avatar::{Avatar, AvatarShape, avatar};
+pub use badge::{Badge, Chip, ChipSize, RoundBadge};
 pub use banner::{Banner, banner};
 pub use button::{
     ButtonContent, ToggleGroup, ToggleItem, circular_button, destructive_button, flat_button,
     icon_button, pill_button, progress_bar, raised_button, suggested_button,
     suggested_circular_button, suggested_pill_button, toggle_group,
 };
+pub use card_grid::CardGrid;
 pub use carousel::{Carousel, CarouselIndicator, carousel};
 pub use chart::{
     BarChart, BarLayout, Funnel, FunnelShape, LineChart, PieChart, Sankey, Sunburst, format_value,
 };
+pub use chip_group::{ChipGroup, ChipOption};
 pub use collapsible::Collapsible;
 pub use color_picker::{ColorInput, ColorPicker};
 pub use composed_component::{ComposeAxis, ComposedComponent};
@@ -155,8 +164,11 @@ pub use forms::{
     text_view,
 };
 pub use header_bar::{HeaderBar, WindowControls, header_bar, window_title};
+pub use histogram_range_slider::HistogramRangeSlider;
 pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent};
+pub use icon_toggle::IconToggleButton;
 pub use infinite::{InfiniteList, LoadTrigger};
+pub use media_row::MediaRow;
 pub use menu::{
     Menu, MenuButton, MenuCheckStyle, MenuIconSide, MenuItem, MenuPresentation, menu_button,
     primary_menu,
@@ -198,8 +210,10 @@ pub use rows::{
     SwitchRow, ToggleGroupRow, action_row, boxed_list,
 };
 pub use scrolled::{scrollbar, scrolled_window, scrolled_window_both, scrolled_window_horizontal};
+pub use section_heading::SectionHeading;
 pub use sections::{SectionButton, SectionIcon, section_button, section_icon, section_size};
 pub use shortcut_scope::shortcuts;
+pub use sort_header::SortHeader;
 pub use spinner::{Spinner, spinner};
 pub use split::{SplitAction, SplitButton, SplitButtonAction, split_button};
 pub use split_view::{AdaptiveSplit, adaptive_split};

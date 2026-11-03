@@ -18,6 +18,9 @@ Builder methods, chained after the constructor.
 .B \&.icon(icon: impl Into<IconSource>)
 An icon: a built\-in \fBIcon\fR or your own SVG (\fBIconSource\fR).
 .TP
+.B \&.size(size: ChipSize)
+The size: \fBChipSize::Small\fR, \fBMedium\fR (default) or \fBLarge\fR.
+.TP
 .B \&.color(color: iced::Color)
 A color of your own (a tag's color), in place of the \fBrole\fR's: the chip is tinted with it, or solid in it when selected, and its icon and text follow.
 .TP
@@ -32,6 +35,9 @@ A disabled chip is dimmed and ignores presses.
 .B \&.metrics(m: Metrics)
 .SH EVENTS
 Callbacks that produce the application's message.
+.TP
+.B \&.on_color(color: iced::Color)
+The text and icon color of a selected chip that has its own \fBcolor\fR, in place of the one picked for contrast (white on every tag, for a consistent look).
 .TP
 .B \&.on_press(m: M)
 Pressing the chip body.

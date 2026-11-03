@@ -6,6 +6,8 @@
 use crate::Theme;
 use iced::widget::svg::{self, Svg};
 use iced::{Color, Length};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Icon {
@@ -276,7 +278,18 @@ impl Icon {
         if let Some(bytes) = self.system_name().and_then(crate::system::find_icon) {
             return svg::Handle::from_memory(bytes);
         }
-        svg::Handle::from_memory(self.source().into_bytes())
+        // The built-in drawing never changes, so its handle is made once: building the SVG text
+        // and hashing it on every view of every icon is work a screen full of icons repeats at
+        // every frame.
+        static BUILTIN: OnceLock<Mutex<HashMap<Icon, svg::Handle>>> = OnceLock::new();
+        let cache = BUILTIN.get_or_init(Default::default);
+        let Ok(mut cache) = cache.lock() else {
+            return svg::Handle::from_memory(self.source().into_bytes());
+        };
+        cache
+            .entry(self)
+            .or_insert_with(|| svg::Handle::from_memory(self.source().into_bytes()))
+            .clone()
     }
 
     /// Renders the icon at the given size, tinted with the window foreground.

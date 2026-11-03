@@ -11,7 +11,7 @@ Avatar::new(size: f32, text: impl Into<String>)
 .PP
 \fBAdwAvatar\fR: round badge with initials.
 .PP
-\fBAdwAvatar\fR.
+\fBAdwAvatar\fR, with an optional icon in place of the initials and a choice of shape: the round badge of a person, a playlist, a cover.
 .SH FUNCTIONS
 .TP
 .B avatar(size: f32, text: impl Into<String>)
@@ -20,6 +20,12 @@ Avatar::new(size: f32, text: impl Into<String>)
 .B Avatar::new(size: f32, text: impl Into<String>)
 .SH PROPERTIES
 Builder methods, chained after the constructor.
+.TP
+.B \&.icon(icon: impl Into<IconSource>)
+An icon (a built\-in \fBIcon\fR or your own SVG) in place of the initials. The background color still comes from the text, so the same name keeps the same color.
+.TP
+.B \&.shape(shape: AvatarShape)
+The outline: a circle (default), a rounded square or a square.
 .TP
 .B \&.show_initials(show: bool)
 .TP
