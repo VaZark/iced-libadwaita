@@ -30,6 +30,9 @@ AdwAlertDialog
 .B anchored
 A base with a floating surface placed against it
 .TP
+.B as_button
+Makes any content a button: as_button(ItemRow::new(..)).on_press(m)
+.TP
 .B autocomplete
 an entry whose suggestions come from an asynchronous lookup (a database, an HTTP call), shown in a popover under it
 .TP
@@ -65,9 +68,6 @@ a centered action row
 .TP
 .B card
 \&.card: padded card surface
-.TP
-.B card_button
-A clickable .card: any content on a card surface that reacts to hover and press
 .TP
 .B card_shadow
 Wraps content (a surface with its own background and border) in a card elevation

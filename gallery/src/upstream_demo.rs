@@ -34,6 +34,9 @@ pub enum Msg {
     Noop,
     Sort(Col),
     Compact(bool),
+    RowPress(bool),
+    RowPad(bool),
+    RowPadPx(f32),
     Scroll2(Viewport),
     ChipToggle(u8),
     Query(String),
@@ -93,6 +96,9 @@ pub struct State {
     flow_editing: bool,
     flow_text: String,
     cards_compact: bool,
+    row_press: bool,
+    row_pad: bool,
+    row_pad_px: f32,
     cards_cols: usize,
     queue: ReorderState<&'static str>,
     viewport: Viewport,
@@ -130,6 +136,9 @@ impl Default for State {
             history: History::new("Home"),
             flow_editing: false,
             cards_compact: false,
+            row_press: true,
+            row_pad: true,
+            row_pad_px: 0.0,
             cards_cols: 0,
             queue: ReorderState::live(vec![
                 "Winter Barn",
@@ -167,6 +176,9 @@ impl State {
                 });
             }
             Msg::Compact(c) => self.compact = c,
+            Msg::RowPress(b) => self.row_press = b,
+            Msg::RowPad(b) => self.row_pad = b,
+            Msg::RowPadPx(v) => self.row_pad_px = v,
             Msg::Scroll2(v) => self.media_vp = v,
             Msg::ChipToggle(k) => match self.chips.iter().position(|c| *c == k) {
                 Some(i) => {
@@ -355,6 +367,41 @@ impl State {
         .into()
     }
 
+    /// A configurable `ItemRow`: content, optionally wrapped in a `as_button`.
+    fn row_playground(&self, m: Metrics) -> Element<'_, Msg> {
+        let mut row = w::ItemRow::new("Late Night Mix")
+            .subtitle("dynamic \u{b7} 24 tracks")
+            .picture(
+                Avatar::new(w::PICTURE_WIDTH, "Late Night Mix")
+                    .icon(Icon::MusicNote)
+                    .shape(AvatarShape::Rounded),
+            );
+        if self.row_pad {
+            row = row.padding(self.row_pad_px);
+        }
+        // The row is content; the caller wraps it in the surface that makes it a control.
+        let stage: Element<'_, Msg> = match self.row_press {
+            false => w::card(row),
+            true => w::as_button(w::card(row))
+                .width(Length::Fill)
+                .on_press(Msg::Noop)
+                .into(),
+        };
+        let mut group = Self::group(
+            "Item row: content, wrapped by the caller",
+            "The row is content: no hover, press or padding. as_button around it makes it a control; padding(..) insets it; inset() is the classic list inset.",
+            m,
+        )
+        .push(w::SwitchRow::new("Wrap in a as_button", self.row_press, Msg::RowPress).metrics(m))
+        .push(w::SwitchRow::new("padding(..)", self.row_pad, Msg::RowPad).metrics(m));
+        if self.row_pad {
+            group = group.push(
+                w::SliderRow::new("Padding", self.row_pad_px, 0.0..=24.0, Msg::RowPadPx).metrics(m),
+            );
+        }
+        column![group, stage].spacing(m.group_spacing).into()
+    }
+
     pub fn media_view(&self, m: Metrics) -> Element<'_, Msg> {
         let row_h = if self.compact { 36.0 } else { 56.0 };
         let compact = self.compact;
@@ -381,8 +428,7 @@ impl State {
                 .height(Length::Fill)
                 .cell(iad::widget::typography::caption(t.album))
                 .cell(iad::widget::typography::caption(time))
-                .suffix(w::icon_button(Icon::ViewMore).on_press(Msg::Noop))
-                .on_press(Msg::Noop);
+                .suffix(w::icon_button(Icon::ViewMore).on_press(Msg::Noop));
             if !compact {
                 r = r.picture(
                     Avatar::new(w::PICTURE_WIDTH, t.title.clone())
@@ -390,7 +436,12 @@ impl State {
                         .shape(AvatarShape::Rounded),
                 );
             }
-            r.into()
+            w::as_button(r)
+                .width(Length::Fill)
+                .style(iad::style::button::flat_row(8.0, 0.08, 0.14))
+                .height(Length::Fill)
+                .on_press(Msg::Noop)
+                .into()
         })
         .on_scroll(Msg::Scroll2);
         let header = cols.header(&self.sort, Msg::Sort);
@@ -404,6 +455,7 @@ impl State {
             w::card(
                 column![header, container(list).height(Length::Fixed(320.0))].spacing(m.space_xs),
             ),
+            self.row_playground(m),
         ]
         .spacing(m.group_spacing)
         .into()

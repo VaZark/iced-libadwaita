@@ -1,5 +1,4 @@
-//! `ItemRow`: one row of a music, podcast, video or file list. A flat, rounded, whole-row
-//! button holding a picture, a title with a subtitle, optional extra columns, and a trailing
+//! `ItemRow`: one row of a music, podcast, video or file list: a picture, a title with a subtitle, optional extra columns, and a trailing
 //! part (a time, a menu). Together with [`VirtualList`](super::VirtualList) and a
 //! [`SortHeader`](super::SortHeader) it is the list component.
 //!
@@ -15,8 +14,10 @@
 //! * [`column`](ItemRow::column) adds a cell of a given width (an album, a BPM, a time);
 //!   [`suffix`](ItemRow::suffix) adds the trailing part (a menu button).
 //!
-//! The whole row is the target, rounded, with a hover that reads on a plain page
-//! ([`style::button::flat_row`](crate::style::button::flat_row)).
+//! **The row is content, like a `<tr>`**: no button, no hover, no press, no surface, and no
+//! inset unless asked for ([`padding`](ItemRow::padding), or [`inset`](ItemRow::inset) for the
+//! classic list inset). The caller wraps it in the surface that makes it a control:
+//! [`as_button`](super::as_button): events only, so the row keeps its own layout.
 //!
 //! ```ignore
 //! ItemRow::new(&track.title)
@@ -25,17 +26,18 @@
 //!     .column(Length::Fixed(160.0), caption(&track.album))
 //!     .column(Length::Fixed(44.0), caption(track.time()))
 //!     .suffix(menu_button(Icon::ViewMore, menu))
-//!     .on_press(Msg::Play(track.id))
+//!     .inset()
+//!
+//! as_button(row).height(Length::Fill).on_press(Msg::Play(track.id))
 //! ```
 
 use super::sort_header::flex_of;
 use super::{Element, Flex, FlexCells, SortHeader, typography as ty};
 use crate::Metrics;
 use crate::primitives::sorting::SortState;
-use crate::style::button as sb;
 use crate::style::text as st;
 use iced::alignment::Horizontal;
-use iced::widget::{button, column, container};
+use iced::widget::{column, container};
 use iced::{Length, Padding};
 
 /// The usual width of a picture (a cover, an avatar) at the start of a row.
@@ -59,7 +61,8 @@ pub struct ItemRow<'a, M> {
     suffix: Vec<Element<'a, M>>,
     compact: bool,
     height: Length,
-    on_press: Option<M>,
+    padding: Option<Padding>,
+    inset: bool,
     metrics: Metrics,
 }
 
@@ -76,7 +79,8 @@ impl<'a, M: 'a> ItemRow<'a, M> {
             suffix: Vec::new(),
             compact: false,
             height: Length::Shrink,
-            on_press: None,
+            padding: None,
+            inset: false,
             metrics: Metrics::desktop(),
         }
     }
@@ -130,8 +134,17 @@ impl<'a, M: 'a> ItemRow<'a, M> {
         self.height = h.into();
         self
     }
-    pub fn on_press(mut self, m: M) -> Self {
-        self.on_press = Some(m);
+    /// The space between the row's edge and its content. None by default, button or not: a
+    /// row is content, and the surface around it (a card, a list) sets the inset.
+    pub fn padding(mut self, padding: impl Into<Padding>) -> Self {
+        self.padding = Some(padding.into());
+        self
+    }
+    /// The classic inset for a row that is its own button in a list: `space_s` left, `space_m`
+    /// right, and a little above and below when the row fits its content. Overridden by
+    /// [`padding`](Self::padding).
+    pub fn inset(mut self) -> Self {
+        self.inset = true;
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -170,21 +183,21 @@ impl<'a, M: Clone + 'a> From<ItemRow<'a, M>> for Element<'a, M> {
         for part in r.suffix {
             line = line.cell(Flex::fixed(SUFFIX_WIDTH), part);
         }
-        // A button does not center its content, so the row is centered in it explicitly.
-        let inner = container(container(line).padding(Padding {
-            left: m.space_s,
-            right: m.space_m,
-            top: if r.height == Length::Shrink { 4.0 } else { 0.0 },
-            bottom: if r.height == Length::Shrink { 4.0 } else { 0.0 },
-        }))
-        .width(Length::Fill)
-        .center_y(r.height);
-        button(inner)
+        let fits = r.height == Length::Shrink;
+        let pad = r.padding.unwrap_or(if r.inset {
+            Padding {
+                left: m.space_s,
+                right: m.space_m,
+                top: if fits { 4.0 } else { 0.0 },
+                bottom: if fits { 4.0 } else { 0.0 },
+            }
+        } else {
+            Padding::ZERO
+        });
+        container(container(line).padding(pad))
             .width(Length::Fill)
+            .center_y(r.height)
             .height(r.height)
-            .padding(0)
-            .style(sb::flat_row(8.0, 0.08, 0.14))
-            .on_press_maybe(r.on_press)
             .into()
     }
 }
@@ -304,7 +317,7 @@ impl<K> ItemColumns<K> {
     }
     /// A row in these columns: compact as the columns are, and ready for [`ItemRow::cell`].
     pub fn row<'a, M: 'a>(&self, title: impl Into<String>) -> ItemRow<'a, M> {
-        let mut r = ItemRow::new(title).compact(self.compact);
+        let mut r = ItemRow::new(title).compact(self.compact).inset();
         // The flex the header gives each column (down to its label's floor), so cells agree.
         r.spec = self
             .cols
@@ -374,6 +387,15 @@ mod tests {
         assert_eq!(r.columns.len(), 1);
         assert_eq!(r.suffix.len(), 1);
         assert!(r.compact && r.height == Length::Fill && r.subtitle.as_deref() == Some("Artist"));
+    }
+
+    #[test]
+    fn a_row_is_content_with_no_inset_unless_asked() {
+        let r: ItemRow<'_, u8> = ItemRow::new("x");
+        assert!(r.padding.is_none() && !r.inset);
+        let _: Element<'_, u8> = r.into();
+        let _: Element<'_, u8> = ItemRow::<u8>::new("x").padding(6.0).into();
+        let _: Element<'_, u8> = ItemRow::<u8>::new("x").inset().into();
     }
 
     #[test]

@@ -10,7 +10,7 @@ ItemRow::new(title: impl Into<String>)
 .PP
 See the module.
 .PP
-\fBItemRow\fR: one row of a music, podcast, video or file list. A flat, rounded, whole\-row button holding a picture, a title with a subtitle, optional extra columns, and a trailing part (a time, a menu). Together with \fBVirtualList\fR and a \fBSortHeader\fR it is the list component.
+\fBItemRow\fR: one row of a music, podcast, video or file list: a picture, a title with a subtitle, optional extra columns, and a trailing part (a time, a menu). Together with \fBVirtualList\fR and a \fBSortHeader\fR it is the list component.
 .IP \(bu 2
 \fBEvery column is flex\fR (\fBFlexCells\fR). A fixed width is a *starting* size: when the row narrows, all the columns give way together, in proportion, \fBnone below what its\fR header label needs\fB, so the title is never squeezed out and a header is never cut off. The\fR header and the rows resolve the same flex, so they line up at any width.
 .IP \(bu 2
@@ -20,7 +20,7 @@ See the module.
 .IP \(bu 2
 \fBcolumn\fR adds a cell of a given width (an album, a BPM, a time); \fBsuffix\fR adds the trailing part (a menu button).
 .PP
-The whole row is the target, rounded, with a hover that reads on a plain page (\fBstyle::button::flat_row\fR).
+\fBThe row is content, like a \fB<tr>\fR\fR: no button, no hover, no press, no surface, and no inset unless asked for (\fBpadding\fR, or \fBinset\fR for the classic list inset). The caller wraps it in the surface that makes it a control: \fBas_button\fR: events only, so the row keeps its own layout.
 .PP
 .nf
 .RS
@@ -30,7 +30,9 @@ ItemRow::new(&track.title)
     .column(Length::Fixed(160.0), caption(&track.album))
     .column(Length::Fixed(44.0), caption(track.time()))
     .suffix(menu_button(Icon::ViewMore, menu))
-    .on_press(Msg::Play(track.id))
+    .inset()
+
+as_button(row).height(Length::Fill).on_press(Msg::Play(track.id))
 .RE
 .fi
 .SH CONSTRUCTORS
@@ -51,6 +53,12 @@ No picture, and the subtitle on the title's line.
 .B \&.height(h: impl Into<Length>)
 The row's height. \fBFill\fR centers the content in the height it is given (the rows of a \fBVirtualList\fR); the default fits the content.
 .TP
+.B \&.padding(padding: impl Into<Padding>)
+The space between the row's edge and its content. None by default, button or not: a row is content, and the surface around it (a card, a list) sets the inset.
+.TP
+.B \&.inset()
+The classic inset for a row that is its own button in a list: \fBspace_s\fR left, \fBspace_m\fR right, and a little above and below when the row fits its content. Overridden by \fBpadding\fR.
+.TP
 .B \&.metrics(m: Metrics)
 .SH SLOTS
 Builder methods that take children.
@@ -66,10 +74,6 @@ The next extra cell, in the width and alignment the shared \fBItemColumns\fR gav
 .TP
 .B \&.suffix(part: impl Into<Element<'a, M>>)
 A trailing part: a menu button, a toggle. Add as many as needed.
-.SH EVENTS
-Callbacks that produce the application's message.
-.TP
-.B \&.on_press(m: M)
 .SH SOURCE
 src/widget/item_row.rs
 .SH SEE ALSO

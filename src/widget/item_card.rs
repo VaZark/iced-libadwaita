@@ -22,7 +22,7 @@
 //! .cols(if density == Density::Compact { 1 } else { 4 })
 //! ```
 
-use super::{Element, ItemRow, card_button, typography as ty};
+use super::{Element, ItemRow, as_button, typography as ty};
 use crate::Metrics;
 use crate::config::Density;
 use crate::style::text as st;
@@ -79,17 +79,18 @@ impl<'a, M: Clone + 'a> From<ItemCard<'a, M>> for Element<'a, M> {
     fn from(c: ItemCard<'a, M>) -> Self {
         let m = c.metrics;
         if c.density == Density::Compact {
-            let mut row = ItemRow::new(c.title).metrics(m);
+            let mut row = ItemRow::new(c.title).metrics(m).inset();
             if let Some(s) = c.subtitle {
                 row = row.subtitle(s);
             }
             if let Some(p) = c.picture {
                 row = row.picture(p);
             }
-            if let Some(msg) = c.on_press {
-                row = row.on_press(msg);
-            }
-            return row.into();
+            return as_button(row)
+                .width(Length::Fill)
+                .style(crate::style::button::flat_row(8.0, 0.08, 0.14))
+                .on_press_maybe(c.on_press)
+                .into();
         }
         let mut body = column![].spacing(m.space_xs).width(Length::Fill);
         if let Some(p) = c.picture {
@@ -99,7 +100,12 @@ impl<'a, M: Clone + 'a> From<ItemCard<'a, M>> for Element<'a, M> {
         if let Some(s) = c.subtitle {
             body = body.push(ty::caption(s).style(st::dim));
         }
-        card_button(body)
+        // The card draws its own surface; the button only adds the events.
+        let surface = container(body)
+            .padding(m.card_padding)
+            .width(Length::Fill)
+            .style(crate::style::container::card);
+        as_button(surface)
             .width(Length::Fill)
             .on_press_maybe(c.on_press)
             .into()

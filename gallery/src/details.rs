@@ -1316,10 +1316,10 @@ impl Gallery {
                 row![w::link_button("Link").on_press(Message::Noop), w::link_button("Disabled link")].spacing(sp).wrap(),
             ))]
             .into(),
-            Inline::CardButton => column![g("Card button").push(w::card(
+            Inline::CardButton => column![g("As button").push(w::card(
                 row![
-                    w::card_button(text("Card button").width(Length::Fixed(110.0))).on_press(Message::Noop),
-                    w::card_button(text("Disabled").width(Length::Fixed(110.0))),
+                    w::as_button(w::card(text("Card").width(Length::Fixed(110.0)))).on_press(Message::Noop),
+                    w::as_button(w::card(text("Disabled").width(Length::Fixed(110.0)))),
                 ]
                 .spacing(sp)
                 .wrap(),

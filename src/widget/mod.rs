@@ -167,7 +167,7 @@ pub use flow_grid::FlowGrid;
 pub use focus::{FocusScope, focus_return};
 pub use form::{Form, FormActions, Step, StepIndicator};
 pub use forms::{
-    AccentPicker, Entry, EntryState, TextView, accent_picker, card_button, check_button,
+    AccentPicker, Entry, EntryState, TextView, accent_picker, as_button, check_button,
     color_swatch, entry, link_button, password_entry, radio_button, scale, status_swatch, tag,
     text_view,
 };

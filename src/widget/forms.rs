@@ -386,11 +386,12 @@ pub fn link_button<'a, M: 'a>(label: impl Into<String>) -> Button<'a, M, Theme> 
         .style(style::button::link)
 }
 
-/// A clickable `.card`: any content on a card surface that reacts to hover and press.
-pub fn card_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    button(content)
-        .padding(Metrics::desktop().card_padding)
-        .style(style::button::card)
+/// Makes any content a button: `as_button(ItemRow::new(..)).on_press(m)`. A button is events,
+/// not layout: no padding, no width of its own, no surface. The content keeps its size and its
+/// look (a card draws its own surface), and the button adds the press and a hover/press tint
+/// over exactly its bounds. `.style(..)` swaps the tint, e.g. [`flat_row`](crate::style::button::flat_row).
+pub fn as_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
+    button(content).padding(0).style(style::button::events)
 }
 
 // -------------------------------------------------------------------- Tag

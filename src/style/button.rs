@@ -214,6 +214,16 @@ pub fn circular_flat(theme: &Theme, status: Status) -> Style {
     )
 }
 
+/// The events of a button and nothing else: transparent, with a hover and press tint over the
+/// content's bounds, rounded like a card. The content owns its surface and its layout. See
+/// [`as_button`](crate::widget::as_button).
+pub fn events(theme: &Theme, status: Status) -> Style {
+    let s = &theme.semantic;
+    let mut st = row_look(theme, status, s.card.fg, theme.metrics.radius_l, 0.04, 0.08);
+    st.border = iced::Border::default().rounded(theme.metrics.radius_l);
+    st
+}
+
 /// `.card`: a clickable card surface.
 pub fn card(theme: &Theme, status: Status) -> Style {
     let s = &theme.semantic;
