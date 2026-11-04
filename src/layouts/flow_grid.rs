@@ -3,8 +3,8 @@
 //! each at most [`max_width`](FlowGrid::max_width) wide. The items fill their cells, and **a row
 //! shares one height**, that of its tallest item: every item is laid out again at that height, so
 //! a card whose title wraps does not leave its neighbours short (CSS grid's `align-items:
-//! stretch`, the rows of a subgrid). An item stretches if its own surface fits its content
-//! (`Length::Shrink`), as a card does. Albums, playlists, apps, projects.
+//! stretch`, the rows of a subgrid). An item can fill that height (`Length::Fill`, to push a line to its bottom
+//! edge) or just fit its content: a surface that fits its content is stretched too. Albums, playlists, apps, projects.
 //!
 //! [`row_height`](FlowGrid::row_height) chooses: [`Shared`](RowHeight::Shared) (default),
 //! [`Own`](RowHeight::Own) or [`Fixed`](RowHeight::Fixed).
@@ -124,9 +124,12 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for FlowGrid<'a, M> {
             .zip(tree.children.chunks_mut(per_row));
         for (row, states) in rows {
             // First pass: each item at its own height, to find the row's tallest.
-            let own = layout::Limits::new(
+            // Lengths that fill the height (a card whose last line sits at its bottom edge) are
+            // compressed to what they hold here, so every item reports a height to compare.
+            let own = layout::Limits::with_compression(
                 Size::new(cell_width, 0.0),
                 Size::new(cell_width, f32::INFINITY),
+                Size::new(false, true),
             );
             let mut measured: Vec<layout::Node> = row
                 .iter_mut()

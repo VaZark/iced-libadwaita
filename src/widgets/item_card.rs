@@ -2,7 +2,8 @@
 //! as a **card** or, in compact mode, as a tight [`ItemRow`](crate::widgets::ItemRow). One pattern in
 //! two densities, so a grid of cards and a list of rows are the same data with one switch.
 //!
-//! * **Comfort** (default): the picture centered over the title and the subtitle, the whole card pressable.
+//! * **Comfort** (default): the picture centered over the title, the subtitle on the card's bottom
+//!   edge, the whole card pressable.
 //! * **Compact**: the picture small at the start and the title over the subtitle beside it, a
 //!   flat row ([`flat_row`](crate::styles::button::flat_row)).
 //!
@@ -96,7 +97,10 @@ impl<'a, M: Clone + 'a> From<ItemCard<'a, M>> for Element<'a, M> {
                 .on_press_maybe(c.on_press)
                 .into();
         }
-        let mut body = column![].spacing(m.space_xs).width(Length::Fill);
+        let mut body = column![]
+            .spacing(m.space_xs)
+            .width(Length::Fill)
+            .height(Length::Fill);
         if let Some(p) = c.picture {
             body = body.push(container(p).center_x(Length::Fill));
         }
@@ -108,6 +112,9 @@ impl<'a, M: Clone + 'a> From<ItemCard<'a, M>> for Element<'a, M> {
                 .width(Length::Fill),
         );
         if let Some(s) = c.subtitle {
+            // The subtitle (the artist and year, the count) sits on the card's bottom edge: in a
+            // grid with a shared row height the cards' last lines line up.
+            body = body.push(iced::widget::space::vertical());
             body = body.push(
                 ty::caption(s)
                     .style(st::dim)
@@ -119,11 +126,13 @@ impl<'a, M: Clone + 'a> From<ItemCard<'a, M>> for Element<'a, M> {
         let surface = container(body)
             .padding(m.card_padding)
             .width(Length::Fill)
+            .height(Length::Fill)
             .style(crate::styles::container::card);
         iced::widget::button(surface)
             .padding(0)
             .style(crate::styles::button::events)
             .width(Length::Fill)
+            .height(Length::Fill)
             .on_press_maybe(c.on_press)
             .into()
     }

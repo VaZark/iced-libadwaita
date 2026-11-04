@@ -10,7 +10,7 @@ FlowGrid::new(items: impl IntoIterator<Item = Element<'a, M>>)
 .PP
 See the module.
 .PP
-\fBFlowGrid\fR: items of equal size that flow into columns, after Mantine's \fBSimpleGrid\fR. Either a fixed number of columns (\fBcols\fR: one column is a list) or as many as fit, each at most \fBmax_width\fR wide. The items fill their cells, and \fBa row\fR shares one height\fB, that of its tallest item: every item is laid out again at that height, so\fR a card whose title wraps does not leave its neighbours short (CSS grid's \fBalign\-items:\fR stretch\fB, the rows of a subgrid). An item stretches if its own surface fits its content\fR (\fBLength::Shrink\fR), as a card does. Albums, playlists, apps, projects.
+\fBFlowGrid\fR: items of equal size that flow into columns, after Mantine's \fBSimpleGrid\fR. Either a fixed number of columns (\fBcols\fR: one column is a list) or as many as fit, each at most \fBmax_width\fR wide. The items fill their cells, and \fBa row\fR shares one height\fB, that of its tallest item: every item is laid out again at that height, so\fR a card whose title wraps does not leave its neighbours short (CSS grid's \fBalign\-items:\fR stretch\fB, the rows of a subgrid). An item can fill that height (\fRLength::Fill\fB, to push a line to its bottom\fR edge) or just fit its content: a surface that fits its content is stretched too. Albums, playlists, apps, projects.
 .PP
 \fBrow_height\fR chooses: \fBShared\fR (default), \fBOwn\fR or \fBFixed\fR.
 .PP
