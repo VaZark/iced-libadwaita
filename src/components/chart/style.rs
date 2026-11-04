@@ -10,8 +10,8 @@ pub type Paint = Rc<dyn Fn(&Theme, usize) -> Color>;
 /// A color by theme.
 pub type ThemePaint = Rc<dyn Fn(&Theme) -> Color>;
 
-/// The elements and colors of a cartesian chart ([`LineChart`](crate::widget::LineChart),
-/// [`BarChart`](crate::widget::BarChart)). The default draws everything with the series colors.
+/// The elements and colors of a cartesian chart ([`LineChart`](crate::widgets::LineChart),
+/// [`BarChart`](crate::widgets::BarChart)). The default draws everything with the series colors.
 #[derive(Clone)]
 pub struct ChartStyle {
     /// The value axis: its tick labels (and the room they take).

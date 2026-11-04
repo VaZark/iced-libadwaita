@@ -4,8 +4,8 @@
 //! [`use-focus-within`](https://mantine.dev/hooks/use-focus-within/): pure, with no widgets.
 //!
 //! A scope has `total` focusable widgets, numbered in tree order, and at most one of them is
-//! focused (`Some(index)`); the widgets ([`widget::FocusScope`](crate::widget::FocusScope),
-//! [`widget::focus_return`](crate::widget::focus_return)) read and set that index.
+//! focused (`Some(index)`); the widgets ([`binds::FocusScope`](crate::binds::FocusScope),
+//! [`binds::focus_return`](crate::binds::focus_return)) read and set that index.
 //!
 //! * **Trap** ([`trap_step`], [`initial`]): Tab and Shift+Tab move focus through the scope and
 //!   wrap at its ends instead of leaving it; when the scope appears, [`initial`] says what takes

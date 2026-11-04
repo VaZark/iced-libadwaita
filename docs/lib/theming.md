@@ -52,7 +52,7 @@ Theme::light().with_transparency(0.4)    // [appearance] transparency=0.4
 - Popovers and dialogs scale by `1 - t/2`, so their text stays legible.
 - Foregrounds, accents and hairlines are not changed.
 - Tints derived from a surface (hover, press, `color::lighten`, `darken`, `tint`) keep its alpha. A translucent surface stays translucent in every state.
-- The window must be transparent. Client-side windows are. `window::settings()` makes a server-side one transparent when `transparency` is above 0.
+- The window must be transparent. Client-side windows are. `windows::settings()` makes a server-side one transparent when `transparency` is above 0.
 
 ## Tint
 

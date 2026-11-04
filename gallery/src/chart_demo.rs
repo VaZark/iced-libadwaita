@@ -2,7 +2,9 @@
 
 use iced_adaptive_design as iad;
 
-use iad::widget::{BubblePoint, BubbleSeries, Sankey, Series, TreeValue};
+use iad::primitives::chart::Series;
+use iad::primitives::chart::hierarchy::Node as TreeValue;
+use iad::widgets::{BubblePoint, BubbleSeries, Sankey};
 
 pub const MONTHS: [&str; 6] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
 

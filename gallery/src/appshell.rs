@@ -28,9 +28,10 @@
 //! `APPSHELL_DRAWER=1`, `APPSHELL_EDGE=right|bottom`, `APPSHELL_NAVBAR=0`.
 
 use iad::Icon;
-use iad::style;
-use iad::transition::{Budgets, Command, Event, Outcome};
-use iad::widget::{self as w, typography as ty};
+use iad::components::typography as ty;
+use iad::layouts::transition::{Budgets, Command, Event, Outcome};
+use iad::styles as style;
+use iad::{components as cmp, layouts as lay, widgets as w};
 use iced::widget::{column, container, row, scrollable, text};
 use iced::{Length, Subscription, Task};
 use iced_adaptive_design as iad;
@@ -175,7 +176,7 @@ pub enum Message {
     Back,
     MobileSidebar(w::CollapsedSidebar),
     /// Window chrome with client-side decorations; the parent app performs it on this window.
-    Window(iad::window::Action),
+    Window(iad::windows::Action),
     /// The window's maximized state, to draw the frame (the gallery queries it on resize).
     Maximized(bool),
     // Manual triggers owned by the app.
@@ -459,8 +460,8 @@ impl AppShell {
     // both ride the content area's edges as the panes slide in and out.
 
     /// The window's decorations, for the part of it that touches `edges`.
-    fn chrome(&self, edges: Touches) -> iad::window::Chrome {
-        let chrome = iad::window::Chrome::new(iad::window::State {
+    fn chrome(&self, edges: Touches) -> iad::windows::Chrome {
+        let chrome = iad::windows::Chrome::new(iad::windows::State {
             maximized: self.maximized,
             fullscreen: false,
         })
@@ -510,10 +511,10 @@ impl AppShell {
         // window.
         let mut bar = self.bar(edges).title_widget(self.readout());
         if let Some((icon, m)) = start {
-            bar = bar.pack_start(w::icon_button(icon).on_press(m));
+            bar = bar.pack_start(cmp::icon_button(icon).on_press(m));
         }
         if let Some(m) = end {
-            bar = bar.pack_end(w::icon_button(Icon::Settings).on_press(m));
+            bar = bar.pack_end(cmp::icon_button(Icon::Settings).on_press(m));
         }
         bar.into()
     }
@@ -564,7 +565,7 @@ impl AppShell {
     fn tab_bar(&self, edges: Touches) -> Element<'_> {
         // `flat_button` has a minimum height, so the icon over the label grows it.
         let tabs = Page::ALL.map(|p| {
-            w::flat_button(
+            cmp::flat_button(
                 column![p.icon().view(16.0), ty::caption(p.label())]
                     .spacing(2)
                     .align_x(iced::Alignment::Center)
@@ -646,20 +647,20 @@ impl AppShell {
     /// or a sheet over it from the bottom.
     fn with_drawer<'a>(&'a self, layout: Shell, content: Element<'a>) -> Element<'a> {
         match self.edge(layout) {
-            Edge::Right => w::adaptive_split(
+            Edge::Right => lay::adaptive_split(
                 self.drawer_pane(),
                 content,
                 self.drawer_open,
                 DRAWER_WIDTH,
                 DRAWER_WIDTH,
             )
-            .side(w::Side::Right)
+            .side(iad::layouts::anchor::Side::Right)
             .into(),
-            Edge::Bottom => w::Dock::new(content, self.drawer_sheet())
+            Edge::Bottom => lay::Dock::new(content, self.drawer_sheet())
                 .open(self.drawer_open)
-                .side(w::Side::Bottom)
-                .mode(w::DockMode::Overlay)
-                .scope(w::DockScope::Window)
+                .side(iad::layouts::anchor::Side::Bottom)
+                .mode(lay::DockMode::Overlay)
+                .scope(lay::DockScope::Window)
                 .window_radius(
                     self.chrome(Touches {
                         left: true,
@@ -680,17 +681,17 @@ impl AppShell {
             .adaptive
             .allowed_at(&Breakpoints::current(), self.width);
         let pin = |s: Shell| {
-            w::ToggleItem::new(Trigger::Pinned(s), s.to_string()).disabled(!allowed.contains(&&s))
+            cmp::ToggleItem::new(Trigger::Pinned(s), s.to_string()).disabled(!allowed.contains(&&s))
         };
         let layout_items = vec![
-            w::ToggleItem::new(Trigger::Breakpoints, "Auto"),
+            cmp::ToggleItem::new(Trigger::Breakpoints, "Auto"),
             pin(Shell::Mobile),
             pin(Shell::Tablet),
             pin(Shell::Desktop),
         ];
         let hyst_items = vec![
-            w::ToggleItem::new(Hyst::Pixels, "16 px"),
-            w::ToggleItem::new(Hyst::Delay, "200 ms"),
+            cmp::ToggleItem::new(Hyst::Pixels, "16 px"),
+            cmp::ToggleItem::new(Hyst::Delay, "200 ms"),
         ];
         let log = self.log.iter().fold(column![].spacing(2), |c, l| {
             c.push(text(l.clone()).size(12).font(iced::Font::MONOSPACE))
@@ -713,7 +714,7 @@ impl AppShell {
                         .collect::<Vec<_>>()
                         .join(", ")
                 ))
-                .push(w::action_row("Layout").suffix(w::toggle_group(
+                .push(w::action_row("Layout").suffix(cmp::toggle_group(
                     layout_items,
                     Some(self.trigger()),
                     Message::Trigger
@@ -721,10 +722,10 @@ impl AppShell {
                 .push(
                     w::action_row("Mobile sidebar")
                         .subtitle("[navigation] mobile-sidebar, on the Mobile layout")
-                        .suffix(w::toggle_group(
+                        .suffix(cmp::toggle_group(
                             vec![
-                                w::ToggleItem::new(w::CollapsedSidebar::Drawer, "Drawer"),
-                                w::ToggleItem::new(w::CollapsedSidebar::ParentPage, "Parent page"),
+                                cmp::ToggleItem::new(w::CollapsedSidebar::Drawer, "Drawer"),
+                                cmp::ToggleItem::new(w::CollapsedSidebar::ParentPage, "Parent page"),
                             ],
                             Some(self.mobile_sidebar),
                             Message::MobileSidebar,
@@ -733,11 +734,11 @@ impl AppShell {
                 .push(
                     w::action_row("Drawer edge")
                         .subtitle("Where the drawer pops up from")
-                        .suffix(w::toggle_group(
+                        .suffix(cmp::toggle_group(
                             vec![
-                                w::ToggleItem::new(None, "Auto"),
-                                w::ToggleItem::new(Some(Edge::Right), "Right"),
-                                w::ToggleItem::new(Some(Edge::Bottom), "Bottom"),
+                                cmp::ToggleItem::new(None, "Auto"),
+                                cmp::ToggleItem::new(Some(Edge::Right), "Right"),
+                                cmp::ToggleItem::new(Some(Edge::Bottom), "Bottom"),
                             ],
                             Some(self.drawer_edge),
                             Message::DrawerEdge,
@@ -746,7 +747,7 @@ impl AppShell {
                 .push(
                     w::action_row("Hysteresis")
                         .subtitle("Resize near a threshold")
-                        .suffix(w::toggle_group(
+                        .suffix(cmp::toggle_group(
                             hyst_items,
                             Some(self.hyst),
                             Message::Hysteresis
@@ -844,7 +845,7 @@ impl AppShell {
             Bottom::Tabs,
             edges,
         );
-        w::adaptive_split(
+        lay::adaptive_split(
             self.navbar(),
             self.with_drawer(Shell::Mobile, content),
             false,
@@ -890,7 +891,7 @@ impl AppShell {
             none,
         );
         column![
-            w::push_stack(
+            lay::push_stack(
                 parent,
                 self.with_drawer(Shell::Mobile, content),
                 self.show_content
@@ -916,7 +917,7 @@ impl AppShell {
             Bottom::None,
             edges,
         );
-        w::adaptive_split(
+        lay::adaptive_split(
             self.navbar(),
             self.with_drawer(Shell::Tablet, content),
             self.navbar_open,
@@ -941,7 +942,7 @@ impl AppShell {
             Bottom::None,
             edges,
         );
-        w::adaptive_split(
+        lay::adaptive_split(
             self.navbar(),
             self.with_drawer(Shell::Desktop, content),
             self.navbar_open,
@@ -1006,7 +1007,7 @@ enum Bottom {
 
 /// The milliseconds a budget number input spells (0 to 600), `None` for anything else.
 fn budget(text: &str) -> Option<f32> {
-    let rule = w::Numeric::integer().min(0).max(600);
+    let rule = iad::primitives::numeric::Numeric::integer().min(0).max(600);
     rule.validate(text).is_ok().then_some(())?;
     rule.parse(text).map(|d| d.units as f32)
 }

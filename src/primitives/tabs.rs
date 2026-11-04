@@ -1,6 +1,6 @@
 //! Headless logic of a row of exclusive tabs: which can be activated, and where the arrow keys
-//! go. After Radix UI's Tabs; shared by [`Tabs`](crate::widget::Tabs) and the segmented control
-//! behind [`toggle_group`](crate::widget::toggle_group), which are the same behavior with a
+//! go. After Radix UI's Tabs; shared by [`Tabs`](crate::widgets::Tabs) and the segmented control
+//! behind [`toggle_group`](crate::components::toggle_group), which are the same behavior with a
 //! different look.
 //!
 //! Controlled like every primitive: the app owns which tab is active. A [`TabList`] only knows

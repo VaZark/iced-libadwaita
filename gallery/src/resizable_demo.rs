@@ -14,8 +14,12 @@ use iced_adaptive_design as iad;
 
 use crate::appshell::{self, AppShell};
 use iad::breakpoints::{Breakpoints, WidthClass};
+use iad::components::typography as ty;
+use iad::metas::MetaComponent;
+use iad::primitives::When;
 use iad::primitives::resize::{Constraints, Grip};
-use iad::widget::{self as w, MetaComponent, Resizable, When, typography as ty};
+use iad::widgets as w;
+use iad::widgets::Resizable;
 use iad::{Element, Metrics, Role};
 use iced::widget::{column, container, row};
 use iced::{Length, Size, Subscription, Task};
@@ -99,7 +103,7 @@ fn readout<'a>(size: Size) -> Element<'a, Msg> {
         size.height,
         WidthClass::of(size.width)
     ))
-    .style(iad::style::text::dim)
+    .style(iad::styles::text::dim)
     .into()
 }
 
@@ -112,7 +116,7 @@ fn group<'a>(
 ) -> Element<'a, Msg> {
     column![
         ty::heading(t),
-        ty::body(d).style(iad::style::text::dim),
+        ty::body(d).style(iad::styles::text::dim),
         readout(size),
         body,
     ]
@@ -151,7 +155,7 @@ impl State {
             container(
                 column![
                     ty::heading(title),
-                    ty::caption(note).style(iad::style::text::dim)
+                    ty::caption(note).style(iad::styles::text::dim)
                 ]
                 .spacing(4),
             )

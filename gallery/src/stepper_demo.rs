@@ -10,11 +10,14 @@
 use iced_adaptive_design as iad;
 
 use iad::Icon;
-use iad::widget::{
-    self as w, Stepper, StepperIconPosition as Pos, StepperOrientation as Orient, StepperSize,
-    StepperState, StepperStatus, StepperStep as S, typography as ty,
+use iad::components::typography as ty;
+use iad::primitives::stepper::{Status as StepperStatus, StepperState};
+use iad::widgets::{
+    Stepper, StepperIconPosition as Pos, StepperOrientation as Orient, StepperSize,
+    StepperStep as S,
 };
 use iad::{Element, Metrics};
+use iad::{components as cmp, widgets as w};
 use iced::Length;
 use iced::widget::{column, container, row};
 
@@ -111,16 +114,17 @@ impl State {
         };
         // Back / Next under a stepper, disabled at the ends.
         let nav = |which: Which, s: &StepperState| -> Element<'static, Msg> {
-            let back = w::raised_button(ty::label("Back"))
+            let back = cmp::raised_button(ty::label("Back"))
                 .on_press_maybe((!s.is_first()).then_some(Msg::Back(which)));
-            let next = w::suggested_button(ty::label(if s.is_last() { "Finish" } else { "Next" }))
-                .on_press_maybe((!s.is_completed()).then_some(Msg::Next(which)));
-            let reset = w::raised_button(ty::label("Reset"))
+            let next =
+                cmp::suggested_button(ty::label(if s.is_last() { "Finish" } else { "Next" }))
+                    .on_press_maybe((!s.is_completed()).then_some(Msg::Next(which)));
+            let reset = cmp::raised_button(ty::label("Reset"))
                 .on_press_maybe(s.is_completed().then_some(Msg::Go(which, 0)));
             row![back, next, reset].spacing(m.space_s).into()
         };
         let body = |t: &'static str| -> Element<'static, Msg> {
-            ty::body(t).style(iad::style::text::dim).into()
+            ty::body(t).style(iad::styles::text::dim).into()
         };
         let done = || -> Element<'static, Msg> { ty::heading("All steps completed").into() };
         let wrap =
@@ -304,7 +308,7 @@ impl State {
             .step(S::new("Account").description("Who you are"))
             .step(S::new("Profile").description("What you like").content(|| {
                 ty::body("Content stays on the label's side.")
-                    .style(iad::style::text::dim)
+                    .style(iad::styles::text::dim)
                     .into()
             }))
             .step(S::new("Review"));

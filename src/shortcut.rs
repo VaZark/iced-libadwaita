@@ -2,10 +2,10 @@
 //!
 //! The toolkit handles shortcuts by default, with no subscription or `update` plumbing:
 //!
-//! * a [`MenuButton`](crate::widget::MenuButton) registers its menu's accelerators itself, so
+//! * a [`MenuButton`](crate::widgets::MenuButton) registers its menu's accelerators itself, so
 //!   the shortcuts a menu shows work while the button is in the view;
 //! * [`Standard`] lists GNOME's usual ones (quit, fullscreen, help, preferences, shortcuts);
-//! * [`Shortcuts::scope`] (or `widget::shortcuts`) listens for any others around any content.
+//! * [`Shortcuts::scope`] (or `binds::shortcuts`) listens for any others around any content.
 //!
 //! The accelerator labels shown in menus (`MenuItem::accel("Ctrl+,")`) and in shortcut
 //! dialogs are only text. This module makes them work: [`Accel`] parses the same strings,
@@ -26,7 +26,7 @@
 //! Accelerators are written like GNOME shows them: modifiers joined with `+`, then the key:
 //! `Ctrl+,`, `Ctrl+Shift+Z`, `Alt+Left`, `F1`, `Esc`.
 
-use crate::widget::Menu;
+use crate::widgets::Menu;
 use iced::Subscription;
 use iced::keyboard::{self, Key, Modifiers, key::Named};
 
@@ -368,7 +368,7 @@ impl<M: Clone> Shortcuts<M> {
     where
         M: 'a,
     {
-        crate::widget::shortcuts(content, self)
+        crate::binds::shortcuts(content, self)
     }
 
     /// The message bound to this key press, if any. Always `None` when shortcuts are turned off

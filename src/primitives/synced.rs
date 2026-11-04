@@ -2,8 +2,6 @@
 //! scroll. Lyrics are the first use; subtitles, a transcript or a changelog timeline are the same
 //! thing. Pure: the application owns the position and asks these functions what it means.
 
-use iced::widget::scrollable::RelativeOffset;
-
 /// One line, shown from `at` until the next line starts.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Line {
@@ -28,16 +26,13 @@ pub fn current(lines: &[Line], pos: f32) -> Option<usize> {
 }
 
 /// The scroll offset that brings line `current` into view in a list of `total` lines, as a
-/// fraction of the scrollable range. With no current line it is the top.
-pub fn scroll_to(current: Option<usize>, total: usize) -> RelativeOffset {
+/// fraction (`0..=1`) of the scrollable range, vertically. With no current line it is the top.
+pub fn scroll_to(current: Option<usize>, total: usize) -> f32 {
     let y = match current {
         Some(i) if total > 1 => i as f32 / (total - 1) as f32,
         _ => 0.0,
     };
-    RelativeOffset {
-        x: 0.0,
-        y: y.clamp(0.0, 1.0),
-    }
+    y.clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
@@ -64,10 +59,10 @@ mod tests {
 
     #[test]
     fn scrolling_follows_the_line() {
-        assert_eq!(scroll_to(None, 10).y, 0.0);
-        assert_eq!(scroll_to(Some(0), 10).y, 0.0);
-        assert_eq!(scroll_to(Some(9), 10).y, 1.0);
-        assert_eq!(scroll_to(Some(3), 1).y, 0.0);
-        assert!((scroll_to(Some(1), 3).y - 0.5).abs() < 1e-6);
+        assert_eq!(scroll_to(None, 10), 0.0);
+        assert_eq!(scroll_to(Some(0), 10), 0.0);
+        assert_eq!(scroll_to(Some(9), 10), 1.0);
+        assert_eq!(scroll_to(Some(3), 1), 0.0);
+        assert!((scroll_to(Some(1), 3) - 0.5).abs() < 1e-6);
     }
 }

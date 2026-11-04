@@ -496,7 +496,7 @@ mod tests {
 
     #[test]
     fn every_trigger_is_a_motion_property() {
-        for t in crate::animation::Trigger::ALL {
+        for t in crate::layouts::animation::Trigger::ALL {
             assert!(
                 find("motion", t.key()).is_some(),
                 "motion trigger {} has no registry entry",

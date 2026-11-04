@@ -59,7 +59,7 @@ pub fn compile(xml: &str) -> Result<String, Error> {
         root
     };
     let body = element(node)?;
-    Ok(format!("// Generated; do not edit.\npub fn view<'a>() -> iced_adaptive_design::widget::Element<'a, crate::Message> {{\n    {body}\n}}\n"))
+    Ok(format!("// Generated; do not edit.\npub fn view<'a>() -> iced_adaptive_design::Element<'a, crate::Message> {{\n    {body}\n}}\n"))
 }
 
 fn invalid(message: impl Into<String>) -> Error {
@@ -135,13 +135,13 @@ fn element(node: roxmltree::Node<'_, '_>) -> Result<String, Error> {
             .ok_or_else(|| invalid(format!("<{tag}>: missing required attribute '{key}'")))
     };
     let mut expression = match tag {
-        "preferences_page" => "iced_adaptive_design::widget::preferences_page()".to_owned(),
-        "preferences_group" => "iced_adaptive_design::widget::preferences_group()".to_owned(),
+        "preferences_page" => "iced_adaptive_design::widgets::preferences_page()".to_owned(),
+        "preferences_group" => "iced_adaptive_design::widgets::preferences_group()".to_owned(),
         "action_row" => format!(
-            "iced_adaptive_design::widget::ActionRow::new({})",
+            "iced_adaptive_design::widgets::ActionRow::new({})",
             quote(required("title")?)
         ),
-        "header_bar" => "iced_adaptive_design::widget::header_bar()".to_owned(),
+        "header_bar" => "iced_adaptive_design::widgets::header_bar()".to_owned(),
         "toolbar_view" => {
             let (i, _) = children
                 .iter()
@@ -149,7 +149,7 @@ fn element(node: roxmltree::Node<'_, '_>) -> Result<String, Error> {
                 .find(|(_, (slot, _))| slot == "content")
                 .ok_or_else(|| invalid("<toolbar_view>: missing content child"))?;
             let content = &children[i].1;
-            format!("iced_adaptive_design::widget::toolbar_view({content})")
+            format!("iced_adaptive_design::widgets::toolbar_view({content})")
         }
         "page" => {
             let (i, _) = children
@@ -157,7 +157,7 @@ fn element(node: roxmltree::Node<'_, '_>) -> Result<String, Error> {
                 .enumerate()
                 .find(|(_, (slot, _))| slot == "content")
                 .ok_or_else(|| invalid("<page>: missing content child"))?;
-            format!("iced_adaptive_design::widget::page({})", children[i].1)
+            format!("iced_adaptive_design::widgets::page({})", children[i].1)
         }
         _ => unreachable!(),
     };

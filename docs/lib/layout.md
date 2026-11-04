@@ -21,7 +21,7 @@ flowchart TD
 - Show the sidebar as `SidebarStyle::Cards` in `ParentPage` (icon, title, description, chevron). Use `SidebarStyle::List` beside the content or in a drawer.
 - Crossing a breakpoint slides the sidebar out of or into the layout on the drawer's spring. The content gives way. It is not covered. (`Trigger::Layout`, `[motion] layout`.) In `ParentPage` the change is not animated.
 - Every threshold is configurable: `[breakpoints]`, `[navigation]`. The constants are fallbacks.
-- Mobile mode: `window::is_mobile(width)`, below 576 px (Bootstrap `sm`). Hide window controls. Use full-page menus.
+- Mobile mode: `breakpoints::is_mobile(width)`, below 576 px (Bootstrap `sm`). Hide window controls. Use full-page menus.
 - Width classes (`breakpoints::WidthClass`): 576, 768, 992, 1200, 1400.
 
 ### How it is built
@@ -29,7 +29,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     NSV["NavigationSplitView"] --> AS["AdaptiveSplit"]
-    AS --> G["primitives::dock: arrange(bounds, side, extent, progress, Flow)"]
+    AS --> G["layouts::dock::rule: arrange(bounds, side, extent, progress, Flow)"]
     Dock["Dock (Push)"] --> AS
     G --> Push["Flow::Push: sidebar in flow, content shrinks"]
     G --> Over["Flow::Overlay: drawer over the content"]

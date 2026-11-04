@@ -5,10 +5,13 @@
 
 use iced_adaptive_design as iad;
 
+use iad::components::typography as ty;
 use iad::primitives::form::{FormSpec, FormState, Outcome};
-use iad::widget::validation::{chain, required};
-use iad::widget::{self as w, Field, FieldLayout, Validity, typography as ty};
+use iad::primitives::validation::Validity;
+use iad::primitives::validation::{chain, required};
+use iad::widgets::{Field, FieldLayout};
 use iad::{Element, Metrics};
+use iad::{components as cmp, widgets as w};
 use iced::Length;
 use iced::widget::{column, container, row};
 
@@ -19,7 +22,7 @@ const FRUITS5: [&str; 5] = ["Apple", "Banana", "Cherry", "Damson", "Elderberry"]
 pub enum Msg {
     Name(String),
     Password(String),
-    Bio(w::TextAction),
+    Bio(iced::widget::text_editor::Action),
     Fruit(&'static str),
     Multi(Vec<&'static str>),
     Date(String),
@@ -35,7 +38,7 @@ pub enum Msg {
 pub struct State {
     name: String,
     password: String,
-    bio: w::TextContent,
+    bio: iced::widget::text_editor::Content,
     fruit: Option<&'static str>,
     multi: Vec<&'static str>,
     date: String,
@@ -61,7 +64,7 @@ impl Default for State {
         Self {
             name: String::new(),
             password: String::new(),
-            bio: w::TextContent::new(),
+            bio: iced::widget::text_editor::Content::new(),
             fruit: None,
             multi: vec!["Apple"],
             date: String::from("2026-11-02"),
@@ -199,7 +202,7 @@ impl State {
                 .fruit
                 .map_or(Validity::error("Pick a fruit."), |_| Validity::Ok),
             "multi" if self.multi.len() < 2 => Validity::error("Pick at least two."),
-            "date" => w::validate_date(&self.date, None, None),
+            "date" => iad::primitives::date::validate(&self.date, None, None),
             "agree" if !self.agree => Validity::error("You must agree to continue."),
             "plan" => self
                 .plan
@@ -232,7 +235,7 @@ impl State {
             f(
                 "Name",
                 "name",
-                w::entry("Ada", &self.name)
+                cmp::entry("Ada", &self.name)
                     .on_input(Msg::Name)
                     .metrics(m)
                     .into()
@@ -242,7 +245,7 @@ impl State {
             f(
                 "Password",
                 "password",
-                w::password_entry("Password", &self.password)
+                cmp::password_entry("Password", &self.password)
                     .on_input(Msg::Password)
                     .metrics(m)
                     .into()
@@ -251,7 +254,7 @@ impl State {
             f(
                 "Bio",
                 "bio",
-                w::text_view(&self.bio)
+                cmp::text_view(&self.bio)
                     .on_action(Msg::Bio)
                     .placeholder("About you")
                     .into()
@@ -269,7 +272,7 @@ impl State {
                 w::MultiSelect::selecting(
                     &FRUITS5,
                     &self.multi,
-                    w::Selection::Multiple,
+                    iad::primitives::Selection::Multiple,
                     Msg::Multi
                 )
                 .into()
@@ -278,14 +281,18 @@ impl State {
             f(
                 "Birthday",
                 "date",
-                w::DateInput::new(&self.date, w::Date::new(2026, 11, 1).unwrap(), Msg::Date)
-                    .revealed(self.form.revealed(&spec, &"date"))
-                    .into()
+                w::DateInput::new(
+                    &self.date,
+                    iad::primitives::date::Date::new(2026, 11, 1).unwrap(),
+                    Msg::Date
+                )
+                .revealed(self.form.revealed(&spec, &"date"))
+                .into()
             ),
             f(
                 "Terms",
                 "agree",
-                w::check_button("I agree to the terms", self.agree)
+                cmp::check_button("I agree to the terms", self.agree)
                     .on_toggle(Msg::Agree)
                     .into()
             )
@@ -295,8 +302,8 @@ impl State {
                 "Plan",
                 "plan",
                 row![
-                    w::radio_button("Free", 0u8, self.plan, Msg::Plan),
-                    w::radio_button("Pro", 1u8, self.plan, Msg::Plan),
+                    cmp::radio_button("Free", 0u8, self.plan, Msg::Plan),
+                    cmp::radio_button("Pro", 1u8, self.plan, Msg::Plan),
                 ]
                 .spacing(sp)
                 .into()
@@ -306,19 +313,19 @@ impl State {
             f(
                 "Volume",
                 "volume",
-                w::scale(0.0..=100.0, self.volume, Msg::Volume).into()
+                cmp::scale(0.0..=100.0, self.volume, Msg::Volume).into()
             )
             .inline(true),
             Field::new(
                 "Notifications",
-                w::switch(self.notify).on_toggle(Msg::Notify)
+                cmp::switch(self.notify).on_toggle(Msg::Notify)
             )
             .metrics(m)
             .layout(FieldLayout::Row)
             .description("Row layout: label at the start, control at the end."),
             row![
-                w::suggested_button(ty::label("Submit")).on_press(Msg::Submit),
-                w::flat_button(ty::label("Reset")).on_press(Msg::Reset),
+                cmp::suggested_button(ty::label("Submit")).on_press(Msg::Submit),
+                cmp::flat_button(ty::label("Reset")).on_press(Msg::Reset),
             ]
             .spacing(sp),
         ]
@@ -330,7 +337,7 @@ impl State {
         let cell = |label: &'static str, value: &'static str| {
             Field::new(
                 label,
-                w::entry("", value).on_input(|_| Msg::Noop).metrics(m),
+                cmp::entry("", value).on_input(|_| Msg::Noop).metrics(m),
             )
             .metrics(m)
         };
@@ -350,7 +357,7 @@ impl State {
             cell("Invalid after submit", "nope")
                 .validity(bad.clone())
                 .submitted(true),
-            Field::new("Disabled", w::entry("", "read only").metrics(m))
+            Field::new("Disabled", cmp::entry("", "read only").metrics(m))
                 .disabled(true)
                 .required(true)
                 .validity(bad)
@@ -359,7 +366,7 @@ impl State {
                 .metrics(m),
             Field::new(
                 "Row layout",
-                w::entry("", "nope").on_input(|_| Msg::Noop).metrics(m)
+                cmp::entry("", "nope").on_input(|_| Msg::Noop).metrics(m)
             )
             .layout(FieldLayout::Row)
             .validity(Validity::error("Row layout shows the message below."))

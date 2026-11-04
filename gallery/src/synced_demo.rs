@@ -3,8 +3,11 @@
 
 use iced_adaptive_design as iad;
 
-use iad::widget::{self as w, PreferencesGroup, SyncedLine, SyncedText, synced};
+use iad::primitives::synced;
+use iad::primitives::synced::Line as SyncedLine;
+use iad::widgets::{PreferencesGroup, SyncedText};
 use iad::{Element, Icon, Metrics};
+use iad::{components as cmp, widgets as w};
 use iced::widget::{Id, container, row, text};
 use iced::{Length, Task};
 
@@ -67,9 +70,9 @@ impl State {
             container(SyncedText::new(Id::new(LIST), &self.lines, Msg::Seek).position(self.pos))
                 .height(Length::Fixed(260.0));
         let controls = row![
-            w::flat_button(Icon::GoPrevious.view(m.icon_size)).on_press(Msg::Step(-STEP)),
+            cmp::flat_button(Icon::GoPrevious.view(m.icon_size)).on_press(Msg::Step(-STEP)),
             text(format!("{:.0} s", self.pos)),
-            w::flat_button(Icon::GoNext.view(m.icon_size)).on_press(Msg::Step(STEP)),
+            cmp::flat_button(Icon::GoNext.view(m.icon_size)).on_press(Msg::Step(STEP)),
         ]
         .spacing(m.space_m)
         .align_y(iced::Alignment::Center);

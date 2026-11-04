@@ -14,15 +14,16 @@
 
 use iced_adaptive_design as iad;
 
+use iad::components::typography as ty;
 use iad::primitives::infinite::{Infinite, Page, Request};
 use iad::primitives::lookup::RequestId;
 use iad::primitives::pagination::Pagination as Paging;
 use iad::primitives::sorting::{Direction, SortState, cmp_f64, cmp_natural};
-use iad::widget::{
-    self as w, Column, InfiniteList, LoadTrigger, PageSize, Pagination, PaginationSize,
-    ResponsiveTable, typography as ty,
+use iad::widgets::{
+    Column, InfiniteList, LoadTrigger, PageSize, Pagination, PaginationSize, ResponsiveTable,
 };
 use iad::{Element, Metrics};
+use iad::{components as cmp, widgets as w};
 use iced::widget::{column, container, row, space};
 use iced::{Length, Task};
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
@@ -163,7 +164,7 @@ fn bare<'a>(
 ) -> Element<'a, Msg> {
     column![
         ty::heading(t),
-        ty::body(d).style(iad::style::text::dim),
+        ty::body(d).style(iad::styles::text::dim),
         body
     ]
     .spacing(m.space_s)
@@ -348,7 +349,7 @@ impl State {
         if show(&["pagination"]) {
             let p = |total: usize, page: usize| Paging::new(total * 10, 10).at(page);
             let line = |label: &'static str, e: Element<'static, Msg>| -> Element<'static, Msg> {
-                column![ty::caption(label).style(iad::style::text::dim), e]
+                column![ty::caption(label).style(iad::styles::text::dim), e]
                     .spacing(m.space_s)
                     .into()
             };
@@ -418,7 +419,7 @@ impl State {
                     s.applied,
                     s.discarded
                 ))
-                .style(iad::style::text::dim)
+                .style(iad::styles::text::dim)
                 .into()
             };
             if show(&["infinite", "infinite-error", "infinite-end"]) {
@@ -427,10 +428,10 @@ impl State {
                     .on_retry(Msg::Retry(Which::Scroll))
                     .height(Length::Fixed(260.0));
                 let order = row![
-                    w::toggle_group(
+                    cmp::toggle_group(
                         vec![
-                            w::ToggleItem::new(false, "Oldest first"),
-                            w::ToggleItem::new(true, "Newest first"),
+                            cmp::ToggleItem::new(false, "Oldest first"),
+                            cmp::ToggleItem::new(true, "Newest first"),
                         ],
                         Some(self.newest),
                         Msg::Newest,

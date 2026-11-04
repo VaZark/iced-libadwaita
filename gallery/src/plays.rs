@@ -632,7 +632,7 @@ pub fn build<'a>(
     p: &'a crate::playground::Playground,
     m: Metrics,
 ) -> Option<(Element<'a>, String)> {
-    let lbl = |s: &str| -> Element<'a> { w::typography::label(s.to_string()).into() };
+    let lbl = |s: &str| -> Element<'a> { cmp::typography::label(s.to_string()).into() };
     let noop = Message::Noop;
     Some(match d {
         Detail::Button => {
@@ -640,12 +640,14 @@ pub fn build<'a>(
             let label = lbl(p.text("label"));
             let press = (!p.bool("disabled")).then_some(Message::Noop);
             let button: Element<'a> = match style {
-                0 => w::raised_button(label).on_press_maybe(press).into(),
-                1 => w::flat_button(label).on_press_maybe(press).into(),
-                2 => w::suggested_button(label).on_press_maybe(press).into(),
-                3 => w::destructive_button(label).on_press_maybe(press).into(),
-                4 => w::pill_button(label).on_press_maybe(press).into(),
-                _ => w::suggested_pill_button(label).on_press_maybe(press).into(),
+                0 => cmp::raised_button(label).on_press_maybe(press).into(),
+                1 => cmp::flat_button(label).on_press_maybe(press).into(),
+                2 => cmp::suggested_button(label).on_press_maybe(press).into(),
+                3 => cmp::destructive_button(label).on_press_maybe(press).into(),
+                4 => cmp::pill_button(label).on_press_maybe(press).into(),
+                _ => cmp::suggested_pill_button(label)
+                    .on_press_maybe(press)
+                    .into(),
             };
             let ctor = [
                 "raised_button",
@@ -667,22 +669,22 @@ pub fn build<'a>(
                 Some(Icon::ListAdd),
                 Some(Icon::Search),
             ][p.choice("icon")];
-            let mut content = w::ButtonContent::new(p.text("label").to_string()).metrics(m);
+            let mut content = cmp::ButtonContent::new(p.text("label").to_string()).metrics(m);
             if let Some(i) = icon {
                 content = content.icon(i);
             }
             let press = (!p.bool("disabled")).then_some(Message::Noop);
             let button: Element<'a> = if p.choice("style") == 2 {
-                w::suggested_circular_button(icon.unwrap_or(Icon::Play).view(m.icon_size))
+                cmp::suggested_circular_button(icon.unwrap_or(Icon::Play).view(m.icon_size))
                     .size(p.number("circ_size"))
                     .on_press_maybe(press)
                     .into()
             } else if p.choice("style") == 1 {
-                w::suggested_button(Element::from(content))
+                cmp::suggested_button(Element::from(content))
                     .on_press_maybe(press)
                     .into()
             } else {
-                w::raised_button(Element::from(content))
+                cmp::raised_button(Element::from(content))
                     .on_press_maybe(press)
                     .into()
             };
@@ -710,15 +712,16 @@ pub fn build<'a>(
                 ("Three", Icon::Settings),
             ];
             let icons = p.bool("icons");
-            let items: Vec<w::ToggleItem<'a, usize, Message>> = names
+            let items: Vec<cmp::ToggleItem<'a, usize, Message>> = names
                 .iter()
                 .enumerate()
                 .map(|(i, (n, ic))| {
-                    let it = w::ToggleItem::new(i, *n);
+                    let it = cmp::ToggleItem::new(i, *n);
                     if icons { it.icon(*ic) } else { it }
                 })
                 .collect();
-            let mut tg = w::toggle_group(items, Some(p.choice("selected")), on_pick(d, "selected"));
+            let mut tg =
+                cmp::toggle_group(items, Some(p.choice("selected")), on_pick(d, "selected"));
             if p.bool("fill") {
                 tg = tg.width(Length::Fill);
             }
@@ -732,7 +735,7 @@ pub fn build<'a>(
             (Element::from(tg), code)
         }
         Detail::LinkButton => {
-            let b = w::link_button(p.text("label").to_string());
+            let b = cmp::link_button(p.text("label").to_string());
             let b: Element<'a> = b
                 .on_press_maybe((!p.bool("disabled")).then_some(noop))
                 .into();
@@ -744,19 +747,19 @@ pub fn build<'a>(
         Detail::TextInput => {
             let state = [
                 None,
-                Some(w::EntryState::Error),
-                Some(w::EntryState::Warning),
-                Some(w::EntryState::Success),
+                Some(cmp::EntryState::Error),
+                Some(cmp::EntryState::Warning),
+                Some(cmp::EntryState::Success),
             ][p.choice("state")];
             let value = p.text("value").to_string();
             let el: Element<'a> = if p.bool("password") {
-                let mut e = w::password_entry("Password", &value).metrics(m);
+                let mut e = cmp::password_entry("Password", &value).metrics(m);
                 if !p.bool("disabled") {
                     e = e.on_input(on_text(d, "value"));
                 }
                 e.into()
             } else {
-                let mut e = w::entry("Placeholder", &value).metrics(m);
+                let mut e = cmp::entry("Placeholder", &value).metrics(m);
                 if !p.bool("disabled") {
                     e = e.on_input(on_text(d, "value"));
                 }
@@ -794,7 +797,7 @@ pub fn build<'a>(
             (el, code)
         }
         Detail::Switch => {
-            let mut s = w::switch(p.bool("active"));
+            let mut s = cmp::switch(p.bool("active"));
             if !p.bool("disabled") {
                 s = s.on_toggle(on_bool(d, "active"));
             }
@@ -804,7 +807,7 @@ pub fn build<'a>(
             (s.into(), code)
         }
         Detail::CheckButton => {
-            let mut c = w::check_button(p.text("label").to_string(), p.bool("active"));
+            let mut c = cmp::check_button(p.text("label").to_string(), p.bool("active"));
             if !p.bool("disabled") {
                 c = c.on_toggle(on_bool(d, "active"));
             }
@@ -820,9 +823,9 @@ pub fn build<'a>(
             let sel = Some(p.choice("selected"));
             let mk = |i: usize, name: &str| -> Element<'a> {
                 if p.bool("disabled") {
-                    w::radio_button(name.to_string(), i, sel, |_| Message::Noop).into()
+                    cmp::radio_button(name.to_string(), i, sel, |_| Message::Noop).into()
                 } else {
-                    w::radio_button(name.to_string(), i, sel, on_pick(d, "selected")).into()
+                    cmp::radio_button(name.to_string(), i, sel, on_pick(d, "selected")).into()
                 }
             };
             let el =
@@ -834,7 +837,8 @@ pub fn build<'a>(
         }
         Detail::Scale => {
             let v = p.number("value");
-            let mut col = column![w::scale(0.0..=100.0, v, on_num(d, "value"))].spacing(m.space_s);
+            let mut col =
+                column![cmp::scale(0.0..=100.0, v, on_num(d, "value"))].spacing(m.space_s);
             if p.bool("readout") {
                 col = col.push(ty::dim_label(format!("value {v:.0}")));
             }
@@ -870,10 +874,10 @@ pub fn build<'a>(
                 r = r.subtitle("A secondary line");
             }
             if p.bool("prefix") {
-                r = r.prefix(w::avatar(40.0, p.text("title").to_string()));
+                r = r.prefix(cmp::avatar(40.0, p.text("title").to_string()));
             }
             if p.bool("suffix") {
-                r = r.suffix(w::raised_button(lbl("Action")).on_press(Message::Noop));
+                r = r.suffix(cmp::raised_button(lbl("Action")).on_press(Message::Noop));
             }
             if p.bool("chevron") {
                 r = r.chevron(true).on_activate(Message::ShowToast("Opened"));
@@ -922,7 +926,7 @@ pub fn build<'a>(
                 r = r.prefix(Icon::Home.view(m.icon_size));
             }
             if p.bool("suffix") {
-                r = r.suffix(w::Badge::count(p.number("count") as u32, 99));
+                r = r.suffix(cmp::Badge::count(p.number("count") as u32, 99));
             }
             // Untouched, the row keeps the toolkit's default (`[rows] expander-indent`).
             if p.changed("indent") {
@@ -1020,7 +1024,7 @@ pub fn build<'a>(
         Detail::Clamp => {
             let max = p.number("max");
             let el = w::clamp(
-                w::entry("Never wider than the maximum", "centered")
+                cmp::entry("Never wider than the maximum", "centered")
                     .on_input(|_| Message::Noop)
                     .metrics(m),
                 max,
@@ -1039,8 +1043,8 @@ pub fn build<'a>(
                 .compact(true)
                 .metrics(m);
             if p.bool("action") {
-                page =
-                    page.child(w::suggested_pill_button(lbl("Try Again")).on_press(Message::Noop));
+                page = page
+                    .child(cmp::suggested_pill_button(lbl("Try Again")).on_press(Message::Noop));
             }
             let code = Code::new("status_page()")
                 .add(true, &format!(".icon(Icon::{icon:?}.colored(64.0, dim))"))
@@ -1073,7 +1077,7 @@ pub fn build<'a>(
             ]
             .into_iter()
             .take(p.number("count") as usize)
-            .map(|t| w::tag(t, Role::Accent))
+            .map(|t| cmp::tag(t, Role::Accent))
             .collect();
             let code = Code::new(&format!("wrap_box(tags, {:.0})", p.number("spacing"))).done();
             (stage(w::wrap_box(tags, p.number("spacing"))), code)
@@ -1110,16 +1114,16 @@ pub fn build<'a>(
             // parent, the maximum width and the padding are all scaled, the proportions are real.
             const SCALE: f32 = 0.4;
             let sizes = [
-                w::ContainerSize::Xs,
-                w::ContainerSize::Sm,
-                w::ContainerSize::Md,
-                w::ContainerSize::Lg,
-                w::ContainerSize::Xl,
+                lay::ContainerSize::Xs,
+                lay::ContainerSize::Sm,
+                lay::ContainerSize::Md,
+                lay::ContainerSize::Lg,
+                lay::ContainerSize::Xl,
             ];
             let size = sizes
                 .get(p.choice("size"))
                 .copied()
-                .unwrap_or(w::ContainerSize::Px(p.number("custom")));
+                .unwrap_or(lay::ContainerSize::Px(p.number("custom")));
             let (fluid, pad, parent) = (p.bool("fluid"), p.number("padding"), p.number("parent"));
             let content_px = if fluid {
                 parent
@@ -1140,8 +1144,8 @@ pub fn build<'a>(
             .center_x(Length::Fill)
             .padding(m.space_m)
             .style(tint(0.6));
-            let inner = w::Container::new(content)
-                .size(w::ContainerSize::Px(size.width() * SCALE))
+            let inner = lay::Container::new(content)
+                .size(lay::ContainerSize::Px(size.width() * SCALE))
                 .fluid(fluid)
                 .padding(pad * SCALE);
             let parent_box = container(inner)
@@ -1187,7 +1191,13 @@ pub fn build<'a>(
                 crate::chart_demo::MONTHS,
                 crate::chart_demo::sales().into_iter().take(n),
             )
-            .curve([w::Curve::Linear, w::Curve::Step, w::Curve::Monotone][p.choice("curve")])
+            .curve(
+                [
+                    iad::primitives::chart::shape::Curve::Linear,
+                    iad::primitives::chart::shape::Curve::Step,
+                    iad::primitives::chart::shape::Curve::Monotone,
+                ][p.choice("curve")],
+            )
             .points(p.bool("points"))
             .legend(p.bool("legend"))
             .value_axis(p.bool("value_axis"))
@@ -1393,7 +1403,11 @@ pub fn build<'a>(
         Detail::ComboChart => {
             let (cats, series) = crate::chart_demo::quarters();
             let [trend, revenue, costs, target] = series;
-            let curve = [w::Curve::Linear, w::Curve::Step, w::Curve::Monotone][p.choice("curve")];
+            let curve = [
+                iad::primitives::chart::shape::Curve::Linear,
+                iad::primitives::chart::shape::Curve::Step,
+                iad::primitives::chart::shape::Curve::Monotone,
+            ][p.choice("curve")];
             let mut c = w::ComboChart::new(cats)
                 .stack_bars(p.bool("stack"))
                 .curve(curve)
@@ -1538,25 +1552,25 @@ pub fn build<'a>(
         }
         Detail::Divider => {
             let variant = [
-                w::DividerVariant::Solid,
-                w::DividerVariant::Dashed,
-                w::DividerVariant::Dotted,
+                cmp::DividerVariant::Solid,
+                cmp::DividerVariant::Dashed,
+                cmp::DividerVariant::Dotted,
             ][p.choice("variant")];
             let tone = [
-                w::DividerTone::Border,
-                w::DividerTone::Card,
-                w::DividerTone::Bar,
-                w::DividerTone::Popover,
-                w::DividerTone::Sidebar,
+                cmp::DividerTone::Border,
+                cmp::DividerTone::Card,
+                cmp::DividerTone::Bar,
+                cmp::DividerTone::Popover,
+                cmp::DividerTone::Sidebar,
             ][p.choice("tone")];
             let position = [
-                w::LabelPosition::Left,
-                w::LabelPosition::Center,
-                w::LabelPosition::Right,
+                cmp::LabelPosition::Left,
+                cmp::LabelPosition::Center,
+                cmp::LabelPosition::Right,
             ][p.choice("position")];
             let vertical = p.choice("orientation") == 1;
             let label = p.text("label").to_string();
-            let mut div = w::divider::<Message>()
+            let mut div = cmp::divider::<Message>()
                 .variant(variant)
                 .tone(tone)
                 .size(p.number("size"))
@@ -1616,32 +1630,36 @@ pub fn build<'a>(
             (el.map(Message::Widgets), code)
         }
         Detail::Docked => {
-            let side =
-                [w::Side::Bottom, w::Side::Top, w::Side::Left, w::Side::Right][p.choice("side")];
+            let side = [
+                iad::layouts::anchor::Side::Bottom,
+                iad::layouts::anchor::Side::Top,
+                iad::layouts::anchor::Side::Left,
+                iad::layouts::anchor::Side::Right,
+            ][p.choice("side")];
             let size = [
-                w::DockSize::Auto,
-                w::DockSize::Fixed(120.0),
-                w::DockSize::Fraction(0.4),
-                w::DockSize::FullScreen,
+                lay::DockSize::Auto,
+                lay::DockSize::Fixed(120.0),
+                lay::DockSize::Fraction(0.4),
+                lay::DockSize::FullScreen,
             ][p.choice("size")];
             let length = [
-                w::DockSize::FullScreen,
-                w::DockSize::Fixed(320.0),
-                w::DockSize::Fraction(0.5),
+                lay::DockSize::FullScreen,
+                lay::DockSize::Fixed(320.0),
+                lay::DockSize::Fraction(0.5),
             ][p.choice("length")];
             let align = [
-                w::AnchorAlign::Start,
-                w::AnchorAlign::Center,
-                w::AnchorAlign::End,
+                iad::layouts::anchor::Align::Start,
+                iad::layouts::anchor::Align::Center,
+                iad::layouts::anchor::Align::End,
             ][p.choice("align")];
-            let mode = [w::DockMode::Push, w::DockMode::Overlay][p.choice("mode")];
-            let scope = [w::DockScope::Content, w::DockScope::Window][p.choice("scope")];
+            let mode = [lay::DockMode::Push, lay::DockMode::Overlay][p.choice("mode")];
+            let scope = [lay::DockScope::Content, lay::DockScope::Window][p.choice("scope")];
             let stage = container(
                 column![
                     ty::heading("Content"),
                     ty::body("What the surface is docked to. An overlay dock fades and disables it; a push dock makes room.")
-                        .style(iad::style::text::dim),
-                    w::raised_button(ty::label("A button")).on_press(Message::Noop),
+                        .style(iad::styles::text::dim),
+                    cmp::raised_button(ty::label("A button")).on_press(Message::Noop),
                 ]
                 .spacing(m.space_s),
             )
@@ -1652,13 +1670,13 @@ pub fn build<'a>(
                 column![
                     ty::title_3("Docked"),
                     ty::body("A footer, a banner, a drawer or a sheet.")
-                        .style(iad::style::text::dim),
+                        .style(iad::styles::text::dim),
                 ]
                 .spacing(m.space_s),
             )
             .padding(m.space_l)
             .width(Length::Fill);
-            let el = w::Dock::new(stage, surface)
+            let el = lay::Dock::new(stage, surface)
                 .open(p.bool("open"))
                 .side(side)
                 .size(size)
@@ -1725,9 +1743,9 @@ pub fn build<'a>(
         Detail::Timeline => {
             let n = p.number("count") as usize;
             let variant = [
-                w::DividerVariant::Solid,
-                w::DividerVariant::Dashed,
-                w::DividerVariant::Dotted,
+                cmp::DividerVariant::Solid,
+                cmp::DividerVariant::Dashed,
+                cmp::DividerVariant::Dotted,
             ][p.choice("variant")];
             let titles = [
                 "Created", "Assigned", "Reviewed", "Approved", "Merged", "Released",
@@ -1746,7 +1764,7 @@ pub fn build<'a>(
                 let mut item = w::TimelineItem::new(*title)
                     .body(
                         ty::caption(format!("{} min ago", (n - i) * 12))
-                            .style(iad::style::text::dim),
+                            .style(iad::styles::text::dim),
                     )
                     .line(variant);
                 if p.bool("loading") && i + 1 == n {
@@ -1937,9 +1955,9 @@ pub fn build<'a>(
         }
         Detail::ViewSwitcher => {
             let items = vec![
-                w::ToggleItem::new(0usize, "Files").icon(Icon::Home),
-                w::ToggleItem::new(1, "Search").icon(Icon::Search),
-                w::ToggleItem::new(2, "Settings").icon(Icon::Settings),
+                cmp::ToggleItem::new(0usize, "Files").icon(Icon::Home),
+                cmp::ToggleItem::new(1, "Search").icon(Icon::Search),
+                cmp::ToggleItem::new(2, "Settings").icon(Icon::Settings),
             ];
             let el = Element::from(w::view_switcher(
                 items,
@@ -1988,7 +2006,7 @@ pub fn build<'a>(
         }
         Detail::Progress => {
             let v = p.number("value");
-            let bar = w::progress_bar(0.0..=100.0, v);
+            let bar = cmp::progress_bar(0.0..=100.0, v);
             let bar = match p.choice("role") {
                 1 => bar.style(style::progress_bar::success),
                 2 => bar.style(style::progress_bar::warning),
@@ -2040,11 +2058,11 @@ pub fn build<'a>(
             };
             let el = column![
                 row![
-                    w::avatar(48.0, seed.clone()),
+                    cmp::avatar(48.0, seed.clone()),
                     column![
                         ty::heading(seed.clone()),
                         ty::caption("color::from_seed: the same text, the same color")
-                            .style(iad::style::text::dim),
+                            .style(iad::styles::text::dim),
                     ],
                 ]
                 .spacing(m.space_m)
@@ -2065,13 +2083,13 @@ pub fn build<'a>(
             use iced::widget::{container as ct, row};
             let height = p.number("height");
             let anchor = if p.choice("anchor") == 0 {
-                w::ClipAnchor::Top
+                lay::ClipAnchor::Top
             } else {
-                w::ClipAnchor::Bottom
+                lay::ClipAnchor::Bottom
             };
             let content = || -> Element<'a> {
                 column![
-                    w::avatar(64.0, "Queue").shape(w::AvatarShape::Rounded),
+                    cmp::avatar(64.0, "Queue").shape(cmp::AvatarShape::Rounded),
                     ty::heading("Up next"),
                     ty::body("The content keeps its size"),
                     ty::caption("and slides into view"),
@@ -2082,14 +2100,16 @@ pub fn build<'a>(
                 .into()
             };
             let clipped = ct(Element::from(
-                w::ClipWindow::new(content()).height(height).anchor(anchor),
+                lay::ClipWindow::new(content())
+                    .height(height)
+                    .anchor(anchor),
             ))
             .width(Length::Fill)
-            .style(iad::style::container::card_surface);
+            .style(iad::styles::container::card_surface);
             let squeezed = ct(content())
                 .height(Length::Fixed(height))
                 .width(Length::Fill)
-                .style(iad::style::container::card_surface);
+                .style(iad::styles::container::card_surface);
             let el: Element<'a> = if p.bool("compare") {
                 row![
                     column![ty::caption("ClipWindow: translated"), clipped]
@@ -2122,7 +2142,7 @@ pub fn build<'a>(
                 Icon::Star,
                 Icon::Queue,
             ][p.choice("icon")];
-            let mut b = w::IconToggleButton::new(icon, p.bool("active"))
+            let mut b = cmp::IconToggleButton::new(icon, p.bool("active"))
                 .size(p.number("size"))
                 .disabled(p.bool("disabled"))
                 .on_toggle(on_bool(d, "active"));
@@ -2142,11 +2162,11 @@ pub fn build<'a>(
         }
         Detail::Avatar => {
             let shape = [
-                w::AvatarShape::Circle,
-                w::AvatarShape::Rounded,
-                w::AvatarShape::Square,
+                cmp::AvatarShape::Circle,
+                cmp::AvatarShape::Rounded,
+                cmp::AvatarShape::Square,
             ][p.choice("shape")];
-            let mut a = w::avatar(p.number("size"), p.text("name").to_string())
+            let mut a = cmp::avatar(p.number("size"), p.text("name").to_string())
                 .show_initials(p.bool("initials"))
                 .shape(shape);
             if let Some(i) = icon_source(p.choice("icon")) {
@@ -2181,14 +2201,17 @@ pub fn build<'a>(
                 ROLE_OF[r]
             ))
             .done();
-            (stage(w::tag(p.text("label").to_string(), ROLE_OF[r])), code)
+            (
+                stage(cmp::tag(p.text("label").to_string(), ROLE_OF[r])),
+                code,
+            )
         }
         Detail::BadgeChip => {
             let role = ROLE_OF[p.choice("role")];
             let label = p.text("label").to_string();
             let (el, code): (Element<'a>, String) = match p.choice("kind") {
                 0 => (
-                    w::Badge::new(label.clone())
+                    cmp::Badge::new(label.clone())
                         .role(role)
                         .solid(p.bool("solid"))
                         .into(),
@@ -2198,7 +2221,7 @@ pub fn build<'a>(
                         .done(),
                 ),
                 1 => (
-                    w::Badge::count(p.number("count") as u32, 99)
+                    cmp::Badge::count(p.number("count") as u32, 99)
                         .role(role)
                         .solid(p.bool("solid"))
                         .into(),
@@ -2216,7 +2239,7 @@ pub fn build<'a>(
                     };
                     (
                         {
-                            let mut b = w::RoundBadge::new(content)
+                            let mut b = cmp::RoundBadge::new(content)
                                 .role(role)
                                 .solid(p.bool("solid"))
                                 .size(size);
@@ -2238,15 +2261,18 @@ pub fn build<'a>(
                 }
                 _ => (
                     {
-                        let mut c = w::Chip::new(label.clone())
+                        let mut c = cmp::Chip::new(label.clone())
                             .role(role)
                             .selected(p.bool("selected"))
                             .disabled(p.bool("disabled"))
                             .on_press(Message::Noop)
                             .on_remove(Message::Noop)
                             .size(
-                                [w::ChipSize::Small, w::ChipSize::Medium, w::ChipSize::Large]
-                                    [p.choice("chip_size")],
+                                [
+                                    cmp::ChipSize::Small,
+                                    cmp::ChipSize::Medium,
+                                    cmp::ChipSize::Large,
+                                ][p.choice("chip_size")],
                             );
                         if let Some(i) = icon_source(p.choice("icon")) {
                             c = c.icon(i);
@@ -2314,7 +2340,7 @@ pub fn build<'a>(
 pub fn snippet(d: Detail) -> Option<&'static str> {
     Some(match d {
         Detail::TableVirtual => {
-            "// the app keeps a Viewport (from on_scroll) and passes only the window's rows\nlet window = self.viewport.window(TOTAL, ResponsiveTable::pitch(ROW), 4);   // primitives::virtualize\nlet rows: Vec<Person> = window.clone().map(person).collect();\n\nResponsiveTable::new(&rows)\n    .column(Column::new(\"Name\", |p| heading(&p.name).into()).min_width(160.0))\n    .virtualized(TOTAL, window.start, ROW)   // rows of a long list: spacers stand in for the rest\n    .on_scroll(Msg::Scroll)                  // Msg::Scroll(vp) => self.viewport = vp\n\n// a virtualized table is always a table: cards have no fixed height"
+            "// the app keeps a Viewport (from on_scroll) and passes only the window's rows\nlet window = self.viewport.window(TOTAL, ResponsiveTable::pitch(ROW), 4);   // layouts::virtualize\nlet rows: Vec<Person> = window.clone().map(person).collect();\n\nResponsiveTable::new(&rows)\n    .column(Column::new(\"Name\", |p| heading(&p.name).into()).min_width(160.0))\n    .virtualized(TOTAL, window.start, ROW)   // rows of a long list: spacers stand in for the rest\n    .on_scroll(Msg::Scroll)                  // Msg::Scroll(vp) => self.viewport = vp\n\n// a virtualized table is always a table: cards have no fixed height"
         }
         Detail::TableAsync => {
             "// rows fetched 50 at a time as they are scrolled to (primitives::loading)\nlet mut chunks = Chunks::new(TOTAL, 50);\n\n// Msg::Scroll(vp): ask for the chunks the window touches, once each\nfor chunk in chunks.request(vp.window(TOTAL, pitch, 4)) {\n    tasks.push(Task::perform(fetch(chunk), move |r| Msg::Fetched(chunk, r)));\n}\n// Msg::Fetched(chunk, r): cache it, then chunks.finish(chunk, r.map(|_| ()))\n\n// a row is a placeholder until its chunk arrives; a failed chunk is not asked for again\nmatch chunks.slot(row) {\n    Slot::Ready => ready_cells(row),\n    Slot::Loading => skeleton_cells(),\n    Slot::Failed(reason) => error_cells(reason, /* Retry: chunks.retry(chunk) */),\n}"
@@ -2323,7 +2349,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "// data: a branch with children still to come\nTreeNode::lazy(\"remote\", \"remote\")\n\n// update: opening it returns an effect; fetch, then merge\nif let Some(TreeEffect::Load(v)) = self.tree.apply(&mut self.data, event) {\n    return Task::perform(fetch(v.clone()), move |r| Msg::Loaded(v.clone(), r));\n}\nMsg::Loaded(v, r) => self.tree.finish_load(&mut self.data, &v, r)   // Err: shows the error and Retry"
         }
         Detail::TreeVirtualized => {
-            "let total = self.tree.rows(&self.data).len();\nlet range = self.viewport.window(total, TREE_ROW_HEIGHT, 4);   // primitives::virtualize\n\nscrollable(Tree::new(&self.data, &self.tree).window(range).on_event(Msg::Tree))\n    .on_scroll(|vp| Msg::Scroll(vp.absolute_offset().y, vp.bounds().height))\n\n// rows have a fixed height; only the window is built, the rest is spacing"
+            "let total = self.tree.rows(&self.data).len();\nlet range = self.viewport.window(total, TREE_ROW_HEIGHT, 4);   // layouts::virtualize\n\nscrollable(Tree::new(&self.data, &self.tree).window(range).on_event(Msg::Tree))\n    .on_scroll(|vp| Msg::Scroll(vp.absolute_offset().y, vp.bounds().height))\n\n// rows have a fixed height; only the window is built, the rest is spacing"
         }
         Detail::TreeFiles => {
             "Tree::new(&self.files, &self.tree)\n    .lines(true)\n    .icons(|node, row| Some(if row.has_children { Icon::Folder } else { Icon::Document }))\n    .on_event(Msg::Tree)"

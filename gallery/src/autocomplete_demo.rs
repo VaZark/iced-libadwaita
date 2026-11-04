@@ -14,11 +14,14 @@
 
 use iced_adaptive_design as iad;
 
+use iad::components::typography as ty;
 use iad::lookup as glue;
 use iad::primitives::lookup::{Lookup, RequestId, Status, validate_pick};
-use iad::widget::validation::required;
-use iad::widget::{self as w, Autocomplete, Field, Validity, typography as ty};
+use iad::primitives::validation::Validity;
+use iad::primitives::validation::required;
+use iad::widgets::{Autocomplete, Field};
 use iad::{Element, Metrics};
+use iad::{components as cmp, widgets as w};
 use iced::widget::{column, container, row, space, text};
 use iced::{Length, Subscription, Task};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -535,7 +538,7 @@ impl State {
                 row![
                     text(p.name).wrapping(text::Wrapping::None),
                     space().width(Length::Fill),
-                    ty::caption(p.country).style(iad::style::text::dim),
+                    ty::caption(p.country).style(iad::styles::text::dim),
                 ]
                 .spacing(12.0)
                 .into()
@@ -559,7 +562,7 @@ impl State {
         let stats = l.stats();
         let line = |k: &'static str, v: String| {
             row![
-                container(ty::caption(k).style(iad::style::text::dim)).width(Length::Fixed(150.0)),
+                container(ty::caption(k).style(iad::styles::text::dim)).width(Length::Fixed(150.0)),
                 ty::caption(v)
             ]
         };
@@ -594,7 +597,7 @@ impl State {
                  (2.5 s): type it, wait for the spinner, then add a letter; the late answer is \
                  discarded."
             )
-            .style(iad::style::text::dim),
+            .style(iad::styles::text::dim),
         ]
         .spacing(m.space_s);
 
@@ -609,7 +612,7 @@ impl State {
                     .open_initially(open)
                     .metrics(m);
                 column![
-                    ty::caption(*name).style(iad::style::text::dim),
+                    ty::caption(*name).style(iad::styles::text::dim),
                     Element::from(a)
                 ]
                 .spacing(m.space_xs)
@@ -654,8 +657,8 @@ impl State {
             .interaction(interaction)
             .metrics(m),
             row![
-                w::suggested_button(ty::label("Submit")).on_press(Msg::Submit),
-                w::flat_button(ty::label("Reset")).on_press(Msg::Reset),
+                cmp::suggested_button(ty::label("Submit")).on_press(Msg::Submit),
+                cmp::flat_button(ty::label("Reset")).on_press(Msg::Reset),
             ]
             .spacing(sp),
         ]

@@ -6,11 +6,21 @@
 //! * [`Theme`]: one theme type implementing every iced widget catalog, with a
 //!   named [`Palette`], a [`Semantic`] color layer, [`Metrics`] and
 //!   [`Typography`] tokens.
-//! * [`style`]: style functions mirroring libadwaita's CSS classes.
-//! * [`widget`]: components named after their libadwaita counterparts (`HeaderBar`, `ActionRow`, `PreferencesGroup`,
-//!   `StatusPage`, `AlertDialog`, …).
+//! * [`styles`]: style functions mirroring libadwaita's CSS classes.
+//!
+//! The rest is in layers, each importing only the ones below it (DESIGN.md, "Layers"):
+//!
+//! * [`primitives`]: headless rules and state machines. No widgets, no look.
+//! * [`layouts`]: where things go and how they flow: grid, flex, overlay, dock, split, motion.
+//! * [`binds`]: iced events turned into primitive input (focus, shortcuts).
+//! * [`components`]: themed atoms with no information of their own.
+//! * [`metas`]: choose between, or join, whole widgets.
+//! * [`widgets`]: what the user sees and uses, named after their libadwaita counterparts (`HeaderBar`,
+//!   `ActionRow`, `PreferencesGroup`, `StatusPage`, `AlertDialog`, …).
+//! * [`windows`]: window state, chrome and frame logic.
 
 pub mod adaptive;
+pub mod binds;
 pub mod breakpoints;
 pub mod color;
 pub mod components;
@@ -18,7 +28,9 @@ pub mod config;
 pub mod config_history;
 pub mod dev;
 pub mod icon;
+pub mod layouts;
 pub mod lookup;
+pub mod metas;
 pub mod metrics;
 pub mod palette;
 pub mod prelude;
@@ -26,17 +38,17 @@ pub mod primitives;
 pub mod semantic;
 pub mod shadow;
 pub mod shortcut;
-pub mod style;
+pub mod styles;
 pub mod system;
 pub mod theme;
 pub mod theme_config;
-pub mod widget;
-pub mod window;
+pub mod widgets;
+pub mod windows;
 
-/// The animation engine, a [primitive](primitives::animation); kept at its old path.
-pub use primitives::animation;
-/// The ordered-transition coordinator, a [primitive](primitives::transition); kept at its old path.
-pub use primitives::transition;
+/// The animation engine, a [primitive](layouts::animation); kept at its old path.
+pub use layouts::animation;
+/// The ordered-transition coordinator, a [primitive](layouts::transition); kept at its old path.
+pub use layouts::transition;
 
 pub use icon::{Icon, IconSource};
 pub use metrics::{CollapseBehavior, Metrics, Typography};
@@ -45,4 +57,5 @@ pub use semantic::{Opacity, Role, Semantic, Surface, Swatch};
 pub use shadow::{Elevation, Layer, Resolved, Shadows};
 pub use system::{DecorationLayout, WindowButton};
 pub use theme::Theme;
-pub use widget::Element;
+/// Shorthand for an iced element using this crate's [`Theme`].
+pub type Element<'a, Message> = iced::Element<'a, Message, Theme>;

@@ -1,7 +1,7 @@
 //! The legend: a swatch and a name for each series, wrapping onto lines.
 
 use super::color;
-use crate::widget::Element;
+use crate::Element;
 use crate::{Metrics, Theme};
 use iced::widget::{container, row, space, text};
 use iced::{Alignment, Length};

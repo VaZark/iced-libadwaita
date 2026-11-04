@@ -9,12 +9,12 @@
 use iced_adaptive_design as iad;
 
 use crate::playground::Playground;
+use iad::components as cmp;
+use iad::components::typography as ty;
+use iad::layouts::virtualize::Viewport;
 use iad::primitives::tree as t;
-use iad::primitives::virtualize::Viewport;
-use iad::widget::{
-    self as w, DragMode, TREE_ROW_HEIGHT, Tree, TreeEffect, TreeEvent, TreeNode, TreeState,
-    typography as ty,
-};
+use iad::primitives::tree::{Effect as TreeEffect, Event as TreeEvent, TreeNode, TreeState};
+use iad::widgets::{DragMode, TREE_ROW_HEIGHT, Tree};
 use iad::{Element, Icon, Metrics};
 use iced::widget::{column, row, scrollable};
 use iced::{Length, Task};
@@ -293,10 +293,10 @@ impl State {
             tree = tree.highlight(p.text("search"));
         }
         let buttons = row![
-            w::raised_button(ty::label("Expand all")).on_press(Msg::ExpandAll),
-            w::raised_button(ty::label("Collapse all")).on_press(Msg::CollapseAll),
-            w::raised_button(ty::label("Check all")).on_press(Msg::CheckAll),
-            w::raised_button(ty::label("Uncheck all")).on_press(Msg::UncheckAll),
+            cmp::raised_button(ty::label("Expand all")).on_press(Msg::ExpandAll),
+            cmp::raised_button(ty::label("Collapse all")).on_press(Msg::CollapseAll),
+            cmp::raised_button(ty::label("Check all")).on_press(Msg::CheckAll),
+            cmp::raised_button(ty::label("Uncheck all")).on_press(Msg::UncheckAll),
         ]
         .spacing(m.space_s);
         let checked = self.tree.checked_nodes(&self.data).len();
@@ -424,14 +424,14 @@ impl State {
                 if n == 0 {
                     return p.text;
                 }
-                row![p.text, w::Badge::count(n as u32, 99)]
+                row![p.text, cmp::Badge::count(n as u32, 99)]
                     .spacing(8)
                     .into()
             })
             .metrics(m)
             .on_event(Msg::Docs);
         column![
-            w::entry("Search pages…", &self.docs_search)
+            cmp::entry("Search pages…", &self.docs_search)
                 .on_input(Msg::DocsSearch)
                 .metrics(m),
             Element::from(tree)

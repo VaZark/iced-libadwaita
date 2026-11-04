@@ -12,7 +12,7 @@
 
 use iced::Padding;
 
-/// What a row (or any [`FlexRow`](crate::widget::FlexRow)) does when its trailing
+/// What a row (or any [`FlexRow`](crate::layouts::FlexRow)) does when its trailing
 /// control can't share a line with the title.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum CollapseBehavior {
@@ -84,7 +84,7 @@ pub struct Metrics {
     /// suffix control would squeeze it below this, the control wraps to its own
     /// line (CSS `flex-wrap`).
     pub row_wrap_basis: f32,
-    /// How far a row nested in an [`ExpanderRow`](crate::widget::ExpanderRow) is indented, when
+    /// How far a row nested in an [`ExpanderRow`](crate::widgets::ExpanderRow) is indented, when
     /// the row does not set its own. libadwaita nests flush (0); the default here is the width of
     /// the arrow handle (`icon_size + 8`) so the nesting reads. `[rows] expander-indent=0`
     /// restores libadwaita's.
@@ -120,7 +120,7 @@ pub struct Metrics {
 
     // Surfaces.
     /// The distance headings, cards and the edges of lists keep from the window edge: the one
-    /// gutter every page surface ([`surface`](crate::widget::surface)) is built from.
+    /// gutter every page surface ([`surface`](crate::layouts::surface)) is built from.
     pub gutter: f32,
     /// Air above and below a toolbar band.
     pub band_air: f32,

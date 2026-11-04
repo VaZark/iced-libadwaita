@@ -80,7 +80,7 @@ impl Switches {
 
     /// Applies what applies at startup: holds the animations, if asked.
     pub fn apply(&self) {
-        crate::animation::set_hold(self.hold);
+        crate::layouts::animation::set_hold(self.hold);
     }
 
     /// A task that waits [`delay`](Self::delay), screenshots `window` and saves it as a PNG, or

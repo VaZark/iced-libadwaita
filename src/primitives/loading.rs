@@ -4,13 +4,13 @@
 //! Two small pieces, both pure and controlled (the app starts the fetch and reports the result):
 //!
 //! * [`Loads`]: a set of keys in flight and the error of those that failed. A
-//!   [`Tree`](crate::widget::Tree)'s lazy branches use it (`begin` when a branch opens, `finish`
+//!   [`Tree`](crate::widgets::Tree)'s lazy branches use it (`begin` when a branch opens, `finish`
 //!   when its children arrive, `retry` after an error), and so can anything keyed: a row, a
 //!   card, a page.
 //! * [`Chunks`]: a list of `total` rows fetched `size` at a time. Ask which chunks a window of
 //!   rows needs ([`request`](Chunks::request)), fetch those, and report each result; a row of a
 //!   chunk that is not ready yet is a placeholder ([`slot`](Chunks::slot)). With
-//!   [`virtualize`](super::virtualize) this is a table over thousands of rows that loads only
+//!   [`virtualize`](crate::layouts::virtualize) this is a table over thousands of rows that loads only
 //!   what is scrolled to.
 //!
 //! A chunk that **failed is not asked for again** until the app retries it, so a failing server
@@ -140,7 +140,7 @@ impl Chunks {
         let start = chunk * self.size;
         start.min(self.total)..(start + self.size).min(self.total)
     }
-    /// The chunks that `rows` (a [`window`](super::virtualize::window)) needs and nobody has
+    /// The chunks that `rows` (a [`window`](crate::layouts::virtualize::window)) needs and nobody has
     /// asked for yet: they are marked loading and returned, so the app fetches each once. Failed
     /// chunks are skipped until [`retry`](Self::retry).
     pub fn request(&mut self, rows: Range<usize>) -> Vec<usize> {

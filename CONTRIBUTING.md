@@ -22,7 +22,7 @@ Local pre-commit hooks: dprint formats JSON, Markdown and TOML; `cargo fmt --all
 
 | Path                   | Holds                                                                                          |
 | ---------------------- | ---------------------------------------------------------------------------------------------- |
-| `src/`                 | the library: `widget/`, `primitives/`, `window/` (window logic, dialogs), `style/`, theme, config, animation |
+| `src/`                 | the library, in layers (see DESIGN.md): `layouts/`, `primitives/` (headless rules), `binds/`, `components/`, `metas/`, `widgets/`, `styles/`, `windows/`, theme, config |
 | `gallery/`             | the gallery, a separate crate                                                                  |
 | `xtask/`               | repository tasks                                                                               |
 | `man/`                 | man pages. `iad(7)` and `iad-desktop.conf(5)` are written by hand. `iad-<alias>(3)` and the index `iad-components(3)` are generated |
@@ -31,9 +31,9 @@ Local pre-commit hooks: dprint formats JSON, Markdown and TOML; `cargo fmt --all
 
 ## Man pages
 
-`cargo xtask man` reads the `///` and `//!` comments and the public API of `src/widget` and the dialogs, and writes one page per component. `--check` fails when a page is stale.
+`cargo xtask man` reads the `///` and `//!` comments and the public API of `src/layouts`, `src/components`, `src/binds`, `src/metas` and `src/widgets`, and writes one page per component. `--check` fails when a page is stale.
 
-A component is an item exported from `src/widget/mod.rs`:
+A component is an item exported from the `mod.rs` of one of those layers:
 
 - a public struct that becomes an `Element`, or
 - a function that returns an element.

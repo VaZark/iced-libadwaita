@@ -7,7 +7,11 @@
 
 use iced_adaptive_design as iad;
 
-use iad::widget::{self as w, CalendarView, Date, Field, FieldLayout, Level, typography as ty};
+use iad::components::typography as ty;
+use iad::primitives::calendar::{CalendarView, Level};
+use iad::primitives::date::Date;
+use iad::widgets as w;
+use iad::widgets::{Field, FieldLayout};
 use iad::{Element, Metrics};
 use iced::widget::column;
 
@@ -215,7 +219,7 @@ impl State {
         // Relative time wording, from an explicit `now` (today here; the instants are offsets).
         // A name and its read-only value: a row field whose control is dimmed text.
         let value_row = |label: String, value: String| -> Element<'_, Msg> {
-            Field::new(label, ty::body(value).style(iad::style::text::dim))
+            Field::new(label, ty::body(value).style(iad::styles::text::dim))
                 .layout(FieldLayout::Row)
                 .plain_label(true)
                 .metrics(m)

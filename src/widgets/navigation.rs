@@ -1,0 +1,939 @@
+//! `AdwNavigationSplitView`, `AdwOverlaySplitView`, `AdwNavigationView`,
+//! `.navigation-sidebar`, and `AdwBreakpoint`.
+
+use crate::Element;
+use crate::styles::{button as sb, container as sc};
+use crate::widgets::{header_bar, toolbar_view};
+use crate::{Icon, Metrics};
+use iced::alignment::Vertical;
+use iced::widget::{button, column, container, mouse_area, opaque, row, space, stack};
+use iced::{Length, Size};
+
+/// `AdwBreakpoint` condition on window width.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Breakpoint {
+    max_width: Option<f32>,
+    min_width: Option<f32>,
+}
+
+impl Breakpoint {
+    /// `max-width: <px>`.
+    pub fn max_width(px: f32) -> Self {
+        Self {
+            max_width: Some(px),
+            min_width: None,
+        }
+    }
+    /// `min-width: <px>`.
+    pub fn min_width(px: f32) -> Self {
+        Self {
+            max_width: None,
+            min_width: Some(px),
+        }
+    }
+    /// Whether the breakpoint applies at `size`. Typical use inside
+    /// `iced::widget::responsive`.
+    pub fn matches(&self, size: Size) -> bool {
+        self.max_width.is_none_or(|m| size.width <= m)
+            && self.min_width.is_none_or(|m| size.width >= m)
+    }
+}
+
+/// How roomy a sidebar row is. The levels are named after the sidebars they resemble, and each
+/// is a step from the density's base metrics (so a compact density shrinks all three):
+///
+/// | Level | Resembles | Row height | Row side padding | Row gap | Horizontal inset |
+/// |---|---|---|---|---|---|
+/// | `Sm` | Mantine `NavLink` (dense) | -8 | -4 | -1 | -2 |
+/// | `Md` (default) | Nautilus | base (36 / 12 / 2 / 6) | | | |
+/// | `Lg` | GNOME Settings | content + 24 (≈44) | +2 (14) | base | base |
+///
+/// `Lg` is gnome-control-center's `cc-panel-list` row on libadwaita's `.navigation-sidebar`: a
+/// grid with 12 above and below, 6 at the sides and 12 between icon and label, inside a row with
+/// 8 of side padding and a 36 minimum. Rows sit 6px from the list edges and 2px apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum SidebarPadding {
+    Sm,
+    #[default]
+    Md,
+    Lg,
+}
+
+impl SidebarPadding {
+    pub const ALL: [SidebarPadding; 3] = [Self::Sm, Self::Md, Self::Lg];
+
+    /// Nominal row height. `Lg` uses the actual text height plus vertical padding when rendered.
+    pub fn row_height(self, m: &Metrics) -> f32 {
+        m.sidebar_row_height + self.step(-8.0, 8.0)
+    }
+    /// Padding at the row's sides.
+    pub fn row_padding(self, m: &Metrics) -> f32 {
+        m.sidebar_row_padding + self.step(-4.0, 2.0)
+    }
+    /// Gap between rows.
+    pub fn gap(self, m: &Metrics) -> f32 {
+        m.sidebar_spacing + self.step(-1.0, 0.0)
+    }
+    /// Horizontal inset between the list edges and its rows.
+    pub fn inset(self, m: &Metrics) -> f32 {
+        m.sidebar_padding + self.step(-2.0, 0.0)
+    }
+    fn step(self, sm: f32, lg: f32) -> f32 {
+        match self {
+            Self::Sm => sm,
+            Self::Md => 0.0,
+            Self::Lg => lg,
+        }
+    }
+}
+
+impl std::fmt::Display for SidebarPadding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Sm => "Small",
+            Self::Md => "Medium",
+            Self::Lg => "Large",
+        })
+    }
+}
+
+/// A sidebar entry (`.navigation-sidebar` row) at the default [`SidebarPadding::Md`].
+pub fn sidebar_row<'a, M: Clone + 'a>(
+    icon: Option<Icon>,
+    label: impl Into<String>,
+    selected: bool,
+    on_press: M,
+) -> Element<'a, M> {
+    sidebar_row_padded(icon, label, selected, on_press, SidebarPadding::Md)
+}
+
+/// A sidebar entry at the given [`SidebarPadding`].
+pub fn sidebar_row_padded<'a, M: Clone + 'a>(
+    icon: Option<Icon>,
+    label: impl Into<String>,
+    selected: bool,
+    on_press: M,
+    padding: SidebarPadding,
+) -> Element<'a, M> {
+    let m = Metrics::desktop();
+    let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
+    if let Some(i) = icon {
+        r = r.push(i.view(m.icon_size));
+    }
+    // libadwaita ellipsizes; we clip at the row edge so text never paints
+    // outside the selection highlight.
+    r = r.push(
+        container(crate::components::typography::label(label.into()))
+            .width(Length::Fill)
+            .clip(true),
+    );
+    // Settings sizes its grid from the font, not a fixed ~20px line. Keep the
+    // inherited font/size and allow larger interface fonts to grow the row.
+    let content = if padding == SidebarPadding::Lg {
+        let vertical = (padding.row_height(&m) - 20.0) / 2.0;
+        container(
+            row![
+                r,
+                space()
+                    .width(0)
+                    .height((m.sidebar_row_height - 2.0 * vertical).max(0.0))
+            ]
+            .align_y(Vertical::Center),
+        )
+        .padding([vertical, padding.row_padding(&m)])
+        .align_y(Vertical::Center)
+    } else {
+        container(r)
+            .padding([0.0, padding.row_padding(&m)])
+            .center_y(Length::Fixed(padding.row_height(&m)))
+    };
+    // The selected background fades in and out (`Highlight`); the button keeps hover/press.
+    let btn = button(content.width(Length::Fill))
+        .padding(0)
+        .width(Length::Fill)
+        .style(sb::sidebar_row(false))
+        .on_press(on_press);
+    crate::layouts::highlight(btn, selected, m.radius_m, 0.10).into()
+}
+
+/// Like [`navigation_sidebar`] but rounds the bottom corners to match a
+/// rounded window (pass [`window::State::radius`](crate::windows::State::radius)).
+pub fn navigation_sidebar_rounded<'a, M: 'a>(
+    rows: impl IntoIterator<Item = Element<'a, M>>,
+    window_radius: f32,
+) -> Element<'a, M> {
+    navigation_sidebar_rounded_padded(rows, window_radius, SidebarPadding::Md)
+}
+
+/// [`navigation_sidebar_rounded`] with the list's gap and horizontal inset at the given [`SidebarPadding`].
+pub fn navigation_sidebar_rounded_padded<'a, M: 'a>(
+    rows: impl IntoIterator<Item = Element<'a, M>>,
+    window_radius: f32,
+    padding: SidebarPadding,
+) -> Element<'a, M> {
+    let m = Metrics::desktop();
+    // CSS has top/bottom list padding as well as horizontal row margins. The
+    // last row's 2px bottom margin compensates the list's bottom padding - 2px.
+    container(
+        column(rows)
+            .spacing(padding.gap(&m))
+            .padding(padding.inset(&m)),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .style(move |_: &crate::Theme| iced::widget::container::Style {
+        // Transparent: the split view's pane supplies the color (sidebar or, as a first
+        // page, content). Both bottom corners: beside content the right one reveals the pane behind
+        // (same color); when the sidebar is the whole window it is a real window corner.
+        border: iced::Border::default().rounded(iced::border::bottom(window_radius)),
+        ..Default::default()
+    })
+    .into()
+}
+
+/// Stacks sidebar rows with `.navigation-sidebar` spacing and horizontal inset.
+pub fn navigation_sidebar<'a, M: 'a>(
+    rows: impl IntoIterator<Item = Element<'a, M>>,
+) -> Element<'a, M> {
+    let m = Metrics::desktop();
+    container(
+        column(rows)
+            .spacing(m.sidebar_spacing)
+            .padding(m.sidebar_padding),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .style(sc::sidebar)
+    .into()
+}
+
+/// One entry of a [`SidebarList`]: one description with two forms, a compact row
+/// ([`SidebarStyle::List`]) and a card row ([`SidebarStyle::Cards`]).
+#[derive(Clone)]
+pub struct SidebarItem<M> {
+    icon: Option<Icon>,
+    title: String,
+    subtitle: Option<String>,
+    selected: bool,
+    on_press: M,
+    padding: Option<SidebarPadding>,
+    divider_above: bool,
+}
+
+impl<M> SidebarItem<M> {
+    pub fn new(title: impl Into<String>, on_press: M) -> Self {
+        Self {
+            icon: None,
+            title: title.into(),
+            subtitle: None,
+            selected: false,
+            on_press,
+            padding: None,
+            divider_above: false,
+        }
+    }
+    /// Draws a [`divider`](crate::components::divider) above this row, to start a new section.
+    pub fn divider_above(mut self) -> Self {
+        self.divider_above = true;
+        self
+    }
+    /// This row's [`SidebarPadding`], overriding the list's.
+    pub fn padding(mut self, padding: SidebarPadding) -> Self {
+        self.padding = Some(padding);
+        self
+    }
+    pub fn icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+    /// A short description. Shown only in [`SidebarStyle::Cards`].
+    pub fn subtitle(mut self, s: impl Into<String>) -> Self {
+        self.subtitle = Some(s.into());
+        self
+    }
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+}
+
+/// How a [`SidebarList`] presents its items.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SidebarStyle {
+    /// `.navigation-sidebar`: compact selectable rows on the sidebar color, for a sidebar
+    /// beside the content or in a drawer. Subtitles are hidden.
+    #[default]
+    List,
+    /// A page of cards: a padded, scrolling boxed list on the content color, each row with
+    /// its icon, title, **subtitle** and a chevron, as in a mobile settings app. Use it for
+    /// the sidebar as the parent page ([`CollapsedSidebar::ParentPage`]) when collapsed.
+    Cards,
+}
+
+/// The navigation entries of a sidebar, in either [`SidebarStyle`]. One component, so an
+/// app describes its destinations once and the presentation follows the layout.
+pub struct SidebarList<'a, M> {
+    items: Vec<SidebarItem<M>>,
+    style: SidebarStyle,
+    window_radius: f32,
+    padding: SidebarPadding,
+    cards_below: Option<crate::breakpoints::WidthClass>,
+    _p: std::marker::PhantomData<&'a ()>,
+}
+
+impl<'a, M: Clone + 'a> SidebarList<'a, M> {
+    pub fn new(items: impl IntoIterator<Item = SidebarItem<M>>) -> Self {
+        Self {
+            items: items.into_iter().collect(),
+            style: SidebarStyle::List,
+            window_radius: 0.0,
+            padding: SidebarPadding::Md,
+            cards_below: None,
+            _p: Default::default(),
+        }
+    }
+    pub fn style(mut self, style: SidebarStyle) -> Self {
+        self.style = style;
+        self
+    }
+    /// How roomy the rows are ([`SidebarPadding`]): `Sm` dense like Mantine, `Md` like Nautilus
+    /// (default), `Lg` like GNOME Settings. An item's own [`SidebarItem::padding`] wins.
+    pub fn padding(mut self, padding: SidebarPadding) -> Self {
+        self.padding = padding;
+        self
+    }
+    /// Chooses the style by the width of the list's own container, with the same rule as
+    /// [`MetaComponent`](crate::metas::MetaComponent) (as [`ResponsiveTable`](crate::widgets::ResponsiveTable)
+    /// does): cards below this width class, the compact list from it. Overrides
+    /// [`style`](Self::style) and [`follow`](Self::follow). The list then fills its container.
+    pub fn cards_below(mut self, class: crate::breakpoints::WidthClass) -> Self {
+        self.cards_below = Some(class);
+        self
+    }
+    /// Window radius for the [`SidebarStyle::List`] bottom corners.
+    pub fn window_radius(mut self, r: f32) -> Self {
+        self.window_radius = r;
+        self
+    }
+    /// Makes the presentation follow the layout an [`Adaptive`](crate::adaptive::Adaptive) shows:
+    /// `present` maps the shown layout to a style and a padding. The items stay the same in
+    /// every layout (describe the destinations once); only how they are drawn changes, and it
+    /// changes together with the layout, never ahead of it. Until a layout is shown, the list
+    /// keeps its own [`style`](Self::style) and [`padding`](Self::padding).
+    ///
+    /// ```ignore
+    /// SidebarList::new(items).follow(&self.adaptive, |layout| match layout {
+    ///     Layout::Mobile => (SidebarStyle::List, SidebarPadding::Lg),
+    ///     Layout::Desktop => (SidebarStyle::List, SidebarPadding::Sm),
+    /// })
+    /// ```
+    pub fn follow<K: Clone + PartialEq>(
+        mut self,
+        state: &crate::adaptive::Adaptive<K>,
+        present: impl Fn(&K) -> (SidebarStyle, SidebarPadding),
+    ) -> Self {
+        if let Some(layout) = state.shown().last() {
+            (self.style, self.padding) = present(layout);
+        }
+        self
+    }
+}
+
+fn list_view<'a, M: Clone + 'a>(
+    items: Vec<SidebarItem<M>>,
+    level: SidebarPadding,
+    radius: f32,
+) -> Element<'a, M> {
+    navigation_sidebar_rounded_padded(
+        items.into_iter().flat_map(|i| {
+            let m = Metrics::desktop();
+            let line = i.divider_above.then(|| {
+                Element::from(
+                    crate::components::divider()
+                        .spacing((level.inset(&m) - level.gap(&m)).max(0.0)),
+                )
+            });
+            let row = sidebar_row_padded(
+                i.icon,
+                i.title,
+                i.selected,
+                i.on_press,
+                i.padding.unwrap_or(level),
+            );
+            line.into_iter().chain(std::iter::once(row))
+        }),
+        radius,
+        level,
+    )
+}
+
+fn cards_view<'a, M: Clone + 'a>(items: Vec<SidebarItem<M>>) -> Element<'a, M> {
+    let m = Metrics::desktop();
+    let rows = items.into_iter().map(|i| {
+        let mut r = crate::widgets::ActionRow::new(i.title)
+            .chevron(true)
+            .on_activate(i.on_press)
+            .metrics(m);
+        if let Some(icon) = i.icon {
+            r = r.prefix(icon.view(m.icon_size));
+        }
+        if let Some(s) = i.subtitle {
+            r = r.subtitle(s);
+        }
+        Element::from(r)
+    });
+    crate::widgets::page(crate::widgets::boxed_list(rows))
+        .metrics(m)
+        .into()
+}
+
+impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
+    fn from(l: SidebarList<'a, M>) -> Self {
+        use crate::metas::meta_component::MetaComponent;
+        use crate::primitives::When;
+        if let Some(class) = l.cards_below {
+            let (items, level, radius) = (l.items, l.padding, l.window_radius);
+            let cards = items.clone();
+            return MetaComponent::new()
+                .width(Length::Fill)
+                .variant(SidebarStyle::List, When::from_class(class), move |_| {
+                    list_view(items.clone(), level, radius)
+                })
+                .variant(SidebarStyle::Cards, When::always(), move |_| {
+                    cards_view(cards.clone())
+                })
+                .into();
+        }
+        match l.style {
+            SidebarStyle::List => list_view(l.items, l.padding, l.window_radius),
+            SidebarStyle::Cards => cards_view(l.items),
+        }
+    }
+}
+
+/// What the sidebar becomes when a [`NavigationSplitView`] collapses (narrow / mobile).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum CollapsedSidebar {
+    /// The sidebar slides over the content from the start edge with a scrim; the
+    /// content stays visible behind it and the drawer never takes the whole screen
+    /// (`AdwOverlaySplitView`'s collapsed overlay). Opened/closed by the app
+    /// ([`NavigationSplitView::show_sidebar`]). (default)
+    #[default]
+    Drawer,
+    /// The sidebar is the *parent page* of a navigation stack, as in a settings app: it
+    /// is the landing page, painted in the **content** color (not the sidebar color),
+    /// and choosing an item pushes the content page (`show_content`) with a back button.
+    /// Beside the content the sidebar keeps its own color.
+    ParentPage,
+}
+
+impl CollapsedSidebar {
+    pub const ALL: [Self; 2] = [Self::Drawer, Self::ParentPage];
+}
+
+impl std::fmt::Display for CollapsedSidebar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Drawer => "Drawer",
+            Self::ParentPage => "Parent page",
+        })
+    }
+}
+
+/// `AdwNavigationSplitView`. Collapsed, it shows either a drawer over the content
+/// or one pane at a time; see [`CollapsedSidebar`].
+pub struct NavigationSplitView<'a, M> {
+    sidebar: Element<'a, M>,
+    content: Element<'a, M>,
+    sidebar_width: f32,
+    fraction: f32,
+    min_width: f32,
+    max_width: f32,
+    collapsed: bool,
+    show_content: bool,
+    window_radius: f32,
+    collapsed_sidebar: CollapsedSidebar,
+    drawer_open: bool,
+    on_close_drawer: Option<M>,
+    min_content: f32,
+    drawer_width: f32,
+}
+
+/// libadwaita's width for a split-view sidebar: `fraction` of the total width
+/// clamped to `[min, max]` (defaults 25%, 180sp, 280sp).
+pub fn sidebar_width_for(total: f32, fraction: f32, min: f32, max: f32) -> f32 {
+    (total * fraction).clamp(min, max)
+}
+
+/// The default width up to which split views collapse: just under
+/// [`breakpoints::MD`](crate::breakpoints::MD), so a sidebar sits beside the content only on
+/// tablet-landscape widths and up. (libadwaita collapses at 400sp, which leaves a phone-width
+/// content area beside a sidebar; we do not.)
+pub const COLLAPSE_WIDTH: f32 = crate::breakpoints::MD - 1.0;
+
+/// The narrowest the content area may get beside a sidebar before it collapses. Content must
+/// never feel squeezed: below this the sidebar becomes a drawer or the parent page, whatever
+/// the window width.
+pub const MIN_CONTENT_WIDTH: f32 = 520.0;
+
+/// Fallback sidebar rules (libadwaita's: 25% of the window clamped to 180-280, and a drawer takes
+/// at most 85% of it); each is configurable under `[navigation]`.
+pub const SIDEBAR_FRACTION: f32 = 0.25;
+pub const SIDEBAR_MIN_WIDTH: f32 = 180.0;
+pub const SIDEBAR_MAX_WIDTH: f32 = 280.0;
+pub const DRAWER_MAX_FRACTION: f32 = 0.85;
+
+/// The minimum content width in effect: the desktop config's `[navigation] min-content-width`.
+pub fn min_content_width() -> f32 {
+    crate::config::current().min_content_width
+}
+
+/// Whether a split view with the default sidebar rules is collapsed at this window `width`.
+/// [`NavigationSplitView::adapt`] uses the same rule, so apps can branch on this for their own
+/// layout (headers, back buttons) and agree with it.
+pub fn split_collapsed(width: f32) -> bool {
+    let c = crate::config::current();
+    collapses(
+        width,
+        c.sidebar_fraction,
+        c.sidebar_min_width,
+        c.sidebar_max_width,
+        c.min_content_width,
+    )
+}
+
+fn collapses(width: f32, fraction: f32, min: f32, max: f32, min_content: f32) -> bool {
+    width <= collapse_width() || width - sidebar_width_for(width, fraction, min, max) < min_content
+}
+
+/// The collapse width in effect: the desktop config's `[navigation] collapse-width`.
+pub fn collapse_width() -> f32 {
+    crate::config::current().collapse_width
+}
+
+impl<'a, M: 'a> NavigationSplitView<'a, M> {
+    pub fn new(sidebar: impl Into<Element<'a, M>>, content: impl Into<Element<'a, M>>) -> Self {
+        Self {
+            sidebar: sidebar.into(),
+            content: content.into(),
+            sidebar_width: 240.0,
+            // The desktop config decides; the constants are the fallbacks.
+            fraction: crate::config::current().sidebar_fraction,
+            min_width: crate::config::current().sidebar_min_width,
+            max_width: crate::config::current().sidebar_max_width,
+            collapsed: false,
+            show_content: true,
+            window_radius: 0.0,
+            // The desktop config decides (default: drawer); `.collapsed_sidebar(..)` is an opt-out.
+            collapsed_sidebar: crate::config::current().mobile_sidebar,
+            drawer_open: false,
+            on_close_drawer: None,
+            min_content: min_content_width(),
+            drawer_width: 280.0,
+        }
+    }
+    /// What the sidebar becomes when collapsed: [`CollapsedSidebar::Drawer`]
+    /// (default) or [`CollapsedSidebar::ParentPage`].
+    pub fn collapsed_sidebar(mut self, mode: CollapsedSidebar) -> Self {
+        self.collapsed_sidebar = mode;
+        self
+    }
+    /// Whether the drawer is open (only used with [`CollapsedSidebar::Drawer`]).
+    pub fn show_sidebar(mut self, open: bool) -> Self {
+        self.drawer_open = open;
+        self
+    }
+    /// Message sent when the scrim behind the open drawer is clicked.
+    pub fn on_close_drawer(mut self, msg: M) -> Self {
+        self.on_close_drawer = Some(msg);
+        self
+    }
+    /// Rounds the sidebar pane's outer corners to match a rounded window
+    /// ([`window::State::radius`](crate::windows::State::radius)). The pane paints
+    /// the sidebar color, so without this it would cover the window's corners.
+    pub fn window_radius(mut self, r: f32) -> Self {
+        self.window_radius = r;
+        self
+    }
+    /// Fixed sidebar width (overrides the fraction rules).
+    pub fn sidebar_width(mut self, w: f32) -> Self {
+        self.sidebar_width = w;
+        self
+    }
+    pub fn sidebar_width_fraction(mut self, f: f32) -> Self {
+        self.fraction = f;
+        self
+    }
+    pub fn min_sidebar_width(mut self, w: f32) -> Self {
+        self.min_width = w;
+        self
+    }
+    pub fn max_sidebar_width(mut self, w: f32) -> Self {
+        self.max_width = w;
+        self
+    }
+    pub fn collapsed(mut self, c: bool) -> Self {
+        self.collapsed = c;
+        self
+    }
+    pub fn show_content(mut self, s: bool) -> Self {
+        self.show_content = s;
+        self
+    }
+    /// The narrowest content area allowed beside the sidebar (default
+    /// [`MIN_CONTENT_WIDTH`], or the desktop config). Below it the sidebar collapses.
+    pub fn min_content_width(mut self, w: f32) -> Self {
+        self.min_content = w;
+        self
+    }
+    /// Applies the adaptive rules for a window of `width`: collapse up to
+    /// [`COLLAPSE_WIDTH`] *or* when the content area would be narrower than
+    /// [`min_content_width`](Self::min_content_width), and size the sidebar by
+    /// fraction/min/max.
+    pub fn adapt(mut self, width: f32) -> Self {
+        self.collapsed = collapses(
+            width,
+            self.fraction,
+            self.min_width,
+            self.max_width,
+            self.min_content,
+        );
+        self.sidebar_width =
+            sidebar_width_for(width, self.fraction, self.min_width, self.max_width);
+        // A drawer uses the maximum sidebar width when it fits, but always leaves a strip of
+        // content (and the scrim) visible: never the whole screen.
+        self.drawer_width = self
+            .max_width
+            .min(width * crate::config::current().drawer_max_fraction);
+        self
+    }
+}
+
+impl<'a, M: Clone + 'a> From<NavigationSplitView<'a, M>> for Element<'a, M> {
+    fn from(v: NavigationSplitView<'a, M>) -> Self {
+        v.build()
+    }
+}
+
+impl<'a, M: Clone + 'a> NavigationSplitView<'a, M> {
+    fn build(self) -> Element<'a, M> {
+        let v = self;
+        let r = v.window_radius;
+        // The sidebar pane carries the sidebar color (`.sidebar-pane`), so a flat header
+        // above the list continues it. It sits at the window edge, so it rounds the
+        // window's corners: left only when beside the content or as a drawer, all four
+        // when it is the whole (collapsed, parent-page) window.
+        let pane = move |radius: iced::border::Radius| {
+            move |t: &crate::Theme| iced::widget::container::Style {
+                border: iced::Border::default().rounded(radius),
+                ..sc::sidebar(t)
+            }
+        };
+        let left = iced::border::Radius {
+            top_left: r,
+            top_right: 0.0,
+            bottom_right: 0.0,
+            bottom_left: r,
+        };
+        if v.collapsed && v.collapsed_sidebar != CollapsedSidebar::Drawer {
+            // The sidebar is the parent page; the content is pushed over it (and popped back)
+            // with the navigation slide.
+            let first: Element<'a, M> = container(v.sidebar)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into();
+            return crate::layouts::push_stack(first, v.content, v.show_content)
+                .window_radius(r)
+                .into();
+        }
+        // Beside the content or as a drawer, one widget moves the sidebar between the two on the
+        // same spring: crossing the collapse breakpoint slides it out of the layout (or in),
+        // displacing the content, the way a drawer slides over it.
+        let sidebar: Element<'a, M> = container(v.sidebar)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(pane(left))
+            .into();
+        let content: Element<'a, M> = container(crate::layouts::content_area(v.content))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
+        let mut split = crate::layouts::adaptive_split(
+            sidebar,
+            content,
+            !v.collapsed,
+            v.sidebar_width,
+            v.drawer_width,
+        )
+        .drawer_open(v.drawer_open)
+        .window_radius(r);
+        if let Some(m) = v.on_close_drawer {
+            split = split.on_close(m);
+        }
+        split.into()
+    }
+}
+
+/// `AdwOverlaySplitView`. When `collapsed`, the sidebar floats over the
+/// content with a scrim (click it to send `on_close`).
+pub struct OverlaySplitView<'a, M> {
+    sidebar: Element<'a, M>,
+    content: Element<'a, M>,
+    sidebar_width: f32,
+    collapsed: bool,
+    show_sidebar: bool,
+    on_close: Option<M>,
+}
+
+impl<'a, M: 'a> OverlaySplitView<'a, M> {
+    pub fn new(sidebar: impl Into<Element<'a, M>>, content: impl Into<Element<'a, M>>) -> Self {
+        Self {
+            sidebar: sidebar.into(),
+            content: content.into(),
+            sidebar_width: Metrics::desktop().sidebar_width,
+            collapsed: false,
+            show_sidebar: true,
+            on_close: None,
+        }
+    }
+    pub fn sidebar_width(mut self, w: f32) -> Self {
+        self.sidebar_width = w;
+        self
+    }
+    pub fn collapsed(mut self, c: bool) -> Self {
+        self.collapsed = c;
+        self
+    }
+    pub fn show_sidebar(mut self, s: bool) -> Self {
+        self.show_sidebar = s;
+        self
+    }
+    pub fn on_close(mut self, m: M) -> Self {
+        self.on_close = Some(m);
+        self
+    }
+}
+
+impl<'a, M: Clone + 'a> From<OverlaySplitView<'a, M>> for Element<'a, M> {
+    fn from(v: OverlaySplitView<'a, M>) -> Self {
+        // Popovers opened in the content stay inside it, not under the sidebar.
+        let content: Element<'a, M> = crate::layouts::content_area(v.content).into();
+        if !v.show_sidebar {
+            return content;
+        }
+        let side = container(v.sidebar)
+            .width(Length::Fixed(v.sidebar_width))
+            .height(Length::Fill);
+        if !v.collapsed {
+            return row![
+                side,
+                container(space().width(1))
+                    .height(Length::Fill)
+                    .style(sc::sidebar_separator),
+                content
+            ]
+            .into();
+        }
+        let mut scrim = mouse_area(
+            container(space())
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .style(sc::backdrop),
+        );
+        if let Some(m) = v.on_close {
+            scrim = scrim.on_press(m);
+        }
+        stack![content, opaque(scrim), opaque(side)].into()
+    }
+}
+
+/// One page of a navigation stack.
+pub struct NavigationPage<'a, M> {
+    pub title: String,
+    pub content: Element<'a, M>,
+}
+
+impl<'a, M> NavigationPage<'a, M> {
+    pub fn new(title: impl Into<String>, content: impl Into<Element<'a, M>>) -> Self {
+        Self {
+            title: title.into(),
+            content: content.into(),
+        }
+    }
+}
+
+/// `AdwNavigationView`: shows the top page with a header bar and a back
+/// button (sending `on_pop`) when the stack has more than one page.
+pub fn navigation_view<'a, M: Clone + 'a>(
+    mut pages: Vec<NavigationPage<'a, M>>,
+    on_pop: M,
+) -> Element<'a, M> {
+    let depth = pages.len();
+    let Some(top) = pages.pop() else {
+        return space().into();
+    };
+    let mut bar = header_bar().title(top.title);
+    if depth > 1 {
+        bar = bar.pack_start(crate::components::circular_button(Icon::GoPrevious).on_press(on_pop));
+    }
+    toolbar_view(top.content).top_bar(bar).into()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_sidebar_list_can_pick_its_style_by_its_own_width() {
+        let l = SidebarList::<()>::new([SidebarItem::new("One", ())])
+            .cards_below(crate::breakpoints::WidthClass::Md);
+        assert_eq!(l.cards_below, Some(crate::breakpoints::WidthClass::Md));
+        let _: Element<'_, ()> = l.into();
+    }
+
+    #[test]
+    fn a_sidebar_list_follows_the_layout_that_is_shown() {
+        use crate::adaptive::{Adaptive, Layouts};
+        use crate::breakpoints::{Breakpoints, WidthClass};
+        use crate::layouts::transition::Budgets;
+        use std::time::Instant;
+
+        let scale = Breakpoints::default();
+        let mut a = Adaptive::new(
+            Layouts::new()
+                .layout(..WidthClass::Md, "narrow")
+                .layout(WidthClass::Md.., "wide"),
+        );
+        let present = |k: &&str| match *k {
+            "narrow" => (SidebarStyle::Cards, SidebarPadding::Lg),
+            _ => (SidebarStyle::List, SidebarPadding::Sm),
+        };
+        let list = || SidebarList::<()>::new([SidebarItem::new("One", ())]);
+
+        // Nothing shown yet: the list keeps its own presentation.
+        let l = list().follow(&a, present);
+        assert_eq!(
+            (l.style, l.padding),
+            (SidebarStyle::List, SidebarPadding::Md)
+        );
+
+        let t0 = Instant::now();
+        a.resize_with(&scale, Budgets::ZERO, 1000.0, t0);
+        let l = list().follow(&a, present);
+        assert_eq!(
+            (l.style, l.padding),
+            (SidebarStyle::List, SidebarPadding::Sm)
+        );
+
+        a.resize_with(&scale, Budgets::ZERO, 500.0, t0);
+        let l = list().follow(&a, present);
+        assert_eq!(
+            (l.style, l.padding),
+            (SidebarStyle::Cards, SidebarPadding::Lg)
+        );
+    }
+
+    use super::*;
+
+    #[test]
+    fn sidebar_width_follows_docs_rules() {
+        // 25% of the width, clamped to 180..280.
+        assert_eq!(sidebar_width_for(600.0, 0.25, 180.0, 280.0), 180.0);
+        assert_eq!(sidebar_width_for(1000.0, 0.25, 180.0, 280.0), 250.0);
+        assert_eq!(sidebar_width_for(2000.0, 0.25, 180.0, 280.0), 280.0);
+    }
+
+    fn split(mode: CollapsedSidebar) -> NavigationSplitView<'static, ()> {
+        NavigationSplitView::new(space(), space()).collapsed_sidebar(mode)
+    }
+
+    #[test]
+    fn drawer_is_the_default_collapsed_mode() {
+        assert_eq!(CollapsedSidebar::default(), CollapsedSidebar::Drawer);
+        assert_eq!(
+            split(CollapsedSidebar::Drawer).collapsed_sidebar,
+            CollapsedSidebar::Drawer
+        );
+    }
+
+    #[test]
+    fn drawer_never_takes_the_whole_screen() {
+        // At 380px the drawer uses the max sidebar width; at 300px it is capped to 85%.
+        let d = split(CollapsedSidebar::Drawer).adapt(380.0);
+        assert!(d.collapsed && (d.drawer_width - 280.0).abs() < 1e-3);
+        let d = split(CollapsedSidebar::Drawer).adapt(300.0);
+        assert!((d.drawer_width - 255.0).abs() < 1e-3 && d.drawer_width < 300.0);
+        // Not collapsed: the usual fraction/min/max rule.
+        let wide = split(CollapsedSidebar::Drawer).adapt(1000.0);
+        assert!(!wide.collapsed && (wide.sidebar_width - 250.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn content_is_never_squeezed() {
+        // Whenever the sidebar sits beside the content, the content keeps its minimum width.
+        for w in (360..=1800).step_by(5) {
+            let v = split(CollapsedSidebar::Drawer).adapt(w as f32);
+            if !v.collapsed {
+                assert!(
+                    w as f32 - v.sidebar_width >= MIN_CONTENT_WIDTH,
+                    "squeezed at {w}"
+                );
+            }
+        }
+        // Up to just under the `md` breakpoint it collapses; from there it does not.
+        assert!(split(CollapsedSidebar::Drawer).adapt(767.0).collapsed);
+        assert!(!split(CollapsedSidebar::Drawer).adapt(768.0).collapsed);
+        // A wider sidebar needs more room: the content rule collapses it earlier.
+        let wide_sidebar = split(CollapsedSidebar::Drawer)
+            .sidebar_width_fraction(0.4)
+            .max_sidebar_width(400.0)
+            .adapt(800.0);
+        assert!(
+            wide_sidebar.collapsed,
+            "320px sidebar leaves 480px of content"
+        );
+        // And the app-facing helper agrees with `adapt` for the defaults.
+        for w in [400.0, 700.0, 767.0, 768.0, 1000.0] {
+            assert_eq!(
+                split_collapsed(w),
+                split(CollapsedSidebar::Drawer).adapt(w).collapsed
+            );
+        }
+    }
+
+    #[test]
+    fn full_page_uses_the_regular_width_rule() {
+        let f = split(CollapsedSidebar::ParentPage).adapt(300.0);
+        assert!(f.collapsed && (f.sidebar_width - 180.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn sidebar_padding_levels_grow_in_every_measure() {
+        let m = Metrics::default();
+        let [sm, md, lg] = SidebarPadding::ALL;
+        for f in [SidebarPadding::row_height, SidebarPadding::row_padding] {
+            assert!(f(sm, &m) < f(md, &m) && f(md, &m) < f(lg, &m));
+        }
+        // Settings keeps Nautilus's row gap and horizontal inset.
+        assert!(sm.gap(&m) < md.gap(&m) && sm.inset(&m) < md.inset(&m));
+        assert_eq!((lg.gap(&m), lg.inset(&m)), (md.gap(&m), md.inset(&m)));
+        // GNOME Settings: 12 above and below one ~20px line of text.
+        assert_eq!(lg.row_height(&m), 2.0 * 12.0 + 20.0);
+        // Medium is the base metrics, so existing sidebars do not change.
+        assert_eq!(md.row_height(&m), m.sidebar_row_height);
+        assert_eq!(md.gap(&m), m.sidebar_spacing);
+        // A compact density keeps the ordering and the same steps.
+        let c = Metrics::compact();
+        assert_eq!(
+            lg.row_height(&c) - md.row_height(&c),
+            lg.row_height(&m) - md.row_height(&m)
+        );
+    }
+
+    #[test]
+    fn breakpoint_conditions() {
+        let bp = Breakpoint::max_width(400.0);
+        assert!(bp.matches(Size::new(360.0, 600.0)));
+        assert!(bp.matches(Size::new(400.0, 600.0)));
+        assert!(!bp.matches(Size::new(401.0, 600.0)));
+        assert!(Breakpoint::min_width(500.0).matches(Size::new(500.0, 1.0)));
+    }
+}

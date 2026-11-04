@@ -1,6 +1,6 @@
 //! Headless responsive logic: the conditions and the choice, with no widgets.
 //!
-//! [`MetaComponent`](crate::widget::MetaComponent) applies it to a container's size; any
+//! [`MetaComponent`](crate::metas::MetaComponent) applies it to a container's size; any
 //! other component (or plain code) can ask the same question of a width.
 
 use crate::breakpoints::{Breakpoints, WidthClass};

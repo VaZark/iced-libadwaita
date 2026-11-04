@@ -4,22 +4,23 @@
 use iced_adaptive_design as iad;
 
 use iad::theme_config::{Schema, Source, ThemeConfig, Value};
-use iad::widget::{self as w, PreferencesGroup};
+use iad::widgets::PreferencesGroup;
 use iad::{Element, Metrics};
+use iad::{components as cmp, widgets as w};
 use iced::widget::{column, container, row, text};
 use iced::{Color, Length};
 
 #[derive(Debug, Clone)]
 pub enum Msg {
-    Toolkit(w::TextAction),
-    App(w::TextAction),
+    Toolkit(iced::widget::text_editor::Action),
+    App(iced::widget::text_editor::Action),
     Hardcode(bool),
     Reset,
 }
 
 pub struct State {
-    toolkit: w::TextContent,
-    app: w::TextContent,
+    toolkit: iced::widget::text_editor::Content,
+    app: iced::widget::text_editor::Content,
     hardcode: bool,
 }
 
@@ -38,8 +39,8 @@ fn schema() -> Schema {
 impl Default for State {
     fn default() -> Self {
         Self {
-            toolkit: w::TextContent::with_text(TOOLKIT),
-            app: w::TextContent::with_text(APP),
+            toolkit: iced::widget::text_editor::Content::with_text(TOOLKIT),
+            app: iced::widget::text_editor::Content::with_text(APP),
             hardcode: false,
         }
     }
@@ -73,15 +74,18 @@ impl State {
             m: Metrics,
             title: &'static str,
             desc: &'static str,
-            content: &'a w::TextContent,
-            f: fn(w::TextAction) -> Msg,
+            content: &'a iced::widget::text_editor::Content,
+            f: fn(iced::widget::text_editor::Action) -> Msg,
         ) -> PreferencesGroup<'a, Msg> {
             PreferencesGroup::<Msg>::new()
                 .title(title)
                 .description(desc)
                 .metrics(m)
                 .push(w::card(
-                    w::text_view(content).max_lines(8).min_lines(3).on_action(f),
+                    cmp::text_view(content)
+                        .max_lines(8)
+                        .min_lines(3)
+                        .on_action(f),
                 ))
         }
 
@@ -196,7 +200,7 @@ impl State {
                 .title("An object styled by tokens")
                 .metrics(m)
                 .push(w::card(column![sample, notes].spacing(m.space_s))),
-            row![w::flat_button(text("Reset")).on_press(Msg::Reset)],
+            row![cmp::flat_button(text("Reset")).on_press(Msg::Reset)],
         ]
         .spacing(m.group_spacing)
         .into()

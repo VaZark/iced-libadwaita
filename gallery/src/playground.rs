@@ -16,8 +16,9 @@
 
 use iced_adaptive_design as iad;
 
-use iad::widget::{self as w, ToggleItem, typography as ty};
+use iad::components::{ToggleItem, typography as ty};
 use iad::{Element, Metrics};
+use iad::{components as cmp, widgets as w};
 use iced::Length;
 use iced::widget::{column, container};
 use std::ops::RangeInclusive;
@@ -283,7 +284,7 @@ impl Playground {
             for ((s, v), text) in self.specs.iter().zip(&self.values).zip(&self.texts) {
                 props = props.push(control(s, v, text, wrap, m));
             }
-            let reset = w::flat_button(ty::label("Reset")).on_press(wrap(Msg::Reset));
+            let reset = cmp::flat_button(ty::label("Reset")).on_press(wrap(Msg::Reset));
             page = page
                 .push(container(props).width(Length::Fill))
                 .push(container(reset).align_right(Length::Fill));
@@ -388,25 +389,25 @@ fn control<'a, M: Clone + 'a>(
 
 /// The number input's rule for a range: whole numbers, or two decimals when the range or the
 /// default is fractional; stepping by one unit of the last digit (1 for whole numbers).
-fn number_rule(range: &RangeInclusive<f32>, default: f32) -> w::Numeric {
+fn number_rule(range: &RangeInclusive<f32>, default: f32) -> iad::primitives::numeric::Numeric {
     let whole = |v: f32| (v - v.round()).abs() < 1e-6;
     let digits = if whole(*range.start()) && whole(*range.end()) && whole(default) {
         0
     } else {
         2
     };
-    w::Numeric::decimal(digits)
+    iad::primitives::numeric::Numeric::decimal(digits)
         .min(from_f32(*range.start(), digits))
         .max(from_f32(*range.end(), digits))
 }
 
-fn from_f32(v: f32, digits: u8) -> w::Decimal {
-    w::Decimal::new(
+fn from_f32(v: f32, digits: u8) -> iad::primitives::numeric::Decimal {
+    iad::primitives::numeric::Decimal::new(
         (f64::from(v) * 10f64.powi(i32::from(digits))).round() as i64,
         digits,
     )
 }
 
-fn to_f32(d: w::Decimal) -> f32 {
+fn to_f32(d: iad::primitives::numeric::Decimal) -> f32 {
     (d.units as f64 / 10f64.powi(i32::from(d.digits))) as f32
 }

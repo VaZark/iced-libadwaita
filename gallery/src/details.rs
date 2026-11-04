@@ -159,7 +159,7 @@ impl Gallery {
     fn detail_page(&self, d: Detail) -> Element<'_> {
         let m = self.metrics();
         let noop = |_: String| Message::Noop;
-        let lbl = |s: &'static str| -> Element<'static> { w::typography::label(s).into() };
+        let lbl = |s: &'static str| -> Element<'static> { cmp::typography::label(s).into() };
         let sp = m.space_m;
         let g = |t| self.group(t);
 
@@ -174,34 +174,34 @@ impl Gallery {
             match d {
             Detail::Button => {
                 let enabled = row![
-                    w::raised_button(lbl("Default")).on_press(Message::Noop),
-                    w::flat_button(lbl("Flat")).on_press(Message::Noop),
-                    w::suggested_button(lbl("Suggested")).on_press(Message::Noop),
-                    w::destructive_button(lbl("Destructive")).on_press(Message::Noop),
+                    cmp::raised_button(lbl("Default")).on_press(Message::Noop),
+                    cmp::flat_button(lbl("Flat")).on_press(Message::Noop),
+                    cmp::suggested_button(lbl("Suggested")).on_press(Message::Noop),
+                    cmp::destructive_button(lbl("Destructive")).on_press(Message::Noop),
                 ]
                 .spacing(sp)
                 .wrap();
                 let disabled = row![
-                    w::raised_button(lbl("Default")),
-                    w::flat_button(lbl("Flat")),
-                    w::suggested_button(lbl("Suggested")),
-                    w::destructive_button(lbl("Destructive")),
+                    cmp::raised_button(lbl("Default")),
+                    cmp::flat_button(lbl("Flat")),
+                    cmp::suggested_button(lbl("Suggested")),
+                    cmp::destructive_button(lbl("Destructive")),
                 ]
                 .spacing(sp)
                 .wrap();
                 let shapes = row![
-                    w::pill_button(lbl("Pill")).on_press(Message::Noop),
-                    w::suggested_pill_button(lbl("Suggested Pill")).on_press(Message::Noop),
-                    w::circular_button(Icon::ListAdd).on_press(Message::Noop),
-                    w::icon_button(Icon::Delete).on_press(Message::Noop),
+                    cmp::pill_button(lbl("Pill")).on_press(Message::Noop),
+                    cmp::suggested_pill_button(lbl("Suggested Pill")).on_press(Message::Noop),
+                    cmp::circular_button(Icon::ListAdd).on_press(Message::Noop),
+                    cmp::icon_button(Icon::Delete).on_press(Message::Noop),
                 ]
                 .spacing(sp)
                 .align_y(iced::Alignment::Center)
                 .wrap();
                 let shapes_disabled = row![
-                    w::pill_button(lbl("Pill")),
-                    w::circular_button(Icon::ListAdd),
-                    w::icon_button(Icon::Delete),
+                    cmp::pill_button(lbl("Pill")),
+                    cmp::circular_button(Icon::ListAdd),
+                    cmp::icon_button(Icon::Delete),
                 ]
                 .spacing(sp)
                 .align_y(iced::Alignment::Center)
@@ -217,11 +217,11 @@ impl Gallery {
             }
             Detail::ButtonContent => {
                 let content = row![
-                    w::raised_button(Element::from(w::ButtonContent::new("Open").icon(Icon::Home).metrics(m)))
+                    cmp::raised_button(Element::from(cmp::ButtonContent::new("Open").icon(Icon::Home).metrics(m)))
                         .on_press(Message::Noop),
-                    w::suggested_button(Element::from(w::ButtonContent::new("Add").icon(Icon::ListAdd)))
+                    cmp::suggested_button(Element::from(cmp::ButtonContent::new("Add").icon(Icon::ListAdd)))
                         .on_press(Message::Noop),
-                    w::raised_button(Element::from(w::ButtonContent::new("Disabled").icon(Icon::Home).metrics(m))),
+                    cmp::raised_button(Element::from(cmp::ButtonContent::new("Disabled").icon(Icon::Home).metrics(m))),
                 ]
                 .spacing(sp)
                 .align_y(iced::Alignment::Center)
@@ -273,28 +273,28 @@ impl Gallery {
             Detail::ToggleGroup => {
                 let items = || {
                     vec![
-                        w::ToggleItem::new(Tab::One, "One"),
-                        w::ToggleItem::new(Tab::Two, "Two"),
-                        w::ToggleItem::new(Tab::Three, "Three"),
+                        cmp::ToggleItem::new(Tab::One, "One"),
+                        cmp::ToggleItem::new(Tab::Two, "Two"),
+                        cmp::ToggleItem::new(Tab::Three, "Three"),
                     ]
                 };
                 let icons = vec![
-                    w::ToggleItem::new(Tab::One, "Files").icon(Icon::Home),
-                    w::ToggleItem::new(Tab::Two, "Search").icon(Icon::Search),
-                    w::ToggleItem::new(Tab::Three, "Settings").icon(Icon::Settings),
+                    cmp::ToggleItem::new(Tab::One, "Files").icon(Icon::Home),
+                    cmp::ToggleItem::new(Tab::Two, "Search").icon(Icon::Search),
+                    cmp::ToggleItem::new(Tab::Three, "Settings").icon(Icon::Settings),
                 ];
                 let crowded = vec![
-                    w::ToggleItem::new(Tab::One, "Files").icon(Icon::Home),
-                    w::ToggleItem::new(Tab::Two, "Search").icon(Icon::Search),
-                    w::ToggleItem::new(Tab::Three, "Settings").icon(Icon::Settings),
-                    w::ToggleItem::new(Tab::One, "Library").icon(Icon::Edit),
-                    w::ToggleItem::new(Tab::Two, "Archive").icon(Icon::Delete),
+                    cmp::ToggleItem::new(Tab::One, "Files").icon(Icon::Home),
+                    cmp::ToggleItem::new(Tab::Two, "Search").icon(Icon::Search),
+                    cmp::ToggleItem::new(Tab::Three, "Settings").icon(Icon::Settings),
+                    cmp::ToggleItem::new(Tab::One, "Library").icon(Icon::Edit),
+                    cmp::ToggleItem::new(Tab::Two, "Archive").icon(Icon::Delete),
                 ];
                 column![
-                    g("Text").push(w::card(Element::from(w::toggle_group(items(), Some(self.tab), Message::Tab)))),
-                    g("Icons and text").push(w::card(Element::from(w::toggle_group(icons, Some(self.tab), Message::Tab)))),
+                    g("Text").push(w::card(Element::from(cmp::toggle_group(items(), Some(self.tab), Message::Tab)))),
+                    g("Icons and text").push(w::card(Element::from(cmp::toggle_group(icons, Some(self.tab), Message::Tab)))),
                     g("Crowded: fills, shrinks, falls back to icons").push(w::card(Element::from(
-                        w::toggle_group(crowded, Some(self.tab), Message::Tab).width(Length::Fill),
+                        cmp::toggle_group(crowded, Some(self.tab), Message::Tab).width(Length::Fill),
                     ))),
                     g("In a row").push(
                         w::ToggleGroupRow::new("View", items(), Some(self.tab), Message::Tab)
@@ -308,25 +308,25 @@ impl Gallery {
 
             Detail::TextInput => {
                 let states = stack(sp, vec![
-                    w::entry("Normal", &self.name).on_input(Message::Name).metrics(m).into(),
-                    w::entry("Placeholder", "").on_input(noop).metrics(m).into(),
-                    w::entry("Error", "not a valid value").on_input(noop).state(w::EntryState::Error).metrics(m).into(),
-                    w::entry("Warning", "check this").on_input(noop).state(w::EntryState::Warning).metrics(m).into(),
-                    w::entry("Success", "looks good").on_input(noop).state(w::EntryState::Success).metrics(m).into(),
-                    w::entry("Disabled", "read only").metrics(m).into(),
+                    cmp::entry("Normal", &self.name).on_input(Message::Name).metrics(m).into(),
+                    cmp::entry("Placeholder", "").on_input(noop).metrics(m).into(),
+                    cmp::entry("Error", "not a valid value").on_input(noop).state(cmp::EntryState::Error).metrics(m).into(),
+                    cmp::entry("Warning", "check this").on_input(noop).state(cmp::EntryState::Warning).metrics(m).into(),
+                    cmp::entry("Success", "looks good").on_input(noop).state(cmp::EntryState::Success).metrics(m).into(),
+                    cmp::entry("Disabled", "read only").metrics(m).into(),
                 ]);
                 let password = stack(sp, vec![
-                    w::password_entry("Password", &self.password).on_input(Message::Password).metrics(m).into(),
-                    w::password_entry("Disabled", "hunter2").metrics(m).into(),
+                    cmp::password_entry("Password", &self.password).on_input(Message::Password).metrics(m).into(),
+                    cmp::password_entry("Disabled", "hunter2").metrics(m).into(),
                 ]);
                 let color = stack(sp, vec![
-                    w::entry("Purple", "text and ring override").on_input(noop).color(iad::color::hex(0x9141ac)).metrics(m).into(),
-                    w::entry("Teal", "any color").on_input(noop).color(iad::color::hex(0x2190a4)).metrics(m).into(),
-                    w::entry("Orange", "disabled keeps it dim").color(iad::color::hex(0xe66100)).metrics(m).into(),
+                    cmp::entry("Purple", "text and ring override").on_input(noop).color(iad::color::hex(0x9141ac)).metrics(m).into(),
+                    cmp::entry("Teal", "any color").on_input(noop).color(iad::color::hex(0x2190a4)).metrics(m).into(),
+                    cmp::entry("Orange", "disabled keeps it dim").color(iad::color::hex(0xe66100)).metrics(m).into(),
                 ]);
                 let width = stack(sp, vec![
-                    w::entry("Fixed width", "200px").on_input(noop).width(Length::Fixed(200.0)).metrics(m).into(),
-                    w::entry("Fills", "fills the card").on_input(noop).metrics(m).into(),
+                    cmp::entry("Fixed width", "200px").on_input(noop).width(Length::Fixed(200.0)).metrics(m).into(),
+                    cmp::entry("Fills", "fills the card").on_input(noop).metrics(m).into(),
                 ]);
                 // GALLERY_ONLY=sections: only the sections demo (a screenshot is one window tall).
                 if std::env::var("GALLERY_ONLY").as_deref() == Ok("sections") {
@@ -343,18 +343,18 @@ impl Gallery {
                 .into()
             }
             Detail::TextView => {
-                let editable = stack(sp, vec![w::text_view(&self.editor).on_action(Message::Editor).into()]);
-                let placeholder = stack(sp, vec![w::text_view(&self.editor_empty)
+                let editable = stack(sp, vec![cmp::text_view(&self.editor).on_action(Message::Editor).into()]);
+                let placeholder = stack(sp, vec![cmp::text_view(&self.editor_empty)
                     .placeholder("Type here…")
                     .on_action(Message::EditorEmpty)
                     .into()]);
-                let readonly = stack(sp, vec![w::text_view(&self.editor_ro).into()]);
-                let grow_lines = stack(sp, vec![w::text_view(&self.editor_grow)
+                let readonly = stack(sp, vec![cmp::text_view(&self.editor_ro).into()]);
+                let grow_lines = stack(sp, vec![cmp::text_view(&self.editor_grow)
                     .min_lines(1)
                     .max_lines(6)
                     .on_action(Message::EditorGrow)
                     .into()]);
-                let grow_px = stack(sp, vec![w::text_view(&self.editor_grow_px)
+                let grow_px = stack(sp, vec![cmp::text_view(&self.editor_grow_px)
                     .placeholder("Grows to 120 px, starting at two lines")
                     .min_lines(2)
                     .max_height(120.0)
@@ -446,7 +446,7 @@ impl Gallery {
                 g(d.title())
                     .description(d.description())
                     .push(w::card(row![
-                        w::raised_button(text("Open")).on_press_maybe(Self::open_message(d))
+                        cmp::raised_button(text("Open")).on_press_maybe(Self::open_message(d))
                     ])),
             ]
             .into(),
@@ -516,7 +516,7 @@ impl Gallery {
                     .push(
                         w::ActionRow::new("Ada Lovelace")
                             .subtitle("Prefix avatar and a chevron")
-                            .prefix(w::avatar(40.0, "Ada Lovelace"))
+                            .prefix(cmp::avatar(40.0, "Ada Lovelace"))
                             .chevron(true)
                             .on_activate(Message::ShowToast("Opened account"))
                             .metrics(m),
@@ -524,7 +524,7 @@ impl Gallery {
                     .push(
                         w::ActionRow::new("Suffix")
                             .subtitle("A button at the end")
-                            .suffix(w::raised_button(lbl("Action")).on_press(Message::Noop))
+                            .suffix(cmp::raised_button(lbl("Action")).on_press(Message::Noop))
                             .metrics(m),
                     ),
             ]
@@ -560,7 +560,7 @@ impl Gallery {
 
             Detail::Toast => {
                 let spec = |title, action, status| Message::ShowToastSpec(ToastSpec { title, action, status });
-                let show = |label: &'static str, msg: Message| w::raised_button(text(label)).on_press(msg);
+                let show = |label: &'static str, msg: Message| cmp::raised_button(text(label)).on_press(msg);
                 let action = row![
                     show("Plain", Message::ShowToast("Settings saved")),
                     show("With action", spec("File deleted", Some("Undo"), None)),
@@ -609,8 +609,8 @@ impl Gallery {
                             w::ToggleGroupRow::new(
                                 "Container",
                                 vec![
-                                    w::ToggleItem::new(w::ToastTarget::Window, "Window").icon(Icon::Window),
-                                    w::ToggleItem::new(w::ToastTarget::Content, "Content").icon(Icon::Sidebar),
+                                    cmp::ToggleItem::new(w::ToastTarget::Window, "Window").icon(Icon::Window),
+                                    cmp::ToggleItem::new(w::ToastTarget::Content, "Content").icon(Icon::Sidebar),
                                 ],
                                 Some(self.toast_target),
                                 Message::ToastTarget,
@@ -659,7 +659,7 @@ impl Gallery {
                         w::ActionRow::new("Tint color")
                             .suffix(
                                 w::ColorInput::new(
-                                    w::Hsva::from_rgba(self.tint.r, self.tint.g, self.tint.b, self.tint.a),
+                                    iad::primitives::color_picker::Hsva::from_rgba(self.tint.r, self.tint.g, self.tint.b, self.tint.a),
                                     &self.tint_text,
                                     Message::TintText,
                                     Message::Tint,
@@ -682,18 +682,18 @@ impl Gallery {
                 // rounds the card and boxed list; toast radius rounds toasts.
                 let preview = column![
                     row![
-                        w::raised_button(lbl("Default")).on_press(Message::Noop),
-                        w::suggested_button(lbl("Suggested")).on_press(Message::Noop),
-                        w::destructive_button(lbl("Destructive")).on_press(Message::Noop),
+                        cmp::raised_button(lbl("Default")).on_press(Message::Noop),
+                        cmp::suggested_button(lbl("Suggested")).on_press(Message::Noop),
+                        cmp::destructive_button(lbl("Destructive")).on_press(Message::Noop),
                     ]
                     .spacing(m.space_s)
                     .wrap(),
-                    w::entry("Entry", &self.name).on_input(Message::Name).metrics(m),
-                    Element::from(w::toggle_group(
+                    cmp::entry("Entry", &self.name).on_input(Message::Name).metrics(m),
+                    Element::from(cmp::toggle_group(
                         vec![
-                            w::ToggleItem::new(Tab::One, "One"),
-                            w::ToggleItem::new(Tab::Two, "Two"),
-                            w::ToggleItem::new(Tab::Three, "Three"),
+                            cmp::ToggleItem::new(Tab::One, "One"),
+                            cmp::ToggleItem::new(Tab::Two, "Two"),
+                            cmp::ToggleItem::new(Tab::Three, "Three"),
                         ],
                         Some(self.tab),
                         Message::Tab,
@@ -747,8 +747,8 @@ impl Gallery {
                             .subtitle(format!("value {:.2}", self.demo_value))
                             .suffix(
                                 row![
-                                    w::progress_bar(0.0..=1.0, self.demo_value.clamp(0.0, 1.0)).length(Length::Fixed(120.0)),
-                                    w::suggested_button(w::typography::label("Play")).on_press(Message::DemoPlay),
+                                    cmp::progress_bar(0.0..=1.0, self.demo_value.clamp(0.0, 1.0)).length(Length::Fixed(120.0)),
+                                    cmp::suggested_button(cmp::typography::label("Play")).on_press(Message::DemoPlay),
                                 ]
                                 .spacing(m.space_m)
                                 .align_y(iced::Alignment::Center),
@@ -763,9 +763,9 @@ impl Gallery {
                         w::ToggleGroupRow::new(
                             "Menu presentation",
                             vec![
-                                w::ToggleItem::new(MenuMode::Auto, "Auto").icon(Icon::Settings),
-                                w::ToggleItem::new(MenuMode::Dropdown, "Dropdown").icon(Icon::GoDown),
-                                w::ToggleItem::new(MenuMode::FullPage, "Full page").icon(Icon::Window),
+                                cmp::ToggleItem::new(MenuMode::Auto, "Auto").icon(Icon::Settings),
+                                cmp::ToggleItem::new(MenuMode::Dropdown, "Dropdown").icon(Icon::GoDown),
+                                cmp::ToggleItem::new(MenuMode::FullPage, "Full page").icon(Icon::Window),
                             ],
                             Some(self.menu_mode),
                             Message::MenuMode,
@@ -782,9 +782,9 @@ impl Gallery {
                         w::ToggleGroupRow::new(
                             "Row padding",
                             vec![
-                                w::ToggleItem::new(w::SidebarPadding::Sm, "Small"),
-                                w::ToggleItem::new(w::SidebarPadding::Md, "Medium"),
-                                w::ToggleItem::new(w::SidebarPadding::Lg, "Large"),
+                                cmp::ToggleItem::new(w::SidebarPadding::Sm, "Small"),
+                                cmp::ToggleItem::new(w::SidebarPadding::Md, "Medium"),
+                                cmp::ToggleItem::new(w::SidebarPadding::Lg, "Large"),
                             ],
                             Some(self.sidebar_padding),
                             Message::SidebarPadding,
@@ -842,33 +842,33 @@ impl Gallery {
         match i {
             Inline::Switch => {
                 let bare = stack(sp, vec![
-                    w::Field::new("Enabled", w::switch(self.sw).on_toggle(Message::Sw)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
-                    w::Field::new("Off", w::switch(false).on_toggle(|_| Message::Noop)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
-                    w::Field::new("Disabled, on", w::switch(true)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
-                    w::Field::new("Disabled, off", w::switch(false)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Enabled", cmp::switch(self.sw).on_toggle(Message::Sw)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Off", cmp::switch(false).on_toggle(|_| Message::Noop)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Disabled, on", cmp::switch(true)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
+                    w::Field::new("Disabled, off", cmp::switch(false)).layout(w::FieldLayout::Row).plain_label(true).metrics(m).into(),
                 ]);
                 column![g("Switch").push(w::card(bare))].into()
             }
             Inline::CheckButton => {
                 let checks = stack(sp, vec![
-                    w::check_button("Enabled", self.check).on_toggle(Message::Check).into(),
-                    w::check_button("Unchecked", false).on_toggle(|_| Message::Noop).into(),
-                    w::check_button("Disabled, checked", true).into(),
-                    w::check_button("Disabled, unchecked", false).into(),
+                    cmp::check_button("Enabled", self.check).on_toggle(Message::Check).into(),
+                    cmp::check_button("Unchecked", false).on_toggle(|_| Message::Noop).into(),
+                    cmp::check_button("Disabled, checked", true).into(),
+                    cmp::check_button("Disabled, unchecked", false).into(),
                 ]);
                 column![g("Check button").push(w::card(checks))].into()
             }
             Inline::RadioButton => {
                 let vertical = stack(sp, vec![
-                    w::radio_button("Radio A", 0u8, self.radio, Message::Radio).into(),
-                    w::radio_button("Radio B", 1u8, self.radio, Message::Radio).into(),
-                    w::radio_button("Radio C", 2u8, self.radio, Message::Radio).into(),
+                    cmp::radio_button("Radio A", 0u8, self.radio, Message::Radio).into(),
+                    cmp::radio_button("Radio B", 1u8, self.radio, Message::Radio).into(),
+                    cmp::radio_button("Radio C", 2u8, self.radio, Message::Radio).into(),
                 ]);
                 column![g("Radio button").push(w::card(vertical))].into()
             }
             Inline::Scale => {
                 let scale = stack(sp, vec![
-                    w::scale(0.0..=100.0, self.slider, Message::Slider).into(),
+                    cmp::scale(0.0..=100.0, self.slider, Message::Slider).into(),
                     ty::dim_label(format!("value {:.0}", self.slider)).into(),
                 ]);
                 column![g("Scale").push(w::card(scale))].into()
@@ -882,7 +882,7 @@ impl Gallery {
             .into(),
             Inline::Clamp => column![
                 g("Clamp at 280px").push(w::card(w::clamp(
-                    w::entry("Never wider than 280px", "centered").on_input(noop).metrics(m),
+                    cmp::entry("Never wider than 280px", "centered").on_input(noop).metrics(m),
                     280.0,
                 ))),
             ]
@@ -894,7 +894,7 @@ impl Gallery {
                             .icon(icon.colored(64.0, self.build_theme().semantic.dim_solid()))
                             .title(title)
                             .description(desc)
-                            .child(w::suggested_pill_button(text("Try Again")).on_press(Message::Noop))
+                            .child(cmp::suggested_pill_button(text("Try Again")).on_press(Message::Noop))
                             .compact(true)
                             .metrics(m),
                     )
@@ -906,7 +906,7 @@ impl Gallery {
             Inline::WrapBox => {
                 let tags: Vec<Element> = ["rust", "iced", "gnome", "adwaita", "libadwaita", "theming", "widgets"]
                     .into_iter()
-                    .map(|t| w::tag(t, Role::Accent))
+                    .map(|t| cmp::tag(t, Role::Accent))
                     .collect();
                 column![g("Wrap box").description("Narrow the window: children wrap.").push(w::card(w::wrap_box(tags, m.space_s)))]
                     .into()
@@ -934,9 +934,9 @@ impl Gallery {
             Inline::ViewSwitcher => {
                 let items = || {
                     vec![
-                        w::ToggleItem::new(Tab::One, "Files").icon(Icon::Home),
-                        w::ToggleItem::new(Tab::Two, "Search").icon(Icon::Search),
-                        w::ToggleItem::new(Tab::Three, "Settings").icon(Icon::Settings),
+                        cmp::ToggleItem::new(Tab::One, "Files").icon(Icon::Home),
+                        cmp::ToggleItem::new(Tab::Two, "Search").icon(Icon::Search),
+                        cmp::ToggleItem::new(Tab::Three, "Settings").icon(Icon::Settings),
                     ]
                 };
                 column![
@@ -1042,15 +1042,15 @@ impl Gallery {
                         row![icons(w::MenuIconSide::End), icons(w::MenuIconSide::Start)].spacing(m.space_m),
                     )),
                     g("Bottom sheet").description("Menu::sheet is the same menu as the content of a bottom sheet: the large touch rows under a title and a dimmed line. The app closes the sheet by mapping the messages.").push(
-                        w::card(w::suggested_button(ty::label("Open sheet")).on_press(Message::Sheet(true))),
+                        w::card(cmp::suggested_button(ty::label("Open sheet")).on_press(Message::Sheet(true))),
                     ),
                     g("Presentation").push(
                         w::ToggleGroupRow::new(
                             "Menu presentation",
                             vec![
-                                w::ToggleItem::new(MenuMode::Auto, "Auto").icon(Icon::Settings),
-                                w::ToggleItem::new(MenuMode::Dropdown, "Dropdown").icon(Icon::GoDown),
-                                w::ToggleItem::new(MenuMode::FullPage, "Full page").icon(Icon::Window),
+                                cmp::ToggleItem::new(MenuMode::Auto, "Auto").icon(Icon::Settings),
+                                cmp::ToggleItem::new(MenuMode::Dropdown, "Dropdown").icon(Icon::GoDown),
+                                cmp::ToggleItem::new(MenuMode::FullPage, "Full page").icon(Icon::Window),
                             ],
                             Some(self.menu_mode),
                             Message::MenuMode,
@@ -1085,25 +1085,25 @@ impl Gallery {
             }
             Inline::Progress => {
                 let bars = stack(sp, vec![
-                    w::scale(0.0..=100.0, self.slider, Message::Slider).into(),
-                    w::progress_bar(0.0..=100.0, self.slider).into(),
-                    w::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::success).into(),
-                    w::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::warning).into(),
-                    w::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::error).into(),
+                    cmp::scale(0.0..=100.0, self.slider, Message::Slider).into(),
+                    cmp::progress_bar(0.0..=100.0, self.slider).into(),
+                    cmp::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::success).into(),
+                    cmp::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::warning).into(),
+                    cmp::progress_bar(0.0..=100.0, self.slider).style(style::progress_bar::error).into(),
                 ]);
                 column![
                     g("Progress bar").push(w::card(bars)),
-                    g("Spinner").push(w::card(w::spinner(32.0, self.angle))),
+                    g("Spinner").push(w::card(cmp::spinner(32.0, self.angle))),
                 ]
                 .spacing(m.group_spacing)
                 .into()
             }
             Inline::Avatar => {
                 let avatars = row![
-                    w::avatar(32.0, "Ada Lovelace"),
-                    w::avatar(48.0, "Grace Hopper"),
-                    w::avatar(64.0, "Linus"),
-                    w::avatar(48.0, "Margaret Hamilton").show_initials(false),
+                    cmp::avatar(32.0, "Ada Lovelace"),
+                    cmp::avatar(48.0, "Grace Hopper"),
+                    cmp::avatar(64.0, "Linus"),
+                    cmp::avatar(48.0, "Margaret Hamilton").show_initials(false),
                 ]
                 .spacing(sp)
                 .align_y(iced::Alignment::Center);
@@ -1112,22 +1112,22 @@ impl Gallery {
             Inline::Surfaces => {
                 let sem = self.build_theme().semantic;
                 let surfaces = column![
-                    row![w::color_swatch("window", sem.window), w::color_swatch("view", sem.view), w::color_swatch("headerbar", sem.headerbar)].spacing(m.space_s),
-                    row![w::color_swatch("card", sem.card), w::color_swatch("dialog", sem.dialog), w::color_swatch("popover", sem.popover)].spacing(m.space_s),
-                    row![w::color_swatch("sidebar", sem.sidebar), w::color_swatch("thumbnail", sem.thumbnail), w::color_swatch("osd", sem.osd)].spacing(m.space_s),
-                    row![w::status_swatch("accent", sem.accent), w::status_swatch("destructive", sem.destructive), w::status_swatch("success", sem.success)].spacing(m.space_s),
-                    row![w::status_swatch("warning", sem.warning), w::status_swatch("error", sem.error)].spacing(m.space_s),
+                    row![cmp::color_swatch("window", sem.window), cmp::color_swatch("view", sem.view), cmp::color_swatch("headerbar", sem.headerbar)].spacing(m.space_s),
+                    row![cmp::color_swatch("card", sem.card), cmp::color_swatch("dialog", sem.dialog), cmp::color_swatch("popover", sem.popover)].spacing(m.space_s),
+                    row![cmp::color_swatch("sidebar", sem.sidebar), cmp::color_swatch("thumbnail", sem.thumbnail), cmp::color_swatch("osd", sem.osd)].spacing(m.space_s),
+                    row![cmp::status_swatch("accent", sem.accent), cmp::status_swatch("destructive", sem.destructive), cmp::status_swatch("success", sem.success)].spacing(m.space_s),
+                    row![cmp::status_swatch("warning", sem.warning), cmp::status_swatch("error", sem.error)].spacing(m.space_s),
                 ]
                 .spacing(m.space_s);
                 column![g("Semantic surfaces").push(w::card(surfaces))].into()
             }
             Inline::Tag => {
                 let tags = row![
-                    w::tag("Accent", Role::Accent),
-                    w::tag("Success", Role::Success),
-                    w::tag("Warning", Role::Warning),
-                    w::tag("Error", Role::Error),
-                    w::tag("Destructive", Role::Destructive),
+                    cmp::tag("Accent", Role::Accent),
+                    cmp::tag("Success", Role::Success),
+                    cmp::tag("Warning", Role::Warning),
+                    cmp::tag("Error", Role::Error),
+                    cmp::tag("Destructive", Role::Destructive),
                 ]
                 .spacing(m.space_s)
                 .wrap();
@@ -1136,29 +1136,29 @@ impl Gallery {
 
             Inline::BadgeChip => {
                 let badges = row![
-                    w::Badge::new("New").role(Role::Accent),
-                    w::Badge::new("Stable").role(Role::Success),
-                    w::Badge::new("Beta").role(Role::Warning),
-                    w::Badge::new("Broken").role(Role::Error),
-                    w::Badge::count(7, 99).role(Role::Error).solid(true),
-                    w::Badge::count(120, 99).role(Role::Accent).solid(true),
-                    w::Badge::new("Neutral"),
+                    cmp::Badge::new("New").role(Role::Accent),
+                    cmp::Badge::new("Stable").role(Role::Success),
+                    cmp::Badge::new("Beta").role(Role::Warning),
+                    cmp::Badge::new("Broken").role(Role::Error),
+                    cmp::Badge::count(7, 99).role(Role::Error).solid(true),
+                    cmp::Badge::count(120, 99).role(Role::Accent).solid(true),
+                    cmp::Badge::new("Neutral"),
                 ]
                 .spacing(m.space_s)
                 .wrap();
                 let chips = row(self.chips.iter().map(|c| {
                     Element::from(
-                        w::Chip::new(*c).role(Role::Accent).on_press(Message::Noop).on_remove(Message::ChipRemove(c)),
+                        cmp::Chip::new(*c).role(Role::Accent).on_press(Message::Noop).on_remove(Message::ChipRemove(c)),
                     )
                 }))
                 .spacing(m.space_s)
                 .wrap();
                 let states = row![
-                    w::Chip::new("Plain").on_press(Message::Noop),
-                    w::Chip::new("Icon").icon(Icon::Check).role(Role::Success).on_press(Message::Noop),
-                    w::Chip::new("Selected").role(Role::Accent).selected(true).on_press(Message::Noop),
-                    w::Chip::new("Disabled").on_press(Message::Noop).disabled(true),
-                    w::Chip::new("Disabled ✕").role(Role::Accent).on_remove(Message::Noop).disabled(true),
+                    cmp::Chip::new("Plain").on_press(Message::Noop),
+                    cmp::Chip::new("Icon").icon(Icon::Check).role(Role::Success).on_press(Message::Noop),
+                    cmp::Chip::new("Selected").role(Role::Accent).selected(true).on_press(Message::Noop),
+                    cmp::Chip::new("Disabled").on_press(Message::Noop).disabled(true),
+                    cmp::Chip::new("Disabled ✕").role(Role::Accent).on_remove(Message::Noop).disabled(true),
                 ]
                 .spacing(m.space_s)
                 .wrap();
@@ -1181,23 +1181,23 @@ impl Gallery {
                 };
                 let ok = |s: &iad::Semantic| s.success.color;
                 let bad = |s: &iad::Semantic| s.error.color;
-                let av = |n: &str| Element::from(w::avatar(48.0, n.to_string()));
-                use iad::primitives::anchor::{Align, Side};
-                let ind = |child: Element<'static>, badge: Element<'static>| w::Indicator::new(child, badge);
+                let av = |n: &str| Element::from(cmp::avatar(48.0, n.to_string()));
+                use iad::layouts::anchor::{Align, Side};
+                let ind = |child: Element<'static>, badge: Element<'static>| lay::Indicator::new(child, badge);
                 let corners = row![
-                    ind(av("Ada Lovelace"), w::Badge::count(3, 99).role(Role::Error).solid(true).into()),
+                    ind(av("Ada Lovelace"), cmp::Badge::count(3, 99).role(Role::Error).solid(true).into()),
                     ind(av("Grace Hopper"), dot(ok)).corner(Side::Bottom, Align::End).offset(4.0),
                     ind(av("Linus T"), dot(bad)).corner(Side::Top, Align::Start).offset(4.0),
-                    ind(av("Margaret H"), w::Badge::new("Pro").role(Role::Accent).solid(true).into()).corner(Side::Bottom, Align::Center),
-                    ind(av("Alan Turing"), w::Badge::count(120, 99).role(Role::Accent).solid(true).into()),
+                    ind(av("Margaret H"), cmp::Badge::new("Pro").role(Role::Accent).solid(true).into()).corner(Side::Bottom, Align::Center),
+                    ind(av("Alan Turing"), cmp::Badge::count(120, 99).role(Role::Accent).solid(true).into()),
                     ind(av("Hidden"), dot(bad)).show(false),
                 ]
                 .spacing(m.space_l)
                 .wrap();
                 let on_buttons = row![
-                    ind(w::raised_button(ty::label("Inbox")).on_press(Message::Noop).into(), w::Badge::count(12, 99).role(Role::Error).solid(true).into()),
-                    ind(w::icon_button(Icon::Search).on_press(Message::Noop).into(), dot(bad)),
-                    ind(w::flat_button(ty::label("Updates")).on_press(Message::Noop).into(), w::Badge::new("new").role(Role::Success).solid(true).into()).offset(2.0),
+                    ind(cmp::raised_button(ty::label("Inbox")).on_press(Message::Noop).into(), cmp::Badge::count(12, 99).role(Role::Error).solid(true).into()),
+                    ind(cmp::icon_button(Icon::Search).on_press(Message::Noop).into(), dot(bad)),
+                    ind(cmp::flat_button(ty::label("Updates")).on_press(Message::Noop).into(), cmp::Badge::new("new").role(Role::Success).solid(true).into()).offset(2.0),
                 ]
                 .spacing(m.space_l)
                 .align_y(iced::Alignment::Center)
@@ -1227,7 +1227,7 @@ impl Gallery {
                 let menu = |t: &'static str| {
                     w::popover([w::menu_item(t, false, Message::Noop), w::menu_item("Second", true, Message::Noop)], 160.0)
                 };
-                let pop = |label: &'static str, side: w::Side, o: bool| {
+                let pop = |label: &'static str, side: iad::layouts::anchor::Side, o: bool| {
                     Element::from(
                         w::Popover::new(text(label), menu(label))
                             .side(side)
@@ -1237,10 +1237,10 @@ impl Gallery {
                     )
                 };
                 let sides = row![
-                    pop("Bottom", w::Side::Bottom, false),
-                    pop("Top", w::Side::Top, false),
-                    pop("Right", w::Side::Right, open),
-                    pop("Left", w::Side::Left, false),
+                    pop("Bottom", iad::layouts::anchor::Side::Bottom, false),
+                    pop("Top", iad::layouts::anchor::Side::Top, false),
+                    pop("Right", iad::layouts::anchor::Side::Right, open),
+                    pop("Left", iad::layouts::anchor::Side::Left, false),
                 ]
                 .spacing(m.space_m);
                 // Opening to the left from the edge of the content: kept to the content area it flips
@@ -1248,7 +1248,7 @@ impl Gallery {
                 let bounded = |label: &'static str, b: w::PopoverBounds| {
                     Element::from(
                         w::Popover::new(text(label), menu(label))
-                            .side(w::Side::Left)
+                            .side(iad::layouts::anchor::Side::Left)
                             .offset(8.0)
                             .popover_width(140.0)
                             .bounds(b),
@@ -1275,7 +1275,7 @@ impl Gallery {
                         .column(w::Column::new("Email", |p: &Person| ty::body(p.email).into()).width(Length::FillPortion(2)).min_width(150.0))
                         .card(|p: &Person| {
                             column![
-                                row![ty::heading(p.name), w::Badge::new(p.role).role(Role::Accent)].spacing(8).align_y(iced::Alignment::Center),
+                                row![ty::heading(p.name), cmp::Badge::new(p.role).role(Role::Accent)].spacing(8).align_y(iced::Alignment::Center),
                                 ty::caption(p.email),
                                 ty::body(p.team),
                             ]
@@ -1304,22 +1304,22 @@ impl Gallery {
                 };
                 column![
                     g("Accordion, single").description("One item open at a time; opening another closes it, and the open one can be closed.")
-                        .push(Element::from(items(w::Accordion::new(&self.acc_single, Message::AccSingle).selection(w::Selection::SINGLE)))),
+                        .push(Element::from(items(w::Accordion::new(&self.acc_single, Message::AccSingle).selection(iad::primitives::Selection::SINGLE)))),
                     g("Accordion, multiple").description("Any number open.")
-                        .push(Element::from(items(w::Accordion::new(&self.acc_multi, Message::AccMulti).selection(w::Selection::Multiple)))),
+                        .push(Element::from(items(w::Accordion::new(&self.acc_multi, Message::AccMulti).selection(iad::primitives::Selection::Multiple)))),
                 ]
                 .spacing(m.group_spacing)
                 .into()
             }
 
             Inline::LinkButton => column![g("Link button").push(w::card(
-                row![w::link_button("Link").on_press(Message::Noop), w::link_button("Disabled link")].spacing(sp).wrap(),
+                row![cmp::link_button("Link").on_press(Message::Noop), cmp::link_button("Disabled link")].spacing(sp).wrap(),
             ))]
             .into(),
             Inline::CardButton => column![g("As button").push(w::card(
                 row![
-                    w::as_button(w::card(text("Card").width(Length::Fixed(110.0)))).on_press(Message::Noop),
-                    w::as_button(w::card(text("Disabled").width(Length::Fixed(110.0)))),
+                    iced::widget::button(w::card(text("Card").width(Length::Fixed(110.0)))).padding(0).style(iad::styles::button::events).on_press(Message::Noop),
+                    iced::widget::button(w::card(text("Disabled").width(Length::Fixed(110.0)))).padding(0).style(iad::styles::button::events),
                 ]
                 .spacing(sp)
                 .wrap(),
