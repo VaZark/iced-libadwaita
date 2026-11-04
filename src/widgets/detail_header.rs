@@ -2,9 +2,9 @@
 //! music-app pattern.
 //!
 //! * **Wide**: the cover on the left, a small kind label, the large title, the description and
-//!   facts beside it, and an action row under both: the main action first, then the options,
+//!   facts beside it, centered against the cover, and an action row under both: the main action first, then the options,
 //!   then something at the far end.
-//! * **Narrow** ([`narrow`](DetailHeader::narrow)): the cover centered, then the title,
+//! * **Narrow** ([`narrow`](DetailHeader::narrow)): the cover and the title centered, then the
 //!   description and facts, and one action row with the options at the start and the main
 //!   action at the end.
 //! * A [wash](crate::styles::container::wash) of [`tint`](DetailHeader::tint) fades down from the
@@ -136,7 +136,11 @@ impl<'a, M: 'a> From<DetailHeader<'a, M>> for Element<'a, M> {
             if let Some(c) = h.cover {
                 col = col.push(container(c).center_x(Length::Fill));
             }
-            col = col.push(ty::title_2(h.title));
+            col = col.push(
+                ty::title_2(h.title)
+                    .width(Length::Fill)
+                    .align_x(iced::alignment::Horizontal::Center),
+            );
             col = col.push(h.description.unwrap_or_else(blank));
             if let Some(f) = h.facts {
                 col = col.push(f);
@@ -157,7 +161,7 @@ impl<'a, M: 'a> From<DetailHeader<'a, M>> for Element<'a, M> {
         if let Some(e) = h.end {
             actions = actions.push(e);
         }
-        let mut text_col = column![space::vertical().height(Length::Fill)].spacing(m.space_s);
+        let mut text_col = column![].spacing(m.space_s);
         if let Some(k) = h.kind {
             text_col = text_col.push(ty::caption(k));
         }
@@ -171,7 +175,11 @@ impl<'a, M: 'a> From<DetailHeader<'a, M>> for Element<'a, M> {
         if let Some(f) = h.facts {
             text_col = text_col.push(f);
         }
-        let mut top = row![].spacing(m.space_xl).height(Length::Shrink);
+        // The text is centered against the cover, whichever is taller.
+        let mut top = row![]
+            .spacing(m.space_xl)
+            .height(Length::Shrink)
+            .align_y(Alignment::Center);
         if let Some(c) = h.cover {
             top = top.push(c);
         }
