@@ -99,9 +99,10 @@ impl<'a, M: Clone + 'a> From<ItemCard<'a, M>> for Element<'a, M> {
         if let Some(p) = c.picture {
             body = body.push(container(p).center_x(Length::Fill));
         }
-        body = body.push(ty::heading(c.title).width(Length::Fill));
+        // Text never leaves the card: what does not fit is clipped at its edge.
+        body = body.push(clipped(ty::heading(c.title).width(Length::Fill)));
         if let Some(s) = c.subtitle {
-            body = body.push(ty::caption(s).style(st::dim));
+            body = body.push(clipped(ty::caption(s).style(st::dim)));
         }
         // The card draws its own surface; the button only adds the events.
         let surface = container(body)
@@ -115,6 +116,11 @@ impl<'a, M: Clone + 'a> From<ItemCard<'a, M>> for Element<'a, M> {
             .on_press_maybe(c.on_press)
             .into()
     }
+}
+
+/// `content` cut off at its own bounds, so a long title cannot spill over its neighbours.
+fn clipped<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
+    container(content).width(Length::Fill).clip(true).into()
 }
 
 #[cfg(test)]
