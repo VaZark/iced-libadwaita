@@ -7,7 +7,7 @@ use crate::metrics::{Metrics, Typography};
 use crate::palette::{AccentColor, Palette, Scheme};
 use crate::semantic::Semantic;
 use crate::shadow::Shadows;
-use crate::style;
+use crate::styles;
 use iced::widget::overlay::menu;
 use iced::widget::{
     button, checkbox, combo_box, container, pane_grid, pick_list, progress_bar, radio, rule,
@@ -335,7 +335,7 @@ impl container::Catalog for Theme {
     type Class<'a> = container::StyleFn<'a, Self>;
 
     fn default<'a>() -> Self::Class<'a> {
-        Box::new(style::container::transparent)
+        Box::new(styles::container::transparent)
     }
 
     fn style(&self, class: &Self::Class<'_>) -> container::Style {
@@ -347,7 +347,7 @@ impl button::Catalog for Theme {
     type Class<'a> = button::StyleFn<'a, Self>;
 
     fn default<'a>() -> Self::Class<'a> {
-        Box::new(style::button::default)
+        Box::new(styles::button::default)
     }
 
     fn style(&self, class: &Self::Class<'_>, status: button::Status) -> button::Style {
@@ -359,7 +359,7 @@ impl text_input::Catalog for Theme {
     type Class<'a> = text_input::StyleFn<'a, Self>;
 
     fn default<'a>() -> Self::Class<'a> {
-        Box::new(style::text_input::default)
+        Box::new(styles::text_input::default)
     }
 
     fn style(&self, class: &Self::Class<'_>, status: text_input::Status) -> text_input::Style {
@@ -371,7 +371,7 @@ impl checkbox::Catalog for Theme {
     type Class<'a> = checkbox::StyleFn<'a, Self>;
 
     fn default<'a>() -> Self::Class<'a> {
-        Box::new(style::checkbox::default)
+        Box::new(styles::checkbox::default)
     }
 
     fn style(&self, class: &Self::Class<'_>, status: checkbox::Status) -> checkbox::Style {
@@ -383,7 +383,7 @@ impl radio::Catalog for Theme {
     type Class<'a> = radio::StyleFn<'a, Self>;
 
     fn default<'a>() -> Self::Class<'a> {
-        Box::new(style::radio::default)
+        Box::new(styles::radio::default)
     }
 
     fn style(&self, class: &Self::Class<'_>, status: radio::Status) -> radio::Style {
@@ -395,7 +395,7 @@ impl toggler::Catalog for Theme {
     type Class<'a> = toggler::StyleFn<'a, Self>;
 
     fn default<'a>() -> Self::Class<'a> {
-        Box::new(style::toggler::default)
+        Box::new(styles::toggler::default)
     }
 
     fn style(&self, class: &Self::Class<'_>, status: toggler::Status) -> toggler::Style {
@@ -407,7 +407,7 @@ impl slider::Catalog for Theme {
     type Class<'a> = slider::StyleFn<'a, Self>;
 
     fn default<'a>() -> Self::Class<'a> {
-        Box::new(style::slider::default)
+        Box::new(styles::slider::default)
     }
 
     fn style(&self, class: &Self::Class<'_>, status: slider::Status) -> slider::Style {
@@ -419,7 +419,7 @@ impl progress_bar::Catalog for Theme {
     type Class<'a> = progress_bar::StyleFn<'a, Self>;
 
     fn default<'a>() -> Self::Class<'a> {
-        Box::new(style::progress_bar::default)
+        Box::new(styles::progress_bar::default)
     }
 
     fn style(&self, class: &Self::Class<'_>) -> progress_bar::Style {
@@ -431,7 +431,7 @@ impl rule::Catalog for Theme {
     type Class<'a> = rule::StyleFn<'a, Self>;
 
     fn default<'a>() -> Self::Class<'a> {
-        Box::new(style::rule::default)
+        Box::new(styles::rule::default)
     }
 
     fn style(&self, class: &Self::Class<'_>) -> rule::Style {
@@ -443,7 +443,7 @@ impl scrollable::Catalog for Theme {
     type Class<'a> = scrollable::StyleFn<'a, Self>;
 
     fn default<'a>() -> Self::Class<'a> {
-        Box::new(style::scrollable::default)
+        Box::new(styles::scrollable::default)
     }
 
     fn style(&self, class: &Self::Class<'_>, status: scrollable::Status) -> scrollable::Style {
@@ -455,7 +455,7 @@ impl pick_list::Catalog for Theme {
     type Class<'a> = pick_list::StyleFn<'a, Self>;
 
     fn default<'a>() -> <Self as pick_list::Catalog>::Class<'a> {
-        Box::new(style::pick_list::default)
+        Box::new(styles::pick_list::default)
     }
 
     fn style(
@@ -471,7 +471,7 @@ impl menu::Catalog for Theme {
     type Class<'a> = menu::StyleFn<'a, Self>;
 
     fn default<'a>() -> <Self as menu::Catalog>::Class<'a> {
-        Box::new(style::menu::default)
+        Box::new(styles::menu::default)
     }
 
     fn style(&self, class: &<Self as menu::Catalog>::Class<'_>) -> menu::Style {
@@ -488,7 +488,7 @@ impl text_editor::Catalog for Theme {
     type Class<'a> = text_editor::StyleFn<'a, Self>;
 
     fn default<'a>() -> Self::Class<'a> {
-        Box::new(style::text_editor::default)
+        Box::new(styles::text_editor::default)
     }
 
     fn style(&self, class: &Self::Class<'_>, status: text_editor::Status) -> text_editor::Style {
@@ -608,10 +608,10 @@ mod shadow_and_scrollbar_tests {
         let off = Theme::light().with_shadows(Shadows::none());
         assert!(on.shadows.card().ring.is_some());
         assert!(off.shadows.card().ring.is_none());
-        let flat = crate::style::container::card(&off);
+        let flat = crate::styles::container::card(&off);
         assert_eq!(flat.shadow.color.a, 0.0);
         assert_eq!(flat.border.width, 0.0);
-        let raised = crate::style::container::card(&on);
+        let raised = crate::styles::container::card(&on);
         assert!(raised.shadow.blur_radius > 0.0 && raised.border.width == 1.0);
     }
 
@@ -619,7 +619,7 @@ mod shadow_and_scrollbar_tests {
     fn scrollbar_slider_levels_match_adwaita() {
         use iced::Background;
         let t = Theme::light();
-        let alpha = |s: Status| match crate::style::scrollable::default(&t, s)
+        let alpha = |s: Status| match crate::styles::scrollable::default(&t, s)
             .vertical_rail
             .scroller
             .background
@@ -648,13 +648,13 @@ mod shadow_and_scrollbar_tests {
         assert!((alpha(drag) - 0.60).abs() < 1e-4);
         // The trough only shows while hovered.
         assert!(
-            crate::style::scrollable::default(&t, rest)
+            crate::styles::scrollable::default(&t, rest)
                 .vertical_rail
                 .background
                 .is_none()
         );
         assert!(
-            crate::style::scrollable::default(&t, hover)
+            crate::styles::scrollable::default(&t, hover)
                 .vertical_rail
                 .background
                 .is_some()

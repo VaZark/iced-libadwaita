@@ -36,7 +36,7 @@
 //! theme from it.
 
 use crate::palette::AccentColor;
-use crate::widget::CollapsedSidebar;
+use crate::widgets::CollapsedSidebar;
 use crate::{CollapseBehavior, Metrics, Scheme};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -132,7 +132,10 @@ pub struct Config {
     /// `true`: every trigger resolves to [`Motion::None`] (prefers-reduced-motion).
     pub reduced_motion: bool,
     /// Per-trigger overrides from `[motion] <trigger>=default|none`.
-    pub motion: std::collections::HashMap<crate::animation::Trigger, crate::animation::Motion>,
+    pub motion: std::collections::HashMap<
+        crate::layouts::animation::Trigger,
+        crate::layouts::animation::Motion,
+    >,
     /// `[motion] transition-close`: the time budget of a close step, in milliseconds.
     pub transition_close_ms: f32,
     /// `[motion] transition-open`: the time budget of an open step, in milliseconds.
@@ -165,11 +168,11 @@ pub struct Config {
     pub menu_presentation: MenuPresentationSetting,
     pub row_collapse: CollapseBehavior,
     /// `[toasts] position`: where toasts sit in their target.
-    pub toast_position: crate::widget::ToastPosition,
+    pub toast_position: crate::widgets::ToastPosition,
     /// `[toasts] target`: the whole window or only the content area.
-    pub toast_target: crate::widget::ToastTarget,
+    pub toast_target: crate::widgets::ToastTarget,
     /// `[popovers] bounds`: what a popover is kept inside by default.
-    pub popover_bounds: crate::widget::PopoverBounds,
+    pub popover_bounds: crate::widgets::PopoverBounds,
     /// `[shortcuts] enabled`: keyboard shortcuts work (and are shown) at all.
     pub shortcuts_enabled: bool,
     /// `[shortcuts] hints`: whether menus show accelerator hints.
@@ -213,16 +216,16 @@ impl Default for Config {
             transition_open_ms: 30.0,
             decorations: DecorationMode::Csd,
             button_layout: Pick::System,
-            mobile_max_width: crate::window::MOBILE_MAX_WIDTH,
-            collapse_width: crate::widget::COLLAPSE_WIDTH,
-            min_content_width: crate::widget::MIN_CONTENT_WIDTH,
+            mobile_max_width: crate::breakpoints::MOBILE_MAX_WIDTH,
+            collapse_width: crate::widgets::COLLAPSE_WIDTH,
+            min_content_width: crate::widgets::MIN_CONTENT_WIDTH,
             breakpoints: crate::breakpoints::Breakpoints::default(),
-            sidebar_fraction: crate::widget::SIDEBAR_FRACTION,
-            sidebar_min_width: crate::widget::SIDEBAR_MIN_WIDTH,
-            sidebar_max_width: crate::widget::SIDEBAR_MAX_WIDTH,
-            drawer_max_fraction: crate::widget::DRAWER_MAX_FRACTION,
-            min_window_width: crate::window::MIN_SIZE.width,
-            min_window_height: crate::window::MIN_SIZE.height,
+            sidebar_fraction: crate::widgets::SIDEBAR_FRACTION,
+            sidebar_min_width: crate::widgets::SIDEBAR_MIN_WIDTH,
+            sidebar_max_width: crate::widgets::SIDEBAR_MAX_WIDTH,
+            drawer_max_fraction: crate::widgets::DRAWER_MAX_FRACTION,
+            min_window_width: crate::windows::MIN_SIZE.width,
+            min_window_height: crate::windows::MIN_SIZE.height,
             page_max_width: Metrics::default().clamp_maximum,
             mobile_explicit: false,
             collapse_explicit: false,
@@ -397,7 +400,7 @@ impl Config {
                 .map(|f| self.shadow_intensity = f)
                 .unwrap_or_else(|| bad!("appearance", "shadow-intensity", v));
         }
-        for t in crate::animation::Trigger::ALL {
+        for t in crate::layouts::animation::Trigger::ALL {
             if let Some(v) = get("motion", t.key()) {
                 match v {
                     // The default is no entry, so it also overrides an earlier file's `none`.
@@ -405,7 +408,8 @@ impl Config {
                         self.motion.remove(&t);
                     }
                     "none" => {
-                        self.motion.insert(t, crate::animation::Motion::None);
+                        self.motion
+                            .insert(t, crate::layouts::animation::Motion::None);
                     }
                     _ => bad!("motion", t.key(), v),
                 }
@@ -530,8 +534,8 @@ impl Config {
             warn.push(
                 "[navigation]: sidebar-min-width exceeds sidebar-max-width; both reset".into(),
             );
-            self.sidebar_min_width = crate::widget::SIDEBAR_MIN_WIDTH;
-            self.sidebar_max_width = crate::widget::SIDEBAR_MAX_WIDTH;
+            self.sidebar_min_width = crate::widgets::SIDEBAR_MIN_WIDTH;
+            self.sidebar_max_width = crate::widgets::SIDEBAR_MAX_WIDTH;
         }
         num!("windows", "min-width", self.min_window_width, 200.0, 2000.0);
         num!(
@@ -564,17 +568,17 @@ impl Config {
             }
         }
         if let Some(v) = get("toasts", "position") {
-            crate::widget::ToastPosition::from_key(v)
+            crate::widgets::ToastPosition::from_key(v)
                 .map(|p| self.toast_position = p)
                 .unwrap_or_else(|| bad!("toasts", "position", v));
         }
         if let Some(v) = get("popovers", "bounds") {
-            crate::widget::PopoverBounds::from_key(v)
+            crate::widgets::PopoverBounds::from_key(v)
                 .map(|b| self.popover_bounds = b)
                 .unwrap_or_else(|| bad!("popovers", "bounds", v));
         }
         if let Some(v) = get("toasts", "target") {
-            crate::widget::ToastTarget::from_key(v)
+            crate::widgets::ToastTarget::from_key(v)
                 .map(|t| self.toast_target = t)
                 .unwrap_or_else(|| bad!("toasts", "target", v));
         }
@@ -789,15 +793,18 @@ pub struct Overrides {
     mobile_sidebar: Option<CollapsedSidebar>,
     menu_presentation: Option<MenuPresentationSetting>,
     row_collapse: Option<CollapseBehavior>,
-    toast_position: Option<crate::widget::ToastPosition>,
-    toast_target: Option<crate::widget::ToastTarget>,
-    popover_bounds: Option<crate::widget::PopoverBounds>,
+    toast_position: Option<crate::widgets::ToastPosition>,
+    toast_target: Option<crate::widgets::ToastTarget>,
+    popover_bounds: Option<crate::widgets::PopoverBounds>,
     shortcuts_enabled: Option<bool>,
     shortcut_hints: Option<crate::shortcut::Hints>,
     row_wrap_basis: Option<f32>,
     expander_indent: Option<f32>,
     icon_theme: Option<String>,
-    motion: Vec<(crate::animation::Trigger, crate::animation::Motion)>,
+    motion: Vec<(
+        crate::layouts::animation::Trigger,
+        crate::layouts::animation::Motion,
+    )>,
 }
 
 macro_rules! override_fn {
@@ -869,19 +876,19 @@ impl Overrides {
     override_fn!(
         toast_position,
         toast_position,
-        crate::widget::ToastPosition,
+        crate::widgets::ToastPosition,
         Setting::ToastPosition
     );
     override_fn!(
         toast_target,
         toast_target,
-        crate::widget::ToastTarget,
+        crate::widgets::ToastTarget,
         Setting::ToastTarget
     );
     override_fn!(
         popover_bounds,
         popover_bounds,
-        crate::widget::PopoverBounds,
+        crate::widgets::PopoverBounds,
         Setting::PopoverBounds
     );
     override_fn!(
@@ -908,8 +915,8 @@ impl Overrides {
     /// Overrides one trigger's animation for this app (discouraged).
     pub fn motion(
         &mut self,
-        trigger: crate::animation::Trigger,
-        motion: crate::animation::Motion,
+        trigger: crate::layouts::animation::Trigger,
+        motion: crate::layouts::animation::Motion,
     ) -> &mut Self {
         self.motion.push((trigger, motion));
         self.touched.push(Setting::Motion);
@@ -1225,7 +1232,7 @@ thing=1
 
     #[test]
     fn each_trigger_can_be_set_to_none() {
-        use crate::animation::{Motion, Trigger};
+        use crate::layouts::animation::{Motion, Trigger};
         let c =
             Config::from_keyfile("[motion]\npage-change=none\npopover=default\ncarousel=wobble\n");
         assert_eq!(c.motion.get(&Trigger::PageChange), Some(&Motion::None));
@@ -1252,7 +1259,7 @@ thing=1
 
     #[test]
     fn trigger_keys_round_trip() {
-        use crate::animation::Trigger;
+        use crate::layouts::animation::Trigger;
         for t in Trigger::ALL {
             assert_eq!(Trigger::from_key(t.key()), Some(t));
             assert!(!t.animation().is_empty());
@@ -1261,7 +1268,7 @@ thing=1
 
     #[test]
     fn popovers_stay_in_the_content_area_unless_the_config_says_window() {
-        use crate::widget::PopoverBounds;
+        use crate::widgets::PopoverBounds;
         assert_eq!(Config::default().popover_bounds, PopoverBounds::Content);
         let c = Config::from_keyfile("[popovers]\nbounds=window\n");
         assert_eq!(c.popover_bounds, PopoverBounds::Window);
@@ -1286,7 +1293,7 @@ thing=1
 
     #[test]
     fn toast_position_and_target_are_configurable() {
-        use crate::widget::{ToastPosition, ToastTarget};
+        use crate::widgets::{ToastPosition, ToastTarget};
         let d = Config::default();
         assert_eq!(
             (d.toast_position, d.toast_target),

@@ -61,7 +61,7 @@ impl<K> Trigger<K> {
 impl<K: Clone> Trigger<K> {
     /// The keys whose selection can make this trigger fire: every `Selected` key outside a
     /// `Not`. This is what a variant announces to a
-    /// [`MetaParentComponent`](crate::widget::MetaParentComponent) when it registers.
+    /// [`MetaParentComponent`](crate::metas::MetaParentComponent) when it registers.
     pub fn keys(&self) -> Vec<K> {
         match self {
             Self::Breakpoint(_) | Self::Not(_) => Vec::new(),

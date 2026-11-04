@@ -3,10 +3,15 @@
 
 use iced_adaptive_design as iad;
 
+use iad::primitives::calendar::{CalendarView, Level};
+use iad::primitives::date::Date;
 use iad::primitives::form::{FormSpec, FormState, Outcome};
+use iad::primitives::numeric::{Decimal, Numeric};
 use iad::primitives::range::{DateRange, Range, Track};
-use iad::widget::{self as w, CalendarView, Date, Decimal, Field, Level, Numeric, Validity};
+use iad::primitives::validation::Validity;
+use iad::widgets::Field;
 use iad::{Element, Metrics};
+use iad::{components as cmp, widgets as w};
 use iced::Length;
 use iced::widget::{column, container, row};
 
@@ -479,8 +484,8 @@ impl State {
             .interaction(self.form.interaction(&spec, &"dates"))
             .metrics(m);
         let buttons = row![
-            container(w::flat_button("Reset").on_press(Msg::Reset)),
-            w::suggested_button("Submit").on_press(Msg::Submit),
+            container(cmp::flat_button("Reset").on_press(Msg::Reset)),
+            cmp::suggested_button("Submit").on_press(Msg::Submit),
         ]
         .spacing(sp);
 

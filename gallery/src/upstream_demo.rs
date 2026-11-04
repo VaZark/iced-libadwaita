@@ -3,16 +3,19 @@
 
 use iced_adaptive_design as iad;
 
+use iad::components::{Avatar, AvatarShape, ChipSize};
 use iad::config::Density;
+use iad::layouts::virtualize::Viewport;
+use iad::layouts::{FlowGrid, VirtualList};
 use iad::primitives::history::History;
 use iad::primitives::reorder::{Event as ReorderEvent, ReorderState};
 use iad::primitives::sorting::{Direction, SortState, cmp_str};
-use iad::primitives::virtualize::Viewport;
-use iad::widget::{
-    self as w, Avatar, AvatarShape, ChipGroup, ChipOption, ChipSize, DetailHeader, EditableText,
-    FlowGrid, ItemColumns, PreferencesGroup, SectionHeading, VirtualList,
+use iad::widgets::{
+    ChipGroup, ChipOption, DetailHeader, EditableText, ItemColumns, PreferencesGroup,
+    SectionHeading,
 };
 use iad::{Element, Icon, Metrics};
+use iad::{components as cmp, layouts as lay, metas as met, widgets as w};
 use iced::widget::{column, container, row, text};
 use iced::{Color, Length};
 
@@ -226,7 +229,7 @@ impl State {
             )
             .width(Length::Fill)
             .height(Length::Fill)
-            .style(iad::style::button::flat_row(8.0, 0.08, 0.14))
+            .style(iad::styles::button::flat_row(8.0, 0.08, 0.14))
             .on_press(Msg::Noop)
             .into()
         })
@@ -293,10 +296,12 @@ impl State {
             .cover(cover)
             .description(text("Slow songs for a long road."))
             .facts(text("24 songs, 1 hr 32 min").size(12))
-            .primary(w::suggested_circular_button(Icon::Play.view(m.icon_size)).on_press(Msg::Noop))
-            .action(w::icon_button(Icon::Heart).on_press(Msg::Noop))
-            .action(w::icon_button(Icon::ViewMore).on_press(Msg::Noop))
-            .end(w::flat_button(text("Share")).on_press(Msg::Noop))
+            .primary(
+                cmp::suggested_circular_button(Icon::Play.view(m.icon_size)).on_press(Msg::Noop),
+            )
+            .action(cmp::icon_button(Icon::Heart).on_press(Msg::Noop))
+            .action(cmp::icon_button(Icon::ViewMore).on_press(Msg::Noop))
+            .end(cmp::flat_button(text("Share")).on_press(Msg::Noop))
             .tint(tint)
             .narrow(self.narrow)
             .metrics(m);
@@ -356,7 +361,7 @@ impl State {
                 });
                 row(cells).into()
             }));
-            w::scrolled_window(body).width(Length::Fill).into()
+            lay::scrolled_window(body).width(Length::Fill).into()
         });
         Self::group(
             "Icons",
@@ -382,7 +387,9 @@ impl State {
         // The row is content; the caller wraps it in the surface that makes it a control.
         let stage: Element<'_, Msg> = match self.row_press {
             false => w::card(row),
-            true => w::as_button(w::card(row))
+            true => iced::widget::button(w::card(row))
+                .padding(0)
+                .style(iad::styles::button::events)
                 .width(Length::Fill)
                 .on_press(Msg::Noop)
                 .into(),
@@ -426,9 +433,9 @@ impl State {
                 .row(t.title.clone())
                 .subtitle(t.artist)
                 .height(Length::Fill)
-                .cell(iad::widget::typography::caption(t.album))
-                .cell(iad::widget::typography::caption(time))
-                .suffix(w::icon_button(Icon::ViewMore).on_press(Msg::Noop));
+                .cell(cmp::typography::caption(t.album))
+                .cell(cmp::typography::caption(time))
+                .suffix(cmp::icon_button(Icon::ViewMore).on_press(Msg::Noop));
             if !compact {
                 r = r.picture(
                     Avatar::new(w::PICTURE_WIDTH, t.title.clone())
@@ -436,9 +443,10 @@ impl State {
                         .shape(AvatarShape::Rounded),
                 );
             }
-            w::as_button(r)
+            iced::widget::button(r)
+                .padding(0)
                 .width(Length::Fill)
-                .style(iad::style::button::flat_row(8.0, 0.08, 0.14))
+                .style(iad::styles::button::flat_row(8.0, 0.08, 0.14))
                 .height(Length::Fill)
                 .on_press(Msg::Noop)
                 .into()
@@ -531,10 +539,10 @@ impl State {
             w::ToggleGroupRow::new(
                 "Columns",
                 vec![
-                    w::ToggleItem::new(0, "Fit"),
-                    w::ToggleItem::new(1, "1"),
-                    w::ToggleItem::new(2, "2"),
-                    w::ToggleItem::new(3, "3"),
+                    cmp::ToggleItem::new(0, "Fit"),
+                    cmp::ToggleItem::new(1, "1"),
+                    cmp::ToggleItem::new(2, "2"),
+                    cmp::ToggleItem::new(3, "3"),
                 ],
                 Some(self.cards_cols),
                 Msg::CardsCols,
@@ -551,15 +559,15 @@ impl State {
     pub fn table_grid_view(&self, m: Metrics) -> Element<'_, Msg> {
         let cell = |label: &'static str, span, offset| {
             let body = w::card(
-                container(w::typography::label(label))
+                container(cmp::typography::label(label))
                     .center_x(Length::Fill)
                     .padding(m.space_m),
             );
-            w::TableCell::new(body).span(span).offset(offset)
+            lay::TableCell::new(body).span(span).offset(offset)
         };
         column![
             Self::group("Spans", "Each cell takes some of the 12 columns.", m).push(
-                w::TableGrid::new([
+                lay::TableGrid::new([
                     cell("8", 8, 0),
                     cell("4", 4, 0),
                     cell("4", 4, 0),
@@ -569,7 +577,8 @@ impl State {
                 .spacing(m.space_s),
             ),
             Self::group("Offset", "Columns left empty before a cell.", m).push(
-                w::TableGrid::new([cell("6, offset 3", 6, 3), cell("3", 3, 0)]).spacing(m.space_s),
+                lay::TableGrid::new([cell("6, offset 3", 6, 3), cell("3", 3, 0)])
+                    .spacing(m.space_s),
             ),
             Self::group(
                 "Wrap",
@@ -577,7 +586,7 @@ impl State {
                 m
             )
             .push(
-                w::TableGrid::new([cell("7", 7, 0), cell("7", 7, 0), cell("5", 5, 0)])
+                lay::TableGrid::new([cell("7", 7, 0), cell("7", 7, 0), cell("5", 5, 0)])
                     .spacing(m.space_s),
             ),
         ]
@@ -593,7 +602,9 @@ impl State {
         })
         .row_action(|name| {
             let i = items.iter().position(|n| n == name).unwrap_or(0);
-            w::icon_button(Icon::Delete).on_press(Msg::Remove(i)).into()
+            cmp::icon_button(Icon::Delete)
+                .on_press(Msg::Remove(i))
+                .into()
         })
         .on_event(Msg::Queue);
         Self::group(
@@ -621,7 +632,7 @@ impl State {
     }
 
     pub fn history_view(&self, m: Metrics) -> Element<'_, Msg> {
-        let btn = |label: &'static str, msg: Msg| w::raised_button(text(label)).on_press(msg);
+        let btn = |label: &'static str, msg: Msg| cmp::raised_button(text(label)).on_press(msg);
         let trail = self
             .history
             .trail()
@@ -649,7 +660,7 @@ impl State {
                 row![
                     btn("Go Home", Msg::Go("Home")),
                     btn("Go Library", Msg::Go("Library")),
-                    w::suggested_button(text("Back"))
+                    cmp::suggested_button(text("Back"))
                         .on_press_maybe(self.history.can_back().then_some(Msg::Back)),
                 ]
                 .spacing(m.space_s)
@@ -669,14 +680,14 @@ impl State {
             Text,
         }
         let text_value = self.flow_text.clone();
-        let flowing = w::MetaComponent::new()
+        let flowing = met::MetaComponent::new()
             .selected(self.flow_editing.then_some(Mode::Entry))
             .when_selected(Mode::Entry, {
                 let v = self.flow_text.clone();
-                move |_| w::entry("Text", v.clone()).on_input(Msg::FlowText).metrics(m).into()
+                move |_| cmp::entry("Text", v.clone()).on_input(Msg::FlowText).metrics(m).into()
             })
-            .variant(Mode::Text, w::When::always(), move |_| {
-                iad::widget::typography::body(
+            .variant(Mode::Text, iad::primitives::When::always(), move |_| {
+                cmp::typography::body(
                     format!("{text_value} It is long enough to wrap onto a second line when the pane is narrow, and the height follows it."),
                 )
                 .into()
@@ -696,7 +707,7 @@ impl State {
 
     /// The page surfaces: the gutter is in one place (`Metrics::gutter`).
     pub fn surface_view(&self, m: Metrics) -> Element<'_, Msg> {
-        use iad::widget::surface;
+        use iad::layouts::surface;
         let tint = |t: &iad::Theme| container::Style {
             background: Some(iad::color::alpha(t.semantic.accent.bg, 0.25).into()),
             border: iced::Border::default().rounded(4),

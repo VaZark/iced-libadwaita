@@ -3,13 +3,14 @@
 
 use iced_adaptive_design as iad;
 
-use iad::widget::{self as w, typography as ty};
+use iad::components::typography as ty;
 use iad::{Element, Icon, Metrics, Role};
+use iad::{components as cmp, metas as met, widgets as w};
 use iced::widget::{column, container, row, text};
 use iced::{Length, Padding};
 
 fn dim<'a>(c: impl iced::widget::text::IntoFragment<'a>) -> iced::widget::Text<'a, iad::Theme> {
-    ty::caption(c).style(iad::style::text::dim)
+    ty::caption(c).style(iad::styles::text::dim)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -186,7 +187,7 @@ impl State {
                 iced::widget::button(text("Reset").width(Length::Fill).center())
                     .padding(m.space_s)
                     .width(Length::Fill)
-                    .style(iad::style::button::default)
+                    .style(iad::styles::button::default)
                     .on_press_maybe(self.filtered().then_some(Msg::Reset)),
             )
             .padding(Padding::new(m.space_xs).top(m.space_s))
@@ -199,7 +200,7 @@ impl State {
     /// section.
     fn search_entry<'a>(&'a self, m: Metrics, left: Element<'a, Msg>) -> Element<'a, Msg> {
         let filter = w::Popover::new(
-            w::SectionButton::<Msg>::face(Icon::Filter, self.filtered()),
+            cmp::SectionButton::<Msg>::face(Icon::Filter, self.filtered()),
             self.filter_popover(),
         )
         .appearance(w::PopoverAppearance::Flat)
@@ -208,7 +209,7 @@ impl State {
         .keep_open(true)
         .popover_width(220.0)
         .open_initially(std::env::var("GALLERY_OPEN").as_deref() == Ok("filter"));
-        w::entry("Search files", &self.search)
+        cmp::entry("Search files", &self.search)
             .on_input(Msg::Search)
             .left_section(left)
             .right_section(filter)
@@ -221,14 +222,14 @@ impl State {
         let mut chips = row![].spacing(m.space_s);
         if self.when != When::Any {
             chips = chips.push(
-                w::Chip::new(self.when.label())
+                cmp::Chip::new(self.when.label())
                     .role(Role::Accent)
                     .on_remove(Msg::When(When::Any)),
             );
         }
         if self.kind != Kind::Any {
             chips = chips.push(
-                w::Chip::new(self.kind.label())
+                cmp::Chip::new(self.kind.label())
                     .role(Role::Accent)
                     .on_remove(Msg::Kind(Kind::Any)),
             );
@@ -260,52 +261,52 @@ impl State {
         let sp = m.space_m;
         let g = |t: &'static str| w::PreferencesGroup::<Msg>::new().title(t).metrics(m);
         let pad = |c| padded(c, sp);
-        let search_icon = || w::section_icon(Icon::Search).metrics(m);
+        let search_icon = || cmp::section_icon(Icon::Search).metrics(m);
         let clear: Element<'_, Msg> = if self.clearable.is_empty() {
             iced::widget::space().into()
         } else {
-            w::section_button(Icon::WindowClose, Msg::Clear)
+            cmp::section_button(Icon::WindowClose, Msg::Clear)
                 .metrics(m)
                 .into()
         };
 
         let sections = pad(column![
-            w::entry("Left icon", &self.left)
+            cmp::entry("Left icon", &self.left)
                 .on_input(Msg::Left)
                 .left_section(search_icon())
                 .metrics(m),
-            w::entry("Right icon", &self.right)
+            cmp::entry("Right icon", &self.right)
                 .on_input(Msg::Right)
-                .right_section(w::section_icon(Icon::Edit).metrics(m))
+                .right_section(cmp::section_icon(Icon::Edit).metrics(m))
                 .metrics(m),
-            w::entry("Both sides", &self.both)
+            cmp::entry("Both sides", &self.both)
                 .on_input(Msg::Both)
                 .left_section(search_icon())
-                .right_section(w::section_icon(Icon::Settings).metrics(m))
+                .right_section(cmp::section_icon(Icon::Settings).metrics(m))
                 .metrics(m),
-            w::entry("Clear button", &self.clearable)
+            cmp::entry("Clear button", &self.clearable)
                 .on_input(Msg::Clearable)
                 .left_section(search_icon())
                 .right_section(clear)
                 .metrics(m),
-            w::entry("Unit label", "72")
+            cmp::entry("Unit label", "72")
                 .on_input(|_| Msg::Noop)
                 .right_section(dim("kg"))
                 .right_section_width(28.0)
                 .metrics(m),
-            w::entry("Disabled", "read only")
-                .left_section(w::section_icon(Icon::Search).disabled(true).metrics(m))
+            cmp::entry("Disabled", "read only")
+                .left_section(cmp::section_icon(Icon::Search).disabled(true).metrics(m))
                 .right_section(
-                    w::section_button(Icon::WindowClose, Msg::Noop)
+                    cmp::section_button(Icon::WindowClose, Msg::Noop)
                         .disabled(true)
                         .metrics(m)
                 )
                 .metrics(m),
-            w::entry("Invalid", "not a valid value")
+            cmp::entry("Invalid", "not a valid value")
                 .on_input(|_| Msg::Noop)
-                .state(w::EntryState::Error)
+                .state(cmp::EntryState::Error)
                 .left_section(search_icon())
-                .right_section(w::section_icon(Icon::DialogError).metrics(m))
+                .right_section(cmp::section_icon(Icon::DialogError).metrics(m))
                 .metrics(m),
         ]
         .spacing(sp));
@@ -330,7 +331,7 @@ fn radio_row<'a, V: Copy + Eq + 'a>(
     selected: Option<V>,
     f: fn(V) -> Msg,
 ) -> Element<'a, Msg> {
-    container(w::radio_button(label, value, selected, f))
+    container(cmp::radio_button(label, value, selected, f))
         .padding([
             iad::Metrics::desktop().space_xs,
             iad::Metrics::desktop().space_s,
@@ -362,38 +363,42 @@ impl State {
     pub fn meta_view(&self, m: Metrics) -> Element<'_, Msg> {
         let g = |t: &'static str| w::PreferencesGroup::<Msg>::new().title(t).metrics(m);
         let people = |width: f32| -> Element<'_, Msg> {
-            let table = w::MetaComponent::new()
-                .variant(Layout::Table, w::When::min_width(380.0), move |_| {
-                    let mut rows = column![
-                        row![
-                            ty::caption_heading("Name").width(Length::FillPortion(2)),
-                            ty::caption_heading("Role").width(Length::FillPortion(2)),
-                            ty::caption_heading("Email").width(Length::FillPortion(3)),
-                        ]
-                        .spacing(8)
-                    ]
-                    .spacing(10)
-                    .padding(12);
-                    for p in crate::PEOPLE.iter() {
-                        rows = rows.push(
+            let table = met::MetaComponent::new()
+                .variant(
+                    Layout::Table,
+                    iad::primitives::When::min_width(380.0),
+                    move |_| {
+                        let mut rows = column![
                             row![
-                                ty::heading(p.name).width(Length::FillPortion(2)),
-                                ty::body(p.role).width(Length::FillPortion(2)),
-                                ty::body(p.email).width(Length::FillPortion(3)),
+                                ty::caption_heading("Name").width(Length::FillPortion(2)),
+                                ty::caption_heading("Role").width(Length::FillPortion(2)),
+                                ty::caption_heading("Email").width(Length::FillPortion(3)),
                             ]
-                            .spacing(8),
-                        );
-                    }
-                    w::card(rows)
-                })
-                .variant(Layout::Cards, w::When::always(), |_| {
+                            .spacing(8)
+                        ]
+                        .spacing(10)
+                        .padding(12);
+                        for p in crate::PEOPLE.iter() {
+                            rows = rows.push(
+                                row![
+                                    ty::heading(p.name).width(Length::FillPortion(2)),
+                                    ty::body(p.role).width(Length::FillPortion(2)),
+                                    ty::body(p.email).width(Length::FillPortion(3)),
+                                ]
+                                .spacing(8),
+                            );
+                        }
+                        w::card(rows)
+                    },
+                )
+                .variant(Layout::Cards, iad::primitives::When::always(), |_| {
                     let mut cards = column![].spacing(8).padding(4);
                     for p in crate::PEOPLE.iter() {
                         cards = cards.push(w::card(
                             column![
                                 row![
                                     ty::heading(p.name),
-                                    w::Badge::new(p.role).role(Role::Accent)
+                                    cmp::Badge::new(p.role).role(Role::Accent)
                                 ]
                                 .spacing(8)
                                 .align_y(iced::Alignment::Center),
@@ -412,18 +417,18 @@ impl State {
         };
         let sides = row![people(400.0), people(270.0)].spacing(m.space_m).wrap();
 
-        let toggle = w::section_button(Icon::Search, Msg::ToggleSearch)
+        let toggle = cmp::section_button(Icon::Search, Msg::ToggleSearch)
             .active(self.searching)
             .metrics(m);
-        let bar = w::MetaComponent::new()
+        let bar = met::MetaComponent::new()
             .selected(self.searching.then_some(Bar::Search))
             .when_selected(Bar::Search, move |_| {
-                let back = w::section_button(Icon::GoPrevious, Msg::ToggleSearch).metrics(m);
+                let back = cmp::section_button(Icon::GoPrevious, Msg::ToggleSearch).metrics(m);
                 container(self.search_entry(m, back.into()))
                     .center_y(Length::Fill)
                     .into()
             })
-            .variant(Bar::Path, w::When::always(), |_| {
+            .variant(Bar::Path, iad::primitives::When::always(), |_| {
                 container(w::path_bar(
                     ["Home", "Projects", "iced-adaptive-design", "docs"]
                         .map(String::from)

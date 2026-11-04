@@ -6,8 +6,8 @@
 //! ```
 //!
 //! The man pages are generated from the source, as rustdoc or JSDoc generates reference pages:
-//! the `///` doc comments and the public API of every component in `src/widget` and
-//! `src/window/dialog.rs`. A component is a public struct that becomes an `Element`
+//! the `///` doc comments and the public API of every component in `src/layouts`, `src/components`,
+//! `src/binds`, `src/metas` and `src/widgets`. A component is a public struct that becomes an `Element`
 //! (`impl From<X> for Element`) or is a `Widget`. Its builder methods (`pub fn f(mut self, ..) ->
 //! Self`) are its properties; those taking an `Element` are slots, and `on_*` ones are events.
 //! Write the doc comment and the page follows; there is nothing else to keep in step.
@@ -67,7 +67,7 @@ fn hardcoded_padding(line: &str) -> bool {
 }
 
 /// Every hard-coded padding under `paths` (default `src`): the rule that a page's edge distance
-/// is written once, in `widget::surface`, not in each page. Returns whether there were none.
+/// is written once, in `layouts::surface`, not in each page. Returns whether there were none.
 fn lint_gutters(paths: &[std::path::PathBuf]) -> bool {
     let roots: Vec<std::path::PathBuf> = if paths.is_empty() {
         vec![std::path::PathBuf::from("src")]
@@ -99,7 +99,7 @@ fn lint_gutters(paths: &[std::path::PathBuf]) -> bool {
     }
     if found > 0 {
         eprintln!(
-            "{found} hard-coded padding(s). Use widget::surface (or add `// gutter-ok` where a number is right)."
+            "{found} hard-coded padding(s). Use layouts::surface (or add `// gutter-ok` where a number is right)."
         );
     } else {
         println!("no hard-coded gutters");
@@ -432,7 +432,7 @@ fn is_element_like(ret: &str) -> bool {
     )
 }
 
-/// The names `src/widget/mod.rs` re-exports (`pub use`): original name to exported name
+/// The names a layer's `mod.rs` re-exports (`pub use`): original name to exported name
 /// (`Align as PopoverAlign` exports `Align` as `PopoverAlign`). Only these are public API.
 fn exported(mod_rs: &Path) -> BTreeMap<String, String> {
     fn walk(t: &syn::UseTree, out: &mut BTreeMap<String, String>) {
@@ -827,9 +827,13 @@ fn man(check: bool) -> bool {
         })
         .unwrap_or_default();
     let mut files = Vec::new();
-    rust_files(&root.join("src/widget"), &mut files);
-    files.push(root.join("src/window/dialog.rs"));
-    let exports = exported(&root.join("src/widget/mod.rs"));
+    // Every layer that holds user-facing components. Primitives are headless and not components.
+    let layers = ["layouts", "components", "binds", "metas", "widgets"];
+    let mut exports = BTreeMap::new();
+    for layer in layers {
+        rust_files(&root.join("src").join(layer), &mut files);
+        exports.extend(exported(&root.join("src").join(layer).join("mod.rs")));
+    }
     // Every public struct of the widget files: a function returning one is a component too.
     let known: Vec<String> = files
         .iter()

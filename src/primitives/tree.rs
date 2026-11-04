@@ -20,7 +20,7 @@
 //! * **Drag and drop**: [`Event::Drop`] moves a node before, inside or after another
 //!   ([`move_node`]); [`can_move`] refuses a node into itself or its own branch, and the widget
 //!   takes the app's `allow_drop` on top (Mantine's `allowDrop`).
-//! * **Virtualization**: [`window`] (from [`virtualize`](super::virtualize)) says which rows to build
+//! * **Virtualization**: `layouts::virtualize::window` says which rows to build
 //!   for a scroll offset.
 //! * **Keys** ([`navigate`]) are those of GTK's tree expander and the ARIA tree: up / down /
 //!   Home / End move, Right opens a branch or enters it, Left closes it or goes to its parent,
@@ -264,9 +264,6 @@ fn path(data: &[TreeNode], value: &str) -> Option<Vec<String>> {
     }
     None
 }
-
-/// Which rows to build for a scrolled list: the shared [`virtualize::window`](super::virtualize::window).
-pub use super::virtualize::window;
 
 /// Where a dragged node lands relative to the one it is dropped on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1133,17 +1130,5 @@ mod tests {
         assert!(fuzzy_ranges("Button", "nb").is_empty());
         let f = filter_with(&data(), "cd", &fuzzy);
         assert_eq!(f[0].children[0].children[0].value, "Card");
-    }
-
-    #[test]
-    fn the_window_covers_the_viewport_plus_overscan() {
-        assert_eq!(window(1000, 0.0, 100.0, 20.0, 2), 0..7);
-        assert_eq!(window(1000, 400.0, 100.0, 20.0, 2), 18..27);
-        assert_eq!(
-            window(10, 1000.0, 100.0, 20.0, 2),
-            10..10,
-            "scrolled past the end"
-        );
-        assert_eq!(window(0, 0.0, 100.0, 20.0, 2), 0..0);
     }
 }

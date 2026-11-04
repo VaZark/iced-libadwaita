@@ -3,7 +3,7 @@
 //!
 //! * **Virtualization**: a table of 100,000 rows. The app keeps a `Viewport` (from the table's
 //!   `on_scroll`), asks it for the window, and passes only those rows; the table pads the scroll
-//!   area with exact spacers (`primitives::virtualize`).
+//!   area with exact spacers (`layouts::virtualize`).
 //! * **Async chunks**: 5,000 rows fetched 50 at a time as they are scrolled to. A row whose chunk
 //!   has not arrived is a placeholder, a failed chunk is an error row with Retry, and a failing
 //!   chunk is not asked for again until retried (`primitives::loading::Chunks`). Every seventh
@@ -11,9 +11,11 @@
 
 use iced_adaptive_design as iad;
 
+use iad::components as cmp;
+use iad::components::typography as ty;
+use iad::layouts::virtualize::Viewport;
 use iad::primitives::loading::{Chunks, Slot};
-use iad::primitives::virtualize::Viewport;
-use iad::widget::{self as w, Column, ResponsiveTable, typography as ty};
+use iad::widgets::{Column, ResponsiveTable};
 use iad::{Element, Metrics};
 use iced::widget::{column, container};
 use iced::{Length, Task};
@@ -233,10 +235,10 @@ impl State {
             move |r: &Slotted| -> Element<'_, Msg> {
                 match r {
                     Slotted::Ready(p) => ty::body(text(p)).into(),
-                    Slotted::Loading => ty::body("·····").style(iad::style::text::dim).into(),
+                    Slotted::Loading => ty::body("·····").style(iad::styles::text::dim).into(),
                     Slotted::Failed { chunk, reason, .. } if first => iced::widget::row![
-                        ty::body(format!("Failed: {reason}")).style(iad::style::text::error),
-                        w::flat_button(ty::label("Retry")).on_press(Msg::Retry(*chunk)),
+                        ty::body(format!("Failed: {reason}")).style(iad::styles::text::error),
+                        cmp::flat_button(ty::label("Retry")).on_press(Msg::Retry(*chunk)),
                     ]
                     .spacing(8)
                     .align_y(iced::Alignment::Center)

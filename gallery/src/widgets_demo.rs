@@ -6,12 +6,18 @@
 use iced_adaptive_design as iad;
 
 use crate::playground::Playground;
-use iad::widget::{
-    self as w, ColorFormat, ColorInput, ColorPicker, Decimal, Hsva, NumberDrag, NumberInput,
-    Numeric, Redistribute, Splitter, SplitterEvent, SplitterLimit, SplitterOrientation,
-    SplitterPane, SplitterState, Spoiler, SpoilerEvent, SpoilerState, typography as ty,
+use iad::components::typography as ty;
+use iad::layouts::splitter::rule::{
+    Event as SplitterEvent, Limit as SplitterLimit, Pane as SplitterPane, Redistribute,
+    SplitterState,
 };
+use iad::layouts::{Splitter, SplitterOrientation};
+use iad::primitives::color_picker::{Format as ColorFormat, Hsva};
+use iad::primitives::numeric::{Decimal, Numeric};
+use iad::primitives::spoiler::{Event as SpoilerEvent, SpoilerState};
+use iad::widgets::{ColorInput, ColorPicker, NumberDrag, NumberInput, Spoiler};
 use iad::{Element, Metrics};
+use iad::{components as cmp, widgets as w};
 use iced::widget::{column, container};
 use iced::{Length, Task};
 
@@ -154,8 +160,8 @@ impl State {
                 ..Default::default()
             });
         let buttons = iced::widget::row![
-            w::raised_button(ty::label("Toggle the first pane")).on_press(Msg::ToggleFirst),
-            w::flat_button(ty::label("Reset sizes")).on_press(Msg::ResetSplit),
+            cmp::raised_button(ty::label("Toggle the first pane")).on_press(Msg::ToggleFirst),
+            cmp::flat_button(ty::label("Reset sizes")).on_press(Msg::ResetSplit),
         ]
         .spacing(m.space_s);
         let preview: Element<'a, Msg> = column![buttons, Element::from(frame)]

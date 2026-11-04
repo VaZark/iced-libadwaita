@@ -7,12 +7,13 @@
 
 use iced_adaptive_design as iad;
 
-use iad::widget::validation::{chain, required};
-use iad::widget::{
-    self as w, Field, Form, FormOutcome, FormSpec, FormState, Step, StepIndicator, StepStatus,
-    Validity, typography as ty,
-};
+use iad::components::typography as ty;
+use iad::primitives::form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
+use iad::primitives::validation::Validity;
+use iad::primitives::validation::{chain, required};
+use iad::widgets::{Field, Form, Step, StepIndicator};
 use iad::{Element, Metrics};
+use iad::{components as cmp, widgets as w};
 use iced::Length;
 use iced::widget::{column, container, text};
 
@@ -92,7 +93,7 @@ impl Values {
                 &self.date,
                 &[
                     |s| required(s, "Enter your birthday."),
-                    |s| w::validate_date(s, None, None),
+                    |s| iad::primitives::date::validate(s, None, None),
                 ],
             ),
             Key::Agree => {
@@ -211,7 +212,7 @@ impl Demo {
                 m,
                 "Name",
                 Key::Name,
-                w::entry("Ada", &v.name)
+                cmp::entry("Ada", &v.name)
                     .on_input(Edit::Name)
                     .metrics(m)
                     .into()
@@ -221,7 +222,7 @@ impl Demo {
                 m,
                 "Password",
                 Key::Password,
-                w::password_entry("Password", &v.password)
+                cmp::password_entry("Password", &v.password)
                     .on_input(Edit::Password)
                     .metrics(m)
                     .into()
@@ -246,9 +247,13 @@ impl Demo {
                 m,
                 "Birthday",
                 Key::Birthday,
-                w::DateInput::new(&v.date, w::Date::new(2026, 11, 1).unwrap(), Edit::Date)
-                    .revealed(self.form.revealed(&self.spec, &Key::Birthday))
-                    .into()
+                w::DateInput::new(
+                    &v.date,
+                    iad::primitives::date::Date::new(2026, 11, 1).unwrap(),
+                    Edit::Date
+                )
+                .revealed(self.form.revealed(&self.spec, &Key::Birthday))
+                .into()
             )
             .description("YYYY-MM-DD"),
         ]
@@ -261,7 +266,7 @@ impl Demo {
             m,
             "Terms",
             Key::Agree,
-            w::check_button("I agree to the terms", self.values.agree)
+            cmp::check_button("I agree to the terms", self.values.agree)
                 .on_toggle(Edit::Agree)
                 .into(),
         )

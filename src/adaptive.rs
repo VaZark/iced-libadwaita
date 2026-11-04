@@ -4,7 +4,7 @@
 //! desktop layout with a sidebar need not share a single widget. `adaptive` assumes nothing about
 //! their contents. It only maps width classes ([`WidthClass`], so the thresholds follow the
 //! user's `[breakpoints]`) to layouts, and when the choice changes runs a close-then-open
-//! [`transition`](crate::transition) instead of cutting.
+//! [`transition`](crate::layouts::transition) instead of cutting.
 //!
 //! ```text
 //! width <  768 px  ->  Layout::Narrow
@@ -43,7 +43,7 @@
 
 use crate::Element;
 use crate::breakpoints::{Breakpoints, WidthClass};
-use crate::transition::{
+use crate::layouts::transition::{
     Action, Budgets, Command, Event, FRAME, Phase, Record, Sequence, Transitions,
 };
 use iced::Subscription;
@@ -574,7 +574,7 @@ impl<'a, K: PartialEq, M: 'a> From<AdaptiveView<'a, K, M>> for Element<'a, M> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transition::Outcome;
+    use crate::layouts::transition::Outcome;
     use std::time::Duration;
 
     #[derive(Debug, Clone, PartialEq)]

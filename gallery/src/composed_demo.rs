@@ -3,7 +3,9 @@
 
 use iced_adaptive_design as iad;
 
-use iad::widget::{self as w, Histogram, HistogramRangeSlider, PreferencesGroup};
+use iad::primitives::histogram::Histogram;
+use iad::widgets as w;
+use iad::widgets::{HistogramRangeSlider, PreferencesGroup};
 use iad::{Element, Metrics};
 use iced::widget::{column, text};
 

@@ -10,11 +10,14 @@
 use iced_adaptive_design as iad;
 
 use crate::playground::{self, Playground, Spec};
-use iad::widget::{
-    self as w, ChildEvent, MetaComponent, MetaParentComponent, MetaRegistry, Mode, ReorderEvent,
-    ReorderState, ReorderableList, When, typography as ty,
-};
+use iad::components::typography as ty;
+use iad::metas::{MetaComponent, MetaParentComponent};
+use iad::primitives::When;
+use iad::primitives::meta_parent::{ChildEvent, Registry as MetaRegistry};
+use iad::primitives::reorder::{Event as ReorderEvent, Mode, ReorderState};
+use iad::widgets::ReorderableList;
 use iad::{Element, Metrics};
+use iad::{components as cmp, widgets as w};
 use iced::Length;
 use iced::widget::column;
 
@@ -194,9 +197,9 @@ impl State {
             column![
                 list,
                 iced::widget::row![
-                    w::raised_button(ty::label("Cancel"))
+                    cmp::raised_button(ty::label("Cancel"))
                         .on_press(Msg::Plain(ReorderEvent::Cancel)),
-                    w::suggested_button(ty::label("Save"))
+                    cmp::suggested_button(ty::label("Save"))
                         .on_press(Msg::Plain(ReorderEvent::Submit)),
                 ]
                 .spacing(m.space_s)
@@ -206,7 +209,7 @@ impl State {
         } else {
             column![
                 list,
-                w::raised_button(ty::label("Arrange tools"))
+                cmp::raised_button(ty::label("Arrange tools"))
                     .on_press(Msg::Plain(ReorderEvent::Edit))
             ]
             .spacing(m.space_m)
@@ -272,7 +275,7 @@ impl State {
         }
         let preview: Element<'_, Msg> = column![
             parent,
-            w::raised_button(ty::label("Notify Search")).on_press(Msg::Search)
+            cmp::raised_button(ty::label("Notify Search")).on_press(Msg::Search)
         ]
         .spacing(m.space_m)
         .into();

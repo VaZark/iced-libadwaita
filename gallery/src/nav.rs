@@ -2,7 +2,7 @@
 //! page per component inside a group showing all of its properties and states.
 
 use iced_adaptive_design::Icon;
-use iced_adaptive_design::widget as w;
+use iced_adaptive_design::layouts as lay;
 
 /// A level-1 page (a sidebar entry). Groups with details list their components; the others
 /// (`Typography`, `Theming`) are a single page.
@@ -441,8 +441,8 @@ impl Detail {
     }
 
     /// How wide the page of this component reads: charts and wide demos get more room.
-    pub fn container_size(self) -> w::ContainerSize {
-        use w::ContainerSize::{Md, Sm};
+    pub fn container_size(self) -> lay::ContainerSize {
+        use lay::ContainerSize::{Md, Sm};
         match self {
             Detail::LineChart
             | Detail::BarChart

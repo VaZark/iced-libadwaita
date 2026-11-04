@@ -5,7 +5,7 @@
 //! Nothing here draws and nothing here knows iced. A layout is a pure function from data and a
 //! size to numbers: positions, angles, bands. The drawing pieces are in
 //! [`components::chart`](crate::components::chart); the widgets
-//! ([`LineChart`](crate::widget::LineChart), [`BarChart`](crate::widget::BarChart), …) compose the two.
+//! ([`LineChart`](crate::widgets::LineChart), [`BarChart`](crate::widgets::BarChart), …) compose the two.
 //!
 //! * [`scale`]: [`Linear`](scale::Linear) and [`Band`](scale::Band) scales, "nice" ticks;
 //! * [`shape`]: path commands, lines and areas with a [`Curve`](shape::Curve);

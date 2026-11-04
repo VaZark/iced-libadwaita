@@ -10,7 +10,7 @@ Each component has a page of its own, \fBiad\-\fIalias\fR(3), with its construct
 AdwAboutDialog (content only; present it with dialog)
 .TP
 .B accent_picker
-AccentPicker
+the accent color chooser
 .TP
 .B accordion
 a group of collapsible items under a Selection rule (Radix Accordion)
@@ -29,9 +29,6 @@ AdwAlertDialog
 .TP
 .B anchored
 A base with a floating surface placed against it
-.TP
-.B as_button
-Makes any content a button: as_button(ItemRow::new(..)).on_press(m)
 .TP
 .B autocomplete
 an entry whose suggestions come from an asynchronous lookup (a database, an HTTP call), shown in a popover under it
@@ -313,7 +310,7 @@ Fades content in whenever key changes: the AdwViewStack cross\-fade (200ms, ease
 See the module
 .TP
 .B pagination_label
-"Showing 21\-40 of 187": a dim caption for a footer
+A single\-line label that never wraps (button, tab, sidebar and header labels)
 .TP
 .B password_entry
 hides its contents

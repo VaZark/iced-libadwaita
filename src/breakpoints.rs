@@ -26,6 +26,22 @@ pub const XL: f32 = 1200.0;
 /// Extra extra large.
 pub const XXL: f32 = 1400.0;
 
+/// At or below this width (just under [`SM`]) the window is
+/// in *mobile mode*: window decorations are hidden completely and menus become full pages.
+/// Corners are unaffected: use [`windows::State`](crate::windows::State) (rounded unless actually maximized/fullscreen).
+pub const MOBILE_MAX_WIDTH: f32 = SM - 1.0;
+
+/// The mobile breakpoint in effect: the desktop config's `[windows] mobile-max-width`
+/// (default [`MOBILE_MAX_WIDTH`]).
+pub fn mobile_max_width() -> f32 {
+    crate::config::current().mobile_max_width
+}
+
+/// Whether a window of this width is in mobile mode.
+pub fn is_mobile(width: f32) -> bool {
+    width <= mobile_max_width()
+}
+
 /// The width scale in effect: the fallback constants unless the desktop config overrides them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Breakpoints {

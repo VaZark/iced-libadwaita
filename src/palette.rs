@@ -35,7 +35,7 @@ pub enum AccentColor {
     Purple,
     Slate,
     /// Any color, as `0xRRGGBB`. The ones above are the desktop's; this is for an app or a user
-    /// that picks its own (a [`ColorPicker`](crate::widget::ColorPicker)).
+    /// that picks its own (a [`ColorPicker`](crate::widgets::ColorPicker)).
     Custom(u32),
 }
 

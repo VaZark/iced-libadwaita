@@ -5,11 +5,11 @@
 The app draws its own title bar (client-side decorations). Server-side decorations are off by default.
 
 ```rust
-iced::application(boot, update, view).window(iad::window::settings()).run()
+iced::application(boot, update, view).window(iad::windows::settings()).run()
 
 // view: the header bar carries title, controls and drag. `frame` adds rounded corners.
 let corner = state.radius(&iad::Metrics::default()); // 0 when maximized or fullscreen
-iad::window::frame(
+iad::windows::frame(
     w::toolbar_view(content).top_bar(
         w::header_bar().title("My App").window_radius(corner)
             .on_drag(Msg::Drag).on_double_click(Msg::ToggleMaximize)
@@ -24,14 +24,14 @@ iad::window::frame(
 )
 ```
 
-- Track the window state with `window::changes()` and `refresh()`. Corners round only while the window floats.
+- Track the window state with `windows::changes()` and `refresh()`. Corners round only while the window floats.
 - Buttons and their places follow GNOME's `button-layout`. Icons follow the icon theme. In mobile mode they are hidden.
 - Anything on a window corner takes the window radius: `NavigationSplitView::window_radius`, `dialog_in_window`, `Dock` (window scope), `HeaderBar::window_corners`.
 - In a split view each pane has its own header bar. Only the pane on a window edge shows the window buttons.
 
 ## Transparency
 
-`iad::window::settings()` makes the window transparent. Surface transparency is a theme setting (`Theme::with_transparency`, `[appearance] transparency`). See [theming](theming.md).
+`iad::windows::settings()` makes the window transparent. Surface transparency is a theme setting (`Theme::with_transparency`, `[appearance] transparency`). See [theming](theming.md).
 
 ## Dialogs are modals, not windows
 
@@ -68,7 +68,7 @@ Overlay::new(base, layer)
     .initial_focus("name")
 ```
 
-Nested layers: `overlay_stack`. Rules: `primitives::overlay` (`Stack` routes Escape to the top layer only).
+Nested layers: `overlay_stack`. Rules: `layouts::overlay::rule` (`Stack` routes Escape to the top layer only).
 
 ## Dock
 
@@ -110,7 +110,7 @@ Dock::new(content, bar)
 Dock::new(content, pane).side(Side::Right).size(DockSize::Fixed(280.0))
 ```
 
-`Push` takes the whole edge: length, align, margin and border do not apply. It shares its geometry with the split-view sidebar and drawer (`primitives::dock`).
+`Push` takes the whole edge: length, align, margin and border do not apply. It shares its geometry with the split-view sidebar and drawer (`layouts::dock::rule`).
 
 ## Focus
 
@@ -139,7 +139,7 @@ iced buttons are not focusable. Entries and editors are.
 Not a child. A separate process, started by an action:
 
 ```rust
-window::Detached::this_exe()?.arg("--settings").spawn()?;
+windows::Detached::this_exe()?.arg("--settings").spawn()?;
 ```
 
 It starts this executable again in its own process group. Closing or quitting the parent leaves it running. The app decides from its arguments what the new process shows. `.task(Msg::Spawned)` is the task form.

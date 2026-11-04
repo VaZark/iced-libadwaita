@@ -5,9 +5,10 @@
 //! cargo run --example gallery -- --screenshot target/shots   # renders every page, light + dark
 //! ```
 
-use iad::style;
-use iad::widget::{self as w, typography as ty};
+use iad::components::typography as ty;
+use iad::styles as style;
 use iad::{AccentColor, Icon, Metrics, Role, Scheme, Theme};
+use iad::{binds as bnd, components as cmp, layouts as lay, metas as met, widgets as w};
 use iced::widget::{container, text};
 use iced::{Element as IcedElement, Length, Subscription, Task, window};
 use iced_adaptive_design as iad;
@@ -86,8 +87,8 @@ impl DemoMotion {
         }
     }
 
-    fn spec(self) -> iad::animation::Spec {
-        use iad::animation::{Easing, Spec, presets};
+    fn spec(self) -> iad::layouts::animation::Spec {
+        use iad::layouts::animation::{Easing, Spec, presets};
         let ms = std::time::Duration::from_millis(600);
         match self {
             DemoMotion::Linear => Spec::Timed(ms, Easing::Linear),
@@ -165,7 +166,7 @@ struct Gallery {
     search: String,
     anim_enabled: bool,
     demo: DemoMotion,
-    demo_tween: iad::animation::Tween,
+    demo_tween: iad::layouts::animation::Tween,
     demo_value: f32,
 
     wifi: bool,
@@ -179,11 +180,11 @@ struct Gallery {
     check: bool,
     radio: Option<u8>,
     slider: f32,
-    editor: w::TextContent,
-    editor_empty: w::TextContent,
-    editor_ro: w::TextContent,
-    editor_grow: w::TextContent,
-    editor_grow_px: w::TextContent,
+    editor: iced::widget::text_editor::Content,
+    editor_empty: iced::widget::text_editor::Content,
+    editor_ro: iced::widget::text_editor::Content,
+    editor_grow: iced::widget::text_editor::Content,
+    editor_grow_px: iced::widget::text_editor::Content,
     sw: bool,
     row_sw: bool,
     combo2: Option<&'static str>,
@@ -220,10 +221,10 @@ struct Gallery {
     sidebar_mode: w::CollapsedSidebar,
     sidebar_padding: w::SidebarPadding,
     drawer_open: bool,
-    win: iad::window::State,
+    win: iad::windows::State,
     main: window::Id,
     /// The AppShell demo: its own window, with its own state.
-    shell: Option<iad::window::Child<appshell::AppShell>>,
+    shell: Option<iad::windows::Child<appshell::AppShell>>,
     /// Screenshot harness: the window to capture instead of the main one.
     shot_window: Option<window::Id>,
     sheet: bool,
@@ -286,7 +287,7 @@ enum Message {
     Accent(AccentColor),
     AccentText(String),
     Transparency(String),
-    Tint(iad::widget::Hsva),
+    Tint(iad::primitives::color_picker::Hsva),
     TintOn(bool),
     TintText(String),
     Compact(bool),
@@ -314,10 +315,10 @@ enum Message {
     Check(bool),
     Radio(u8),
     Slider(f32),
-    Editor(w::TextAction),
-    EditorEmpty(w::TextAction),
-    EditorGrow(w::TextAction),
-    EditorGrowPx(w::TextAction),
+    Editor(iced::widget::text_editor::Action),
+    EditorEmpty(iced::widget::text_editor::Action),
+    EditorGrow(iced::widget::text_editor::Action),
+    EditorGrowPx(iced::widget::text_editor::Action),
     Picked(&'static str),
     MultiToggle(&'static str),
     Date(date_demo::Msg),
@@ -386,7 +387,7 @@ enum Message {
     Drawer(bool),
     ToggleFullscreen,
     WindowChanged,
-    WindowState(iad::window::State),
+    WindowState(iad::windows::State),
     // screenshot mode
     Shot(usize),
     Capture(usize),
@@ -514,13 +515,13 @@ impl Gallery {
             transparency: (cfg.transparency * 100.0).round() as u32,
             tint_on: cfg.tint.is_some(),
             tint: tint_color,
-            tint_text: iad::widget::Hsva::from_rgba(
+            tint_text: iad::primitives::color_picker::Hsva::from_rgba(
                 tint_color.r,
                 tint_color.g,
                 tint_color.b,
                 tint_color.a,
             )
-            .format(iad::widget::ColorFormat::Hexa),
+            .format(iad::primitives::color_picker::Format::Hexa),
             transparency_text: ((cfg.transparency * 100.0).round() as u32).to_string(),
             radius_m: std::env::var("GALLERY_RM")
                 .ok()
@@ -540,9 +541,9 @@ impl Gallery {
             // GALLERY_SEARCH=<text> starts with the search open (screenshots).
             searching: std::env::var_os("GALLERY_SEARCH").is_some(),
             search: std::env::var("GALLERY_SEARCH").unwrap_or_default(),
-            anim_enabled: iad::animation::enabled(),
+            anim_enabled: iad::layouts::animation::enabled(),
             demo: DemoMotion::EaseOutCubic,
-            demo_tween: iad::animation::Tween::new(0.0),
+            demo_tween: iad::layouts::animation::Tween::new(0.0),
             demo_value: 0.0,
             wifi: true,
             notifications: false,
@@ -555,13 +556,17 @@ impl Gallery {
             check: true,
             radio: Some(1),
             slider: 40.0,
-            editor: w::TextContent::with_text("Multi-line text editor\nstyled by the theme."),
-            editor_empty: w::TextContent::new(),
-            editor_ro: w::TextContent::with_text("Read-only text.\nIt cannot be edited."),
-            editor_grow: w::TextContent::with_text(
+            editor: iced::widget::text_editor::Content::with_text(
+                "Multi-line text editor\nstyled by the theme.",
+            ),
+            editor_empty: iced::widget::text_editor::Content::new(),
+            editor_ro: iced::widget::text_editor::Content::with_text(
+                "Read-only text.\nIt cannot be edited.",
+            ),
+            editor_grow: iced::widget::text_editor::Content::with_text(
                 "Type, and press Enter for new lines.\nThe field grows with its text up to six lines, then scrolls.",
             ),
-            editor_grow_px: w::TextContent::new(),
+            editor_grow_px: iced::widget::text_editor::Content::new(),
             sw: true,
             row_sw: false,
             combo2: None,
@@ -608,7 +613,7 @@ impl Gallery {
                 Ok("dropdown") => MenuMode::Dropdown,
                 _ => MenuMode::Auto,
             },
-            win: iad::window::State {
+            win: iad::windows::State {
                 maximized: std::env::var_os("GALLERY_FULL").is_some(),
                 fullscreen: false,
             },
@@ -652,7 +657,7 @@ impl Gallery {
                 })
                 .unwrap_or(iced::Size::new(1040.0, 760.0)),
             // Client-side or system decorations: the toolkit's `[windows] decorations` setting.
-            ..iad::window::settings()
+            ..iad::windows::settings()
         }
     }
 
@@ -679,7 +684,7 @@ impl Gallery {
             .unwrap_or(iced::Size::new(1100.0, 720.0));
         // An ordinary window: it does not disable this one.
         let (shell, boot) = appshell::AppShell::new(size.width);
-        let (child, open) = iad::window::Child::window(size, shell);
+        let (child, open) = iad::windows::Child::window(size, shell);
         self.shell = Some(child);
         Task::batch([open.map(|_| Message::Noop), boot.map(Message::Shell)])
     }
@@ -796,17 +801,21 @@ impl Gallery {
                     c.to_rgb8()[2] as f32 / 255.0,
                     c.a,
                 );
-                self.tint_text = c.format(iad::widget::ColorFormat::Hexa);
+                self.tint_text = c.format(iad::primitives::color_picker::Format::Hexa);
             }
             Message::TintText(t) => {
-                if let Some(c) = iad::widget::Hsva::parse(&t) {
+                if let Some(c) = iad::primitives::color_picker::Hsva::parse(&t) {
                     let [r, g, b] = c.to_rgb8();
                     self.tint = iced::Color::from_rgba8(r, g, b, c.a);
                 }
                 self.tint_text = t;
             }
             Message::Transparency(t) => {
-                if let Some(p) = iad::widget::Numeric::integer().min(0).max(90).parse(&t) {
+                if let Some(p) = iad::primitives::numeric::Numeric::integer()
+                    .min(0)
+                    .max(90)
+                    .parse(&t)
+                {
                     self.transparency = p.units as u32;
                 }
                 self.transparency_text = t;
@@ -829,7 +838,9 @@ impl Gallery {
                     Metrics::MAX_RADIUS_L,
                     Metrics::MAX_RADIUS_TOAST,
                 ][i];
-                let rule = iad::widget::Numeric::integer().min(0).max(max as i32);
+                let rule = iad::primitives::numeric::Numeric::integer()
+                    .min(0)
+                    .max(max as i32);
                 if rule.validate(&t).is_ok()
                     && let Some(d) = rule.parse(&t)
                 {
@@ -909,7 +920,7 @@ impl Gallery {
             // this window is closed.
             Message::OpenShell => {
                 let size = std::env::var("GALLERY_SHELL_SIZE").ok();
-                let mut d = iad::window::Detached::this_exe().map(|d| d.arg("--appshell"));
+                let mut d = iad::windows::Detached::this_exe().map(|d| d.arg("--appshell"));
                 if let (Ok(d), Some(size)) = (&mut d, size) {
                     *d = d.clone().env("GALLERY_SHELL_SIZE", size);
                 }
@@ -978,7 +989,7 @@ impl Gallery {
             }
             Message::Animations(on) => {
                 self.anim_enabled = on;
-                iad::animation::set_enabled(Some(on));
+                iad::layouts::animation::set_enabled(Some(on));
             }
             Message::DemoMotion(m) => self.demo = m,
             Message::DemoPlay => {
@@ -1044,7 +1055,7 @@ impl Gallery {
                     })
                 });
             }
-            Message::WindowChanged => return iad::window::refresh().map(Message::WindowState),
+            Message::WindowChanged => return iad::windows::refresh().map(Message::WindowState),
             // GALLERY_FULL forces the edge-to-edge look for screenshots.
             Message::WindowState(st) => {
                 if std::env::var_os("GALLERY_FULL").is_none() {
@@ -1322,7 +1333,7 @@ impl Gallery {
             toast_clock,
             self.autocomplete.subscription().map(Message::Autocomplete),
             self.resizable.subscription().map(Message::Resizable),
-            iad::window::changes().map(|_| Message::WindowChanged),
+            iad::windows::changes().map(|_| Message::WindowChanged),
             window::close_events().map(Message::WindowClosed),
             window::resize_events().map(|(id, size)| Message::Resized(id, size.width)),
             self.shell.as_ref().map_or_else(Subscription::none, |c| {
@@ -1342,7 +1353,7 @@ impl Gallery {
 
     /// Whether the window draws its own decorations: the toolkit's setting, nothing of ours.
     fn csd() -> bool {
-        iad::window::csd()
+        iad::windows::csd()
     }
 
     fn root(&self, size: iced::Size) -> IcedElement<'_, Message, Theme> {
@@ -1361,7 +1372,7 @@ impl Gallery {
         // Mobile mode (narrow): no window decorations at all. Corners still follow the
         // real window state: rounded while floating, edge to edge only when the window
         // is actually maximized or fullscreen.
-        let mobile = iad::window::is_mobile(width);
+        let mobile = iad::breakpoints::is_mobile(width);
         let win_state = self.win;
         let corner = if csd {
             win_state.radius(&iad::Metrics::default())
@@ -1438,7 +1449,7 @@ impl Gallery {
         // swaps the header's title for a search entry (an on-select trigger of a
         // `MetaComponent`); the path bar (or the plain title) is its other variant.
         content_bar = content_bar.pack_end(
-            w::section_button(Icon::Search, Message::ToggleSearch)
+            cmp::section_button(Icon::Search, Message::ToggleSearch)
                 .active(self.searching)
                 .metrics(m),
         );
@@ -1447,14 +1458,14 @@ impl Gallery {
             let path = self.path_bar_title;
             let entry_m = m;
             content_bar = content_bar.title_widget(
-                w::MetaComponent::new()
+                met::MetaComponent::new()
                     .selected(self.searching.then_some(HeaderTitle::Search))
                     .when_selected(HeaderTitle::Search, move |_| {
                         // The search field takes focus as it appears (a focus scope that does not
                         // trap Tab: the header's other controls stay reachable).
-                        w::FocusScope::new(
+                        bnd::FocusScope::new(
                             container(w::clamp(
-                                w::entry("Search components", &self.search)
+                                cmp::entry("Search components", &self.search)
                                     .id(SEARCH_ID)
                                     .on_input(Message::SearchInput)
                                     .left_section(Icon::Search.view(entry_m.icon_size))
@@ -1467,36 +1478,40 @@ impl Gallery {
                         .initial_focus(SEARCH_ID)
                         .into()
                     })
-                    .variant(HeaderTitle::Title, w::When::always(), move |_| {
-                        let shown: Element<'_> = if path {
-                            w::path_bar(
-                                vec![
-                                    "Home".into(),
-                                    "Projects".into(),
-                                    "iced-adaptive-design".into(),
-                                ],
-                                2,
-                                |_| Message::Noop,
-                            )
-                        } else {
-                            ty::heading(title).into()
-                        };
-                        container(shown).center_y(Length::Fill).into()
-                    })
+                    .variant(
+                        HeaderTitle::Title,
+                        iad::primitives::When::always(),
+                        move |_| {
+                            let shown: Element<'_> = if path {
+                                w::path_bar(
+                                    vec![
+                                        "Home".into(),
+                                        "Projects".into(),
+                                        "iced-adaptive-design".into(),
+                                    ],
+                                    2,
+                                    |_| Message::Noop,
+                                )
+                            } else {
+                                ty::heading(title).into()
+                            };
+                            container(shown).center_y(Length::Fill).into()
+                        },
+                    )
                     .height(Length::Fixed(m.button_min_height)),
             );
         }
         if self.detail.is_some() {
             // Inside a component page: back to the group's list.
             content_bar = content_bar
-                .pack_start(w::circular_button(Icon::GoPrevious).on_press(Message::CloseDetail));
+                .pack_start(cmp::circular_button(Icon::GoPrevious).on_press(Message::CloseDetail));
         } else if drawer_mode {
             // The drawer toggle: the sidebar lives behind it.
             content_bar = content_bar
-                .pack_start(w::circular_button(Icon::Sidebar).on_press(Message::Drawer(true)));
+                .pack_start(cmp::circular_button(Icon::Sidebar).on_press(Message::Drawer(true)));
         } else if show_content_only {
             content_bar = content_bar
-                .pack_start(w::circular_button(Icon::GoPrevious).on_press(Message::Back));
+                .pack_start(cmp::circular_button(Icon::GoPrevious).on_press(Message::Back));
         }
         if csd {
             sidebar_bar = sidebar_bar
@@ -1549,7 +1564,7 @@ impl Gallery {
         };
 
         // Switching pages fades the new one in (as a parent page, the push slide does that job).
-        let page = w::page_transition(
+        let page = lay::page_transition(
             page,
             if collapsed && self.sidebar_mode == w::CollapsedSidebar::ParentPage {
                 0
@@ -1593,7 +1608,7 @@ impl Gallery {
             .on_close_drawer(Message::Drawer(false))
             .show_content(self.show_content);
 
-        // The window background comes from `iad::window::frame` (rounded when floating).
+        // The window background comes from `iad::windows::frame` (rounded when floating).
         let body = container(body).width(Length::Fill).height(Length::Fill);
         let base: Element = if in_content {
             w::toast_stack(body, Vec::new())
@@ -1602,7 +1617,7 @@ impl Gallery {
         };
 
         // A docked sheet over the whole window: modal, so the window is faded and disabled.
-        let base: Element = w::Dock::new(
+        let base: Element = lay::Dock::new(
             base,
             w::Menu::new("Track")
                 .section([
@@ -1614,9 +1629,9 @@ impl Gallery {
                 .sheet(Some("Midnight City · M83".into())),
         )
         .open(self.sheet)
-        .side(w::Side::Bottom)
-        .mode(w::DockMode::Overlay)
-        .scope(w::DockScope::Window)
+        .side(iad::layouts::anchor::Side::Bottom)
+        .mode(lay::DockMode::Overlay)
+        .scope(lay::DockScope::Window)
         .window_radius(corner)
         .on_outside(Message::Sheet(false))
         .into();
@@ -1691,7 +1706,7 @@ impl Gallery {
             .bind("Ctrl+F", Message::ToggleSearch)
             .scope(result);
         if csd {
-            iad::window::frame(result, win_state, Message::Resize)
+            iad::windows::frame(result, win_state, Message::Resize)
         } else {
             result
         }
@@ -1700,19 +1715,19 @@ impl Gallery {
     // --- pages ----------------------------------------------------------
 
     fn page_frame<'a>(&self, content: impl Into<Element<'a>>) -> Element<'a> {
-        self.page_frame_sized(content, w::ContainerSize::Sm)
+        self.page_frame_sized(content, lay::ContainerSize::Sm)
     }
 
-    /// A content page: a scrolled [`w::Container`] of the given size. Every page of the gallery
+    /// A content page: a scrolled [`lay::Container`] of the given size. Every page of the gallery
     /// is one.
     fn page_frame_sized<'a>(
         &self,
         content: impl Into<Element<'a>>,
-        size: w::ContainerSize,
+        size: lay::ContainerSize,
     ) -> Element<'a> {
         let m = self.metrics();
-        w::scrolled_window(
-            w::Container::new(content)
+        lay::scrolled_window(
+            lay::Container::new(content)
                 .size(size)
                 .padding(m.page_padding)
                 .metrics(m),
@@ -1760,7 +1775,7 @@ impl Gallery {
                 .push(
                     w::ActionRow::new("Ada Lovelace")
                         .subtitle("ada@example.org")
-                        .prefix(w::avatar(40.0, "Ada Lovelace"))
+                        .prefix(cmp::avatar(40.0, "Ada Lovelace"))
                         .chevron(true)
                         .on_activate(Message::ShowToast("Opened account"))
                         .metrics(m),
@@ -1781,7 +1796,7 @@ impl Gallery {
         page = page.push(
             w::PreferencesGroup::new()
                 .title("Advanced")
-                .header_suffix(w::flat_button(text("Reset")).on_press(Message::Noop))
+                .header_suffix(cmp::flat_button(text("Reset")).on_press(Message::Noop))
                 .metrics(m)
                 .push(
                     w::TreeRow::new("Notifications")

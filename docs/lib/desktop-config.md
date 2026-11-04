@@ -56,10 +56,10 @@ Defaults are in parentheses. Every key is optional.
 
 | Key                | Values                          | Drives                                          |
 | ------------------ | ------------------------------- | ----------------------------------------------- |
-| `decorations`      | csd, ssd (csd)                  | `window::settings()`; transparent base for csd  |
+| `decorations`      | csd, ssd (csd)                  | `windows::settings()`; transparent base for csd  |
 | `button-layout`    | system, a GTK string (system)   | `DecorationLayout::detect()`                    |
 | `min-width`, `min-height` | px (360, 200)            | minimum window size                             |
-| `mobile-max-width` | px (575, `sm` − 1)              | `window::is_mobile`, menu `Auto`                |
+| `mobile-max-width` | px (575, `sm` − 1)              | `breakpoints::is_mobile`, menu `Auto`                |
 
 ### `[breakpoints]`
 
@@ -109,14 +109,14 @@ Defaults are in parentheses. Every key is optional.
 | `[icons]`   | `theme`               | system, a name (system)   | window-control icon lookup                                    |
 | `[policy]`  | `allow-app-overrides` | bool (true)               | may apps opt out                                              |
 
-Every number used for adaptive layout is a named fallback constant (`breakpoints::MD`, `widget::MIN_CONTENT_WIDTH`, `widget::SIDEBAR_MAX_WIDTH`). The config overrides it. Widgets read the installed config, never the constant.
+Every number used for adaptive layout is a named fallback constant (`breakpoints::MD`, `widgets::MIN_CONTENT_WIDTH`, `widgets::SIDEBAR_MAX_WIDTH`). The config overrides it. Widgets read the installed config, never the constant.
 
 ## Using it
 
 ```rust
 iad::config::install(iad::config::Config::load());     // once, at startup
 let theme = iad::Theme::from_config(&iad::config::current());
-let presentation = iad::widget::MenuPresentation::resolve(window_width);
+let presentation = iad::widgets::MenuPresentation::resolve(window_width);
 ```
 
 Widgets read the installed config themselves: `Metrics::desktop()`, mobile breakpoint, animation switch, button layout, icon theme, mobile sidebar default. Without one, libadwaita's defaults apply. Reload with `Config::load()` and `install` (on a timer or a file watch).

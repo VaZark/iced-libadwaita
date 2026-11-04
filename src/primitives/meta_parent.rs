@@ -2,7 +2,7 @@
 //! notification that reaches them.
 //!
 //! Each child **registers separately** and announces the actions it implements (for a
-//! [`MetaComponent`](crate::widget::MetaComponent), the keys its variants are selected by). A
+//! [`MetaComponent`](crate::metas::MetaComponent), the keys its variants are selected by). A
 //! [`notify`](Registry::notify) switches exactly the children that announced the action:
 //!
 //! * a child that did not announce it is *unrelated* and is left as it is;

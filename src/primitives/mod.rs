@@ -1,17 +1,14 @@
 //! Headless primitives: behavior with no widgets and no look, after Radix UI.
 //!
 //! Each is pure (plain data in, plain data out), controlled (the application owns the state)
-//! and unit-tested. The widgets in [`widget`](crate::widget) apply them to the screen, so a
+//! and unit-tested. The components, layouts and widgets apply them to the screen, so a
 //! more complex component can combine the same primitives without copying their logic. See
 //! `docs/lib/primitives.md`.
 //!
-//! * [`anchor`]: where a floating surface sits against an anchor (flip, shift);
 //! * [`calendar`]: calendar navigation by level (month, year, decade);
 //! * [`chart`]: charts, headless: scales and ticks, line and area shapes, stacks, pie, funnel, sankey and sunburst layouts (d3, Chart.js, TanStack Charts);
 //! * [`color_picker`]: a color as hue / saturation / value / alpha, its conversions and text forms (hex, rgb, hsl, hsv), parsing (Mantine's ColorPicker);
-//! * [`dock`]: how a panel docked against an edge shares the space with the content: pushing it aside or floating over it, its slide-in geometry on every side (shared by `AdaptiveSplit` and `Dock`);
 //! * [`date`]: calendar dates and month math;
-//! * [`flex`]: CSS-flex sizing along a line: basis, grow, shrink and a minimum, so columns give way together and none is cut off;
 //! * [`focus`]: keyboard focus rules: a Tab trap that wraps and its initial focus, returning focus when a scope closes, whether focus is within a scope (Mantine's use-focus-trap, use-focus-return, use-focus-within);
 //! * [`form`]: submit / reset / next / back gating and when a form's fields reveal errors (steps);
 //! * [`histogram`]: values counted into bins over a range, and which bins a selection covers;
@@ -20,20 +17,15 @@
 //! * [`lookup`]: a query answered asynchronously: debounce, stale-response discarding, cache;
 //! * [`notifications`]: the queue behind stacked toasts: ids, a limit, in-place update, auto-dismiss from an explicit `now`;
 //! * [`numeric`]: fixed-point numbers with a chosen number of digits (never floats), min / max, a handle step, parsing, formatting and validation (Mantine's NumberInput);
-//! * [`overlay`]: a layer over another (a dialog, a nested window): opt-in scrim, modality, dismissal, a stack of layers, centering;
 //! * [`pagination`]: page, page size, "Showing 21-40 of 187", Mantine's page-number window with dots;
 //! * [`range`]: a value with two ends (`lo <= hi`): the two-thumb slider's thumbs, a date range;
 //! * [`sections`]: text padding around an input's left / right sections;
 //! * [`reorder`]: a list with a preview and an edit view, the draft order, and what dragging a row means;
 //! * [`relative`]: relative time wording ("yesterday", "12 days ago", "in 3 hours") from an explicit `now`;
-//! * [`animation`]: the animation engine (easing, timed and spring animations, `Tween`, `Progress`);
-//! * [`transition`]: ordered close / open transitions between layouts (`Sequence`, `Transitions`);
 //! * [`selection`]: which keys are on (single, required single, multiple);
 //! * [`sorting`]: sort keys with the asc / desc / unsorted cycle, multi-column, a stable sort and comparators;
 //! * [`tabs`]: which tab a click or an arrow key activates, skipping disabled ones (Radix Tabs); shared by `Tabs` and the segmented control;
 //! * [`spoiler`]: show part of the height or of the data and reveal the rest; only the visible items are built (Mantine's Spoiler);
-//! * [`splitter`]: panes along an axis with draggable handles: fixed and flexible sizes, limits, collapsing, redistribution (Mantine's Splitter);
-//! * [`virtualize`]: which rows of a long fixed-height list to build for a scroll offset, and the spacers around them (shared by `Tree` and `ResponsiveTable`);
 //! * [`loading`]: keys being loaded (with their errors and retry), and a list fetched in chunks with placeholders for what has not arrived (shared by `Tree` and the tables);
 //! * [`tree`]: nodes, open branches, selection, checking, search / filter and keyboard navigation (Mantine's `useTree`, GTK's tree expander keys);
 //! * [`synced`]: lines that carry a time (lyrics, subtitles), the one active at a position, where to scroll;
@@ -43,15 +35,14 @@
 //! * [`meta_parent`]: the children of a meta parent: what each announced when it registered, and who a notification reaches;
 //! * [`resize`]: dragging a handle into a size (grips, min / max, grid and breakpoint snapping);
 //! * [`responsive`]: which presentation a width gets ([`When`](responsive::When)).
+//!
+//! Layout rules (anchor, dock, flex, overlay, splitter, virtualize) and the animation and transition
+//! engines are in `layouts`, next to the widgets that place things with them.
 
-pub mod anchor;
-pub mod animation;
 pub mod calendar;
 pub mod chart;
 pub mod color_picker;
 pub mod date;
-pub mod dock;
-pub mod flex;
 pub mod focus;
 pub mod form;
 pub mod histogram;
@@ -63,7 +54,6 @@ pub mod meta;
 pub mod meta_parent;
 pub mod notifications;
 pub mod numeric;
-pub mod overlay;
 pub mod pagination;
 pub mod range;
 pub mod relative;
@@ -73,15 +63,12 @@ pub mod responsive;
 pub mod sections;
 pub mod selection;
 pub mod sorting;
-pub mod splitter;
 pub mod spoiler;
 pub mod stepper;
 pub mod synced;
 pub mod tabs;
-pub mod transition;
 pub mod tree;
 pub mod validation;
-pub mod virtualize;
 
 pub use form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
 pub use infinite::{Infinite, Page as InfinitePage, ScrollMetrics};

@@ -32,7 +32,7 @@ Use `iad::Theme` as the application theme: `iad::Theme::from_config(&iad::config
 
 | Path                | Holds                                                                           |
 | ------------------- | ------------------------------------------------------------------------------- |
-| `src/`              | the library: `widget/`, `primitives/` (headless logic), `window/`, `style/`, theme, config |
+| `src/`              | the library: `layouts/`, `primitives/` (headless rules), `binds/`, `components/`, `metas/`, `widgets/`, `styles/`, `windows/`, theme, config |
 | `man/`              | man pages: overview, desktop config, one per component                          |
 | `docs/lib/`         | the user guide (published with the crate)                                       |
 | `docs/hig-inferences/` | design rationale for contributors (not published)                            |

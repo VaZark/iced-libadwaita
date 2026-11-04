@@ -43,6 +43,23 @@ Three layers, each overridable ([theming](docs/lib/theming.md)):
 
 Surfaces can be translucent (`with_transparency`) and tinted (`with_tint`, off by default). Tints derived from a surface keep its alpha.
 
+### Layers
+
+The library is five layers, plus the theme and the window logic. Each has one job, and a layer imports only the layers listed (`cargo test` checks it).
+
+| Layer         | Job                                                                                         | May import                                                    |
+| ------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `layouts/`    | where things go and how they flow: grid, flex, overlay, dock, split, clip, virtualize, motion | `binds`, `primitives`, `styles`                               |
+| `primitives/` | headless rules and state machines: `(state, input) -> next state`, no iced widgets or events  | nothing                                                       |
+| `binds/`      | iced events turned into primitive input (focus, shortcuts). No rules                         | `primitives`, `styles`                                        |
+| `components/` | themed atoms with no information of their own; usable by third-party widgets                | `layouts`, `binds`, `primitives`, `styles`                    |
+| `metas/`      | choose (`MetaComponent`) or join (`ComposedComponent`) whole widgets                         | `components`, `layouts`, `binds`, `primitives`, `styles`      |
+| `widgets/`    | what the user sees and uses; composed of the above, with their own layout and density       | everything above, and `windows`                               |
+| `styles/`     | `Catalog` style functions                                                                    | the theme                                                     |
+| `windows/`    | window state, chrome and frame logic                                                         | `layouts`, `styles`                                           |
+
+The rule that decides where code goes: a primitive is a pure, controlled rule. A component shows state through props (`.selected(bool)`) and reports intent through callbacks (`.on_press(Msg)`). The app owns the state and wires the two in `update`. `Selection` is the model. There is no handle type: the handle is the primitive plus that vocabulary, so swapping `ItemRow` for `ItemCard` keeps the behavior.
+
 ### Components
 
 Each is a builder: `new(..)`, properties, slots, `on_*` events, controlled state, `Into<Element>`. The API of each is its man page, generated from its doc comments. See [components](docs/lib/components.md).
@@ -55,16 +72,16 @@ Differences from a stock widget:
 
 ### Primitives
 
-`src/primitives/` holds behavior with no widgets and no look: pure, controlled, unit-tested. A component is a primitive plus a look. List: [primitives](docs/lib/primitives.md).
+`src/primitives/` holds behavior with no widgets and no look: pure, controlled, unit-tested (iced geometry types such as `Rectangle` and `Size` are allowed; widgets and events are not). A component is a primitive plus a look. List: [primitives](docs/lib/primitives.md).
 
 ### Dialogs and overlays
 
 A dialog is a modal layer over its parent window. The parent is faded and disabled. The library opens no OS window for a dialog.
 
-- `Overlay`: a layer over a base. Rules in `primitives::overlay`.
+- `Overlay`: a layer over a base. Rules in `layouts::overlay::rule`.
 - `Dock`: a surface on an edge. Modes: `Push` (makes room) and `Overlay` (floats over a faded base).
 - `FocusScope`, `focus_return`: Tab trap, initial focus, focus return. Every `Overlay` is one.
-- A window that must outlive the main window is a separate process: `window::Detached`.
+- A window that must outlive the main window is a separate process: `windows::Detached`.
 
 See [windows and menus](docs/lib/windows-and-menus.md).
 
