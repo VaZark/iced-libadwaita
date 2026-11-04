@@ -35,7 +35,7 @@ Defaults are in parentheses. Every key is optional.
 | `accent`                                     | system, a name, `#rrggbb` (system)        | the accent. System reads GNOME's `accent-color`      |
 | `flat-headerbars`                            | bool (true)                               | continuous, Nautilus-style header bars               |
 | `auto-contrast`                              | bool (true)                               | text on colored fills by contrast (`color-contrast()`) |
-| `density`                                    | default, compact                          | `Metrics`                                            |
+| `density`                                    | comfort, compact                          | `Metrics`                                            |
 | `text-scale`                                 | 0.5 … 3.0 (1.0)                           | `Typography` base size                               |
 | `transparency`                               | 0 … 1 (0)                                 | `Theme::with_transparency`: surface alpha            |
 | `tint`                                       | none, `#rrggbb`, `#rrggbbaa` (none)       | `Theme::with_tint`: a color mixed into surfaces, its alpha the strength |

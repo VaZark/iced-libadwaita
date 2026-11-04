@@ -84,9 +84,10 @@ pub enum Pick<T> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// How tight the metrics and the density-aware components are.
 pub enum Density {
     #[default]
-    Default,
+    Comfort,
     Compact,
 }
 
@@ -198,7 +199,7 @@ impl Default for Config {
             accent: Pick::System,
             flat_headerbars: true,
             auto_contrast: true,
-            density: Density::Default,
+            density: Density::Comfort,
             text_scale: 1.0,
             transparency: 0.0,
             tint: None,
@@ -354,7 +355,7 @@ impl Config {
         }
         if let Some(v) = get("appearance", "density") {
             match v {
-                "default" => self.density = Density::Default,
+                "comfort" => self.density = Density::Comfort,
                 "compact" => self.density = Density::Compact,
                 _ => bad!("appearance", "density", v),
             }
@@ -639,7 +640,7 @@ impl Config {
 
     fn compute_metrics(&self) -> Metrics {
         let base = match self.density {
-            Density::Default => Metrics::default(),
+            Density::Comfort => Metrics::default(),
             Density::Compact => Metrics::compact(),
         };
         let mut m = Metrics {

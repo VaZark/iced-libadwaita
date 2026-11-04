@@ -1,49 +1,51 @@
-//! `MediaCard`: an album, an artist, a playlist, an app: a picture, a title and a subtitle, drawn
-//! as a **card** or, in compact mode, as a tight [`MediaRow`](super::MediaRow). One pattern in
+//! `ItemCard`: an album, an artist, a playlist, an app: a picture, a title and a subtitle, drawn
+//! as a **card** or, in compact mode, as a tight [`ItemRow`](super::ItemRow). One pattern in
 //! two densities, so a grid of cards and a list of rows are the same data with one switch.
 //!
-//! * **Card**: the picture centered over the title and the subtitle, the whole card pressable.
+//! * **Comfort** (default): the picture centered over the title and the subtitle, the whole card pressable.
 //! * **Compact**: the picture small at the start and the title over the subtitle beside it, a
 //!   flat row ([`flat_row`](crate::style::button::flat_row)).
 //!
-//! Put cards in a [`CardGrid`](super::CardGrid); `CardGrid::compact(true)` lays the compact form
-//! out as a list.
+//! The density is the item's own. How items are arranged is the container's: a
+//! [`FlowGrid`](super::FlowGrid) with several columns makes a grid, with one column a list, and a
+//! [`TableGrid`](super::TableGrid) gives each its span.
 //!
 //! ```ignore
-//! CardGrid::new(albums.iter().map(|a| {
-//!     MediaCard::new(&a.name)
+//! FlowGrid::new(albums.iter().map(|a| {
+//!     ItemCard::new(&a.name)
 //!         .subtitle(format!("{} · {}", a.artist, a.year))
-//!         .picture(cover(a.id, if compact { 36.0 } else { 88.0 }))
-//!         .compact(compact)
+//!         .picture(cover(a.id, if density == Density::Compact { 36.0 } else { 88.0 }))
+//!         .density(density)
 //!         .on_press(Msg::Open(a.id))
 //!         .into()
 //! }))
-//! .compact(compact)
+//! .cols(if density == Density::Compact { 1 } else { 4 })
 //! ```
 
-use super::{Element, MediaRow, card_button, typography as ty};
+use super::{Element, ItemRow, card_button, typography as ty};
 use crate::Metrics;
+use crate::config::Density;
 use crate::style::text as st;
 use iced::Length;
 use iced::widget::{column, container};
 
 /// See the [module](self).
-pub struct MediaCard<'a, M> {
+pub struct ItemCard<'a, M> {
     title: String,
     subtitle: Option<String>,
     picture: Option<Element<'a, M>>,
-    compact: bool,
+    density: Density,
     on_press: Option<M>,
     metrics: Metrics,
 }
 
-impl<'a, M: Clone + 'a> MediaCard<'a, M> {
+impl<'a, M: Clone + 'a> ItemCard<'a, M> {
     pub fn new(title: impl Into<String>) -> Self {
         Self {
             title: title.into(),
             subtitle: None,
             picture: None,
-            compact: false,
+            density: Density::Comfort,
             on_press: None,
             metrics: Metrics::desktop(),
         }
@@ -58,9 +60,9 @@ impl<'a, M: Clone + 'a> MediaCard<'a, M> {
         self.picture = Some(picture.into());
         self
     }
-    /// A tight row instead of a card (default card).
-    pub fn compact(mut self, compact: bool) -> Self {
-        self.compact = compact;
+    /// [`Comfort`](Density::Comfort): a card. [`Compact`](Density::Compact): a tight row.
+    pub fn density(mut self, density: Density) -> Self {
+        self.density = density;
         self
     }
     pub fn on_press(mut self, m: M) -> Self {
@@ -73,11 +75,11 @@ impl<'a, M: Clone + 'a> MediaCard<'a, M> {
     }
 }
 
-impl<'a, M: Clone + 'a> From<MediaCard<'a, M>> for Element<'a, M> {
-    fn from(c: MediaCard<'a, M>) -> Self {
+impl<'a, M: Clone + 'a> From<ItemCard<'a, M>> for Element<'a, M> {
+    fn from(c: ItemCard<'a, M>) -> Self {
         let m = c.metrics;
-        if c.compact {
-            let mut row = MediaRow::new(c.title).metrics(m);
+        if c.density == Density::Compact {
+            let mut row = ItemRow::new(c.title).metrics(m);
             if let Some(s) = c.subtitle {
                 row = row.subtitle(s);
             }
@@ -110,12 +112,12 @@ mod tests {
 
     #[test]
     fn the_builder_keeps_its_parts() {
-        let c: MediaCard<'_, u8> = MediaCard::new("Album")
+        let c: ItemCard<'_, u8> = ItemCard::new("Album")
             .subtitle("Artist")
             .picture(iced::widget::space())
-            .compact(true)
+            .density(Density::Compact)
             .on_press(3);
-        assert!(c.compact && c.picture.is_some() && c.on_press == Some(3));
+        assert!(c.density == Density::Compact && c.picture.is_some() && c.on_press == Some(3));
         assert_eq!(c.subtitle.as_deref(), Some("Artist"));
         assert_eq!(c.title, "Album");
     }

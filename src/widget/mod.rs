@@ -13,7 +13,6 @@ mod avatar;
 mod badge;
 mod banner;
 mod button;
-mod card_grid;
 mod carousel;
 mod chart;
 mod chip_group;
@@ -36,6 +35,7 @@ mod field;
 mod flex;
 mod flex_cells;
 mod floating_indicator;
+mod flow_grid;
 mod focus;
 mod form;
 mod forms;
@@ -43,8 +43,8 @@ mod header_bar;
 mod histogram_range_slider;
 mod icon_toggle;
 mod infinite;
-mod media_card;
-mod media_row;
+mod item_card;
+mod item_row;
 mod menu;
 mod meta_component;
 mod meta_parent_component;
@@ -78,6 +78,7 @@ mod stepper;
 pub mod surface;
 mod switch;
 mod synced_text;
+mod table_grid;
 mod tabs;
 mod timeline;
 mod toast;
@@ -133,7 +134,6 @@ pub use button::{
     destructive_button, flat_button, icon_button, pill_button, progress_bar, raised_button,
     suggested_button, suggested_circular_button, suggested_pill_button, toggle_group,
 };
-pub use card_grid::CardGrid;
 pub use carousel::{Carousel, CarouselIndicator, carousel};
 pub use chart::{
     BarChart, BarLayout, Funnel, FunnelShape, LineChart, PieChart, Sankey, Sunburst, format_value,
@@ -163,6 +163,7 @@ pub use field::{Field, FieldLayout, outlined as field_outline};
 pub use flex::FlexRow;
 pub use flex_cells::{Flex, FlexCells};
 pub use floating_indicator::FloatingIndicator;
+pub use flow_grid::FlowGrid;
 pub use focus::{FocusScope, focus_return};
 pub use form::{Form, FormActions, Step, StepIndicator};
 pub use forms::{
@@ -175,8 +176,8 @@ pub use histogram_range_slider::HistogramRangeSlider;
 pub use iced::widget::text_editor::{Action as TextAction, Content as TextContent};
 pub use icon_toggle::IconToggleButton;
 pub use infinite::{InfiniteList, LoadTrigger};
-pub use media_card::MediaCard;
-pub use media_row::{MediaColumns, MediaRow, PICTURE_WIDTH, SUFFIX_WIDTH, TIME_WIDTH};
+pub use item_card::ItemCard;
+pub use item_row::{ItemColumns, ItemRow, PICTURE_WIDTH, SUFFIX_WIDTH, TIME_WIDTH};
 pub use menu::{
     Menu, MenuButton, MenuCheckStyle, MenuIconSide, MenuItem, MenuPresentation, menu_button,
     primary_menu,
@@ -231,6 +232,7 @@ pub use status_page::{Card, Page, StatusPage, bin, card, clamp, page, status_pag
 pub use stepper::{Stepper, StepperIconPosition, StepperOrientation, StepperSize, StepperStep};
 pub use switch::{Switch, switch};
 pub use synced_text::{SyncedText, follow_synced_text};
+pub use table_grid::{TableCell, TableGrid};
 pub use tabs::{TabItem, Tabs, TabsVariant};
 pub use timeline::{Timeline, TimelineAlign, TimelineItem};
 pub use toast::{

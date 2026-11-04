@@ -140,8 +140,8 @@ pub const PROPERTIES: &[Property] = &[
     p(
         "appearance",
         "density",
-        Choice(&["default", "compact"]),
-        "default",
+        Choice(&["comfort", "compact"]),
+        "comfort",
     ),
     p(
         "appearance",

@@ -10,7 +10,7 @@ SortHeader::new(state: &'a SortState<K>, on_sort: impl Fn(K) \-> M + 'a)
 .PP
 See the module.
 .PP
-\fBSortHeader\fR: the header of a flat list (\fBVirtualList\fR of \fBMediaRow\fRs): labels over the columns, each with an arrow for its sort direction, driven by a \fBSortState\fR. \fBResponsiveTable\fR has one built in; a flat list does not.
+\fBSortHeader\fR: the header of a flat list (\fBVirtualList\fR of \fBItemRow\fRs): labels over the columns, each with an arrow for its sort direction, driven by a \fBSortState\fR. \fBResponsiveTable\fR has one built in; a flat list does not.
 .PP
 The columns are given in the same order and widths as the row's, so the labels sit over their cells. A label that does not sort is plain; a space keeps a gap for a picture or a menu.
 .PP

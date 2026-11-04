@@ -197,6 +197,26 @@ impl<M> Menu<M> {
         self.sections.push(items.into_iter().collect());
         self
     }
+    /// The menu as the content of a bottom sheet (put it in a [`Dock`](super::Dock)): the title
+    /// and an optional dimmed line under it, then the large touch rows. The sheet closes on a
+    /// choice by the app mapping the messages, as with any menu.
+    pub fn sheet<'a>(&self, subtitle: Option<String>) -> Element<'a, M>
+    where
+        M: Clone + 'a,
+    {
+        let m = Metrics::desktop();
+        let t = Typography::default();
+        let mut head = column![t.heading(self.title.clone())];
+        if let Some(s) = subtitle {
+            head = head.push(t.caption(s).style(st::dim));
+        }
+        container(column![
+            container(head).padding(m.page_padding),
+            container(touch_lists(self)).padding(m.page_padding),
+        ])
+        .width(Length::Fill)
+        .into()
+    }
     /// The accelerator and message of every enabled item that has an accelerator, so a
     /// [`Shortcuts`](crate::shortcut::Shortcuts) can make the shown shortcuts work.
     pub fn accelerators(&self) -> Vec<(String, M)>
@@ -447,32 +467,11 @@ fn dropdown_items<'a, M: Clone + 'a>(menu: &Menu<M>) -> Vec<Element<'a, M>> {
     out
 }
 
-fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M> {
+/// Large touch rows, one boxed list per section: the body of the full-page menu and of
+/// [`Menu::sheet`].
+fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M, Theme> {
     let m = Metrics::desktop();
-    let t = Typography::default();
     let slots = slots(menu);
-
-    // Header: back arrow (hit area handled by the overlay) + centered title.
-    let header = container(
-        row![
-            container(Icon::GoPrevious.view(m.icon_size + 2.0))
-                .center(Length::Fixed(PAGE_BACK_WIDTH))
-                .height(Length::Fixed(PAGE_HEADER_HEIGHT)),
-            container(t.heading(menu.title.clone()).wrapping(text::Wrapping::None))
-                .center_x(Length::Fill)
-                .center_y(Length::Fixed(PAGE_HEADER_HEIGHT)),
-            space().width(PAGE_BACK_WIDTH),
-        ]
-        .align_y(Vertical::Center),
-    )
-    .width(Length::Fill)
-    // Flat, like a dialog header: it shares the page background.
-    .style(|th: &Theme| iced::widget::container::Style {
-        text_color: Some(th.semantic.window.fg),
-        ..Default::default()
-    });
-
-    // Large touch rows, one boxed list per section.
     let mut lists = column![].spacing(m.space_l);
     for section in &menu.sections {
         let rows = section.iter().map(|item| -> Element<'a, M> {
@@ -495,6 +494,34 @@ fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M>
         });
         lists = lists.push(boxed_list(rows));
     }
+    lists
+}
+
+fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M> {
+    let m = Metrics::desktop();
+    let t = Typography::default();
+
+    // Header: back arrow (hit area handled by the overlay) + centered title.
+    let header = container(
+        row![
+            container(Icon::GoPrevious.view(m.icon_size + 2.0))
+                .center(Length::Fixed(PAGE_BACK_WIDTH))
+                .height(Length::Fixed(PAGE_HEADER_HEIGHT)),
+            container(t.heading(menu.title.clone()).wrapping(text::Wrapping::None))
+                .center_x(Length::Fill)
+                .center_y(Length::Fixed(PAGE_HEADER_HEIGHT)),
+            space().width(PAGE_BACK_WIDTH),
+        ]
+        .align_y(Vertical::Center),
+    )
+    .width(Length::Fill)
+    // Flat, like a dialog header: it shares the page background.
+    .style(|th: &Theme| iced::widget::container::Style {
+        text_color: Some(th.semantic.window.fg),
+        ..Default::default()
+    });
+
+    let lists = touch_lists(menu);
 
     let body = scrolled_window(clamp(
         container(lists).padding(m.page_padding).width(Length::Fill),

@@ -10,7 +10,7 @@ color-scheme=system      # system | light | dark
 accent=system            # system | blue | teal | green | yellow | orange | red | pink | purple | slate
 flat-headerbars=false    # header bars with no color of their own (Nautilus-style)
 auto-contrast=true        # light/dark text on colored fills by contrast; false = fixed white
-density=default          # default | compact
+density=comfort          # comfort | compact
 text-scale=1.0           # 0.5 .. 3.0
 transparency=0.0         # 0 (opaque) .. 1: how see-through the surfaces are
 tint=none                # none | #rrggbb | #rrggbbaa: a color mixed into the surfaces (the alpha is the strength; their own alpha is kept)

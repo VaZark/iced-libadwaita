@@ -21,7 +21,7 @@
 //! ```ignore
 //! surface::scrolling(column![
 //!     surface::band(SectionHeading::new("Recent").link("View all", Msg::All)),
-//!     CardGrid::new(cards),
+//!     FlowGrid::new(cards),
 //! ])
 //! ```
 

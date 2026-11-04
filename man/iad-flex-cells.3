@@ -12,7 +12,7 @@ See the module.
 .PP
 \fBFlexCells\fR: a line of cells sized as CSS flex sizes them. Each cell has a \fBFlex\fR (basis, grow, shrink, minimum), and the line divides its width with \fBprimitives::flex::resolve\fR: free space goes to the cells that grow, a shortage is taken from the cells that shrink in proportion to their basis, and \fBno cell goes below its minimum\fR.
 .PP
-It is the line of a table: the header and every row are a \fBFlexCells\fR over the same \fBFlex\fR specs, so their columns line up at any width, and a small column keeps what its label needs while a big one gives way ("Tim" never happens). \fBMediaRow\fR and \fBSortHeader\fR are built on it.
+It is the line of a table: the header and every row are a \fBFlexCells\fR over the same \fBFlex\fR specs, so their columns line up at any width, and a small column keeps what its label needs while a big one gives way ("Tim" never happens). \fBItemRow\fR and \fBSortHeader\fR are built on it.
 .PP
 .nf
 .RS

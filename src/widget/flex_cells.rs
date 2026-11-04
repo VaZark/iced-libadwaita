@@ -6,7 +6,7 @@
 //!
 //! It is the line of a table: the header and every row are a `FlexCells` over the same
 //! [`Flex`] specs, so their columns line up at any width, and a small column keeps what its label
-//! needs while a big one gives way ("Tim" never happens). [`MediaRow`](super::MediaRow) and
+//! needs while a big one gives way ("Tim" never happens). [`ItemRow`](super::ItemRow) and
 //! [`SortHeader`](super::SortHeader) are built on it.
 //!
 //! ```ignore

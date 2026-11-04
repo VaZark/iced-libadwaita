@@ -402,9 +402,10 @@ impl Gallery {
             Detail::PageHeader => self.upstream.header_view(m).map(Message::Upstream),
             Detail::ThemeConfig => self.theme_cfg.view(m).map(Message::ThemeCfg),
             Detail::Surface => self.upstream.surface_view(m).map(Message::Upstream),
-            Detail::CardGrid => self.upstream.grid_view(m).map(Message::Upstream),
+            Detail::FlowGrid => self.upstream.grid_view(m).map(Message::Upstream),
+            Detail::TableGrid => self.upstream.table_grid_view(m).map(Message::Upstream),
             Detail::SectionHeading => self.upstream.heading_view(m).map(Message::Upstream),
-            Detail::MediaRow => self.upstream.media_view(m).map(Message::Upstream),
+            Detail::ItemRow => self.upstream.media_view(m).map(Message::Upstream),
             Detail::ChipGroup => self.upstream.chips_view(m).map(Message::Upstream),
             Detail::History => self.upstream.history_view(m).map(Message::Upstream),
             Detail::Icons => {
@@ -1040,6 +1041,9 @@ impl Gallery {
                     g("Icon side").description("Icons sit at the end by default. MenuIconSide::Start puts them before the label.").push(w::card(
                         row![icons(w::MenuIconSide::End), icons(w::MenuIconSide::Start)].spacing(m.space_m),
                     )),
+                    g("Bottom sheet").description("Menu::sheet is the same menu as the content of a bottom sheet: the large touch rows under a title and a dimmed line. The app closes the sheet by mapping the messages.").push(
+                        w::card(w::suggested_button(ty::label("Open sheet")).on_press(Message::Sheet(true))),
+                    ),
                     g("Presentation").push(
                         w::ToggleGroupRow::new(
                             "Menu presentation",

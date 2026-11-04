@@ -8,7 +8,7 @@
 use iad::style;
 use iad::widget::{self as w, typography as ty};
 use iad::{AccentColor, Icon, Metrics, Role, Scheme, Theme};
-use iced::widget::{column, container, text};
+use iced::widget::{container, text};
 use iced::{Element as IcedElement, Length, Subscription, Task, window};
 use iced_adaptive_design as iad;
 use std::path::PathBuf;
@@ -1604,12 +1604,14 @@ impl Gallery {
         // A docked sheet over the whole window: modal, so the window is faded and disabled.
         let base: Element = w::Dock::new(
             base,
-            column![
-                ty::title_3("Sheet"),
-                ty::body("A bottom sheet over the content."),
-                w::suggested_button(text("Done")).on_press(Message::Sheet(false))
-            ]
-            .spacing(m.space_m),
+            w::Menu::new("Track")
+                .section([
+                    w::MenuItem::action("Play next", Message::Sheet(false)).icon(Icon::MusicNote),
+                    w::MenuItem::action("Add to playlist", Message::Sheet(false))
+                        .icon(Icon::ListAdd),
+                ])
+                .section([w::MenuItem::action("Remove", Message::Sheet(false)).icon(Icon::Delete)])
+                .sheet(Some("Midnight City · M83".into())),
         )
         .open(self.sheet)
         .side(w::Side::Bottom)

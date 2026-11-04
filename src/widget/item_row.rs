@@ -1,4 +1,4 @@
-//! `MediaRow`: one row of a music, podcast, video or file list. A flat, rounded, whole-row
+//! `ItemRow`: one row of a music, podcast, video or file list. A flat, rounded, whole-row
 //! button holding a picture, a title with a subtitle, optional extra columns, and a trailing
 //! part (a time, a menu). Together with [`VirtualList`](super::VirtualList) and a
 //! [`SortHeader`](super::SortHeader) it is the list component.
@@ -10,16 +10,16 @@
 //! * **Regular**: picture, then the title over its subtitle. The title column **grows**
 //!   (`flex-grow: 1`): it covers all the width the picture, the extra columns and the suffix leave,
 //!   so give the other columns fixed widths.
-//! * **Compact** ([`compact`](MediaRow::compact)): no picture, and the title and subtitle share
+//! * **Compact** ([`compact`](ItemRow::compact)): no picture, and the title and subtitle share
 //!   the line, each in its own column, for dense lists.
-//! * [`column`](MediaRow::column) adds a cell of a given width (an album, a BPM, a time);
-//!   [`suffix`](MediaRow::suffix) adds the trailing part (a menu button).
+//! * [`column`](ItemRow::column) adds a cell of a given width (an album, a BPM, a time);
+//!   [`suffix`](ItemRow::suffix) adds the trailing part (a menu button).
 //!
 //! The whole row is the target, rounded, with a hover that reads on a plain page
 //! ([`style::button::flat_row`](crate::style::button::flat_row)).
 //!
 //! ```ignore
-//! MediaRow::new(&track.title)
+//! ItemRow::new(&track.title)
 //!     .subtitle(&track.artist)
 //!     .picture(cover(track.id, 40.0))
 //!     .column(Length::Fixed(160.0), caption(&track.album))
@@ -46,12 +46,12 @@ pub const TIME_WIDTH: f32 = 44.0;
 pub const SUFFIX_WIDTH: f32 = 36.0;
 
 /// See the [module](self).
-pub struct MediaRow<'a, M> {
+pub struct ItemRow<'a, M> {
     title: String,
     subtitle: Option<String>,
     picture: Option<Element<'a, M>>,
     columns: Vec<(Flex, Horizontal, Element<'a, M>)>,
-    /// The flex and alignment a shared [`MediaColumns`] gave each column, for [`cell`](Self::cell).
+    /// The flex and alignment a shared [`ItemColumns`] gave each column, for [`cell`](Self::cell).
     spec: Vec<(Flex, Horizontal)>,
     /// The title's (and, compact, the subtitle's) flex.
     title_flex: Flex,
@@ -63,7 +63,7 @@ pub struct MediaRow<'a, M> {
     metrics: Metrics,
 }
 
-impl<'a, M: 'a> MediaRow<'a, M> {
+impl<'a, M: 'a> ItemRow<'a, M> {
     pub fn new(title: impl Into<String>) -> Self {
         Self {
             title: title.into(),
@@ -103,8 +103,8 @@ impl<'a, M: 'a> MediaRow<'a, M> {
         }
         self
     }
-    /// The next extra cell, in the width and alignment the shared [`MediaColumns`] gave this
-    /// column (see [`MediaColumns::row`]). Cells are given in the columns' order.
+    /// The next extra cell, in the width and alignment the shared [`ItemColumns`] gave this
+    /// column (see [`ItemColumns::row`]). Cells are given in the columns' order.
     pub fn cell(mut self, cell: impl Into<Element<'a, M>>) -> Self {
         let (width, align) = self
             .spec
@@ -140,8 +140,8 @@ impl<'a, M: 'a> MediaRow<'a, M> {
     }
 }
 
-impl<'a, M: Clone + 'a> From<MediaRow<'a, M>> for Element<'a, M> {
-    fn from(r: MediaRow<'a, M>) -> Self {
+impl<'a, M: Clone + 'a> From<ItemRow<'a, M>> for Element<'a, M> {
+    fn from(r: ItemRow<'a, M>) -> Self {
         let m = r.metrics;
         // Every cell is flex: the line divides its width by the same rules as the header, so the
         // columns line up and shrink together, none below what its label needs.
@@ -197,11 +197,11 @@ struct Def<K> {
     align: Horizontal,
 }
 
-/// The columns of a media list, **written once** for both the [`SortHeader`] and the rows, so the
+/// The columns of an item list, **written once** for both the [`SortHeader`] and the rows, so the
 /// labels sit over their cells without matching widths by hand.
 ///
 /// ```ignore
-/// let cols = MediaColumns::new()
+/// let cols = ItemColumns::new()
 ///     .picture(true)                                   // PICTURE_WIDTH, over the cover
 ///     .title(Col::Title, "Title")
 ///     .column(Col::Album, "Album").width(Length::Fixed(160.0))
@@ -213,7 +213,7 @@ struct Def<K> {
 ///     .picture(cover).cell(caption(&t.album)).cell(caption(t.time())).suffix(menu)
 /// ```
 #[derive(Clone)]
-pub struct MediaColumns<K> {
+pub struct ItemColumns<K> {
     title: Option<(Option<K>, String)>,
     subtitle: Option<(Option<K>, String)>,
     cols: Vec<Def<K>>,
@@ -222,13 +222,13 @@ pub struct MediaColumns<K> {
     compact: bool,
 }
 
-impl<K> Default for MediaColumns<K> {
+impl<K> Default for ItemColumns<K> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K> MediaColumns<K> {
+impl<K> ItemColumns<K> {
     pub fn new() -> Self {
         Self {
             title: None,
@@ -302,9 +302,9 @@ impl<K> MediaColumns<K> {
         self.compact = compact;
         self
     }
-    /// A row in these columns: compact as the columns are, and ready for [`MediaRow::cell`].
-    pub fn row<'a, M: 'a>(&self, title: impl Into<String>) -> MediaRow<'a, M> {
-        let mut r = MediaRow::new(title).compact(self.compact);
+    /// A row in these columns: compact as the columns are, and ready for [`ItemRow::cell`].
+    pub fn row<'a, M: 'a>(&self, title: impl Into<String>) -> ItemRow<'a, M> {
+        let mut r = ItemRow::new(title).compact(self.compact);
         // The flex the header gives each column (down to its label's floor), so cells agree.
         r.spec = self
             .cols
@@ -321,7 +321,7 @@ impl<K> MediaColumns<K> {
     }
 }
 
-impl<K: PartialEq + Clone> MediaColumns<K> {
+impl<K: PartialEq + Clone> ItemColumns<K> {
     /// The header over these columns, in the same order and widths as the rows. `on_sort` gets
     /// the key of a pressed label.
     pub fn header<'a, M: Clone + 'a>(
@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn the_builder_keeps_its_parts() {
-        let r: MediaRow<'_, ()> = MediaRow::new("Song")
+        let r: ItemRow<'_, ()> = ItemRow::new("Song")
             .subtitle("Artist")
             .column(Length::Fixed(44.0), iced::widget::space())
             .suffix(iced::widget::space())
@@ -378,11 +378,11 @@ mod tests {
 
     #[test]
     fn a_row_gives_a_small_column_the_room_its_header_needs() {
-        let cols = MediaColumns::<u8>::new()
+        let cols = ItemColumns::<u8>::new()
             .title(0, "Title")
             .column(1, "Duration")
             .width(Length::Fixed(20.0));
-        let r: MediaRow<'_, ()> = cols.row("x");
+        let r: ItemRow<'_, ()> = cols.row("x");
         // The cell's minimum is its header's label, so the two agree at any width.
         assert_eq!(
             r.spec[0].0.0.min,
@@ -396,14 +396,14 @@ mod tests {
 
     #[test]
     fn rows_take_their_widths_from_the_shared_columns() {
-        let cols = MediaColumns::<u8>::new()
+        let cols = ItemColumns::<u8>::new()
             .title(0, "Title")
             .column(1, "Album")
             .width(Length::FillPortion(2))
             .column(2, "Time")
             .width(Length::Fixed(TIME_WIDTH))
             .align(Horizontal::Right);
-        let r: MediaRow<'_, ()> = cols
+        let r: ItemRow<'_, ()> = cols
             .row("Song")
             .cell(iced::widget::space())
             .cell(iced::widget::space());
@@ -416,7 +416,7 @@ mod tests {
     #[test]
     fn the_header_leaves_room_for_the_picture_and_the_suffix() {
         let state = SortState::<u8>::new();
-        let cols = MediaColumns::<u8>::new()
+        let cols = ItemColumns::<u8>::new()
             .picture(true)
             .title(0, "Title")
             .suffix(true);

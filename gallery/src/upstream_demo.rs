@@ -3,13 +3,14 @@
 
 use iced_adaptive_design as iad;
 
+use iad::config::Density;
 use iad::primitives::history::History;
 use iad::primitives::reorder::{Event as ReorderEvent, ReorderState};
 use iad::primitives::sorting::{Direction, SortState, cmp_str};
 use iad::primitives::virtualize::Viewport;
 use iad::widget::{
-    self as w, Avatar, AvatarShape, CardGrid, ChipGroup, ChipOption, ChipSize, DetailHeader,
-    EditableText, MediaColumns, PreferencesGroup, SectionHeading, VirtualList,
+    self as w, Avatar, AvatarShape, ChipGroup, ChipOption, ChipSize, DetailHeader, EditableText,
+    FlowGrid, ItemColumns, PreferencesGroup, SectionHeading, VirtualList,
 };
 use iad::{Element, Icon, Metrics};
 use iced::widget::{column, container, row, text};
@@ -42,11 +43,12 @@ pub enum Msg {
     Flow(bool),
     FlowText(String),
     CardsCompact(bool),
+    CardsCols(usize),
     Queue(ReorderEvent),
     Remove(usize),
 }
 
-/// The columns of the media list.
+/// The columns of the item list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Col {
     Title,
@@ -55,7 +57,7 @@ pub enum Col {
     Time,
 }
 
-/// A track of the media list demo.
+/// A track of the item list demo.
 struct Track {
     title: String,
     artist: &'static str,
@@ -91,6 +93,7 @@ pub struct State {
     flow_editing: bool,
     flow_text: String,
     cards_compact: bool,
+    cards_cols: usize,
     queue: ReorderState<&'static str>,
     viewport: Viewport,
     bio: String,
@@ -127,6 +130,7 @@ impl Default for State {
             history: History::new("Home"),
             flow_editing: false,
             cards_compact: false,
+            cards_cols: 0,
             queue: ReorderState::live(vec![
                 "Winter Barn",
                 "Long Road",
@@ -174,6 +178,7 @@ impl State {
             Msg::Open(p) => self.history.open(p),
             Msg::Go(p) => self.history.go(p),
             Msg::CardsCompact(c) => self.cards_compact = c,
+            Msg::CardsCols(n) => self.cards_cols = n,
             Msg::Queue(e) => {
                 self.queue.apply(e);
             }
@@ -354,7 +359,7 @@ impl State {
         let row_h = if self.compact { 36.0 } else { 56.0 };
         let compact = self.compact;
         // The columns, written once: the header and every row take their widths from them.
-        let cols = MediaColumns::new()
+        let cols = ItemColumns::new()
             .picture(true)
             .compact(compact)
             .title(Col::Title, "Title")
@@ -391,8 +396,8 @@ impl State {
         let header = cols.header(&self.sort, Msg::Sort);
         column![
             Self::group(
-                "Media list",
-                "A virtual list of media rows under a sort header. The columns are written once and shared by the header and the rows; the time is right-aligned.",
+                "Item list",
+                "A virtual list of item rows under a sort header. The columns are written once and shared by the header and the rows; the time is right-aligned.",
                 m,
             )
             .push(w::SwitchRow::new("Compact", self.compact, Msg::Compact).metrics(m)),
@@ -443,27 +448,88 @@ impl State {
 
     pub fn grid_view(&self, m: Metrics) -> Element<'_, Msg> {
         let compact = self.cards_compact;
+        let density = if compact {
+            Density::Compact
+        } else {
+            Density::Comfort
+        };
         let cards = (0..9).map(|i| {
             let name = ALBUMS[i % ALBUMS.len()];
-            w::MediaCard::new(format!("{name} {}", i + 1))
+            w::ItemCard::new(format!("{name} {}", i + 1))
                 .subtitle(ARTISTS[i % ARTISTS.len()])
                 .picture(
                     Avatar::new(if compact { 36.0 } else { 72.0 }, format!("{name}{i}"))
                         .icon(Icon::MusicNote)
                         .shape(AvatarShape::Rounded),
                 )
-                .compact(compact)
+                .density(density)
                 .on_press(Msg::Noop)
                 .into()
         });
+        let grid = FlowGrid::new(cards).max_width(180.0);
+        let grid = match self.cards_cols {
+            0 => grid,
+            n => grid.cols(n),
+        };
         column![
             SectionHeading::new("Recently played")
-                .subtitle("A media card is a card, or a tight row when compact")
+                .subtitle("The item sets its density; the grid sets the columns")
                 .link("View all", Msg::Noop),
             w::SwitchRow::new("Compact", compact, Msg::CardsCompact).metrics(m),
-            CardGrid::new(cards).max_width(180.0).compact(compact),
+            w::ToggleGroupRow::new(
+                "Columns",
+                vec![
+                    w::ToggleItem::new(0, "Fit"),
+                    w::ToggleItem::new(1, "1"),
+                    w::ToggleItem::new(2, "2"),
+                    w::ToggleItem::new(3, "3"),
+                ],
+                Some(self.cards_cols),
+                Msg::CardsCols,
+            )
+            .subtitle("Fit adds columns as the width allows; one column is a list")
+            .metrics(m),
+            grid,
         ]
         .spacing(m.space_m)
+        .into()
+    }
+
+    /// A 12-column grid: cells of different spans, a wrap and an offset.
+    pub fn table_grid_view(&self, m: Metrics) -> Element<'_, Msg> {
+        let cell = |label: &'static str, span, offset| {
+            let body = w::card(
+                container(w::typography::label(label))
+                    .center_x(Length::Fill)
+                    .padding(m.space_m),
+            );
+            w::TableCell::new(body).span(span).offset(offset)
+        };
+        column![
+            Self::group("Spans", "Each cell takes some of the 12 columns.", m).push(
+                w::TableGrid::new([
+                    cell("8", 8, 0),
+                    cell("4", 4, 0),
+                    cell("4", 4, 0),
+                    cell("4", 4, 0),
+                    cell("4", 4, 0)
+                ])
+                .spacing(m.space_s),
+            ),
+            Self::group("Offset", "Columns left empty before a cell.", m).push(
+                w::TableGrid::new([cell("6, offset 3", 6, 3), cell("3", 3, 0)]).spacing(m.space_s),
+            ),
+            Self::group(
+                "Wrap",
+                "A cell that does not fit in the rest of a row starts the next one.",
+                m
+            )
+            .push(
+                w::TableGrid::new([cell("7", 7, 0), cell("7", 7, 0), cell("5", 5, 0)])
+                    .spacing(m.space_s),
+            ),
+        ]
+        .spacing(m.group_spacing)
         .into()
     }
 

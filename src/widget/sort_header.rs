@@ -1,5 +1,5 @@
 //! `SortHeader`: the header of a flat list ([`VirtualList`](super::VirtualList) of
-//! [`MediaRow`](super::MediaRow)s): labels over the columns, each with an arrow for its sort
+//! [`ItemRow`](super::ItemRow)s): labels over the columns, each with an arrow for its sort
 //! direction, driven by a [`SortState`]. [`ResponsiveTable`](super::ResponsiveTable) has one
 //! built in; a flat list does not.
 //!
