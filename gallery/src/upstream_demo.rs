@@ -9,7 +9,7 @@ use iad::primitives::sorting::{Direction, SortState, cmp_str};
 use iad::primitives::virtualize::Viewport;
 use iad::widget::{
     self as w, Avatar, AvatarShape, CardGrid, ChipGroup, ChipOption, ChipSize, DetailHeader,
-    EditableText, PreferencesGroup, SectionHeading, VirtualList,
+    EditableText, MediaColumns, PreferencesGroup, SectionHeading, VirtualList,
 };
 use iad::{Element, Icon, Metrics};
 use iced::widget::{column, container, row, text};
@@ -350,82 +350,55 @@ impl State {
         .into()
     }
 
-    /// A music list is a plain table: virtualized, sortable, compact or default, columns that
-    /// shrink with the width.
     pub fn media_view(&self, m: Metrics) -> Element<'_, Msg> {
-        use iad::config::Density;
-        use iad::widget::{Column, ResponsiveTable, TableMode};
-        use iced::alignment::Horizontal;
-        let density = if self.compact {
-            Density::Compact
-        } else {
-            Density::Default
-        };
-        let pitch = ResponsiveTable::<Track, Msg>::pitch(
-            ResponsiveTable::<Track, Msg>::row_height_of(density),
-        );
-        let range = self.media_vp.window(self.tracks.len(), pitch, 4);
+        let row_h = if self.compact { 36.0 } else { 56.0 };
         let compact = self.compact;
-        use iad::widget::typography::caption;
-        let mut table = ResponsiveTable::new(&self.tracks[range.clone()])
-            .mode(TableMode::Table)
-            .density(density)
-            .virtualized(self.tracks.len(), range.start)
-            .height(Length::Fixed(380.0))
-            .sort(&self.sort)
-            .on_sort(Msg::Sort)
-            .on_scroll(Msg::Scroll2)
-            .column(
-                Column::new("Title", move |t: &Track| {
-                    let title = iad::widget::typography::body(t.title.clone());
-                    if compact {
-                        title.into()
-                    } else {
-                        // A picture, then the title over its subtitle.
-                        row![
-                            Avatar::new(36.0, t.title.clone())
-                                .icon(Icon::MusicNote)
-                                .shape(AvatarShape::Rounded),
-                            column![title, caption(t.artist).style(iad::style::text::dim)],
-                        ]
-                        .spacing(m.space_m)
-                        .align_y(iced::Alignment::Center)
-                        .into()
-                    }
-                })
-                .sortable(Col::Title),
-            );
-        if compact {
-            table = table.column(
-                Column::new("Artist", |t: &Track| caption(t.artist).into()).sortable(Col::Artist),
-            );
-        }
-        let table = table
-            .column(Column::new("Album", |t: &Track| caption(t.album).into()).sortable(Col::Album))
-            .column(
-                Column::new("Time", |t: &Track| {
-                    iad::Typography::default()
-                        .caption(format!("{}:{:02}", t.secs / 60, t.secs % 60))
-                        .into()
-                })
-                .sortable(Col::Time)
-                .width(Length::Fixed(64.0))
-                .align(Horizontal::Right),
-            )
-            .column(
-                Column::new("", |_: &Track| {
-                    w::icon_button(Icon::ViewMore).on_press(Msg::Noop).into()
-                })
-                .width(Length::Fixed(44.0)),
-            );
+        // The columns, written once: the header and every row take their widths from them.
+        let cols = MediaColumns::new()
+            .picture(true)
+            .compact(compact)
+            .title(Col::Title, "Title")
+            .subtitle(Col::Artist, "Artist")
+            .column(Col::Album, "Album")
+            .width(Length::Fixed(160.0))
+            .column(Col::Time, "Time")
+            .width(Length::Fixed(w::TIME_WIDTH))
+            .align(iced::alignment::Horizontal::Right)
+            .suffix(true);
+        let tracks = &self.tracks;
+        let spec = cols.clone();
+        let list = VirtualList::new(tracks.len(), row_h, &self.media_vp, move |i| {
+            let t = &tracks[i];
+            let time = format!("{}:{:02}", t.secs / 60, t.secs % 60);
+            let mut r = spec
+                .row(t.title.clone())
+                .subtitle(t.artist)
+                .height(Length::Fill)
+                .cell(iad::widget::typography::caption(t.album))
+                .cell(iad::widget::typography::caption(time))
+                .suffix(w::icon_button(Icon::ViewMore).on_press(Msg::Noop))
+                .on_press(Msg::Noop);
+            if !compact {
+                r = r.picture(
+                    Avatar::new(w::PICTURE_WIDTH, t.title.clone())
+                        .icon(Icon::MusicNote)
+                        .shape(AvatarShape::Rounded),
+                );
+            }
+            r.into()
+        })
+        .on_scroll(Msg::Scroll2);
+        let header = cols.header(&self.sort, Msg::Sort);
         column![
             Self::group(
-                "Media table",
-                "A plain table: virtualized (400 rows, only those in view are built), sortable, compact or default density. Every column shrinks with the width and clips what does not fit; the time is fixed and right-aligned.",
+                "Media list",
+                "A virtual list of media rows under a sort header. The columns are written once and shared by the header and the rows; the time is right-aligned.",
                 m,
             )
-            .push(w::SwitchRow::new("Compact density", self.compact, Msg::Compact).metrics(m)),
-            table,
+            .push(w::SwitchRow::new("Compact", self.compact, Msg::Compact).metrics(m)),
+            w::card(
+                column![header, container(list).height(Length::Fixed(320.0))].spacing(m.space_xs),
+            ),
         ]
         .spacing(m.group_spacing)
         .into()

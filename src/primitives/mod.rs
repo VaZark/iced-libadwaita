@@ -11,6 +11,7 @@
 //! * [`color_picker`]: a color as hue / saturation / value / alpha, its conversions and text forms (hex, rgb, hsl, hsv), parsing (Mantine's ColorPicker);
 //! * [`dock`]: how a panel docked against an edge shares the space with the content: pushing it aside or floating over it, its slide-in geometry on every side (shared by `AdaptiveSplit` and `Dock`);
 //! * [`date`]: calendar dates and month math;
+//! * [`flex`]: CSS-flex sizing along a line: basis, grow, shrink and a minimum, so columns give way together and none is cut off;
 //! * [`focus`]: keyboard focus rules: a Tab trap that wraps and its initial focus, returning focus when a scope closes, whether focus is within a scope (Mantine's use-focus-trap, use-focus-return, use-focus-within);
 //! * [`form`]: submit / reset / next / back gating and when a form's fields reveal errors (steps);
 //! * [`histogram`]: values counted into bins over a range, and which bins a selection covers;
@@ -50,6 +51,7 @@ pub mod chart;
 pub mod color_picker;
 pub mod date;
 pub mod dock;
+pub mod flex;
 pub mod focus;
 pub mod form;
 pub mod histogram;

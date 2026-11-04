@@ -1,7 +1,6 @@
 //! `MediaCard`: an album, an artist, a playlist, an app: a picture, a title and a subtitle, drawn
-//! as a **card** or, in compact mode, as a tight row. One pattern in two densities, so a grid of
-//! cards and a list of rows are the same data with one switch. (A long list with columns, a sort
-//! and a time is a [`ResponsiveTable`](super::ResponsiveTable) with [`Mode::Table`](super::TableMode).)
+//! as a **card** or, in compact mode, as a tight [`MediaRow`](super::MediaRow). One pattern in
+//! two densities, so a grid of cards and a list of rows are the same data with one switch.
 //!
 //! * **Card**: the picture centered over the title and the subtitle, the whole card pressable.
 //! * **Compact**: the picture small at the start and the title over the subtitle beside it, a
@@ -22,11 +21,11 @@
 //! .compact(compact)
 //! ```
 
-use super::{Element, card_button, typography as ty};
+use super::{Element, MediaRow, card_button, typography as ty};
 use crate::Metrics;
 use crate::style::text as st;
 use iced::Length;
-use iced::widget::{button, column, container, row};
+use iced::widget::{column, container};
 
 /// See the [module](self).
 pub struct MediaCard<'a, M> {
@@ -78,23 +77,17 @@ impl<'a, M: Clone + 'a> From<MediaCard<'a, M>> for Element<'a, M> {
     fn from(c: MediaCard<'a, M>) -> Self {
         let m = c.metrics;
         if c.compact {
-            let mut text = column![ty::body(c.title).width(Length::Fill)];
-            if let Some(sub) = c.subtitle {
-                text = text.push(ty::caption(sub).style(st::dim).width(Length::Fill));
+            let mut row = MediaRow::new(c.title).metrics(m);
+            if let Some(s) = c.subtitle {
+                row = row.subtitle(s);
             }
-            let mut line = row![].spacing(m.space_m).align_y(iced::Alignment::Center);
             if let Some(p) = c.picture {
-                line = line.push(p);
+                row = row.picture(p);
             }
-            let line = container(line.push(text.width(Length::Fill)))
-                .padding([m.space_xs, m.space_s])
-                .width(Length::Fill);
-            return button(line)
-                .width(Length::Fill)
-                .padding(0)
-                .style(crate::style::button::flat_row(8.0, 0.08, 0.14))
-                .on_press_maybe(c.on_press)
-                .into();
+            if let Some(msg) = c.on_press {
+                row = row.on_press(msg);
+            }
+            return row.into();
         }
         let mut body = column![].spacing(m.space_xs).width(Length::Fill);
         if let Some(p) = c.picture {
