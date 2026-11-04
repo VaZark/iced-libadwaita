@@ -6,7 +6,7 @@ use iced_adaptive_design as iad;
 use iad::components::{Avatar, AvatarShape, ChipSize};
 use iad::config::Density;
 use iad::layouts::virtualize::Viewport;
-use iad::layouts::{FlowGrid, VirtualList};
+use iad::layouts::{FlowGrid, RowHeight, VirtualList};
 use iad::primitives::history::History;
 use iad::primitives::reorder::{Event as ReorderEvent, ReorderState};
 use iad::primitives::sorting::{Direction, SortState, cmp_str};
@@ -49,6 +49,7 @@ pub enum Msg {
     Flow(bool),
     FlowText(String),
     CardsCompact(bool),
+    CardsHeight(usize),
     CardsCols(usize),
     Queue(ReorderEvent),
     Remove(usize),
@@ -99,6 +100,8 @@ pub struct State {
     flow_editing: bool,
     flow_text: String,
     cards_compact: bool,
+    /// 0 shared, 1 own, 2 fixed: how tall the items of a row are.
+    cards_height: usize,
     row_press: bool,
     row_pad: bool,
     row_pad_px: f32,
@@ -139,6 +142,7 @@ impl Default for State {
             history: History::new("Home"),
             flow_editing: false,
             cards_compact: false,
+            cards_height: 0,
             row_press: true,
             row_pad: true,
             row_pad_px: 0.0,
@@ -193,6 +197,7 @@ impl State {
             Msg::Open(p) => self.history.open(p),
             Msg::Go(p) => self.history.go(p),
             Msg::CardsCompact(c) => self.cards_compact = c,
+            Msg::CardsHeight(h) => self.cards_height = h,
             Msg::CardsCols(n) => self.cards_cols = n,
             Msg::Queue(e) => {
                 self.queue.apply(e);
@@ -515,7 +520,13 @@ impl State {
         };
         let cards = (0..9).map(|i| {
             let name = ALBUMS[i % ALBUMS.len()];
-            w::ItemCard::new(format!("{name} {}", i + 1))
+            // Every third title is long, so it wraps and the heights differ.
+            let title = if i % 3 == 1 {
+                format!("{name} (Deluxe Anniversary Edition) {}", i + 1)
+            } else {
+                format!("{name} {}", i + 1)
+            };
+            w::ItemCard::new(title)
                 .subtitle(ARTISTS[i % ARTISTS.len()])
                 .picture(
                     Avatar::new(if compact { 36.0 } else { 72.0 }, format!("{name}{i}"))
@@ -526,7 +537,13 @@ impl State {
                 .on_press(Msg::Noop)
                 .into()
         });
-        let grid = FlowGrid::new(cards).max_width(180.0);
+        let grid = FlowGrid::new(cards)
+            .max_width(180.0)
+            .row_height(match self.cards_height {
+                1 => RowHeight::Own,
+                2 => RowHeight::Fixed(150.0),
+                _ => RowHeight::Shared,
+            });
         let grid = match self.cards_cols {
             0 => grid,
             n => grid.cols(n),
@@ -548,6 +565,18 @@ impl State {
                 Msg::CardsCols,
             )
             .subtitle("Fit adds columns as the width allows; one column is a list")
+            .metrics(m),
+            w::ToggleGroupRow::new(
+                "Row height",
+                vec![
+                    cmp::ToggleItem::new(0, "Shared"),
+                    cmp::ToggleItem::new(1, "Own"),
+                    cmp::ToggleItem::new(2, "Fixed"),
+                ],
+                Some(self.cards_height),
+                Msg::CardsHeight,
+            )
+            .subtitle("Shared: a row is as tall as its tallest item. Own: each keeps its height. Fixed: one height for all")
             .metrics(m),
             grid,
         ]

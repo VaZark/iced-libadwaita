@@ -29,6 +29,7 @@ use crate::config::Density;
 use crate::styles::text as st;
 use crate::widgets::ItemRow;
 use iced::Length;
+use iced::widget::text::Wrapping;
 use iced::widget::{column, container};
 
 /// See the [module](self).
@@ -99,10 +100,20 @@ impl<'a, M: Clone + 'a> From<ItemCard<'a, M>> for Element<'a, M> {
         if let Some(p) = c.picture {
             body = body.push(container(p).center_x(Length::Fill));
         }
-        // Text never leaves the card: what does not fit is clipped at its edge.
-        body = body.push(clipped(ty::heading(c.title).width(Length::Fill)));
+        // Text stays inside the card: it wraps at words (and, for one word wider than the card,
+        // at characters). `heading` alone never wraps.
+        body = body.push(
+            ty::heading(c.title)
+                .wrapping(Wrapping::WordOrGlyph)
+                .width(Length::Fill),
+        );
         if let Some(s) = c.subtitle {
-            body = body.push(clipped(ty::caption(s).style(st::dim)));
+            body = body.push(
+                ty::caption(s)
+                    .style(st::dim)
+                    .wrapping(Wrapping::WordOrGlyph)
+                    .width(Length::Fill),
+            );
         }
         // The card draws its own surface; the button only adds the events.
         let surface = container(body)
@@ -116,11 +127,6 @@ impl<'a, M: Clone + 'a> From<ItemCard<'a, M>> for Element<'a, M> {
             .on_press_maybe(c.on_press)
             .into()
     }
-}
-
-/// `content` cut off at its own bounds, so a long title cannot spill over its neighbours.
-fn clipped<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
-    container(content).width(Length::Fill).clip(true).into()
 }
 
 #[cfg(test)]

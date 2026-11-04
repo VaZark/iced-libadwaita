@@ -10,9 +10,11 @@ FlowGrid::new(items: impl IntoIterator<Item = Element<'a, M>>)
 .PP
 See the module.
 .PP
-\fBFlowGrid\fR: items of equal size that flow into columns, after Mantine's \fBSimpleGrid\fR. Either a fixed number of columns (\fBcols\fR: one column is a list) or as many as fit, each at most \fBmax_width\fR wide. The items fill their cells and keep their own height (a row is as tall as its tallest item). Albums, playlists, apps, projects.
+\fBFlowGrid\fR: items of equal size that flow into columns, after Mantine's \fBSimpleGrid\fR. Either a fixed number of columns (\fBcols\fR: one column is a list) or as many as fit, each at most \fBmax_width\fR wide. The items fill their cells, and \fBa row\fR shares one height\fB, that of its tallest item: every item is laid out again at that height, so\fR a card whose title wraps does not leave its neighbours short (CSS grid's \fBalign\-items:\fR stretch\fB, the rows of a subgrid). An item stretches if its own surface fits its content\fR (\fBLength::Shrink\fR), as a card does. Albums, playlists, apps, projects.
 .PP
-A thin, named form of iced's \fBGrid\fR, with the sizing that suits items. When cells should differ in width, use a \fBTableGrid\fR.
+\fBrow_height\fR chooses: \fBShared\fR (default), \fBOwn\fR or \fBFixed\fR.
+.PP
+The layout is the grid of iced's \fBGrid\fR (same column rule), with that second pass. When cells should differ in width, use a \fBTableGrid\fR.
 .PP
 .nf
 .RS
@@ -31,6 +33,9 @@ As many columns as fit, each at most \fBpx\fR wide (default 200).
 .TP
 .B \&.cols(n: usize)
 Exactly \fBn\fR columns (at least one). One column is a list.
+.TP
+.B \&.row_height(row_height: RowHeight)
+How tall the items of a row are: \fBShared\fR (the default) gives them all the height of the tallest, \fBOwn\fR lets each keep its own, and \fBFixed\fR sets one height for all.
 .TP
 .B \&.spacing(px: f32)
 The space between items (default 12).

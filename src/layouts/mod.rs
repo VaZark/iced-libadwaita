@@ -31,7 +31,7 @@ pub use content_area::{ContentArea, content_area};
 pub use dock::{Dock, DockMode, DockScope, DockSize};
 pub use flex::FlexRow;
 pub use flex::{Flex, FlexCells};
-pub use flow_grid::FlowGrid;
+pub use flow_grid::{FlowGrid, RowHeight};
 pub use motion::{
     DrawerLayer, Entrance, Highlight, PageTransition, PushStack, Reveal, drawer_layer, entrance,
     highlight, layered, page_transition, push_stack, reveal,
