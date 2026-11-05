@@ -85,6 +85,16 @@ pub enum Icon {
     /// A bullseye.
     Target,
     Smile,
+    /// A speaker with sound waves: volume.
+    Volume,
+    /// A speaker with a cross: muted.
+    VolumeMute,
+    /// Four corners pointing out: enter fullscreen.
+    Fullscreen,
+    /// Four corners pointing in: leave fullscreen.
+    FullscreenExit,
+    /// A window with its bottom strip marked: the compact, one-line view.
+    Compact,
 }
 
 impl Icon {
@@ -141,6 +151,11 @@ impl Icon {
         Icon::Clock,
         Icon::Target,
         Icon::Smile,
+        Icon::Volume,
+        Icon::VolumeMute,
+        Icon::Fullscreen,
+        Icon::FullscreenExit,
+        Icon::Compact,
     ];
 }
 
@@ -248,6 +263,21 @@ impl Icon {
             Icon::Clock => r#"<circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.6"/>"#,
             Icon::Target => {
                 r#"<circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3"/><circle cx="8" cy="8" r=".8" fill="black"/>"#
+            }
+            Icon::Volume => {
+                r#"<path d="M2.5 6h2.5l3-2.5v9L5 10H2.5z"/><path d="M10.5 5.8a3.2 3.2 0 010 4.4M12.2 4a5.6 5.6 0 010 8"/>"#
+            }
+            Icon::VolumeMute => {
+                r#"<path d="M2.5 6h2.5l3-2.5v9L5 10H2.5z"/><path d="M10.5 6l3.5 4M14 6l-3.5 4"/>"#
+            }
+            Icon::Fullscreen => {
+                r#"<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/>"#
+            }
+            Icon::FullscreenExit => {
+                r#"<path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"/>"#
+            }
+            Icon::Compact => {
+                r#"<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 9.5h12"/>"#
             }
             Icon::Smile => {
                 r#"<circle cx="8" cy="8" r="6"/><path d="M5.4 9.6a3.2 3.2 0 005.2 0"/><circle cx="5.9" cy="6.6" r=".8" fill="black"/><circle cx="10.1" cy="6.6" r=".8" fill="black"/>"#
@@ -393,6 +423,11 @@ mod tests {
             Icon::Clock,
             Icon::Sparkle,
             Icon::Smile,
+            Icon::Volume,
+            Icon::VolumeMute,
+            Icon::Fullscreen,
+            Icon::FullscreenExit,
+            Icon::Compact,
         ] {
             assert!(i.source().contains("<svg") && i.source().ends_with("</svg>"));
         }
