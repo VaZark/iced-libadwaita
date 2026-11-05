@@ -44,7 +44,7 @@ impl<'a, M> SectionDivider<'a, M> {
         self
     }
 
-    /// Whether the section is open: the chevron points up when it is, down when it is folded.
+    /// Whether the section is open: the chevron points down when it is, and sideways (to the next side) when it is folded.
     pub fn open(mut self, open: bool) -> Self {
         self.open = open;
         self
@@ -96,7 +96,7 @@ impl<'a, M: Clone + 'a> From<SectionDivider<'a, M>> for Element<'a, M> {
         };
         let end: Element<'a, M> = match (d.action, d.on_toggle) {
             (Some(action), _) => action,
-            (None, Some(msg)) => icon_button(if d.open { Icon::GoUp } else { Icon::GoDown })
+            (None, Some(msg)) => icon_button(if d.open { Icon::GoDown } else { Icon::GoNext })
                 .on_press(msg)
                 .into(),
             (None, None) => iced::widget::space().width(0).into(),
