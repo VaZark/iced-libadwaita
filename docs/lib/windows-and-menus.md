@@ -40,6 +40,10 @@ The desktop (GNOME Resources, the shell) shows a window as an app only if the wi
 - Open the window with `iad::windows::settings_for("io.example.App")` instead of `settings()`.
 - Render the file with `iad::platform::linux::DesktopEntry { .. }.render()` and install it as `file_name()`. `valid_app_id` checks the id.
 
+## Dark mode
+
+With `[appearance] color-scheme=system` the theme follows the desktop's light/dark setting. That setting is the settings portal's `org.freedesktop.appearance color-scheme` (not a Wayland protocol), the only source inside a Flatpak. Run `iad::system::detect_color_scheme()` at start-up and subscribe to `iad::system::follow_color_scheme()`, mapping both to any message that redraws; `Theme::from_config` then uses the result.
+
 ## Dialogs are modals, not windows
 
 A dialog (alert, about, shortcuts, preferences) is a layer over its parent window, as in `AdwDialog`.

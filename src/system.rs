@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 /// A window button that can appear in a header bar.
@@ -104,15 +105,62 @@ pub fn animations_enabled() -> bool {
     })
 }
 
-/// The desktop color scheme (`org.gnome.desktop.interface color-scheme`): `prefer-dark` is
-/// dark, everything else light. `None` when GSettings is unavailable.
+/// The color scheme the desktop reported through the **settings portal**
+/// (`org.freedesktop.appearance color-scheme`), as `0` unknown, `1` light, `2` dark.
+static PORTAL_SCHEME: AtomicU8 = AtomicU8::new(0);
+
+/// Maps iced's system theme mode (read from the settings portal) to a scheme. "No preference"
+/// is light, as in GNOME.
+fn scheme_from_mode(mode: iced::theme::Mode) -> crate::Scheme {
+    match mode {
+        iced::theme::Mode::Dark => crate::Scheme::Dark,
+        _ => crate::Scheme::Light,
+    }
+}
+
+fn remember_scheme(scheme: crate::Scheme) {
+    let v = if scheme == crate::Scheme::Dark { 2 } else { 1 };
+    PORTAL_SCHEME.store(v, Ordering::Relaxed);
+}
+
+/// The desktop color scheme. It comes from the settings portal once [`follow_color_scheme`] has
+/// reported it (that is the only source inside a sandbox such as Flatpak, and it is not a Wayland
+/// protocol), else from GSettings (`org.gnome.desktop.interface color-scheme`: `prefer-dark` is
+/// dark, everything else light). `None` when neither is available.
 pub fn color_scheme() -> Option<crate::Scheme> {
+    match PORTAL_SCHEME.load(Ordering::Relaxed) {
+        1 => return Some(crate::Scheme::Light),
+        2 => return Some(crate::Scheme::Dark),
+        _ => {}
+    }
     gsettings("org.gnome.desktop.interface", "color-scheme").map(|v| {
         if v == "prefer-dark" {
             crate::Scheme::Dark
         } else {
             crate::Scheme::Light
         }
+    })
+}
+
+/// Reads the desktop color scheme from the settings portal now, and from then on
+/// [`color_scheme`] returns it. Run it once at start-up (`Task::perform`-style: map the result
+/// to a message that redraws).
+pub fn detect_color_scheme() -> iced::Task<crate::Scheme> {
+    iced::system::theme().map(|mode| {
+        let scheme = scheme_from_mode(mode);
+        remember_scheme(scheme);
+        scheme
+    })
+}
+
+/// Emits when the user switches between light and dark, and keeps [`color_scheme`] current.
+/// Subscribe to it and map it to any message that redraws, so an app with
+/// `[appearance] color-scheme=system` follows the desktop live.
+pub fn follow_color_scheme() -> iced::Subscription<crate::Scheme> {
+    iced::system::theme_changes().map(|mode| {
+        let scheme = scheme_from_mode(mode);
+        remember_scheme(scheme);
+        scheme
     })
 }
 
@@ -269,6 +317,14 @@ mod tests {
         let l = DecorationLayout::parse("close");
         assert_eq!((l.start, l.end), (vec![Close], vec![]));
         assert!(DecorationLayout::parse("appmenu:").is_empty());
+    }
+
+    #[test]
+    fn the_portal_mode_decides_the_scheme() {
+        use iced::theme::Mode;
+        assert_eq!(scheme_from_mode(Mode::Dark), crate::Scheme::Dark);
+        assert_eq!(scheme_from_mode(Mode::Light), crate::Scheme::Light);
+        assert_eq!(scheme_from_mode(Mode::None), crate::Scheme::Light);
     }
 
     #[test]
