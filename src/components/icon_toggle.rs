@@ -11,7 +11,6 @@
 use crate::Element;
 use crate::components::{flat_button, suggested_button};
 use crate::{IconSource, Metrics};
-use iced::widget::tooltip;
 use std::rc::Rc;
 
 /// See the [module](self).
@@ -70,13 +69,7 @@ impl<'a, M: Clone + 'a> From<IconToggleButton<'a, M>> for Element<'a, M> {
             flat_button(icon).on_press_maybe(press).into()
         };
         match b.tooltip {
-            Some(t) => tooltip(
-                button,
-                iced::widget::text(t).size(12),
-                tooltip::Position::Bottom,
-            )
-            .style(crate::styles::container::osd)
-            .into(),
+            Some(t) => crate::components::tooltip(button, t, super::TooltipPosition::Bottom),
             None => button,
         }
     }

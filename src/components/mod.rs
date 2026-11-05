@@ -18,6 +18,7 @@ pub(crate) mod sections;
 pub(crate) mod spectrum;
 pub(crate) mod spinner;
 pub(crate) mod switch;
+pub(crate) mod tooltip;
 pub mod typography;
 
 pub use avatar::{Avatar, AvatarShape, avatar};
@@ -39,3 +40,4 @@ pub use sections::{SectionButton, SectionIcon, section_button, section_icon, sec
 pub use spectrum::{SpectrumBars, spectrum_bars};
 pub use spinner::{Spinner, spinner};
 pub use switch::{Switch, switch};
+pub use tooltip::{TooltipPosition, tooltip};
