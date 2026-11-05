@@ -118,6 +118,7 @@ pub struct Popover<'a, M> {
     width: Length,
     padding: Padding,
     popover_width: Option<f32>,
+    fit_content: bool,
     open_initially: bool,
     presentation: Presentation,
     disabled: bool,
@@ -173,6 +174,7 @@ impl<'a, M: 'a> Popover<'a, M> {
             width: Length::Shrink,
             padding: m.button_padding,
             popover_width: None,
+            fit_content: false,
             open_initially: false,
             presentation: Presentation::Popover,
             disabled: false,
@@ -277,6 +279,13 @@ impl<'a, M: 'a> Popover<'a, M> {
     /// Popover width; defaults to the trigger width.
     pub fn popover_width(mut self, w: f32) -> Self {
         self.popover_width = Some(w);
+        self
+    }
+    /// Sizes the popover to its content (and the surface's padding), with no minimum width: for a
+    /// small panel such as a vertical slider. Content that fills its width then has nothing to
+    /// fill, so give it a width of its own.
+    pub fn fit_content(mut self) -> Self {
+        self.fit_content = true;
         self
     }
 }
@@ -450,6 +459,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
             anchor,
             align: self.align,
             min_width: self.popover_width,
+            fit_content: self.fit_content,
             presentation: self.presentation,
             side: self.side,
             offset: self.offset,
@@ -475,6 +485,7 @@ struct PopoverOverlay<'a, 'b, M> {
     anchor: Rectangle,
     align: Align,
     min_width: Option<f32>,
+    fit_content: bool,
     presentation: Presentation,
     side: crate::layouts::anchor::Side,
     offset: f32,
@@ -578,7 +589,12 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
         } else {
             w
         };
-        let limits = layout::Limits::new(Size::new(w, 0.0), Size::new(w, max_h));
+        let limits = if self.fit_content {
+            let max_w = (region.width - 2.0 * MARGIN).max(40.0);
+            layout::Limits::new(Size::ZERO, Size::new(max_w, max_h))
+        } else {
+            layout::Limits::new(Size::new(w, 0.0), Size::new(w, max_h))
+        };
         let node = self
             .content
             .as_widget_mut()
