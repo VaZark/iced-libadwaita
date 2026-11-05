@@ -33,6 +33,7 @@ pub mod lookup;
 pub mod metas;
 pub mod metrics;
 pub mod palette;
+pub mod platform;
 pub mod prelude;
 pub mod primitives;
 pub mod semantic;

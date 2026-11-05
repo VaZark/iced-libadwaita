@@ -50,6 +50,27 @@ pub fn settings() -> Settings {
     }
 }
 
+/// [`settings`] for an app with application id `app_id`. On Linux (Wayland) the id is the
+/// window's app id, which the desktop matches to `<app_id>.desktop` to show the window as that
+/// app (see [`platform::linux`](crate::platform::linux)). Elsewhere it changes nothing.
+pub fn settings_for(app_id: &str) -> Settings {
+    #[cfg(target_os = "linux")]
+    {
+        Settings {
+            platform_specific: iced::window::settings::PlatformSpecific {
+                application_id: app_id.to_owned(),
+                ..Default::default()
+            },
+            ..settings()
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app_id;
+        settings()
+    }
+}
+
 /// A transparent window when the desktop config's `[appearance] transparency` makes the surfaces
 /// translucent.
 fn translucent_settings() -> Settings {
@@ -386,6 +407,14 @@ mod tests {
         assert_eq!(s.min_size, Some(MIN_SIZE));
         assert!(settings_with_ssd(true).decorations);
         assert!(!settings_with_ssd(false).decorations);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn settings_for_sets_the_app_id() {
+        let s = settings_for("io.example.App");
+        assert_eq!(s.platform_specific.application_id, "io.example.App");
+        assert_eq!(s.min_size, settings().min_size);
     }
 
     #[test]

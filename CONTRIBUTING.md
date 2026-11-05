@@ -2,7 +2,7 @@
 
 ## Setup
 
-Stable Rust (edition 2024) and the system libraries iced needs on Linux (Wayland or X11, Vulkan or OpenGL).
+Stable Rust (edition 2024) and the system libraries iced needs on Linux (Wayland, Vulkan or OpenGL; X11 is not supported).
 
 ```text
 cargo build                       # the library only

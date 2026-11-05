@@ -33,6 +33,13 @@ iad::windows::frame(
 
 `iad::windows::settings()` makes the window transparent. Surface transparency is a theme setting (`Theme::with_transparency`, `[appearance] transparency`). See [theming](theming.md).
 
+## App identity (Linux, Wayland)
+
+The desktop (GNOME Resources, the shell) shows a window as an app only if the window's app id equals the basename of an installed `.desktop` file. X11 is not supported.
+
+- Open the window with `iad::windows::settings_for("io.example.App")` instead of `settings()`.
+- Render the file with `iad::platform::linux::DesktopEntry { .. }.render()` and install it as `file_name()`. `valid_app_id` checks the id.
+
 ## Dialogs are modals, not windows
 
 A dialog (alert, about, shortcuts, preferences) is a layer over its parent window, as in `AdwDialog`.

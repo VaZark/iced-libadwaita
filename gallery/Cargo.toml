@@ -7,7 +7,9 @@ publish = false
 
 [dependencies]
 iced-adaptive-design = { path = ".." }
-iced = { version = "0.14", features = ["advanced", "svg", "image", "tokio", "canvas"] }
+# Wayland only on Linux: no `x11` feature. An app that depends on this crate should also set
+# `default-features = false` on its own `iced`, or Cargo turns the X11 backend back on.
+iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "crisp", "web-colors", "thread-pool", "linux-theme-detection", "wayland", "advanced", "svg", "image", "tokio", "canvas"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 tokio = { version = "1", features = ["time"] }
 
