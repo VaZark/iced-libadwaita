@@ -109,12 +109,25 @@ pub fn animations_enabled() -> bool {
 /// (`org.freedesktop.appearance color-scheme`), as `0` unknown, `1` light, `2` dark.
 static PORTAL_SCHEME: AtomicU8 = AtomicU8::new(0);
 
-/// Maps iced's system theme mode (read from the settings portal) to a scheme. "No preference"
-/// is light, as in GNOME.
-fn scheme_from_mode(mode: iced::theme::Mode) -> crate::Scheme {
+/// Maps iced's system theme mode (read from the settings portal) to a scheme. "No preference" is
+/// not an answer: iced reports it too when a window opens (a Wayland window has no theme of its
+/// own), and it must not turn a dark desktop light, so it maps to `None`.
+fn scheme_from_mode(mode: iced::theme::Mode) -> Option<crate::Scheme> {
     match mode {
-        iced::theme::Mode::Dark => crate::Scheme::Dark,
-        _ => crate::Scheme::Light,
+        iced::theme::Mode::Dark => Some(crate::Scheme::Dark),
+        iced::theme::Mode::Light => Some(crate::Scheme::Light),
+        iced::theme::Mode::None => None,
+    }
+}
+
+/// What a reported mode means now: the scheme it names (remembered), else what was known before.
+fn resolve_scheme(mode: iced::theme::Mode) -> crate::Scheme {
+    match scheme_from_mode(mode) {
+        Some(scheme) => {
+            remember_scheme(scheme);
+            scheme
+        }
+        None => color_scheme().unwrap_or(crate::Scheme::Light),
     }
 }
 
@@ -146,22 +159,14 @@ pub fn color_scheme() -> Option<crate::Scheme> {
 /// [`color_scheme`] returns it. Run it once at start-up (`Task::perform`-style: map the result
 /// to a message that redraws).
 pub fn detect_color_scheme() -> iced::Task<crate::Scheme> {
-    iced::system::theme().map(|mode| {
-        let scheme = scheme_from_mode(mode);
-        remember_scheme(scheme);
-        scheme
-    })
+    iced::system::theme().map(resolve_scheme)
 }
 
 /// Emits when the user switches between light and dark, and keeps [`color_scheme`] current.
 /// Subscribe to it and map it to any message that redraws, so an app with
 /// `[appearance] color-scheme=system` follows the desktop live.
 pub fn follow_color_scheme() -> iced::Subscription<crate::Scheme> {
-    iced::system::theme_changes().map(|mode| {
-        let scheme = scheme_from_mode(mode);
-        remember_scheme(scheme);
-        scheme
-    })
+    iced::system::theme_changes().map(resolve_scheme)
 }
 
 /// The desktop accent color (`org.gnome.desktop.interface accent-color`, GNOME 47+).
@@ -322,9 +327,9 @@ mod tests {
     #[test]
     fn the_portal_mode_decides_the_scheme() {
         use iced::theme::Mode;
-        assert_eq!(scheme_from_mode(Mode::Dark), crate::Scheme::Dark);
-        assert_eq!(scheme_from_mode(Mode::Light), crate::Scheme::Light);
-        assert_eq!(scheme_from_mode(Mode::None), crate::Scheme::Light);
+        assert_eq!(scheme_from_mode(Mode::Dark), Some(crate::Scheme::Dark));
+        assert_eq!(scheme_from_mode(Mode::Light), Some(crate::Scheme::Light));
+        assert_eq!(scheme_from_mode(Mode::None), None, "no preference is not a scheme");
     }
 
     #[test]
