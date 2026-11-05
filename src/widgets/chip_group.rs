@@ -75,6 +75,7 @@ pub struct ChipGroup<'a, K, M> {
     size: ChipSize,
     on_color: Option<Color>,
     min_contrast: f32,
+    max_lines: Option<usize>,
     metrics: Metrics,
 }
 
@@ -96,6 +97,7 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
             size: ChipSize::Medium,
             on_color: None,
             min_contrast: 4.5,
+            max_lines: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -121,6 +123,13 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
     /// What shows when no chip matches (default "No matches").
     pub fn empty_text(mut self, text: impl Into<String>) -> Self {
         self.empty = text.into();
+        self
+    }
+    /// Shows at most `lines` lines of chips: the rest is clipped, not drawn, and cannot be
+    /// pressed. Put the chips that must stay visible (the selected ones) first, and let the query
+    /// reach the others: an autocomplete with a limit.
+    pub fn max_lines(mut self, lines: usize) -> Self {
+        self.max_lines = Some(lines.max(1));
         self
     }
     pub fn size(mut self, size: ChipSize) -> Self {
@@ -177,12 +186,24 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for
                 }
                 Element::from(c)
             });
-            row(chips)
+            let wrapped = row(chips)
                 .spacing(m.space_s)
                 .width(iced::Length::Fill)
                 .wrap()
-                .vertical_spacing(m.space_s)
-                .into()
+                .vertical_spacing(m.space_s);
+            match g.max_lines {
+                Some(n) => {
+                    let lines = n as f32;
+                    // The lines and the gaps between them, and a pixel for rounding.
+                    let height = lines * g.size.height(&m) + (lines - 1.0) * m.space_s + 1.0;
+                    iced::widget::container(wrapped)
+                        .width(iced::Length::Fill)
+                        .max_height(height)
+                        .clip(true)
+                        .into()
+                }
+                None => wrapped.into(),
+            }
         };
         // The entry is drawn only when `search` gave it somewhere to send what is typed.
         match (g.query, g.on_query) {
@@ -239,5 +260,19 @@ mod tests {
         .search("jazz", |_| ());
         let labels: Vec<&str> = g.visible().iter().map(|o| o.label.as_str()).collect();
         assert_eq!(labels, vec!["Jazz", "Jazz fusion"]);
+    }
+
+    #[test]
+    fn max_lines_limits_the_height_and_a_chip_has_a_height() {
+        let sel: [u8; 0] = [];
+        let g: ChipGroup<'_, u8, ()> =
+            ChipGroup::new([ChipOption::new(1, "Jazz")], &sel, |_| ()).max_lines(2);
+        assert_eq!(g.max_lines, Some(2));
+        let _: Element<'_, ()> = g.into();
+        let m = Metrics::desktop();
+        // About 22 px for the default size, as documented.
+        let h = ChipSize::Medium.height(&m);
+        assert!((18.0..=26.0).contains(&h), "{h}");
+        assert!(ChipSize::Small.height(&m) < h && h < ChipSize::Large.height(&m));
     }
 }

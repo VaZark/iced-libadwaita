@@ -157,6 +157,12 @@ pub enum ChipSize {
 }
 
 impl ChipSize {
+    /// How tall a chip is for `m`: a line of its text and the vertical padding.
+    pub fn height(self, m: &Metrics) -> f32 {
+        let (text, icon, pad_y, _) = self.dims(m);
+        (text * 1.3).max(icon) + 2.0 * pad_y
+    }
+
     /// `(text size, icon size, vertical padding, horizontal padding)` for `m`.
     fn dims(self, m: &Metrics) -> (f32, f32, f32, f32) {
         match self {
