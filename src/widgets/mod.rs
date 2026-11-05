@@ -41,6 +41,7 @@ pub(crate) mod reorderable_list;
 pub(crate) mod resizable;
 pub(crate) mod responsive_table;
 pub(crate) mod rows;
+pub(crate) mod section_divider;
 pub(crate) mod section_heading;
 pub(crate) mod segmented;
 pub(crate) mod sort_header;
@@ -121,6 +122,7 @@ pub use rows::{
     ActionRow, ButtonRow, ComboRow, EntryRow, ExpanderRow, RangeSliderRow, SliderRow, SpinRow,
     SwitchRow, ToggleGroupRow, action_row, boxed_list,
 };
+pub use section_divider::SectionDivider;
 pub use section_heading::SectionHeading;
 pub use sort_header::SortHeader;
 pub use split::{SplitAction, SplitButton, SplitButtonAction, split_button};
