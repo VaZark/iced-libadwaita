@@ -42,7 +42,7 @@ The desktop (GNOME Resources, the shell) shows a window as an app only if the wi
 
 ## Dark mode
 
-With `[appearance] color-scheme=system` the theme follows the desktop's light/dark setting. That setting is the settings portal's `org.freedesktop.appearance color-scheme` (not a Wayland protocol), the only source inside a Flatpak. Run `iad::system::detect_color_scheme()` at start-up and subscribe to `iad::system::follow_color_scheme()`, mapping both to any message that redraws; `Theme::from_config` then uses the result.
+With `[appearance] color-scheme=system` the theme follows the desktop's light/dark setting. That setting is the settings portal's `org.freedesktop.appearance color-scheme` (not a Wayland protocol), the only source inside a Flatpak. Run `iad::system::detect_color_scheme()` at start-up and subscribe to `iad::system::follow_color_scheme()`, mapping both to any message that redraws; `Theme::from_config` then uses the result. In style code, `theme.light_dark(light, dark)` picks a value by the theme's scheme (like CSS `light-dark()`), so one theme serves both modes.
 
 ## Dialogs are modals, not windows
 

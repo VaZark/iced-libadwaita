@@ -253,6 +253,12 @@ impl Theme {
         self.scheme.is_dark()
     }
 
+    /// `light` when the theme is light, `dark` when it is dark (like CSS `light-dark()`), so one
+    /// style function serves both modes: `t.light_dark(Color::WHITE, Color::BLACK)`.
+    pub fn light_dark<T>(&self, light: T, dark: T) -> T {
+        self.scheme.light_dark(light, dark)
+    }
+
     /// The equivalent plain `iced::Theme`, for interop with code that needs one.
     pub fn as_iced(&self) -> &iced::Theme {
         &self.iced
@@ -524,6 +530,14 @@ impl svg::Catalog for Theme {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn light_dark_picks_by_scheme() {
+        use crate::Scheme;
+        assert_eq!(super::Theme::light().light_dark("l", "d"), "l");
+        assert_eq!(super::Theme::new(Scheme::Dark).light_dark("l", "d"), "d");
+        assert_eq!(Scheme::Dark.light_dark(1, 2), 2);
+    }
+
     use super::*;
     use crate::Metrics;
     use iced::Color;

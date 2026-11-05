@@ -19,6 +19,11 @@ impl Scheme {
     pub fn is_dark(self) -> bool {
         self == Scheme::Dark
     }
+
+    /// `light` in the light scheme, `dark` in the dark one (like CSS `light-dark()`).
+    pub fn light_dark<T>(self, light: T, dark: T) -> T {
+        if self.is_dark() { dark } else { light }
+    }
 }
 
 /// System accent colors (`AdwAccentColor`).
