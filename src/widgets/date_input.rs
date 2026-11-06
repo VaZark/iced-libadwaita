@@ -369,13 +369,13 @@ pub(crate) fn calendar<'a, M: Clone + 'a>(
         // An icon takes no part in the button's disabled look: dim it here.
         let on = msg.is_some();
         let glyph = icon.view(m.icon_size).style(move |t: &Theme, _| {
-            let (fg, bg) = (t.semantic.popover.fg, t.semantic.popover.bg);
-            // Mixed toward the popover, not faded: a tinted icon ignores alpha.
+            let fg = t.semantic.popover.fg;
+            // Preserve disabled opacity against the actual popover surface.
             iced::widget::svg::Style {
                 color: Some(if on {
                     fg
                 } else {
-                    crate::color::mix(bg, fg, t.semantic.opacity.disabled)
+                    crate::color::fade(fg, t.semantic.opacity.disabled)
                 }),
             }
         });

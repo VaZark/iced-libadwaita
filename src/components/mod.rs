@@ -19,6 +19,7 @@ pub(crate) mod sections;
 pub(crate) mod spectrum;
 pub(crate) mod spinner;
 pub(crate) mod switch;
+pub(crate) mod theme_toggle;
 pub(crate) mod tooltip;
 pub mod typography;
 
@@ -42,4 +43,5 @@ pub use sections::{SectionButton, SectionIcon, section_button, section_icon, sec
 pub use spectrum::{SpectrumBars, spectrum_bars};
 pub use spinner::{Spinner, spinner};
 pub use switch::{Switch, switch};
+pub use theme_toggle::ThemeToggle;
 pub use tooltip::{TooltipPosition, tooltip};

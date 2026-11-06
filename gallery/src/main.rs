@@ -285,6 +285,8 @@ enum Message {
     SplitChoice(&'static str),
     SplitRun(&'static str),
     Scheme(bool),
+    SystemTheme,
+    FollowSystemTheme,
     Accent(AccentColor),
     AccentText(String),
     Transparency(String),
@@ -442,7 +444,7 @@ impl Gallery {
         // Desktop-level behavior comes from the shared config; the gallery's own switches
         // below are demos layered on top of it.
         let cfg = iad::config::current();
-        let from_cfg = Theme::from_config(&cfg);
+        let from_cfg = iad::utils::theme();
         let args: Vec<String> = std::env::args().collect();
         let shots = args
             .iter()
@@ -488,7 +490,13 @@ impl Gallery {
         let tint_color = cfg
             .tint
             .unwrap_or(iced::Color::from_rgba(0.21, 0.52, 0.89, 0.25));
+        let detect_theme = if shots.is_none() {
+            iad::utils::detect_theme().map(|_| Message::SystemTheme)
+        } else {
+            Task::none()
+        };
         let boot = Task::batch([
+            detect_theme,
             open_main,
             boot,
             virtual_boot.map(Message::Virtual),
@@ -782,7 +790,23 @@ impl Gallery {
             Message::Back => self.show_content = false,
             Message::MenuMode(m) => self.menu_mode = m,
             Message::SidebarPadding(p) => self.sidebar_padding = p,
-            Message::Scheme(dark) => self.scheme = if dark { Scheme::Dark } else { Scheme::Light },
+            Message::Scheme(dark) => {
+                iad::utils::set_scheme_override(Some(if dark {
+                    Scheme::Dark
+                } else {
+                    Scheme::Light
+                }));
+                self.scheme = iad::utils::theme_settings().scheme;
+            }
+            Message::FollowSystemTheme => {
+                iad::utils::set_scheme_override(None);
+                self.scheme = iad::utils::theme_settings().scheme;
+            }
+            Message::SystemTheme => {
+                if self.shots.is_none() {
+                    self.scheme = iad::utils::theme_settings().scheme;
+                }
+            }
             Message::Accent(a) => {
                 self.accent = a;
                 self.accent_text = a.key();
@@ -1118,16 +1142,27 @@ impl Gallery {
                     Message::Capture(i)
                 })
             };
+            // Exercise the same messages as the header control and system-appearance action.
+            if kind == "theme" {
+                return match i {
+                    0 => wait(500, "theme-system", self),
+                    1 => {
+                        let update = self.update(Message::Scheme(!self.scheme.is_dark()));
+                        update.chain(wait(500, "theme-override", self))
+                    }
+                    2 => {
+                        let update = self.update(Message::FollowSystemTheme);
+                        update.chain(wait(500, "theme-restored", self))
+                    }
+                    _ => iced::exit(),
+                };
+            }
             // GALLERY_ANIM=appshell: open the AppShell window (GALLERY_SHELL_SIZE=WxH) and capture
             // it.
             if kind == "appshell" {
                 return match i {
                     0 => {
-                        self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
-                            Scheme::Dark
-                        } else {
-                            Scheme::Light
-                        };
+                        self.scheme = iad::utils::theme_settings().scheme;
                         let open = self.open_shell();
                         self.shot_tag = Some("parent");
                         open.chain(Task::perform(
@@ -1148,11 +1183,7 @@ impl Gallery {
             if kind == "shell-back" {
                 return match i {
                     0 => {
-                        self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
-                            Scheme::Dark
-                        } else {
-                            Scheme::Light
-                        };
+                        self.scheme = iad::utils::theme_settings().scheme;
                         let open = self.open_shell();
                         self.shot_tag = Some("a0-child");
                         open.chain(Task::perform(
@@ -1177,11 +1208,7 @@ impl Gallery {
             if kind == "embedded-back" {
                 return match i {
                     0 => {
-                        self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
-                            Scheme::Dark
-                        } else {
-                            Scheme::Light
-                        };
+                        self.scheme = iad::utils::theme_settings().scheme;
                         wait(900, "a0-child", self)
                     }
                     1 => {
@@ -1198,11 +1225,7 @@ impl Gallery {
             }
             return match i {
                 0 => {
-                    self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
-                        Scheme::Dark
-                    } else {
-                        Scheme::Light
-                    };
+                    self.scheme = iad::utils::theme_settings().scheme;
                     wait(700, "a0-start", self)
                 }
                 // GALLERY_ANIM=keys: no trigger; send keys from outside during the wait.
@@ -1232,7 +1255,7 @@ impl Gallery {
             };
         }
         // Every group page, then every component page (light), then the groups again (dark).
-        // GALLERY_SHOT_ONLY=<detail name> captures that one page (light) and exits.
+        // GALLERY_SHOT_ONLY=<detail name> captures that page in the detected scheme and exits.
         let only = std::env::var("GALLERY_SHOT_ONLY").ok();
         let views: Vec<(Page, Option<Detail>)> = Page::ALL
             .iter()
@@ -1270,7 +1293,11 @@ impl Gallery {
             ));
         }
         if i < views.len() {
-            self.scheme = Scheme::Light;
+            self.scheme = if only.is_some() {
+                iad::utils::theme_settings().scheme
+            } else {
+                Scheme::Light
+            };
             (self.page, self.detail) = views[i];
         } else {
             self.scheme = Scheme::Dark;
@@ -1329,7 +1356,13 @@ impl Gallery {
         } else {
             Subscription::none()
         };
+        let system_theme = if self.shots.is_none() {
+            iad::utils::follow_theme().map(|_| Message::SystemTheme)
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
+            system_theme,
             frames,
             toast_clock,
             self.autocomplete.subscription().map(Message::Autocomplete),
@@ -1390,11 +1423,14 @@ impl Gallery {
         let dark = self.scheme.is_dark();
         let primary = w::primary_menu(
             w::Menu::new("Main Menu")
-                .section([w::MenuItem::check(
-                    "Dark Style",
-                    dark,
-                    Message::Scheme(!dark),
-                )])
+                .section([
+                    w::MenuItem::check("Dark Style", dark, Message::Scheme(!dark)),
+                    w::MenuItem::check(
+                        "Use System Appearance",
+                        iad::utils::scheme_override().is_none(),
+                        Message::FollowSystemTheme,
+                    ),
+                ])
                 .section([
                     w::MenuItem::action("Preferences", Message::OpenDialog(Dialog::Preferences))
                         .accel("Ctrl+,"),
@@ -1450,10 +1486,22 @@ impl Gallery {
         // swaps the header's title for a search entry (an on-select trigger of a
         // `MetaComponent`); the path bar (or the plain title) is its other variant.
         content_bar = content_bar.pack_end(
-            cmp::section_button(Icon::Search, Message::ToggleSearch)
-                .active(self.searching)
+            cmp::ThemeToggle::new(self.scheme)
+                .on_toggle(|scheme| Message::Scheme(scheme.is_dark()))
+                .disabled(!iad::config::current().allow_app_overrides)
                 .metrics(m),
         );
+        content_bar = content_bar.pack_end(cmp::tooltip(
+            iced::widget::button(
+                container(Icon::Search.view(m.icon_size + 2.0).weight(0.3))
+                    .center(Length::Fixed(m.button_min_height)),
+            )
+            .padding(0)
+            .style(style::button::flat)
+            .on_press(Message::ToggleSearch),
+            "Search",
+            cmp::TooltipPosition::Bottom,
+        ));
         if self.searching || self.path_bar_title {
             let title = self.detail.map_or(self.page.title(), Detail::title);
             let path = self.path_bar_title;

@@ -125,6 +125,7 @@ pub struct Dock<'a, M> {
     scrim: bool,
     on_outside: Option<M>,
     window_radius: f32,
+    radius: Option<iced::border::Radius>,
     margin: f32,
     border: bool,
     initial_focus: Option<iced::widget::Id>,
@@ -147,6 +148,7 @@ impl<'a, M: Clone + 'a> Dock<'a, M> {
             scrim: true,
             on_outside: None,
             window_radius: Metrics::desktop().radius_window,
+            radius: None,
             margin: 0.0,
             border: true,
             initial_focus: None,
@@ -200,6 +202,12 @@ impl<'a, M: Clone + 'a> Dock<'a, M> {
     /// (`window::State::radius`).
     pub fn window_radius(mut self, r: f32) -> Self {
         self.window_radius = r;
+        self
+    }
+    /// Override the surface corner radii, including corners against its docked edge.
+    /// The outline uses the same radii. Omit this to retain adaptive sheet corners.
+    pub fn radius(mut self, radius: impl Into<iced::border::Radius>) -> Self {
+        self.radius = Some(radius.into());
         self
     }
     /// The child of a modal dock that takes focus when it opens, by its widget id (default: the
@@ -440,6 +448,7 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
         let side = d.side;
         let flush = flush_sides(side, size, length, d.align, margin);
         let lifted_radius = margin > 0.0;
+        let radius = d.radius;
         match d.mode {
             DockMode::Push => {
                 // The same geometry as a split view's sidebar: the dock is the sidebar, in flow
@@ -460,7 +469,11 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
                 let panel: Element<'a, M> = container(d.surface)
                     .width(w)
                     .height(h)
-                    .style(|t: &Theme| iced::widget::container::Style {
+                    .style(move |t: &Theme| iced::widget::container::Style {
+                        border: iced::Border {
+                            radius: radius.unwrap_or_default(),
+                            ..Default::default()
+                        },
                         background: Some(iced::Background::Color(t.semantic.window.bg)),
                         ..Default::default()
                     })
@@ -481,11 +494,14 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
                     .height(Length::Fill)
                     .style(move |t: &Theme| iced::widget::container::Style {
                         border: iced::Border {
-                            radius: if full {
-                                edge_radius.into()
-                            } else {
-                                corners(side, t.metrics.radius_l, edge_radius, lifted)
-                            },
+                            radius: surface_radius(
+                                radius,
+                                side,
+                                t.metrics.radius_l,
+                                edge_radius,
+                                lifted,
+                                full,
+                            ),
                             ..Default::default()
                         },
                         ..sc::dialog(t)
@@ -504,7 +520,16 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
                     },
                     _ => panel.into(),
                 };
-                let panel = outlined(panel, d.border, flush, side, edge_radius, lifted_radius);
+                let panel = outlined(
+                    panel,
+                    d.border,
+                    flush,
+                    side,
+                    edge_radius,
+                    lifted_radius,
+                    radius,
+                    full,
+                );
                 let mut o = Overlay::new(d.base, panel)
                     .docked(side, size.dim())
                     .along(length.dim(), d.align)
@@ -523,6 +548,23 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
     }
 }
 
+fn surface_radius(
+    explicit: Option<iced::border::Radius>,
+    side: Side,
+    inner: f32,
+    edge: f32,
+    lifted: bool,
+    full: bool,
+) -> iced::border::Radius {
+    explicit.unwrap_or_else(|| {
+        if full {
+            edge.into()
+        } else {
+            corners(side, inner, edge, lifted)
+        }
+    })
+}
+
 /// `surface` with the hairline border on the sides that are not flush, following the dock's corner
 /// radii (round all around when it stands off its edge). `on` false leaves it as it is.
 fn outlined<'a, M: 'a>(
@@ -532,6 +574,8 @@ fn outlined<'a, M: 'a>(
     side: Side,
     edge_radius: f32,
     lifted: bool,
+    radius: Option<iced::border::Radius>,
+    full: bool,
 ) -> Element<'a, M> {
     let surface = surface.into();
     if !on || flush.all() {
@@ -540,13 +584,48 @@ fn outlined<'a, M: 'a>(
     iced::Element::new(Outlined {
         content: surface,
         flush,
-        radius: Box::new(move |t: &Theme| corners(side, t.metrics.radius_l, edge_radius, lifted)),
+        radius: Box::new(move |t: &Theme| {
+            surface_radius(radius, side, t.metrics.radius_l, edge_radius, lifted, full)
+        }),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_surface_radius_overrides_all_generated_corners() {
+        for radius in [
+            0.0.into(),
+            8.0.into(),
+            iced::border::Radius {
+                top_left: 1.0,
+                top_right: 2.0,
+                bottom_left: 3.0,
+                bottom_right: 4.0,
+            },
+        ] {
+            for side in [Side::Top, Side::Bottom, Side::Left, Side::Right] {
+                for full in [false, true] {
+                    for lifted in [false, true] {
+                        assert_eq!(
+                            surface_radius(Some(radius), side, 12.0, 15.0, lifted, full),
+                            radius
+                        );
+                    }
+                }
+            }
+        }
+        assert_eq!(
+            surface_radius(None, Side::Bottom, 12.0, 15.0, false, false),
+            corners(Side::Bottom, 12.0, 15.0, false)
+        );
+        assert_eq!(
+            surface_radius(None, Side::Bottom, 12.0, 15.0, false, true),
+            15.0.into()
+        );
+    }
 
     #[test]
     fn the_edge_corners_are_square_and_the_open_side_round() {

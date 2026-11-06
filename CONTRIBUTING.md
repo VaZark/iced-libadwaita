@@ -53,11 +53,11 @@ GALLERY_PAGE=inputs               open a group
 GALLERY_SEARCH=text               open the search with this text
 GALLERY_SHOT_ONLY=Docked          with --screenshot: that page only (the `Detail` name)
 GALLERY_SHOT_DELAY_MS=2500        with --screenshot: wait per page (slow debug builds)
-GALLERY_DARK=1                    dark scheme for GALLERY_ANIM captures
 GALLERY_SIDEBAR_MODE=parent-page
 GALLERY_MENU=page|dropdown
 GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push|breakpoint
 GALLERY_ANIM=keys                 wait 6 s, then capture: send keys meanwhile
+GALLERY_ANIM=theme                capture system appearance, app override, then system again
 GALLERY_ANIM=appshell             open the AppShell window (GALLERY_SHELL_SIZE=WxH)
 GALLERY_ANIM=shell-back|embedded-back
 APPSHELL_PIN=mobile|tablet|desktop
@@ -111,3 +111,5 @@ Small logical groups. Each commit builds. The project is managed mostly by AI: r
 ## Status
 
 No license chosen yet.
+
+The gallery follows shared desktop appearance by default. Its header Light/Dark toggle overrides the scheme for this app; “Use System Appearance” in the primary menu resumes following it.

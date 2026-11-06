@@ -43,6 +43,7 @@ pub mod styles;
 pub mod system;
 pub mod theme;
 pub mod theme_config;
+pub mod utils;
 pub mod widgets;
 pub mod windows;
 
@@ -51,7 +52,7 @@ pub use layouts::animation;
 /// The ordered-transition coordinator, a [primitive](layouts::transition); kept at its old path.
 pub use layouts::transition;
 
-pub use icon::{Icon, IconSource};
+pub use icon::{Icon, IconSource, IconView};
 pub use metrics::{CollapseBehavior, Metrics, Typography};
 pub use palette::{AccentColor, Palette, Scheme};
 pub use semantic::{Opacity, Role, Semantic, Surface, Swatch};

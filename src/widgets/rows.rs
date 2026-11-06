@@ -159,7 +159,7 @@ impl<'a, M: Clone + 'a> From<ActionRow<'a, M>> for Element<'a, M> {
         if r.chevron {
             main = main.push(Icon::GoNext.view(m.icon_size).style(|t: &Theme, _| {
                 iced::widget::svg::Style {
-                    color: Some(t.semantic.dim_solid()),
+                    color: Some(t.semantic.dim()),
                 }
             }));
         }

@@ -8,7 +8,7 @@ use super::*;
 use crate::playground::{Msg as PMsg, Spec};
 use iced::widget::{column, container, row};
 
-/// The icon of a playground's icon choice: none, built-ins, or an SVG of its own.
+/// The icon of a playground's icon choice: none, system icons, or an application SVG.
 fn icon_source(choice: usize) -> Option<iad::IconSource> {
     match choice {
         1 => Some(Icon::Check.into()),
@@ -2436,7 +2436,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "DetailHeader::new(\"Evening drive\")\n    .kind(\"Playlist\")\n    .cover(cover)\n    .description(body(\"Slow songs for a long road.\"))\n    .facts(caption(\"24 songs, 1 hr 32 min\"))\n    .primary(suggested_circular_button(Icon::Play.view(16.0)).on_press(Msg::Play))\n    .action(icon_button(Icon::Heart))\n    .end(flat_button(text(\"Share\")))\n    .tint(cover_color)            // the wash: style::container::wash(color)\n    .narrow(width < 576.0)        // the arrangement, from the app's width"
         }
         Detail::Icons => {
-            "Icon::Star.view(16.0)                 // a built-in\n\n// anything that takes an icon takes your own SVG too\nlet mine = IconSource::svg(include_str!(\"vinyl.svg\"));\nMenuItem::action(\"Rate\", Msg::Rate).icon(mine.clone())\nmenu_button(mine, menu)\nChip::new(\"Jazz\").icon(mine).color(tag_color)"
+            "Icon::Star.view(16.0)                 // from the installed theme\n\n// anything that takes an icon takes your own SVG too\nlet mine = IconSource::svg(include_str!(\"vinyl.svg\"));\nMenuItem::action(\"Rate\", Msg::Rate).icon(mine.clone())\nmenu_button(mine, menu)\nChip::new(\"Jazz\").icon(mine).color(tag_color)"
         }
         Detail::Composed => {
             "// HistogramRangeSlider is in the library; this is how it is DEFINED with ComposedComponent:\n// data + callback, and a conversion\npub struct HistogramRangeSlider<'a, M> {\n    histogram: &'a Histogram,\n    range: (f32, f32),                       // the shared state\n    on_change: Box<dyn Fn((f32, f32)) -> M + 'a>,\n}\n\nimpl<'a, M: 'a> From<HistogramRangeSlider<'a, M>> for Element<'a, M> {\n    fn from(c: HistogramRangeSlider<'a, M>) -> Self {\n        let h = c.histogram;\n        ComposedComponent::new(c.range, c.on_change)   // state + one message for every part\n            // each part is built from the state and answers with the NEXT state\n            .part(move |r| BarChart::histogram(h)\n                .minimal()                                  // only the bars, as a range picker\n                .selected(move |i| h.selected(i, *r))      // bars inside the range\n                .on_pick(move |i| h.bin_range(i))           // a pressed bar is a range\n                .into())\n            .part(|r| range_slider(0.0..=100.0, *r, |moved| moved).into())\n            .normalize(|(lo, hi)| (lo.min(hi), lo.max(hi))) // the rule, in one place\n            .into()\n    }\n}\n\n// USE it like any component; the slider's bounds are the histogram's own\nHistogramRangeSlider::new(&self.histogram, self.range, Msg::Range).step(1.0)\n\n// or build one in the view when it depends on a filter, and pass it owned\nHistogramRangeSlider::new(Histogram::from_values(filtered, 0.0, 100.0, 20), self.range, Msg::Range)"

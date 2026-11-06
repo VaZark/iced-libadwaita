@@ -314,15 +314,16 @@ fn bold() -> iced::Font {
     }
 }
 
-/// A solid tint for an svg (iced ignores a tint's alpha): `c` mixed towards the window
-/// background when disabled.
+/// Symbolic tint retaining alpha against the actual surface.
 fn solid(t: &Theme, c: Color, disabled: bool) -> Color {
-    let c = Color { a: 1.0, ..c };
-    if disabled {
-        crate::color::mix(t.semantic.window.bg, c, t.semantic.opacity.disabled)
-    } else {
-        c
-    }
+    crate::color::fade(
+        c,
+        if disabled {
+            t.semantic.opacity.disabled
+        } else {
+            1.0
+        },
+    )
 }
 
 fn dim_fg(t: &Theme, disabled: bool) -> Color {

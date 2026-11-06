@@ -90,7 +90,7 @@ wrap-basis=128           # minimum title width before the suffix wraps
 expander-indent=24       # px a row nested in an expander row is indented (0 = libadwaita's flush nesting)
 
 [icons]
-theme=system             # system | an icon theme name
+theme=system             # system (desktop toolkit settings, then hicolor) | an installed XDG icon theme name
 
 [policy]
 # Desktop policy: may individual apps opt out of the settings above? Opt-outs are highly

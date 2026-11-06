@@ -55,3 +55,5 @@ Every new property goes into the library first: the component, its doc comment, 
 
 - [DESIGN.md](DESIGN.md): structure and targets.
 - [CONTRIBUTING.md](CONTRIBUTING.md): build, test, work on it.
+
+Icons come from installed XDG themes; no icon artwork is bundled. Configure `[icons] theme` to select a theme (`system` follows shared desktop toolkit settings, then falls back to `hicolor`). See [system icons and migration](docs/lib/icons.md).

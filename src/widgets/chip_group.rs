@@ -50,7 +50,7 @@ impl<K> ChipOption<K> {
             color: None,
         }
     }
-    /// An icon of the chip's own (a built-in or your own SVG).
+    /// An icon of the chip's own (a system icon or your own SVG).
     pub fn icon(mut self, icon: impl Into<IconSource>) -> Self {
         self.icon = Some(icon.into());
         self

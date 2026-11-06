@@ -213,11 +213,19 @@ impl<'a, M: Clone + 'a> Default for HeaderBar<'a, M> {
 }
 
 /// A window button: a 24px circle with the icon theme's symbol.
-fn ctl<'a, M: Clone + 'a>(icon: Icon, msg: M) -> Element<'a, M> {
+fn ctl<'a, M: Clone + 'a>(icon: Icon, msg: M, flat: Option<bool>) -> Element<'a, M> {
     let m = Metrics::desktop();
     iced::widget::button(container(icon.view(m.icon_size)).center(Length::Fixed(24.0)))
         .padding(0)
-        .style(crate::styles::button::circular)
+        .style(move |t: &Theme, status| {
+            if flat.unwrap_or(t.flat_headerbars) {
+                crate::styles::button::circular(t, status)
+            } else {
+                let mut style = crate::styles::button::headerbar(t, status);
+                style.border.radius = t.metrics.radius_pill.into();
+                style
+            }
+        })
         .on_press(msg)
         .into()
 }
@@ -233,9 +241,10 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
             let layout = c.layout.clone().unwrap_or_else(DecorationLayout::detect);
             let make = |b: WindowButton| -> Option<Element<'a, M>> {
                 match b {
-                    WindowButton::Minimize => {
-                        c.on_minimize.clone().map(|m| ctl(Icon::WindowMinimize, m))
-                    }
+                    WindowButton::Minimize => c
+                        .on_minimize
+                        .clone()
+                        .map(|m| ctl(Icon::WindowMinimize, m, flat)),
                     WindowButton::Maximize => c.on_maximize.clone().map(|m| {
                         ctl(
                             if c.maximized {
@@ -244,9 +253,12 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
                                 Icon::WindowMaximize
                             },
                             m,
+                            flat,
                         )
                     }),
-                    WindowButton::Close => c.on_close.clone().map(|m| ctl(Icon::WindowClose, m)),
+                    WindowButton::Close => {
+                        c.on_close.clone().map(|m| ctl(Icon::WindowClose, m, flat))
+                    }
                 }
             };
             if h.show_start_buttons {

@@ -49,3 +49,5 @@ opinionated media composition is no longer a toolkit export; see the complete
 owns the body and open state. An explicit `collapsible(false)` suppresses toggling
 and the chevron even if a callback exists. With a callback and no explicit flag,
 existing dividers remain collapsible; without a callback the divider stays a heading.
+
+- [icons.md](icons.md): installed XDG icon themes, symbolic colors, missing icons, and API migration.

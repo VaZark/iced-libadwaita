@@ -103,3 +103,5 @@ More switches are in [CONTRIBUTING.md](../CONTRIBUTING.md#the-gallery). `GALLERY
 Add it to the playground in the same change: a control in `specs`, its use in `build`, its line in the generated code. A property with a toolkit default is a plain value that starts at it. The control shows the default. The generated code adds the call once it changes. Example: Expander row > Indent, default 24 px from `[rows] expander-indent`.
 
 Also update the method's doc comment (`cargo xtask man`) and the component's page. See [CONTRIBUTING.md](../CONTRIBUTING.md#working-on-a-component).
+
+The gallery uses `iad::utils::theme`, `detect_theme`, and `follow_theme` for shared desktop appearance. Normal startup follows the system color scheme and icon theme. Explicit demo color-scheme switches override following for that session. `GALLERY_SHOT_ONLY=EntryRow` captures the detected scheme. The header’s Light/Dark toggle applies an app-level override; “Use System Appearance” in the primary menu clears it.

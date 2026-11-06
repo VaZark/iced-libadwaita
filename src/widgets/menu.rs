@@ -134,7 +134,7 @@ impl<M> MenuItem<M> {
         self.accel = Some(accel.into());
         self
     }
-    /// An icon (a built-in [`Icon`] or your own SVG, see [`IconSource`]), at the end of the item unless [`Menu::icon_side`] or
+    /// An icon (a system [`Icon`] or your own SVG, see [`IconSource`]), at the end of the item unless [`Menu::icon_side`] or
     /// [`icon_side`](Self::icon_side) says otherwise.
     pub fn icon(mut self, icon: impl Into<IconSource>) -> Self {
         self.icon = Some(icon.into());
@@ -352,7 +352,7 @@ fn row_content<'a, M: 'a>(
                     .view(m.icon_size)
                     .style(move |t: &Theme, _| iced::widget::svg::Style {
                         color: Some(if disabled {
-                            t.semantic.dim_solid()
+                            t.semantic.dim()
                         } else {
                             t.semantic.popover.fg
                         }),

@@ -210,7 +210,7 @@ impl<'a, M> Chip<'a, M> {
             _p: Default::default(),
         }
     }
-    /// An icon: a built-in [`Icon`] or your own SVG ([`IconSource`]).
+    /// An icon: a system [`Icon`] or your own SVG ([`IconSource`]).
     pub fn icon(mut self, icon: impl Into<IconSource>) -> Self {
         self.icon = Some(icon.into());
         self

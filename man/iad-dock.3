@@ -73,6 +73,9 @@ Fades the base behind a modal dock (default on).
 .B \&.window_radius(r: f32)
 The window's corner radius, used by a \fBWindow\fR dock (\fBwindow::State::radius\fR).
 .TP
+.B \&.radius(radius: impl Into<iced::border::Radius>)
+Override the surface corner radii, including corners against its docked edge. The outline uses the same radii. Omit this to retain adaptive sheet corners.
+.TP
 .B \&.initial_focus(id: impl Into<iced::widget::Id>)
 The child of a modal dock that takes focus when it opens, by its widget id (default: the first focusable one).
 .TP

@@ -75,7 +75,7 @@ pub enum Setting {
     IconTheme,
 }
 
-/// `system` defers to the desktop (GSettings); otherwise a fixed value.
+/// `system` defers to shared desktop detection; otherwise a fixed value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Pick<T> {
     #[default]
@@ -180,7 +180,7 @@ pub struct Config {
     pub row_wrap_basis: f32,
     /// `[rows] expander-indent`: the indent of rows nested in an expander row.
     pub expander_indent: f32,
-    /// `system` follows `icon-theme`.
+    /// Installed XDG icon theme; `system` follows desktop toolkit settings, then `hicolor`.
     pub icon_theme: Pick<String>,
     /// May apps opt out? (`[policy] allow-app-overrides`, default yes.)
     pub allow_app_overrides: bool,

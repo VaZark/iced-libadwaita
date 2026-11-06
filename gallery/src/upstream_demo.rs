@@ -370,7 +370,7 @@ impl State {
         });
         Self::group(
             "Icons",
-            "The built-in symbolic icons, revealed a row at a time. Anything that takes an icon takes an `Icon` or your own SVG (`IconSource`).",
+            "The installed theme’s symbolic icons, revealed a row at a time. Missing icons leave empty slots. Configure [icons] theme to choose an installed theme. IconSource also accepts system names and application SVGs.",
             m,
         )
         .push(w::card(container(grid).height(Length::Fixed(380.0))))

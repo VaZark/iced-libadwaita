@@ -112,7 +112,7 @@ mod tests {
         let d = Detached::new("gallery")
             .arg("--appshell")
             .args(["--size", "1100x720"])
-            .env("GALLERY_DARK", "1");
+            .env("EXAMPLE_SETTING", "example");
         let c = d.command();
         assert_eq!(c.get_program(), "gallery");
         let args: Vec<_> = c.get_args().collect();

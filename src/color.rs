@@ -34,6 +34,23 @@ pub fn fade(color: Color, factor: f32) -> Color {
     }
 }
 
+/// Composites `foreground` over `background`, including their alpha channels.
+/// Use the result when evaluating contrast on a translucent surface.
+pub fn composite_over(foreground: Color, background: Color) -> Color {
+    let a = foreground.a + background.a * (1.0 - foreground.a);
+    if a <= 0.0 {
+        return Color::TRANSPARENT;
+    }
+    let channel =
+        |fg: f32, bg: f32| (fg * foreground.a + bg * background.a * (1.0 - foreground.a)) / a;
+    Color {
+        r: channel(foreground.r, background.r),
+        g: channel(foreground.g, background.g),
+        b: channel(foreground.b, background.b),
+        a,
+    }
+}
+
 /// Linear mix of two colors; `t = 0.0` gives `a`, `t = 1.0` gives `b`
 /// (like GTK's `mix(a, b, t)`).
 pub fn mix(a: Color, b: Color, t: f32) -> Color {
@@ -220,6 +237,21 @@ pub fn ensure_contrast(fg: Color, bg: Color, min_ratio: f32) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn translucent_surfaces_are_composited_before_measuring_contrast() {
+        let background = hex(0x242424);
+        let surface = composite_over(white(0.08), background);
+        assert!((surface.r - (0x24 as f32 / 255.0 * 0.92 + 0.08)).abs() < 0.0001);
+        assert_eq!(surface.a, 1.0);
+        assert!(contrast_ratio(Color::WHITE, surface) > 4.5);
+        assert_eq!(composite_over(Color::TRANSPARENT, background), background);
+        assert_eq!(composite_over(Color::WHITE, background), Color::WHITE);
+        assert_eq!(
+            composite_over(Color::TRANSPARENT, Color::TRANSPARENT),
+            Color::TRANSPARENT
+        );
+    }
 
     #[test]
     fn colors_parse_and_print_as_hex() {
