@@ -1,53 +1,22 @@
 # TODO
 
 1. Clip bg extending past window when it's not intended behaviour : test weave's full-screen bottom sheet overriding border-radius
-2. Icon naming and resolution
-   1. General:
-      1. **Remove all first-party icon assets and bundled icon collections from the library.**
-      2. Replace existing icon implementations with an XDG-compliant icon resolver.
-      3. Preserve the existing icon API and enums where possible.
-      4. Use freedesktop.org specifications as the source of truth for icon naming and resolution.
-      5. Icon assets must be supplied by the installed system icon theme.
-      6. Missing icons must not cause application failures.
-      7. Preserve compatibility with existing widgets and applications wherever possible.
-
-   2. XDG implementation:
-      1. Follow the Icon Naming Specification for standardized icon names.
-      2. Follow the Icon Theme Specification for:
-         1. Theme discovery and inheritance.
-         2. Icon lookup, size, and scale selection.
-         3. `hicolor` and unthemed fallback.
-      3. Support regular and symbolic icons.
-      4. Implement symbolic fallback:
-         1. Prefer `<name>-symbolic` when symbolic is requested.
-         2. Fall back to `<name>` if unavailable.
-         3. Return `None` if neither resolves.
-      5. Support symbolic recoloring based on the widget's current foreground color and state.
-      6. Cache resolved icons and invalidate the cache when the active theme changes.
-      7. Avoid GNOME, KDE, or COSMIC-specific icon integrations.
-   
-   3.  Symbolic icon colors and contrast:
-      1. Resolve symbolic icons using the installed XDG icon theme.
-      2. Recolor symbolic icons using the widget's computed foreground color by default.
-      3. Automatically update icon colors when widget state, theme, or background changes.
-      4. Support explicit foreground color overrides.
-      5. Ensure the styling system selects foreground colors with sufficient contrast against the effective background.
-      6. Preserve semantic colors (success, warning, error) where supported by the symbolic icon format.
-      7. Apply the same behavior to HeaderLayer window controls and all other widgets.
-
-   4. Migration:
-      1. Audit existing icon assets, constants, enums, and widget dependencies.
-      2. Map existing icon constants to standardized XDG identifiers wherever possible.
-      3. Replace direct references to bundled assets with calls to the icon resolver.
-      4. Update widgets, examples, and documentation to use the new resolver.
-      5. Remove obsolete icon assets, embedded fonts, dependencies, and resource-loading code.
-      6. Verify icon resolution using installed Linux themes.
-      7. Test missing icons, symbolic fallback, recoloring, and theme changes.
-
-   5. References:
-      1. https://specifications.freedesktop.org/icon-naming/latest/
-      2. https://specifications.freedesktop.org/icon-theme/latest/
-
+2. Mechanism to define theme-able variable for Config
+   1. Type Enum : (css attr as reference)
+      1. integer :: min, max, step,  rounds :: (ceil,floor)
+      2. decimal ::  no_decimals, min, max, step,  rounds :: (ceil,floor)
+      3. color :: supports : hex, hexa, rgb, rgba, hsv, hasva, hsl, hsla
+      4. length :: min, max
+      5. percentage :: min (default:0), max (defult 100), rounds :: (ceil,floor)
+      6. string :: listed enum, accepts_random : (bool)
+   2. Fallback values
+   3. variations 
+      1. variation-key (string enum): "light" / "dark" or custom 
+      2. formatted in cofig files as `[variation-key:property]`
+      3. The variation is always cascaded over the the base property
+   4. generate and validate `.conf` against it. 
+   5. When property in conf is invalid, use fallback values, if it's None that's fine as it's intended.
+ 
 3. Linux platform integration
    1. General architecture:
       1. Target Linux as the primary supported platform.
