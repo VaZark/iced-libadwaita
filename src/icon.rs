@@ -61,6 +61,8 @@ pub enum Icon {
     SkipBackward,
     /// A bar and a triangle pointing right (`media-skip-forward-symbolic`).
     SkipForward,
+    /// A die with five pips: a random choice or surprise.
+    Dice,
     /// Two crossing arrows (`media-playlist-shuffle-symbolic`).
     Shuffle,
     /// Two arrows in a loop (`media-playlist-repeat-symbolic`).
@@ -138,6 +140,7 @@ impl Icon {
         Icon::Pause,
         Icon::SkipBackward,
         Icon::SkipForward,
+        Icon::Dice,
         Icon::Shuffle,
         Icon::Repeat,
         Icon::Queue,
@@ -230,6 +233,9 @@ impl Icon {
             }
             Icon::SkipForward => {
                 r#"<rect x="12" y="2.5" width="2" height="11" rx=".8" fill="black" stroke="none"/><path d="M2 3.4v9.2c0 .9 1 1.4 1.7.9l6.1-4.4c.6-.5.6-1.7 0-2.2L3.7 2.5C3 2 2 2.5 2 3.4z" fill="black" stroke="none"/>"#
+            }
+            Icon::Dice => {
+                r#"<rect x="2.5" y="2.5" width="11" height="11" rx="2"/><g fill="black" stroke="none"><circle cx="5.3" cy="5.3" r=".9"/><circle cx="10.7" cy="5.3" r=".9"/><circle cx="8" cy="8" r=".9"/><circle cx="5.3" cy="10.7" r=".9"/><circle cx="10.7" cy="10.7" r=".9"/></g>"#
             }
             Icon::Shuffle => {
                 r#"<path d="M2 4.5h2.5c3 0 4 7 7 7H14M2 11.5h2.5c1 0 1.8-1 2.6-2.2M9 6.2c.7-1 1.4-1.7 2.5-1.7H14M12 2.5l2 2-2 2M12 9.5l2 2-2 2"/>"#

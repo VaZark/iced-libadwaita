@@ -61,11 +61,23 @@ impl<'a, M: 'a> ProfileHeader<'a, M> {
 impl<'a, M: 'a> From<ProfileHeader<'a, M>> for Element<'a, M> {
     fn from(h: ProfileHeader<'a, M>) -> Self {
         let m = h.metrics;
-        let mut text = column![ty::title_2(h.name)].spacing(m.space_s);
+        let alignment = if h.narrow {
+            Alignment::Center
+        } else {
+            Alignment::Start
+        };
+        let mut text = column![ty::title_2(h.name).width(Length::Fill).align_x(alignment)]
+            .spacing(m.space_s)
+            .align_x(alignment)
+            .width(Length::Fill);
         if let Some(after) = h.after {
-            text = text.push(after);
+            text = text.push(container(after).width(Length::Fill).align_x(alignment));
         }
-        text = text.push(h.description);
+        text = text.push(
+            container(h.description)
+                .width(Length::Fill)
+                .align_x(alignment),
+        );
         let mut body = if h.narrow {
             let mut col = column![].spacing(m.space_m);
             if let Some(end) = h.end {
