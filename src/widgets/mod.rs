@@ -16,7 +16,6 @@ pub(crate) mod collapsible;
 pub(crate) mod color_picker;
 pub(crate) mod date_input;
 pub(crate) mod date_range_input;
-pub(crate) mod detail_header;
 pub(crate) mod dialog;
 pub(crate) mod dropdown;
 pub(crate) mod editable_text;
@@ -36,6 +35,7 @@ pub(crate) mod number_input;
 pub(crate) mod pagination;
 pub(crate) mod popover;
 pub(crate) mod preferences;
+pub(crate) mod profile_header;
 pub(crate) mod range_slider;
 pub(crate) mod reorderable_list;
 pub(crate) mod resizable;
@@ -71,7 +71,6 @@ pub use collapsible::Collapsible;
 pub use color_picker::{ColorInput, ColorPicker};
 pub use date_input::DateInput;
 pub use date_range_input::DateRangeInput;
-pub use detail_header::DetailHeader;
 pub use dialog::{
     AboutDialog, AlertDialog, ResponseAppearance, dialog, dialog_in_window, preferences_dialog,
     present_dialog, shortcuts_dialog,
@@ -112,6 +111,7 @@ pub use popover::{
     Presentation as PopoverPresentation, popover, popover_bounds,
 };
 pub use preferences::{PreferencesGroup, PreferencesPage, preferences_group, preferences_page};
+pub use profile_header::ProfileHeader;
 pub use range_slider::{RangeSlider, range_slider};
 pub use reorderable_list::ReorderableList;
 pub use resizable::Resizable;
@@ -122,7 +122,7 @@ pub use rows::{
     ActionRow, ButtonRow, ComboRow, EntryRow, ExpanderRow, RangeSliderRow, SliderRow, SpinRow,
     SwitchRow, ToggleGroupRow, action_row, boxed_list,
 };
-pub use section_divider::SectionDivider;
+pub use section_divider::{CollapseState, SectionDivider};
 pub use section_heading::SectionHeading;
 pub use sort_header::SortHeader;
 pub use split::{SplitAction, SplitButton, SplitButtonAction, split_button};

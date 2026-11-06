@@ -1,6 +1,7 @@
 //! Components that came up from the weave music app: the virtual list, editable text, the detail
 //! header and the icon set.
 
+use crate::example_detail_header::DetailHeader;
 use iced_adaptive_design as iad;
 
 use iad::components::{Avatar, AvatarShape, ChipSize};
@@ -11,8 +12,7 @@ use iad::primitives::history::History;
 use iad::primitives::reorder::{Event as ReorderEvent, ReorderState};
 use iad::primitives::sorting::{Direction, SortState, cmp_str};
 use iad::widgets::{
-    ChipGroup, ChipOption, DetailHeader, EditableText, ItemColumns, PreferencesGroup,
-    SectionHeading,
+    ChipGroup, ChipOption, EditableText, ItemColumns, PreferencesGroup, SectionHeading,
 };
 use iad::{Element, Icon, Metrics};
 use iad::{components as cmp, layouts as lay, metas as met, widgets as w};

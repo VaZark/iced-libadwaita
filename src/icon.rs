@@ -40,6 +40,8 @@ pub enum Icon {
     DialogError,
     Edit,
     Delete,
+    /// A counterclockwise arrow: reset controls to their initial state.
+    Reset,
     Settings,
     Home,
     Calendar,
@@ -124,6 +126,7 @@ impl Icon {
         Icon::DialogError,
         Icon::Edit,
         Icon::Delete,
+        Icon::Reset,
         Icon::Settings,
         Icon::Home,
         Icon::Calendar,
@@ -202,6 +205,7 @@ impl Icon {
             }
             Icon::Edit => r#"<path d="M2.5 13.5l.7-3L11 2.7a1.4 1.4 0 012 2L5.5 12.8z"/>"#,
             Icon::Delete => r#"<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/>"#,
+            Icon::Reset => r#"<path d="M2.5 7a5.5 5.5 0 115.5 6M2.5 3v4h4"/>"#,
             Icon::Settings => {
                 r#"<circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6L5 5M11 11l1.4 1.4M12.4 3.6L11 5M5 11l-1.4 1.4"/>"#
             }

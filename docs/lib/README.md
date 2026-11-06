@@ -29,3 +29,23 @@ The design rationale (HIG notes, libadwaita sources) is for contributors. It is 
 - [primitives.md](primitives.md): the headless logic under the components.
 - [desktop-config.md](desktop-config.md): the shared desktop config. [Sample](desktop.conf.example).
 - [config-registry.md](config-registry.md): the versioned registry behind it: types, defaults, `since`, deprecation.
+
+`ChipGroup::max_lines(n).expandable(open, on_toggle)` limits wrapping chips to `n`
+lines (three when omitted). An inline downward chevron follows the last visible chip
+on the final allowed line, reserving space by hiding the last chip if necessary.
+Expanding reveals all chips, followed by an upward chevron to collapse again.
+Short lists omit the control. Selection and search remain controlled by the app;
+the search entry stays outside the chip flow. Actual measured widget widths drive
+wrapping, resizing and control placement; hidden chips do not participate in drawing,
+input, focus operations or overlays.
+
+`ProfileHeader::new(name, image, description)` is the generic profile primitive.
+Optional `after_name`, `top_right` and `controls` slots belong to the caller. The
+opinionated media composition is no longer a toolkit export; see the complete
+`gallery/src/example_detail_header.rs` example or Weave's `MediaHeader`.
+
+`SectionDivider` is controlled: `collapsible`, `default_collapse_state`, `open`,
+`on_toggle`, `chevron` and `trailing` configure its header, while the application
+owns the body and open state. An explicit `collapsible(false)` suppresses toggling
+and the chevron even if a callback exists. With a callback and no explicit flag,
+existing dividers remain collapsible; without a callback the divider stays a heading.

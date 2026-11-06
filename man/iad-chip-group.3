@@ -14,6 +14,8 @@ See the module.
 .PP
 The application owns the selection (controlled) and the query. Each option has a key, a label and optionally an icon and a color of its own; the chips are \fBChip\fRs, so \fBsize\fR and \fBon_color\fR apply to all.
 .PP
+Opt into inline expansion with \fB.max_lines(3).expandable(self.open, Msg::Expand)\fR. The actual wrapped height decides whether a trailing chevron is needed, so resizing or searching a short list never leaves an unnecessary control. The entry is not clamped.
+.PP
 .nf
 .RS
 ChipGroup::new(
@@ -42,6 +44,12 @@ The entry's placeholder (default "Search").
 .TP
 .B \&.empty_text(text: impl Into<String>)
 What shows when no chip matches (default "No matches").
+.TP
+.B \&.max_lines(lines: usize)
+Shows at most \fBlines\fR lines of chips: the rest is clipped, not drawn, and cannot be pressed. Put the chips that must stay visible (the selected ones) first, and let the query reach the others: an autocomplete with a limit.
+.TP
+.B \&.expandable(expanded: bool, on_toggle: impl Fn(bool) \-> M + 'a)
+A trailing expand/collapse chevron when wrapping chips exceed \fBmax_lines\fR (default three). Expansion is controlled by the caller. The search entry remains outside the clamp, and hidden chips cannot receive pointer input. Short/search\-filtered lists omit the chevron.
 .TP
 .B \&.size(size: ChipSize)
 .TP

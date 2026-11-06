@@ -5,6 +5,7 @@
 //! cargo run --example gallery -- --screenshot target/shots   # renders every page, light + dark
 //! ```
 
+mod example_detail_header;
 use iad::components::typography as ty;
 use iad::styles as style;
 use iad::{AccentColor, Icon, Metrics, Role, Scheme, Theme};

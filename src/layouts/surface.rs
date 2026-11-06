@@ -93,6 +93,16 @@ pub fn bar_padding() -> Padding {
     }
 }
 
+/// `AdwWindow` / `AdwApplicationWindow`: fills the window with the window
+/// background (the title bar is yours: put a [`HeaderBar`](crate::widgets::HeaderBar) in).
+pub fn window<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
+    iced::widget::container(content)
+        .width(iced::Length::Fill)
+        .height(iced::Length::Fill)
+        .style(crate::styles::container::window)
+        .into()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,14 +116,4 @@ mod tests {
         assert_eq!((p.top, p.bottom), (m.band_air, m.band_air));
         assert!(Metrics::compact().gutter < Metrics::default().gutter);
     }
-}
-
-/// `AdwWindow` / `AdwApplicationWindow`: fills the window with the window
-/// background (the title bar is yours: put a [`HeaderBar`](crate::widgets::HeaderBar) in).
-pub fn window<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
-    iced::widget::container(content)
-        .width(iced::Length::Fill)
-        .height(iced::Length::Fill)
-        .style(crate::styles::container::window)
-        .into()
 }

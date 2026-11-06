@@ -25,12 +25,12 @@
 //!     .narrow(width < 576.0)
 //! ```
 
-use crate::Element;
-use crate::components::typography as ty;
-use crate::styles::container as sc;
-use crate::{Metrics, Theme};
 use iced::widget::{column, container, row, space, text};
 use iced::{Alignment, Color, Length};
+use iced_adaptive_design::Element;
+use iced_adaptive_design::components::typography as ty;
+use iced_adaptive_design::styles::container as sc;
+use iced_adaptive_design::{Metrics, Theme};
 
 /// See the [module](self).
 pub struct DetailHeader<'a, M> {
