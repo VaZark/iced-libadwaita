@@ -27,6 +27,7 @@ mod date_demo;
 mod details;
 mod field_demo;
 mod form_demo;
+mod entries_demo;
 mod nav;
 mod playground;
 mod plays;
@@ -196,6 +197,7 @@ struct Gallery {
     date: date_demo::State,
     field: field_demo::State,
     form: form_demo::State,
+    entries: entries_demo::State,
     autocomplete: autocomplete_demo::State,
     sections: sections_demo::State,
     range: range_demo::State,
@@ -284,9 +286,8 @@ enum Message {
     Combo2(&'static str),
     SplitChoice(&'static str),
     SplitRun(&'static str),
-    Scheme(bool),
+    Appearance(cmp::ThemeMode),
     SystemTheme,
-    FollowSystemTheme,
     Accent(AccentColor),
     AccentText(String),
     Transparency(String),
@@ -327,6 +328,7 @@ enum Message {
     Date(date_demo::Msg),
     Field(field_demo::Msg),
     Form(form_demo::Msg),
+    Entries(entries_demo::Msg),
     Autocomplete(autocomplete_demo::Msg),
     Sections(sections_demo::Msg),
     Range(range_demo::Msg),
@@ -605,6 +607,7 @@ impl Gallery {
                 f
             },
             form: form_demo::State::default(),
+            entries: entries_demo::State::default(),
             autocomplete: autocomplete_demo::State::default(),
             chips: vec!["Rust", "iced", "GTK"],
             acc_single: vec![0],
@@ -790,16 +793,8 @@ impl Gallery {
             Message::Back => self.show_content = false,
             Message::MenuMode(m) => self.menu_mode = m,
             Message::SidebarPadding(p) => self.sidebar_padding = p,
-            Message::Scheme(dark) => {
-                iad::utils::set_scheme_override(Some(if dark {
-                    Scheme::Dark
-                } else {
-                    Scheme::Light
-                }));
-                self.scheme = iad::utils::theme_settings().scheme;
-            }
-            Message::FollowSystemTheme => {
-                iad::utils::set_scheme_override(None);
+            Message::Appearance(mode) => {
+                iad::utils::set_scheme_override(mode.scheme_override());
                 self.scheme = iad::utils::theme_settings().scheme;
             }
             Message::SystemTheme => {
@@ -908,6 +903,7 @@ impl Gallery {
             Message::Date(m) => self.date.update(m),
             Message::Field(m) => self.field.update(m),
             Message::Form(m) => self.form.update(m),
+            Message::Entries(m) => self.entries.update(m),
             Message::Autocomplete(m) => {
                 return self.autocomplete.update(m).map(Message::Autocomplete);
             }
@@ -1142,20 +1138,16 @@ impl Gallery {
                     Message::Capture(i)
                 })
             };
-            // Exercise the same messages as the header control and system-appearance action.
+            // Exercise the complete appearance cycle through the header's update path.
             if kind == "theme" {
-                return match i {
-                    0 => wait(500, "theme-system", self),
-                    1 => {
-                        let update = self.update(Message::Scheme(!self.scheme.is_dark()));
-                        update.chain(wait(500, "theme-override", self))
-                    }
-                    2 => {
-                        let update = self.update(Message::FollowSystemTheme);
-                        update.chain(wait(500, "theme-restored", self))
-                    }
-                    _ => iced::exit(),
+                let (mode, tag) = match i {
+                    0 => (cmp::ThemeMode::System, "theme-system"),
+                    1 => (cmp::ThemeMode::Light, "theme-light"),
+                    2 => (cmp::ThemeMode::Dark, "theme-dark"),
+                    3 => (cmp::ThemeMode::System, "theme-restored"),
+                    _ => return iced::exit(),
                 };
+                return self.update(Message::Appearance(mode)).chain(wait(500, tag, self));
             }
             // GALLERY_ANIM=appshell: open the AppShell window (GALLERY_SHELL_SIZE=WxH) and capture
             // it.
@@ -1420,17 +1412,8 @@ impl Gallery {
             MenuMode::Dropdown => w::MenuPresentation::Dropdown,
             MenuMode::FullPage => w::MenuPresentation::FullPage,
         };
-        let dark = self.scheme.is_dark();
         let primary = w::primary_menu(
             w::Menu::new("Main Menu")
-                .section([
-                    w::MenuItem::check("Dark Style", dark, Message::Scheme(!dark)),
-                    w::MenuItem::check(
-                        "Use System Appearance",
-                        iad::utils::scheme_override().is_none(),
-                        Message::FollowSystemTheme,
-                    ),
-                ])
                 .section([
                     w::MenuItem::action("Preferences", Message::OpenDialog(Dialog::Preferences))
                         .accel("Ctrl+,"),
@@ -1486,8 +1469,8 @@ impl Gallery {
         // swaps the header's title for a search entry (an on-select trigger of a
         // `MetaComponent`); the path bar (or the plain title) is its other variant.
         content_bar = content_bar.pack_end(
-            cmp::ThemeToggle::new(self.scheme)
-                .on_toggle(|scheme| Message::Scheme(scheme.is_dark()))
+            cmp::ThemeToggle::new(cmp::ThemeMode::from(iad::utils::scheme_override()))
+                .on_toggle(Message::Appearance)
                 .disabled(!iad::config::current().allow_app_overrides)
                 .metrics(m),
         );
@@ -1795,11 +1778,6 @@ impl Gallery {
                 .title("Appearance")
                 .description("Rows, switches and choosers.")
                 .metrics(m)
-                .push(
-                    w::SwitchRow::new("Dark Style", self.scheme.is_dark(), Message::Scheme)
-                        .subtitle("Switches the whole gallery")
-                        .metrics(m),
-                )
                 .push(w::SwitchRow::new("Wi-Fi", self.wifi, Message::Wifi).metrics(m))
                 .push(
                     w::ComboRow::new("Font", &COMBO, self.combo, Message::Combo)
@@ -1830,14 +1808,11 @@ impl Gallery {
                         .metrics(m),
                 )
                 .push(
-                    w::EntryRow::new("Display name", &self.name)
-                        .on_input(Message::Name)
+                    w::TextEntry::new("Display name", &self.name, Message::Name)
                         .metrics(m),
                 )
                 .push(
-                    w::EntryRow::new("Password", &self.password)
-                        .on_input(Message::Password)
-                        .password(true)
+                    w::TextEntry::from_input("Password", cmp::password_entry("", &self.password).on_input(Message::Password))
                         .metrics(m),
                 ),
         );

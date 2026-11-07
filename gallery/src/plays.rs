@@ -192,12 +192,7 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::bool("suffix", "Suffix button", false),
             S::bool("chevron", "Chevron", false),
         ],
-        Detail::EntryRow => vec![
-            S::text("title", "Title", "Display name"),
-            S::text("value", "Value", "Ada"),
-            S::bool("password", "Password", false),
-            S::bool("disabled", "Disabled", false),
-        ],
+
         Detail::TreeRow => vec![
             S::bool("expanded", "Expanded", true),
             S::bool("selected", "Selected", false),
@@ -891,24 +886,6 @@ pub fn build<'a>(
                 )
                 .add(p.bool("chevron"), ".chevron(true).on_activate(Msg::Open)")
                 .done();
-            (stage(Element::from(r)), code)
-        }
-        Detail::EntryRow => {
-            let mut r = w::EntryRow::new(p.text("title").to_string(), p.text("value").to_string())
-                .metrics(m);
-            if !p.bool("disabled") {
-                r = r.on_input(on_text(d, "value"));
-            }
-            if p.bool("password") {
-                r = r.password(true);
-            }
-            let code = Code::new(&format!(
-                "EntryRow::new(\"{}\", &self.value)",
-                p.text("title")
-            ))
-            .add(!p.bool("disabled"), ".on_input(Msg::Value)")
-            .add(p.bool("password"), ".password(true)")
-            .done();
             (stage(Element::from(r)), code)
         }
         Detail::TreeRow => {
@@ -2429,8 +2406,8 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
         Detail::VirtualList => {
             "// the app keeps the viewport; the list builds only the rows in it\nVirtualList::new(10_000, 40.0, &self.viewport, |i| {\n    // the whole row is the target: rounded, with a hover you can see on a plain page\n    button(row_for(i)).width(Length::Fill).style(style::button::flat_row(8.0, 0.08, 0.14)).on_press(Msg::Play(i)).into()\n})\n    .on_scroll(Msg::Scroll)   // Msg::Scroll(vp) => self.viewport = vp\n    .overscan(4)               // rows built past each edge\n    .id(LIST)                  // for scroll_to / snap_to"
         }
-        Detail::EditableText => {
-            "EditableText::new(&self.bio, Msg::Input)\n    .placeholder(\"Add a description\")\n    .editing(self.editing)        // controlled: the entry shows\n    .expanded(self.expanded)      // a long text shows whole\n    .max_height(60.0)\n    .on_edit(Msg::Edit)\n    .on_done(Msg::Done)\n    .on_expand(Msg::Expand)"
+        Detail::MultilineEntry => {
+            "MultilineEntry::new(\"Description\", &self.bio, Msg::Input)\n\n// update\nMsg::Input(action) => self.bio.perform(action)\n\n// restrict input to one line\nMultilineEntry::from_input(\"Nickname\", text_view(&self.nick)\n    .single_line(true).on_action(Msg::NickInput))"
         }
         Detail::PageHeader => {
             "DetailHeader::new(\"Evening drive\")\n    .kind(\"Playlist\")\n    .cover(cover)\n    .description(body(\"Slow songs for a long road.\"))\n    .facts(caption(\"24 songs, 1 hr 32 min\"))\n    .primary(suggested_circular_button(Icon::Play.view(16.0)).on_press(Msg::Play))\n    .action(icon_button(Icon::Heart))\n    .end(flat_button(text(\"Share\")))\n    .tint(cover_color)            // the wash: style::container::wash(color)\n    .narrow(width < 576.0)        // the arrangement, from the app's width"
@@ -2460,7 +2437,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "SwitchRow::new(\"Enabled\", self.on, Msg::Toggle)\nComboRow::new(\"Font\", &FONTS, self.font, Msg::Font).disabled_when(|o| *o == \"Inter\")\nSpinRow::new(\"Text scale\", self.scale, 1.0..=10.0, 1.0, Msg::Scale)\nSliderRow::new(\"Volume\", self.volume, 0.0..=100.0, Msg::Volume)"
         }
         Detail::PreferencesGroup => {
-            "preferences_group()\n    .title(\"Appearance\")\n    .description(\"How the app looks\")\n    .header_suffix(flat_button(label(\"Reset\")))\n    .push(SwitchRow::new(\"Dark Style\", self.dark, Msg::Dark))"
+            "preferences_group()\n    .title(\"Appearance\")\n    .description(\"How the app looks\")\n    .header_suffix(flat_button(label(\"Reset\")))\n    .push(SwitchEntry::new(\"Notifications\", self.notifications, Msg::Notifications))"
         }
         Detail::ThemeColors => {
             "Theme::new(Scheme::Dark)\n    .accent(AccentColor::Teal)\n    .with_semantic(|s| s.card.bg = hex(0x3d2c5a))\n\n// desktop config: [appearance] color-scheme=dark, accent=teal, density=compact"

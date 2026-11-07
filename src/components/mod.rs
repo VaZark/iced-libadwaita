@@ -14,6 +14,7 @@ pub(crate) mod divider;
 pub(crate) mod elevated;
 pub(crate) mod entry;
 pub(crate) mod icon_toggle;
+pub(crate) mod input_wrapper;
 pub(crate) mod search_bar;
 pub(crate) mod sections;
 pub(crate) mod spectrum;
@@ -43,5 +44,8 @@ pub use sections::{SectionButton, SectionIcon, section_button, section_icon, sec
 pub use spectrum::{SpectrumBars, spectrum_bars};
 pub use spinner::{Spinner, spinner};
 pub use switch::{Switch, switch};
-pub use theme_toggle::ThemeToggle;
+pub use theme_toggle::{ThemeMode, ThemeToggle};
 pub use tooltip::{TooltipPosition, tooltip};
+
+/// Label, description and validation wrapper for custom input components.
+pub use input_wrapper::{InputWrapper, InputWrapperLayout, outlined as input_outline};

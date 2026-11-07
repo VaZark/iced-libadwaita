@@ -1,4 +1,8 @@
-//! System-theme icons. No icon artwork is bundled with this library.
+//! System-theme icons and bundled SVG artwork for entry controls.
+mod appearance;
+mod entry;
+pub use appearance::AppearanceIcon;
+pub use entry::EntryIcon;
 mod resolver;
 mod widget;
 use crate::Theme;
@@ -330,7 +334,11 @@ pub enum IconSource {
 }
 impl From<Icon> for IconSource {
     fn from(icon: Icon) -> Self {
-        Self::Icon(icon)
+        match icon {
+            Icon::Search => EntryIcon::Search.into(),
+            Icon::DragHandle => EntryIcon::DragHandle.into(),
+            _ => Self::Icon(icon),
+        }
     }
 }
 impl From<svg::Handle> for IconSource {

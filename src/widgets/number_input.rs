@@ -31,13 +31,13 @@
 //! model to hang them on.
 
 use crate::Element;
+use crate::Metrics;
 use crate::Theme;
 use crate::components::{EntryState, entry};
 use crate::primitives::numeric::{Axis, Precision, Scrub};
 use crate::primitives::numeric::{Decimal, Numeric};
 use crate::primitives::validation::{self, Presentation, Validity};
 use crate::styles::button as sb;
-use crate::{Icon, Metrics};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer;
 use iced::advanced::widget::{Operation, Tree, Widget, tree};
@@ -68,9 +68,19 @@ pub struct NumberInput<'a, M> {
     revealed: bool,
     width: Length,
     metrics: Metrics,
+    embedded: bool,
+    row_label: Option<String>,
 }
 
 impl<'a, M> NumberInput<'a, M> {
+    pub(crate) fn row_label(mut self, label: String) -> Self {
+        self.row_label = Some(label);
+        self
+    }
+    pub(crate) fn embedded(mut self) -> Self {
+        self.embedded = true;
+        self
+    }
     /// An integer input with no limits, stepping by 1. `text` is the entry's content.
     pub fn new(text: &'a str, on_input: impl Fn(String) -> M + 'a) -> Self {
         Self {
@@ -84,6 +94,8 @@ impl<'a, M> NumberInput<'a, M> {
             revealed: true,
             width: Length::Fixed(160.0),
             metrics: Metrics::desktop(),
+            embedded: false,
+            row_label: None,
         }
     }
     /// All the rules at once.
@@ -168,8 +180,14 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
             .state(n.text_state())
             .width(n.width)
             .metrics(m);
+        if let Some(label) = n.row_label {
+            field = field.row_label(label);
+        }
         if n.disabled {
             return field.into();
+        }
+        if n.embedded {
+            field = field.embedded();
         }
         if let Some(f) = &n.on_input {
             let f = f.clone();
@@ -181,8 +199,8 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
             let value = n.numeric.parse(n.text);
             let up = value.is_none_or(|v| n.numeric.can_up(v));
             let down = value.is_none_or(|v| n.numeric.can_down(v));
-            let handle = |icon: Icon, enabled: bool, text: String| {
-                let glyph = container(icon.view(10.0))
+            let handle = |icon: crate::EntryIcon, enabled: bool, text: String| {
+                let glyph = container(icon.view(12.0))
                     .center(Length::Fill)
                     .width(Length::Fixed(HANDLE_W))
                     .height(Length::Fixed(14.0));
@@ -193,10 +211,17 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
                 b
             };
             let handles = column![
-                handle(Icon::GoUp, up, n.numeric.up_text(n.text)),
-                handle(Icon::GoDown, down, n.numeric.down_text(n.text)),
+                handle(crate::EntryIcon::Increment, up, n.numeric.up_text(n.text)),
+                handle(
+                    crate::EntryIcon::Decrement,
+                    down,
+                    n.numeric.down_text(n.text)
+                ),
             ];
-            field = field.right_section(handles).right_section_width(HANDLE_W);
+            field = field
+                .right_section(handles)
+                .right_section_width(HANDLE_W)
+                .section_height(28.0);
         }
         let field: Element<'a, M> = field.into();
         let axis = match n.drag {

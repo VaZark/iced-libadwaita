@@ -35,8 +35,8 @@ use iced::widget::{column, row};
 /// One chip of a [`ChipGroup`].
 #[derive(Clone)]
 pub struct ChipOption<K> {
-    key: K,
-    label: String,
+    pub(crate) key: K,
+    pub(crate) label: String,
     icon: Option<IconSource>,
     color: Option<Color>,
 }

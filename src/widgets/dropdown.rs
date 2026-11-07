@@ -129,7 +129,9 @@ where
     let current = selected.as_ref().map(|s| s.to_string()).unwrap_or_default();
     let trigger = container(
         row![
-            text(current).wrapping(text::Wrapping::None),
+            text(current)
+                .wrapping(text::Wrapping::None)
+                .width(Length::Fill),
             Icon::GoDown.view(m.icon_size)
         ]
         .spacing(m.space_s)

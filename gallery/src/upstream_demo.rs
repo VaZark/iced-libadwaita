@@ -11,11 +11,9 @@ use iad::layouts::{FlowGrid, RowHeight, VirtualList};
 use iad::primitives::history::History;
 use iad::primitives::reorder::{Event as ReorderEvent, ReorderState};
 use iad::primitives::sorting::{Direction, SortState, cmp_str};
-use iad::widgets::{
-    ChipGroup, ChipOption, EditableText, ItemColumns, PreferencesGroup, SectionHeading,
-};
+use iad::widgets::{ChipGroup, ChipOption, ItemColumns, PreferencesGroup, SectionHeading};
 use iad::{Element, Icon, Metrics};
-use iad::{components as cmp, layouts as lay, metas as met, widgets as w};
+use iad::{components as cmp, layouts as lay, widgets as w};
 use iced::widget::{column, container, row, text};
 use iced::{Color, Length};
 
@@ -26,13 +24,8 @@ const BIO: &str = "Recorded over three winters in a converted barn. The songs we
 #[derive(Debug, Clone)]
 pub enum Msg {
     Scroll(Viewport),
-    Edit,
-    Input(String),
-    Done,
-    Expand(bool),
-    NickEdit,
-    NickInput(String),
-    NickDone,
+    Input(iced::widget::text_editor::Action),
+    NickInput(iced::widget::text_editor::Action),
     Narrow(bool),
     Noop,
     Sort(Col),
@@ -46,8 +39,7 @@ pub enum Msg {
     Open(&'static str),
     Go(&'static str),
     Back,
-    Flow(bool),
-    FlowText(String),
+    FlowText(iced::widget::text_editor::Action),
     CardsCompact(bool),
     CardsHeight(usize),
     CardsCols(usize),
@@ -97,8 +89,7 @@ pub struct State {
     chips: Vec<u8>,
     query: String,
     history: History<&'static str>,
-    flow_editing: bool,
-    flow_text: String,
+    flow_text: iced::widget::text_editor::Content,
     cards_compact: bool,
     /// 0 shared, 1 own, 2 fixed: how tall the items of a row are.
     cards_height: usize,
@@ -108,11 +99,8 @@ pub struct State {
     cards_cols: usize,
     queue: ReorderState<&'static str>,
     viewport: Viewport,
-    bio: String,
-    editing: bool,
-    expanded: bool,
-    nick: String,
-    nick_editing: bool,
+    bio: iced::widget::text_editor::Content,
+    nick: iced::widget::text_editor::Content,
     narrow: bool,
 }
 
@@ -120,11 +108,8 @@ impl Default for State {
     fn default() -> Self {
         Self {
             viewport: Viewport::new(320.0),
-            bio: BIO.into(),
-            editing: false,
-            expanded: false,
-            nick: String::new(),
-            nick_editing: false,
+            bio: iced::widget::text_editor::Content::with_text(BIO),
+            nick: iced::widget::text_editor::Content::new(),
             narrow: false,
             sort: SortState::by(Col::Title, Direction::Asc),
             tracks: (0..400)
@@ -140,7 +125,6 @@ impl Default for State {
             chips: vec![0, 3],
             query: String::new(),
             history: History::new("Home"),
-            flow_editing: false,
             cards_compact: false,
             cards_height: 0,
             row_press: true,
@@ -154,7 +138,9 @@ impl Default for State {
                 "Second Take",
                 "Harbor",
             ]),
-            flow_text: "A paragraph the content decides the height of.".into(),
+            flow_text: iced::widget::text_editor::Content::with_text(
+                "A paragraph the content decides the height of.",
+            ),
         }
     }
 }
@@ -163,13 +149,8 @@ impl State {
     pub fn update(&mut self, m: Msg) {
         match m {
             Msg::Scroll(v) => self.viewport = v,
-            Msg::Edit => self.editing = true,
-            Msg::Input(s) => self.bio = s,
-            Msg::Done => self.editing = false,
-            Msg::Expand(e) => self.expanded = e,
-            Msg::NickEdit => self.nick_editing = true,
-            Msg::NickInput(s) => self.nick = s,
-            Msg::NickDone => self.nick_editing = false,
+            Msg::Input(action) => self.bio.perform(action),
+            Msg::NickInput(action) => self.nick.perform(action),
             Msg::Narrow(n) => self.narrow = n,
             Msg::Noop => {}
             Msg::Sort(c) => {
@@ -205,8 +186,7 @@ impl State {
             Msg::Remove(i) => {
                 self.queue.remove(i);
             }
-            Msg::Flow(e) => self.flow_editing = e,
-            Msg::FlowText(t) => self.flow_text = t,
+            Msg::FlowText(action) => self.flow_text.perform(action),
             Msg::Back => {
                 self.history.back();
             }
@@ -260,29 +240,19 @@ impl State {
     }
 
     pub fn editable_view(&self, m: Metrics) -> Element<'_, Msg> {
-        let bio = EditableText::new(&self.bio, Msg::Input)
-            .placeholder("Add a description")
-            .editing(self.editing)
-            .expanded(self.expanded)
-            .max_height(60.0)
-            .on_edit(Msg::Edit)
-            .on_done(Msg::Done)
-            .on_expand(Msg::Expand);
-        let nick = EditableText::new(&self.nick, Msg::NickInput)
-            .placeholder("Add a nickname")
-            .editing(self.nick_editing)
-            .on_edit(Msg::NickEdit)
-            .on_done(Msg::NickDone);
         column![
-            Self::group(
-                "Clamped text",
-                "A long text is clamped; expanding it pushes what is below down. The pencil swaps it for an entry.",
-                m,
+            w::MultilineEntry::new("Description", &self.bio, Msg::Input).metrics(m),
+            w::MultilineEntry::from_input(
+                "Nickname",
+                cmp::text_view(&self.nick)
+                    .single_line(true)
+                    .placeholder("Add a nickname")
+                    .on_action(Msg::NickInput)
             )
-            .push(w::card(column![bio, text("Content below the text").size(12)].spacing(m.space_m))),
-            Self::group("Empty", "The placeholder is the edit button.", m).push(w::card(nick)),
+            .metrics(m),
+            text("Content below the text moves as the description grows"),
         ]
-        .spacing(m.group_spacing)
+        .spacing(m.space_m)
         .into()
     }
 
@@ -700,37 +670,15 @@ impl State {
         .into()
     }
 
-    /// `MetaComponent::flow`: the variant is built without measuring the container, so it takes
-    /// its content's height and what is below follows it.
+    /// A growing EntryRow editor: following content moves with its height.
     pub fn flow_view(&self, m: Metrics) -> Element<'_, Msg> {
-        #[derive(Clone, Copy, PartialEq)]
-        enum Mode {
-            Entry,
-            Text,
-        }
-        let text_value = self.flow_text.clone();
-        let flowing = met::MetaComponent::new()
-            .selected(self.flow_editing.then_some(Mode::Entry))
-            .when_selected(Mode::Entry, {
-                let v = self.flow_text.clone();
-                move |_| cmp::entry("Text", v.clone()).on_input(Msg::FlowText).metrics(m).into()
-            })
-            .variant(Mode::Text, iad::primitives::When::always(), move |_| {
-                cmp::typography::body(
-                    format!("{text_value} It is long enough to wrap onto a second line when the pane is narrow, and the height follows it."),
-                )
-                .into()
-            })
-            .flow(0.0);
         Self::group(
-            "MetaComponent::flow",
-            "The usual conversion fills its container (it is built on responsive). `.flow(width)` builds the chosen variant as it is, so it takes its content's size and the line below moves with it.",
+            "Growing textarea",
+            "The editor grows with its text, then scrolls at twelve lines.",
             m,
         )
-        .push(w::SwitchRow::new("Editing", self.flow_editing, Msg::Flow).metrics(m))
-        .push(w::card(
-            column![flowing, text("Content below the variant").size(12)].spacing(m.space_m),
-        ))
+        .push(w::MultilineEntry::new("Notes", &self.flow_text, Msg::FlowText).metrics(m))
+        .push(text("Content below the editor"))
         .into()
     }
 

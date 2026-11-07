@@ -9,7 +9,7 @@
 //!         page(
 //!             preferences_group()
 //!                 .title("General")
-//!                 .push(SwitchRow::new("Dark Style", self.dark, Msg::Dark)),
+//!                 .push(SwitchEntry::new("Notifications", self.notifications, Msg::Notifications)),
 //!         ),
 //!     )
 //!     .top_bar(header_bar().title("Settings"))

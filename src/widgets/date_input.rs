@@ -51,9 +51,19 @@ pub struct DateInput<'a, M> {
     window_radius: f32,
     revealed: bool,
     metrics: Metrics,
+    embedded: bool,
+    row_label: Option<String>,
 }
 
 impl<'a, M> DateInput<'a, M> {
+    pub(crate) fn row_label(mut self, label: String) -> Self {
+        self.row_label = Some(label);
+        self
+    }
+    pub(crate) fn embedded(mut self) -> Self {
+        self.embedded = true;
+        self
+    }
     /// `text` is the entry's content, `view` any date in the month the calendar shows.
     pub fn new(text: &'a str, view: Date, on_input: impl Fn(String) -> M + 'a) -> Self {
         Self {
@@ -79,6 +89,8 @@ impl<'a, M> DateInput<'a, M> {
             window_radius: Metrics::desktop().radius_window,
             revealed: true,
             metrics: Metrics::desktop(),
+            embedded: false,
+            row_label: None,
         }
     }
     /// The chosen date, highlighted in the calendar.
@@ -233,7 +245,7 @@ pub(crate) fn opener<'a, M: 'a>(
     o: Opening,
     m: Metrics,
 ) -> Element<'a, M> {
-    let mut p = Popover::new(Icon::Calendar.view(m.icon_size), calendar)
+    let mut p = Popover::new(crate::EntryIcon::Calendar.view(m.icon_size), calendar)
         .appearance(Appearance::Flat)
         .padding(m.space_xs)
         .align(Align::Start)
@@ -500,6 +512,12 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
         let m = d.metrics;
         let state = d.text_state();
         let mut field = entry::<M>("YYYY-MM-DD", d.text).state(state).metrics(m);
+        if let Some(label) = d.row_label.take() {
+            field = field.row_label(label);
+        }
+        if d.embedded {
+            field = field.embedded();
+        }
         if !d.disabled
             && let Some(f) = d.on_input.take()
         {
@@ -553,7 +571,7 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
             },
             m,
         );
-        field.left_section(opener).width(d.width).into()
+        field.right_section(opener).width(d.width).into()
     }
 }
 

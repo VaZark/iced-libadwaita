@@ -104,4 +104,10 @@ Add it to the playground in the same change: a control in `specs`, its use in `b
 
 Also update the method's doc comment (`cargo xtask man`) and the component's page. See [CONTRIBUTING.md](../CONTRIBUTING.md#working-on-a-component).
 
-The gallery uses `iad::utils::theme`, `detect_theme`, and `follow_theme` for shared desktop appearance. Normal startup follows the system color scheme and icon theme. Explicit demo color-scheme switches override following for that session. `GALLERY_SHOT_ONLY=EntryRow` captures the detected scheme. The header’s Light/Dark toggle applies an app-level override; “Use System Appearance” in the primary menu clears it.
+The gallery uses `iad::utils::theme`, `detect_theme`, and `follow_theme` for shared desktop appearance. Normal startup follows the system color scheme and icon theme. The single appearance icon button cycles System → Light → Dark → System. `GALLERY_SHOT_ONLY=Entries` captures the detected scheme. Light and Dark apply a process-local override; System clears it and follows desktop appearance changes.
+
+The Inputs page opens with **Application forms**: **Entries** demonstrates every
+typed EntryRow control, including both date presentations and full-row selections;
+**Form** uses Entries for its single-page and wizard examples. Low-level controls are grouped under
+**Base input elements (for custom widgets)**; use Entries for application forms. To open Entries directly, run
+`GALLERY_DETAIL=Entries cargo run -p iced-adaptive-design-gallery`.

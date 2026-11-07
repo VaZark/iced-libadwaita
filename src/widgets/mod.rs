@@ -18,7 +18,7 @@ pub(crate) mod date_input;
 pub(crate) mod date_range_input;
 pub(crate) mod dialog;
 pub(crate) mod dropdown;
-pub(crate) mod editable_text;
+pub(crate) mod entries;
 pub(crate) mod extra;
 pub(crate) mod field;
 pub(crate) mod floating_indicator;
@@ -76,11 +76,9 @@ pub use dialog::{
     present_dialog, shortcuts_dialog,
 };
 pub use dropdown::{dropdown, dropdown_disabled, menu_item, menu_item_disabled};
-pub use editable_text::EditableText;
 pub use extra::{
     breakpoint_bin, carousel_indicator_dots, carousel_indicator_lines, inline_view_switcher,
-    password_entry_row, path_bar, shortcut_label, sidebar, tab_button, view_switcher,
-    view_switcher_bar, wrap_box,
+    path_bar, shortcut_label, sidebar, tab_button, view_switcher, view_switcher_bar, wrap_box,
 };
 pub use field::{Field, FieldLayout, outlined as field_outline};
 pub use floating_indicator::FloatingIndicator;
@@ -119,8 +117,8 @@ pub use responsive_table::{
     Column, Mode as TableMode, Presentation as TablePresentation, ResponsiveTable,
 };
 pub use rows::{
-    ActionRow, ButtonRow, ComboRow, EntryRow, ExpanderRow, RangeSliderRow, SliderRow, SpinRow,
-    SwitchRow, ToggleGroupRow, action_row, boxed_list,
+    ActionRow, ButtonRow, ComboRow, ExpanderRow, RangeSliderRow, SliderRow, SpinRow, SwitchRow,
+    ToggleGroupRow, action_row, boxed_list,
 };
 pub use section_divider::{CollapseState, SectionDivider};
 pub use section_heading::SectionHeading;
@@ -138,3 +136,10 @@ pub use toast::{
 pub use toolbar::{ActionBar, BarStyle, ToolbarView, action_bar, toolbar_view};
 pub use tree::{DragMode, Payload as TreeNodePayload, ROW_HEIGHT as TREE_ROW_HEIGHT, Tree};
 pub use tree_row::TreeRow;
+
+pub use entries::{
+    ActionEntry, ChipGroupEntry, DateEntry, EntryInput, EntryRow, MultilineEntry, MultiselectEntry,
+    NavigationRow, NumberEntry, SelectEntry, SwitchEntry, TextEntry,
+};
+
+pub use crate::components::InputWrapper;

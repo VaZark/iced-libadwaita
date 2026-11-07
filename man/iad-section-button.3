@@ -4,18 +4,18 @@
 section_button \- A flat circular icon button sized to fit inside an entry: a clear "x", a filter button
 .SH SYNOPSIS
 .nf
-section_button(icon: Icon, on_press: M)
-SectionButton::face(icon: Icon, active: bool)
+section_button(icon: impl Into<IconSource>, on_press: M)
+SectionButton::face(icon: impl Into<IconSource>, active: bool)
 .fi
 .SH DESCRIPTION
 .PP
 A flat circular icon button sized to fit inside an entry: a clear "x", a filter button. \fBactive\fR highlights it in the accent color (e.g. a filter is applied).
 .SH FUNCTIONS
 .TP
-.B section_button(icon: Icon, on_press: M)
+.B section_button(icon: impl Into<IconSource>, on_press: M)
 .SH CONSTRUCTORS
 .TP
-.B SectionButton::face(icon: Icon, active: bool)
+.B SectionButton::face(icon: impl Into<IconSource>, active: bool)
 The button's look with no press handler, for a trigger that handles the press itself (a \fBPopover\fR anchored to it).
 .SH PROPERTIES
 Builder methods, chained after the constructor.

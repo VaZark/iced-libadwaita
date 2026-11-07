@@ -1,6 +1,6 @@
 # System icons
 
-The library ships no icon artwork, icon fonts, or bundled icon collections. Icons come from installed XDG themes, following the freedesktop [Icon Theme Specification](https://specifications.freedesktop.org/icon-theme/) and [Icon Naming Specification](https://specifications.freedesktop.org/icon-naming/latest/).
+General-purpose icons come from installed XDG themes, following the freedesktop [Icon Theme Specification](https://specifications.freedesktop.org/icon-theme/) and [Icon Naming Specification](https://specifications.freedesktop.org/icon-naming/latest/).
 
 Select an installed theme in the shared desktop configuration:
 
@@ -99,3 +99,17 @@ Every existing enum variant is preserved. Names outside the standardized list ar
 | `Fullscreen` | `view-fullscreen` |
 | `FullscreenExit` | `view-restore` |
 | `Compact` | `view-compact` |
+
+## Entry controls
+
+`EntryIcon` provides bundled 16×16 SVG artwork for entry controls, so calendar,
+step buttons and selection chevrons have consistent proportions on every system.
+Use `EntryIcon::Search.view(16.0)` for a prefix, or pass an `EntryIcon` to
+`section_icon`, `section_button` or `ActionEntry`. The set also includes text,
+number, switch, multiselect, chips, multiline, clear, navigation and drag icons.
+The gallery's Icons page previews the full set. Icons inherit the current text
+color and scale from their square viewbox.
+
+`AppearanceIcon::{System, Light, Dark}` supplies bundled monitor, sun and moon
+SVGs for `ThemeToggle`. `Icon::Search` also uses the bundled search SVG, so the
+header search button has the same proportions as entry search prefixes.

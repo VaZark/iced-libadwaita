@@ -111,7 +111,7 @@ use iced_adaptive_design::prelude::*;
 toolbar_view(page(
     preferences_group()
         .title("Appearance")
-        .push(SwitchRow::new("Dark Style", dark, Msg::Dark))
+        .push(SwitchEntry::new("Notifications", notifications, Msg::Notifications))
         .push(ToggleGroupRow::new("Menus", items, Some(mode), Msg::Mode))
         .push(SliderRow::new("Shadow", shadow, 0.0..=2.0, Msg::Shadow)),
 ))
@@ -125,7 +125,7 @@ toolbar_view(page(
   <header_bar slot="top_bar" title="Settings"/>
   <page>
     <preferences_group title="Appearance">
-      <switch_row title="Dark Style" active="{dark}" on_toggle="Dark"/>
+      <switch_entry title="Notifications" active="{notifications}" on_toggle="Notifications"/>
       <toggle_group_row title="Menus" active="{mode}" on_select="Mode"/>
       <slider_row title="Shadow" value="{shadow}" min="0" max="2" on_change="Shadow"/>
     </preferences_group>
@@ -134,3 +134,34 @@ toolbar_view(page(
 ```
 
 Tag names are the snake_case constructors. Attribute names are the properties. Child elements go to the slot named in the component's man page (SLOTS), `push` by default. `on_*` attributes name messages.
+
+### Application entries and custom inputs
+
+Use `widgets::EntryRow` and its typed entries for application forms. Every entry
+fills its parent width and shares `components::InputWrapper` for the label,
+required marker, description and validation message. `InputWrapper` is the shared
+`Field` presentation; use `.validity(...)` and `.interaction(...)` to reveal errors
+from your form state.
+
+- `TextEntry` edits a single-line string. `from_input` accepts an `Entry` configured
+  with password mode, submit behavior and left/right sections for prefixes/suffixes.
+- `NumberEntry::from_input` accepts a configured `NumberInput`, retaining numeric
+  limits, precision and drag behavior, with step controls at the right edge.
+- `DateEntry::from_input` accepts a `DateInput`; `.dialog(false)` opens a dropdown
+  calendar and `.dialog(true)` opens a modal. Its calendar icon is on the right.
+- `SwitchEntry` edits a boolean. `ActionEntry` shows a read-only value with one
+  trailing action. Use `NavigationRow` for navigation destinations.
+- `SelectEntry`, `MultiselectEntry` and `ChipGroupEntry` present selections from
+  the left edge; dropdown triggers span the available width.
+- `MultilineEntry` uses an application-owned `text_editor::Content`. Perform the
+  received actions on that content. It grows from one to twelve lines, then
+  scrolls. `from_input(text_view(...).max_lines(6))` changes that limit;
+  `.single_line(true)` ignores Enter and normalizes pasted line breaks to spaces.
+
+`EntryRow::new(label, EntryInput::Text(entry(...)))` selects the input type explicitly.
+`EntryInput` also has Number, Date, Switch, Action, Select, Multiline and Custom variants. Low-level
+`Entry`, `TextView`, `NumberInput` and `DateInput` components are building blocks
+for custom widgets; prefer the typed entries in application forms. `EntryRow` now accepts an `EntryInput` rather than a text value; use
+`TextEntry::new(label, value, on_input)` for text. `EditableText` and
+`password_entry_row` have been removed; use `MultilineEntry` and
+`TextEntry::from_input(label, password_entry(...))` instead.

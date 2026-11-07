@@ -19,6 +19,9 @@ Builder methods, chained after the constructor.
 .TP
 .B \&.placeholder(p: impl Into<String>)
 .TP
+.B \&.single_line(enabled: bool)
+Keep input to a single line: ignore Enter and normalize pasted line breaks to spaces.
+.TP
 .B \&.height(h: impl Into<Length>)
 The fixed height of a view that does not grow (default 90). Ignored once a maximum is set.
 .TP
