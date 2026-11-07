@@ -60,6 +60,9 @@
 //! let theme = Theme::from_config(&config::current()).with_theme_config(&cfg);
 //! ```
 
+mod variable;
+pub use variable::{Rounding, VariableType};
+
 use crate::metrics::{Metrics, Typography};
 use crate::palette::{AccentColor, Palette, Scheme};
 use iced::Color;
@@ -72,6 +75,10 @@ use std::sync::{Arc, RwLock};
 /// A token's value.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+    Integer(i64),
+    Decimal(f64),
+    Length(f64),
+    Percentage(f64),
     Color(Color),
     Number(f32),
     Bool(bool),
@@ -81,6 +88,10 @@ pub enum Value {
 /// What type a token holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
+    Integer,
+    Decimal,
+    Length,
+    Percentage,
     Color,
     Number,
     Bool,
@@ -90,17 +101,49 @@ pub enum Kind {
 impl Value {
     pub fn kind(&self) -> Kind {
         match self {
+            Self::Integer(_) => Kind::Integer,
+            Self::Decimal(_) => Kind::Decimal,
+            Self::Length(_) => Kind::Length,
+            Self::Percentage(_) => Kind::Percentage,
             Self::Color(_) => Kind::Color,
             Self::Number(_) => Kind::Number,
             Self::Bool(_) => Kind::Bool,
             Self::Text(_) => Kind::Text,
         }
     }
+    pub fn as_number(&self) -> Option<f64> {
+        match self {
+            Self::Integer(n) => Some(*n as f64),
+            Self::Decimal(n) | Self::Length(n) | Self::Percentage(n) => Some(*n),
+            Self::Number(n) => Some(*n as f64),
+            _ => None,
+        }
+    }
     /// Reads `text` as a value of `kind`.
     pub fn parse(kind: Kind, text: &str) -> Option<Self> {
         let t = text.trim();
         match kind {
-            Kind::Color => crate::color::parse(t).map(Self::Color),
+            Kind::Integer => t.parse().ok().map(Self::Integer),
+            Kind::Decimal => t
+                .parse::<f64>()
+                .ok()
+                .filter(|n| n.is_finite())
+                .map(Self::Decimal),
+            Kind::Length => t
+                .strip_suffix("px")?
+                .trim()
+                .parse::<f64>()
+                .ok()
+                .filter(|n| n.is_finite())
+                .map(Self::Length),
+            Kind::Percentage => t
+                .strip_suffix('%')?
+                .trim()
+                .parse::<f64>()
+                .ok()
+                .filter(|n| n.is_finite())
+                .map(Self::Percentage),
+            Kind::Color => VariableType::Color.parse(t),
             Kind::Number => t
                 .parse::<f32>()
                 .ok()
@@ -117,14 +160,12 @@ impl Value {
     /// The value as it is written in a file.
     pub fn to_text(&self) -> String {
         match self {
+            Self::Integer(n) => n.to_string(),
+            Self::Decimal(n) => n.to_string(),
+            Self::Length(n) => format!("{n}px"),
+            Self::Percentage(n) => format!("{n}%"),
             Self::Color(c) => crate::color::to_hex(*c),
-            Self::Number(n) => {
-                if n.fract() == 0.0 {
-                    format!("{}", *n as i64)
-                } else {
-                    format!("{n}")
-                }
-            }
+            Self::Number(n) => n.to_string(),
             Self::Bool(b) => b.to_string(),
             Self::Text(t) => t.clone(),
         }
@@ -138,7 +179,9 @@ impl Value {
 pub struct Spec {
     pub section: String,
     pub key: String,
-    pub default: Value,
+    /// Used only when no valid value survives the cascade. None means intentionally unset.
+    pub default: Option<Value>,
+    pub ty: VariableType,
     pub doc: String,
 }
 
@@ -147,33 +190,131 @@ pub struct Spec {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Schema {
     specs: Vec<Spec>,
+    variations: Vec<String>,
 }
 
 impl Schema {
     pub fn new() -> Self {
         Self::default()
     }
-    fn push(mut self, section: &str, key: &str, default: Value, doc: &str) -> Self {
-        // A token declared twice keeps its latest declaration.
+    /// Restrict variation keys to this string enumeration. Light and dark are built in.
+    pub fn variations(mut self, keys: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        for key in keys {
+            let key = key.into();
+            assert!(
+                !key.is_empty()
+                    && key
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
+                "invalid variation key"
+            );
+            if !["light", "dark"].contains(&key.as_str()) && !self.variations.contains(&key) {
+                self.variations.push(key);
+            }
+        }
+        self
+    }
+    pub fn variation_keys(&self) -> impl Iterator<Item = &str> {
+        ["light", "dark"]
+            .into_iter()
+            .chain(self.variations.iter().map(String::as_str))
+    }
+    /// Validate a .conf against exactly this schema, without reading or writing files.
+    pub fn validate(&self, text: &str) -> ValidationReport {
+        let mut report = ValidationReport {
+            errors: syntax_errors(text),
+            unknown: Vec::new(),
+        };
+        for ((section, key), raw) in crate::config::parse_keyfile(text) {
+            let base = if let Some((variation, base)) = section.split_once(':') {
+                if !self.variation_keys().any(|k| k == variation) {
+                    report.unknown.push((section, key));
+                    continue;
+                }
+                base
+            } else {
+                &section
+            };
+            match self.get(base, &key) {
+                Some(spec) if spec.ty.parse(&raw).is_none() => report
+                    .errors
+                    .push(format!("[{section}] {key}: invalid {:?}", spec.ty)),
+                None => report.unknown.push((section, key)),
+                _ => {}
+            }
+        }
+        report
+    }
+    /// Declare a typed variable and its optional fallback. Invalid schema declarations panic.
+    pub fn variable(
+        mut self,
+        section: &str,
+        key: &str,
+        ty: VariableType,
+        fallback: Option<Value>,
+        doc: &str,
+    ) -> Self {
+        assert!(
+            ty.well_formed(),
+            "invalid type constraints for [{section}] {key}"
+        );
+        assert!(
+            !section.is_empty()
+                && !section.contains([':', '[', ']', '\n', '\r'])
+                && !key.is_empty()
+                && !key.contains(['=', '[', ']', '\n', '\r']),
+            "invalid variable identifier"
+        );
+        let fallback = fallback.map(|value| {
+            assert_eq!(ty.kind(), value.kind(), "fallback type mismatch");
+            if let Value::Color(color) = &value {
+                assert!(
+                    [color.r, color.g, color.b, color.a]
+                        .into_iter()
+                        .all(|n| n.is_finite() && (0.0..=1.0).contains(&n)),
+                    "fallback color has invalid channels"
+                );
+            }
+
+            ty.parse(&value.to_text())
+                .expect("fallback violates its variable constraints")
+        });
         self.specs
             .retain(|s| !(s.section == section && s.key == key));
         self.specs.push(Spec {
             section: section.into(),
             key: key.into(),
-            default,
+            default: fallback,
+            ty,
             doc: doc.into(),
         });
         self
     }
-    /// A color token; `default` is `#rrggbb` or `#rrggbbaa`.
+    fn push(mut self, section: &str, key: &str, default: Value, doc: &str) -> Self {
+        let ty = match default.kind() {
+            Kind::Color => VariableType::Color,
+            Kind::Number => VariableType::Number,
+            Kind::Bool => VariableType::Bool,
+            Kind::Text => VariableType::String {
+                values: vec![],
+                accepts_random: true,
+            },
+            _ => unreachable!("typed variables use Schema::variable"),
+        };
+        self = self.variable(section, key, ty, Some(default), doc);
+        self
+    }
+    /// A color token; the fallback accepts any supported color format.
     ///
     /// # Panics
     /// If `default` is not a color: a schema is written by the app's author, so a typo is a bug.
     pub fn color(self, section: &str, key: &str, default: &str, doc: &str) -> Self {
-        let c = crate::color::parse(default)
+        let value = VariableType::Color
+            .parse(default)
             .unwrap_or_else(|| panic!("theme token [{section}] {key}: {default:?} is not a color"));
-        self.push(section, key, Value::Color(c), doc)
+        self.push(section, key, value, doc)
     }
+
     pub fn number(self, section: &str, key: &str, default: f32, doc: &str) -> Self {
         self.push(section, key, Value::Number(default), doc)
     }
@@ -185,8 +326,9 @@ impl Schema {
     }
     /// This schema with `other`'s tokens added (`other` wins a clash).
     pub fn with(mut self, other: &Schema) -> Self {
+        self = self.variations(other.variations.clone());
         for s in &other.specs {
-            self = self.push(&s.section, &s.key, s.default.clone(), &s.doc);
+            self = self.variable(&s.section, &s.key, s.ty.clone(), s.default.clone(), &s.doc);
         }
         self
     }
@@ -257,15 +399,85 @@ impl Schema {
             out.push_str(&format!("\n[{section}]\n"));
             for s in self.specs.iter().filter(|s| s.section == section) {
                 out.push_str(&format!(
-                    "# {}\n#{}={}\n",
-                    s.doc,
+                    "# {}\n# Type: {:?}\n#{}={}\n",
+                    s.doc.replace('\n', "\n# "),
+                    s.ty,
                     s.key,
-                    s.default.to_text()
+                    s.default
+                        .as_ref()
+                        .map(Value::to_text)
+                        .unwrap_or_else(|| "# unset (no fallback)".into())
                 ));
+            }
+        }
+        for variation in self.variation_keys() {
+            for section in &sections_for_schema(self) {
+                out.push_str(&format!("\n[{variation}:{section}]\n# Overrides [{section}] while {variation} is active.\n"));
+                for spec in self.specs.iter().filter(|s| &s.section == section) {
+                    out.push_str(&format!(
+                        "#{}={}\n",
+                        spec.key,
+                        spec.default
+                            .as_ref()
+                            .map(Value::to_text)
+                            .unwrap_or_else(|| "# unset (no fallback)".into())
+                    ));
+                }
             }
         }
         out
     }
+}
+/// Validation errors and undeclared keys, including undeclared variation keys.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ValidationReport {
+    pub errors: Vec<String>,
+    pub unknown: Vec<(String, String)>,
+}
+impl ValidationReport {
+    pub fn is_valid(&self) -> bool {
+        self.errors.is_empty() && self.unknown.is_empty()
+    }
+}
+fn syntax_errors(text: &str) -> Vec<String> {
+    let mut section = false;
+    text.lines()
+        .enumerate()
+        .filter_map(|(i, line)| {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with(['#', ';']) {
+                return None;
+            }
+            if line.starts_with('[') {
+                if line.ends_with(']')
+                    && line.len() > 2
+                    && !line[1..line.len() - 1].contains(['[', ']'])
+                {
+                    section = true;
+                    return None;
+                }
+            } else if section
+                && line
+                    .split_once('=')
+                    .is_some_and(|(key, _)| !key.trim().is_empty())
+            {
+                return None;
+            }
+            Some(format!(
+                "line {}: expected [section] or key=value inside a section",
+                i + 1
+            ))
+        })
+        .collect()
+}
+fn sections_for_schema(schema: &Schema) -> Vec<String> {
+    schema
+        .specs
+        .iter()
+        .map(|s| s.section.clone())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 // ----------------------------------------------------------- the tables
@@ -407,6 +619,7 @@ pub struct Builder {
     hardcoded: Vec<(String, String, Value)>,
     files: bool,
     regenerate: bool,
+    variation: Option<String>,
 }
 
 impl Builder {
@@ -419,7 +632,12 @@ impl Builder {
             hardcoded: Vec::new(),
             files: true,
             regenerate: true,
+            variation: None,
         }
+    }
+    pub fn variation(mut self, key: impl Into<String>) -> Self {
+        self.variation = Some(key.into());
+        self
     }
     /// The tokens of the app's own objects, with their defaults.
     pub fn schema(mut self, schema: Schema) -> Self {
@@ -511,6 +729,7 @@ impl Builder {
             warnings: Vec::new(),
             unknown: Vec::new(),
             hardcoded: Vec::new(),
+            variation: None,
         };
         for s in cfg.schema.specs().to_vec() {
             cfg.values
@@ -518,26 +737,32 @@ impl Builder {
         }
         // Lowest priority first, so a later layer overwrites an earlier one.
         for (text, source) in [(&toolkit_text, Source::Toolkit), (&app_text, Source::App)] {
+            cfg.warnings.extend(
+                syntax_errors(text)
+                    .into_iter()
+                    .map(|error| format!("{}: {error}", source.label())),
+            );
             for ((section, key), raw) in crate::config::parse_keyfile(text) {
                 cfg.set_from_text(&section, &key, &raw, source);
             }
         }
         for (section, key, value) in self.hardcoded {
-            match cfg.schema.get(&section, &key).map(|s| s.default.kind()) {
-                Some(kind) if kind == value.kind() => {
-                    cfg.values
-                        .insert((section.clone(), key.clone()), (value, Source::Hardcoded));
-                    cfg.hardcoded.push((section, key));
-                }
-                Some(kind) => cfg.warnings.push(format!(
-                    "[{section}] {key}: hardcoded as a {:?}, declared as a {kind:?}; ignored",
-                    value.kind()
-                )),
-                None => cfg.warnings.push(format!(
-                    "[{section}] {key}: hardcoded but not declared; ignored"
-                )),
+            let valid = cfg.schema.get(&section, &key).is_some_and(|spec| {
+                spec.ty.kind() == value.kind() && spec.ty.parse(&value.to_text()).is_some()
+            });
+            if valid {
+                cfg.set_from_text(&section, &key, &value.to_text(), Source::Hardcoded);
+                cfg.hardcoded.push((section, key));
+            } else {
+                cfg.warnings.push(format!(
+                    "[{section}] {key}: invalid or undeclared hardcoded value; ignored"
+                ));
             }
         }
+        if let Some(variation) = self.variation {
+            cfg = cfg.with_variation(&variation);
+        }
+
         cfg
     }
 }
@@ -546,11 +771,12 @@ impl Builder {
 /// declared defaults. See the [module](self).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ThemeConfig {
-    values: BTreeMap<(String, String), (Value, Source)>,
+    values: BTreeMap<(String, String), (Option<Value>, Source)>,
     schema: Schema,
     warnings: Vec<String>,
     unknown: Vec<(String, String)>,
     hardcoded: Vec<(String, String)>,
+    variation: Option<String>,
 }
 
 impl ThemeConfig {
@@ -560,33 +786,54 @@ impl ThemeConfig {
     }
 
     fn set_from_text(&mut self, section: &str, key: &str, raw: &str, source: Source) {
-        let Some(spec) = self.schema.get(section, key) else {
-            // A newer toolkit or app may have written it: ignored, never deleted.
+        let base = if let Some((variation, base)) = section.split_once(':') {
+            if !self.schema.variation_keys().any(|key| key == variation) {
+                self.unknown.push((section.into(), key.into()));
+                return;
+            }
+            base
+        } else {
+            section
+        };
+        let Some(spec) = self.schema.get(base, key) else {
             self.unknown.push((section.into(), key.into()));
             return;
         };
-        match Value::parse(spec.default.kind(), raw) {
-            Some(v) => {
-                self.values
-                    .insert((section.into(), key.into()), (v, source));
-            }
-            None => self.warnings.push(format!(
-                "[{section}] {key}: {raw:?} is not a valid {:?}; {} used",
-                spec.default.kind(),
-                if self.values[&(section.to_string(), key.to_string())].1 == Source::Default {
-                    "the default"
-                } else {
-                    "the lower layer"
-                },
-            )),
+        match spec.ty.parse(raw) {
+            Some(value) => { self.values.insert((section.into(), key.into()), (Some(value), source)); }
+            None => self.warnings.push(format!("[{section}] {key}: {raw:?} is invalid for {:?}; next valid lower layer or declared fallback used", spec.ty)),
         }
     }
-
-    pub fn get(&self, section: &str, key: &str) -> Option<&Value> {
-        self.values
-            .get(&(section.to_string(), key.to_string()))
-            .map(|(v, _)| v)
+    /// Return a config with this declared variation cascaded over every base property.
+    pub fn with_variation(mut self, variation: &str) -> Self {
+        if self.schema.variation_keys().any(|key| key == variation) {
+            self.variation = Some(variation.into());
+        } else {
+            self.warnings
+                .push(format!("unknown variation {variation:?}; base values used"));
+            self.variation = None;
+        }
+        self
     }
+    pub fn active_variation(&self) -> Option<&str> {
+        self.variation.as_deref()
+    }
+    fn resolved(&self, section: &str, key: &str) -> Option<&(Option<Value>, Source)> {
+        if let Some(variation) = &self.variation {
+            if let Some(value) = self
+                .values
+                .get(&(format!("{variation}:{section}"), key.into()))
+            {
+                return Some(value);
+            }
+        }
+        self.values.get(&(section.into(), key.into()))
+    }
+    pub fn get(&self, section: &str, key: &str) -> Option<&Value> {
+        self.resolved(section, key)
+            .and_then(|(value, _)| value.as_ref())
+    }
+
     pub fn color(&self, section: &str, key: &str) -> Option<Color> {
         match self.get(section, key)? {
             Value::Color(c) => Some(*c),
@@ -594,10 +841,10 @@ impl ThemeConfig {
         }
     }
     pub fn number(&self, section: &str, key: &str) -> Option<f32> {
-        match self.get(section, key)? {
-            Value::Number(n) => Some(*n),
-            _ => None,
-        }
+        self.get(section, key)?
+            .as_number()
+            .map(|n| n as f32)
+            .filter(|n| n.is_finite())
     }
     pub fn bool(&self, section: &str, key: &str) -> Option<bool> {
         match self.get(section, key)? {
@@ -613,26 +860,25 @@ impl ThemeConfig {
     }
     /// Where the token's value came from ([`Source::Default`] when it is not declared).
     pub fn source(&self, section: &str, key: &str) -> Source {
-        self.values
-            .get(&(section.to_string(), key.to_string()))
-            .map_or(Source::Default, |(_, s)| *s)
+        self.resolved(section, key)
+            .map_or(Source::Default, |(_, source)| *source)
     }
     /// Whether anyone set the token: it differs from "unset", so it should take effect.
     pub fn is_set(&self, section: &str, key: &str) -> bool {
         self.source(section, key) != Source::Default
     }
-    /// Every token, its resolved value and where the value came from.
+    /// Every resolved non-None token, its value and where it came from.
     pub fn entries(&self) -> impl Iterator<Item = (&Spec, &Value, Source)> {
         self.schema.specs().iter().filter_map(|s| {
-            self.values
-                .get(&(s.section.clone(), s.key.clone()))
-                .map(|(v, src)| (s, v, *src))
+            self.get(&s.section, &s.key)
+                .map(|v| (s, v, self.source(&s.section, &s.key)))
         })
     }
+
     pub fn schema(&self) -> &Schema {
         &self.schema
     }
-    /// Invalid values found in the files: ignored, with the lower layer used.
+    /// Invalid values and syntax found in the files. Invalid properties fall through to the next valid layer, then the declared fallback.
     pub fn warnings(&self) -> &[String] {
         &self.warnings
     }
@@ -669,10 +915,19 @@ impl ThemeConfig {
     /// The toolkit color tokens that were set for `scheme`, applied to `palette`:
     /// `[colors]`, then `[colors-dark]` over it on a dark scheme.
     pub fn apply_to_palette(&self, palette: &mut Palette, scheme: Scheme) {
-        let sections: &[&str] = match scheme {
-            Scheme::Light => &["colors"],
-            Scheme::Dark => &["colors", "colors-dark"],
-        };
+        if self.variation.is_none() {
+            return self
+                .clone()
+                .with_variation(if scheme.is_dark() { "dark" } else { "light" })
+                .apply_to_palette(palette, scheme);
+        }
+        let variation_section = format!("{}:colors", self.variation.as_deref().unwrap());
+        let mut sections = vec!["colors"];
+        if scheme.is_dark() {
+            sections.push("colors-dark");
+        }
+        // Explicit variation sections also win over the legacy dark-color section.
+        sections.push(&variation_section);
         for section in sections {
             if self.is_set(section, "accent")
                 && let Some(c) = self.color(section, "accent")
@@ -706,9 +961,8 @@ impl ThemeConfig {
     /// [`Theme::token_color`](crate::Theme::token_color)).
     pub fn tokens(&self) -> Tokens {
         Tokens(
-            self.values
-                .iter()
-                .map(|(k, (v, _))| (k.clone(), v.clone()))
+            self.entries()
+                .map(|(spec, value, _)| ((spec.section.clone(), spec.key.clone()), value.clone()))
                 .collect(),
         )
     }
@@ -730,10 +984,10 @@ impl Tokens {
         }
     }
     pub fn number(&self, section: &str, key: &str) -> Option<f32> {
-        match self.get(section, key)? {
-            Value::Number(n) => Some(*n),
-            _ => None,
-        }
+        self.get(section, key)?
+            .as_number()
+            .map(|n| n as f32)
+            .filter(|n| n.is_finite())
     }
     pub fn bool(&self, section: &str, key: &str) -> Option<bool> {
         match self.get(section, key)? {
@@ -969,7 +1223,7 @@ mod tests {
             .number("a", "x", 1.0, "first")
             .number("a", "x", 2.0, "second");
         assert_eq!(s.specs().len(), 1);
-        assert_eq!(s.get("a", "x").unwrap().default, Value::Number(2.0));
+        assert_eq!(s.get("a", "x").unwrap().default, Some(Value::Number(2.0)));
     }
 
     #[test]
@@ -1019,5 +1273,155 @@ mod tests {
         let c = build("", "[colors]\ncard-bg=#123456\n");
         let theme = crate::Theme::light().with_theme_config(&c);
         assert_eq!(crate::color::to_hex(theme.semantic.card.bg), "#123456");
+    }
+}
+
+#[cfg(test)]
+mod typed_variable_tests {
+    use super::*;
+    fn schema() -> Schema {
+        Schema::new()
+            .variations(["high-contrast", "dark"])
+            .variable(
+                "panel",
+                "gap",
+                VariableType::Length {
+                    min: Some(0.0),
+                    max: Some(100.0),
+                },
+                Some(Value::Length(8.0)),
+                "Gap",
+            )
+            .variable(
+                "panel",
+                "optional",
+                VariableType::String {
+                    values: vec!["yes".into()],
+                    accepts_random: false,
+                },
+                None,
+                "Optional value",
+            )
+    }
+    fn build(toolkit: &str, app: &str) -> ThemeConfig {
+        ThemeConfig::builder("test")
+            .files(false)
+            .schema(schema())
+            .toolkit_text(toolkit)
+            .app_text(app)
+            .build()
+    }
+    #[test]
+    fn invalid_properties_use_lower_layers_then_fallback_including_none() {
+        let cfg = build(
+            "[panel]\ngap=12px\noptional=yes",
+            "[panel]\ngap=500px\noptional=no",
+        );
+        assert_eq!(cfg.get("panel", "gap"), Some(&Value::Length(12.0)));
+        assert_eq!(cfg.text("panel", "optional"), Some("yes"));
+        assert_eq!(cfg.warnings().len(), 2);
+        let cfg = build(
+            "[panel]\ngap=no\noptional=no",
+            "[panel]\ngap=500px\noptional=no",
+        );
+        assert_eq!(cfg.get("panel", "gap"), Some(&Value::Length(8.0)));
+        assert_eq!(cfg.get("panel", "optional"), None);
+    }
+    #[test]
+    fn variations_always_override_base_and_can_be_switched_without_losing_values() {
+        let cfg = build(
+            "[dark:panel]\ngap=20px",
+            "[panel]\ngap=10px\n[high-contrast:panel]\ngap=30px",
+        );
+        assert_eq!(cfg.number("panel", "gap"), Some(10.0));
+        assert_eq!(
+            cfg.clone().with_variation("dark").number("panel", "gap"),
+            Some(20.0)
+        );
+        assert_eq!(
+            cfg.clone()
+                .with_variation("high-contrast")
+                .number("panel", "gap"),
+            Some(30.0)
+        );
+        assert_eq!(
+            cfg.with_variation("light").number("panel", "gap"),
+            Some(10.0)
+        );
+    }
+    #[test]
+    fn invalid_variations_fall_through_to_base_values() {
+        let cfg = build(
+            "",
+            "[panel]\ngap=12px\noptional=yes\n[dark:panel]\ngap=no\noptional=no",
+        )
+        .with_variation("dark");
+        assert_eq!(cfg.get("panel", "gap"), Some(&Value::Length(12.0)));
+        assert_eq!(cfg.text("panel", "optional"), Some("yes"));
+        assert_eq!(cfg.tokens().text("panel", "optional"), Some("yes"));
+        let cfg = build("[dark:panel]\ngap=24px", "[dark:panel]\ngap=no").with_variation("dark");
+        assert_eq!(cfg.get("panel", "gap"), Some(&Value::Length(24.0)));
+    }
+    #[test]
+    fn templates_validate_and_include_variations_and_optional_fallbacks() {
+        let schema = schema();
+        let template = schema.template("Example");
+        assert!(template.contains("[dark:panel]") && template.contains("[high-contrast:panel]"));
+        assert!(template.contains("#gap=8px") && template.contains("no fallback"));
+        assert!(schema.validate(&template).is_valid());
+        let report =
+            schema.validate("[panel]\ngap=1em\nunknown=yes\n[typo:panel]\ngap=20px\nmalformed");
+        assert_eq!(report.errors.len(), 2);
+        assert_eq!(report.unknown.len(), 2);
+    }
+    #[test]
+    fn themes_automatically_cascade_light_dark_and_respect_custom_variations() {
+        let cfg = build(
+            "",
+            "[dark:metrics]\nrow-min-height=80\n[dark:colors]\ncard-bg=#123456\n[high-contrast:metrics]\nrow-min-height=90",
+        );
+        let light = crate::Theme::light().with_theme_config(&cfg);
+        let dark = crate::Theme::dark().with_theme_config(&cfg);
+        assert_ne!(light.metrics.row_min_height, 80.0);
+        assert_eq!(dark.metrics.row_min_height, 80.0);
+        assert_eq!(crate::color::to_hex(dark.semantic.card.bg), "#123456");
+        assert_eq!(
+            crate::Theme::light()
+                .with_theme_config(&cfg.with_variation("high-contrast"))
+                .metrics
+                .row_min_height,
+            90.0
+        );
+    }
+    #[test]
+    #[should_panic(expected = "fallback")]
+    fn author_errors_in_fallbacks_are_rejected() {
+        Schema::new().variable(
+            "x",
+            "n",
+            VariableType::Integer {
+                min: Some(0),
+                max: Some(10),
+                step: 2,
+                rounds: None,
+            },
+            Some(Value::Integer(3)),
+            "",
+        );
+    }
+}
+
+#[cfg(test)]
+mod variation_palette_tests {
+    use super::*;
+    #[test]
+    fn explicit_dark_variation_wins_over_legacy_dark_colors() {
+        let cfg = ThemeConfig::builder("test")
+            .files(false)
+            .app_text("[colors-dark]\ncard-bg=#ff0000\n[dark:colors]\ncard-bg=#00ff00")
+            .build();
+        let mut palette = Palette::new(Scheme::Dark);
+        cfg.apply_to_palette(&mut palette, Scheme::Dark);
+        assert_eq!(crate::color::to_hex(palette.card_bg_color), "#00ff00");
     }
 }

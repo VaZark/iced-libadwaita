@@ -65,3 +65,62 @@ let size = theme.token_number("cover", "size");
 - `.files(false)` with `.app_text(..)` and `.toolkit_text(..)` reads and writes nothing (tests, a settings preview). `.regenerate(false)` reads files but writes none.
 
 The gallery's **App theme config** page (Theming) shows the layers live.
+
+## Typed variables and variations
+
+Declare explicit constraints with `Schema::variable`. Its fallback is optional:
+`None` intentionally leaves a property unset when no valid value is available.
+
+```rust
+use iced_adaptive_design::theme_config::{Schema, ThemeConfig, VariableType, Value};
+let schema = Schema::new().variations(["high-contrast"])
+    .variable("panel", "gap",
+        VariableType::Length { min: Some(0.0), max: Some(64.0) },
+        Some(Value::Length(8.0)), "Space between controls")
+    .variable("panel", "badge",
+        VariableType::String { values: vec!["preview".into(), "release".into()], accepts_random: false },
+        None, "Optional badge");
+let template = schema.template("Application theme");
+assert!(schema.validate(&template).is_valid());
+let cfg = ThemeConfig::builder("org.example.App").schema(schema).files(false)
+    .toolkit_text("[panel]\ngap=12px\n")
+    .app_text("[panel]\ngap=invalid\n[dark:panel]\ngap=20px\n")
+    .variation("dark").build();
+assert_eq!(cfg.get("panel", "gap"), Some(&Value::Length(20.0)));
+assert_eq!(cfg.get("panel", "badge"), None);
+```
+
+| Type | Constraints and file syntax |
+| --- | --- |
+| `Integer` | Optional `min`/`max`, positive `step`, optional `rounds: Some(Rounding::Ceil/Floor)`; exact `i64` values |
+| `Decimal` | `no_decimals` (0–12), optional `min`/`max` and positive `step`, optional rounding |
+| `Color` | Hex/hex-alpha including shorthand, `rgb`, `rgba`, `hsv`, `hsva` (`hasva` also accepted), `hsl`, `hsla`; out-of-range channels are invalid |
+| `Length` | Optional `min`/`max`; explicit `px` units, such as `12.5px` |
+| `Percentage` | Optional `min`/`max` (default 0–100), optional rounding; `42%` or `42` |
+| `String` | Enumerated `values`; `accepts_random` additionally permits arbitrary single-line text |
+
+Without rounding, integers and decimals must match their declared precision and
+step. Rounding snaps in the chosen direction; bounds are checked afterwards.
+Steps are anchored at `min`, or zero if no minimum is declared. A numeric value
+outside the range is invalid, never silently clamped. Invalid declarations and
+fallbacks are author errors and rejected when creating the schema.
+
+Variations use `[variation-key:property-section]`, for example `[dark:panel]` or
+`[high-contrast:metrics]`. `light` and `dark` are built in; declare custom keys with
+`Schema::variations`. Resolve each section's values through App → Toolkit →
+fallback, then cascade the resolved active variation over the base section.
+An invalid variation value falls through to the next valid variation layer,
+then the base value. A missing or invalid optional property with no valid lower
+layer and no fallback resolves to `None`.
+
+`Builder::variation` and `ThemeConfig::with_variation` select a variation.
+`Theme::with_theme_config` automatically selects `light`/`dark` from the theme
+scheme unless a variation was explicitly selected. Variations apply to custom
+tokens, colors, metrics and typography. Legacy `[colors-dark]` files still work.
+
+`Schema::template` generates a valid, commented `.conf`, including constraints,
+optional fallbacks and variation sections. The existing theme loader regenerates
+missing files from that template. `Schema::validate` validates text without file
+access and returns syntax/value errors plus unknown properties/variation keys.
+The loader reports invalid values through `warnings()` and keeps the cascade;
+unknown values remain ignored and are never rewritten.

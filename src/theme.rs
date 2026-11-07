@@ -134,6 +134,14 @@ impl Theme {
     #[must_use]
     pub fn with_theme_config(mut self, cfg: &crate::theme_config::ThemeConfig) -> Self {
         let scheme = self.scheme;
+        let resolved =
+            cfg.clone()
+                .with_variation(cfg.active_variation().unwrap_or(if scheme.is_dark() {
+                    "dark"
+                } else {
+                    "light"
+                }));
+        let cfg = &resolved;
         self = self.with_palette(|p| cfg.apply_to_palette(p, scheme));
         let mut metrics = self.metrics;
         cfg.apply_to_metrics(&mut metrics);

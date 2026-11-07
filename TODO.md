@@ -1,23 +1,8 @@
 # TODO
 
 1. Clip bg extending past window when it's not intended behaviour : test weave's full-screen bottom sheet overriding border-radius
-2. Mechanism to define theme-able variable for Config
-   1. Type Enum : (css attr as reference)
-      1. integer :: min, max, step,  rounds :: (ceil,floor)
-      2. decimal ::  no_decimals, min, max, step,  rounds :: (ceil,floor)
-      3. color :: supports : hex, hexa, rgb, rgba, hsv, hasva, hsl, hsla
-      4. length :: min, max
-      5. percentage :: min (default:0), max (defult 100), rounds :: (ceil,floor)
-      6. string :: listed enum, accepts_random : (bool)
-   2. Fallback values
-   3. variations 
-      1. variation-key (string enum): "light" / "dark" or custom 
-      2. formatted in cofig files as `[variation-key:property]`
-      3. The variation is always cascaded over the the base property
-   4. generate and validate `.conf` against it. 
-   5. When property in conf is invalid, use fallback values, if it's None that's fine as it's intended.
  
-3. Linux platform integration
+2. Linux platform integration
    1. General architecture:
       1. Target Linux as the primary supported platform.
       2. Use freedesktop.org specifications and XDG portals as the source of truth for system integration.
