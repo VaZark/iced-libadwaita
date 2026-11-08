@@ -146,3 +146,6 @@ pub use crate::components::InputWrapper;
 
 pub(crate) mod theme_toggle;
 pub use theme_toggle::{ThemeMode, ThemeToggle};
+
+mod scale;
+pub use scale::Scale;

@@ -173,6 +173,7 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::bool("disabled", "Disabled", false),
         ],
         Detail::Scale => vec![
+            S::bool("vertical", "Vertical", false),
             S::slider("value", "Value", 0.0..=100.0, 40.0),
             S::bool("readout", "Show the value", true),
         ],
@@ -832,12 +833,14 @@ pub fn build<'a>(
         }
         Detail::Scale => {
             let v = p.number("value");
-            let mut col =
-                column![cmp::scale(0.0..=100.0, v, on_num(d, "value"))].spacing(m.space_s);
+            let vertical = p.bool("vertical");
+            let axis = if vertical { iad::primitives::scrub::Axis::Vertical } else { iad::primitives::scrub::Axis::Horizontal };
+            let mut col = column![cmp::scale(0.0..=100.0, v, on_num(d, "value")).orientation(axis).height(180.0)].spacing(m.space_s);
             if p.bool("readout") {
                 col = col.push(ty::dim_label(format!("value {v:.0}")));
             }
-            let code = Code::new("scale(0.0..=100.0, self.value, Msg::Value)").done();
+            let code = Code::new("scale(0.0..=100.0, self.value, Msg::Value)")
+                .add(vertical, ".orientation(Axis::Vertical).height(180.0)").done();
             (col.into(), code)
         }
         Detail::Dropdown => {

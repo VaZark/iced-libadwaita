@@ -165,3 +165,25 @@ for custom widgets; prefer the typed entries in application forms. `EntryRow` no
 `TextEntry::new(label, value, on_input)` for text. `EditableText` and
 `password_entry_row` have been removed; use `MultilineEntry` and
 `TextEntry::from_input(label, password_entry(...))` instead.
+
+Single-value scales and two-thumb ranges share oriented pointer handling:
+
+```rust,ignore
+use iced_adaptive_design::{components::scale, widgets::range_slider};
+use iced_adaptive_design::primitives::scrub::Axis;
+
+scale(0.0..=100.0, self.value, Msg::Value)
+    .orientation(Axis::Vertical)
+    .height(180.0);
+range_slider(0.0..=100.0, (self.lo, self.hi), Msg::Range)
+    .orientation(Axis::Vertical)
+    .height(180.0)
+    .step(5.0);
+```
+
+Both default to horizontal. Vertical controls increase upward; their height is
+the track length, and horizontal controls use width for length. Number entries
+keep relative scrubbing via `NumberDrag::{Vertical, Horizontal}` and
+`NumberDrag::Select` for text selection. Scales now return the library's `Scale`
+widget rather than iced's `Slider`, sharing range controls' keyboard, touch,
+focus and drag-offset handling.

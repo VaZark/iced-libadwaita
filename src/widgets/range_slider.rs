@@ -20,7 +20,8 @@
 //! thumb there and keeps dragging it.
 
 use crate::Theme;
-use crate::primitives::range::{Collide, Key, Range, Thumb, Track};
+use crate::primitives::range::{Collide, Key, Range, Scalar, Thumb, Track};
+use crate::primitives::scrub::{Axis, Grab};
 use crate::styles::slider::{self, HANDLE_RADIUS};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
@@ -38,15 +39,19 @@ const R: f32 = HANDLE_RADIUS;
 /// Extra height under the rail for the tick marks.
 const MARKS: f32 = 10.0;
 
-type OnChange<'a, M> = Box<dyn Fn((f32, f32)) -> M + 'a>;
+type OnChange<'a, M, T> = Box<dyn Fn((T, T)) -> M + 'a>;
 
-pub struct RangeSlider<'a, M> {
-    value: Range<f32>,
-    track: Track<f32>,
-    on_change: Option<OnChange<'a, M>>,
-    marks: Vec<f32>,
+pub struct RangeSlider<'a, M, T = f32> {
+    value: Range<T>,
+    track: Track<T>,
+    on_change: Option<OnChange<'a, M, T>>,
+    marks: Vec<T>,
     disabled: bool,
     width: Length,
+    height: Length,
+    axis: Axis,
+    single: bool,
+    on_release: Option<Box<dyn Fn() -> M + 'a>>,
 }
 
 /// A `(lo, hi)` slider over `range`; the free-function form of [`RangeSlider::new`].
@@ -58,13 +63,13 @@ pub fn range_slider<'a, M>(
     RangeSlider::new(range, value, on_change)
 }
 
-impl<'a, M> RangeSlider<'a, M> {
+impl<'a, M, T: Scalar> RangeSlider<'a, M, T> {
     /// `value` is `(lo, hi)` (put in order and clamped to `range`); `on_change` gets the new
     /// pair whenever a thumb moves. The step is `1.0`.
     pub fn new(
-        range: RangeInclusive<f32>,
-        value: (f32, f32),
-        on_change: impl Fn((f32, f32)) -> M + 'a,
+        range: RangeInclusive<T>,
+        value: (T, T),
+        on_change: impl Fn((T, T)) -> M + 'a,
     ) -> Self {
         let track = Track::new(*range.start(), *range.end()).step(1.0);
         Self {
@@ -74,11 +79,15 @@ impl<'a, M> RangeSlider<'a, M> {
             marks: Vec::new(),
             disabled: false,
             width: Length::Fill,
+            height: Length::Fixed(160.0),
+            axis: Axis::Horizontal,
+            single: false,
+            on_release: None,
         }
     }
     /// The grid the thumbs snap to, from the start of the range; `0` is continuous.
-    pub fn step(mut self, step: f32) -> Self {
-        self.track = self.track.step(step as f64);
+    pub fn step(mut self, step: impl Into<f64>) -> Self {
+        self.track = self.track.step(step.into());
         self
     }
     /// The smallest allowed `hi - lo`.
@@ -96,19 +105,19 @@ impl<'a, M> RangeSlider<'a, M> {
         self.collide(if push { Collide::Push } else { Collide::Stop })
     }
     /// Tick marks under the rail at these values.
-    pub fn marks(mut self, marks: impl IntoIterator<Item = f32>) -> Self {
+    pub fn marks(mut self, marks: impl IntoIterator<Item = T>) -> Self {
         self.marks = marks.into_iter().collect();
         self
     }
     /// Ticks at every `every` from the start of the range.
     pub fn marks_every(self, every: f32) -> Self {
-        let (min, max) = (self.track.min, self.track.max);
+        let (min, max) = (self.track.min.to_f64(), self.track.max.to_f64());
         let n = if every > 0.0 {
-            ((max - min) / every + 1e-4) as usize
+            ((max - min) / every as f64 + 1e-4) as usize
         } else {
             0
         };
-        self.marks((0..=n).map(|i| min + i as f32 * every))
+        self.marks((0..=n).map(|i| T::from_f64(min + i as f64 * every as f64)))
     }
     /// Dimmed, and ignores the pointer and the keyboard.
     pub fn disabled(mut self, d: bool) -> Self {
@@ -120,31 +129,70 @@ impl<'a, M> RangeSlider<'a, M> {
         self
     }
 
+    /// Direction of increasing values: right (horizontal) or up (vertical).
+    pub fn orientation(mut self, axis: Axis) -> Self {
+        self.axis = axis;
+        self
+    }
+    /// Length of a vertical control (default 160px).
+    pub fn height(mut self, height: impl Into<Length>) -> Self {
+        self.height = height.into();
+        self
+    }
+    pub fn on_release(mut self, message: M) -> Self
+    where
+        M: Clone + 'a,
+    {
+        self.on_release = Some(Box::new(move || message.clone()));
+        self
+    }
+    pub(crate) fn single(mut self) -> Self {
+        self.single = true;
+        self
+    }
+    fn thumbs(&self) -> impl Iterator<Item = Thumb> {
+        [Thumb::Lo, Thumb::Hi]
+            .into_iter()
+            .filter(|t| !self.single || *t == Thumb::Hi)
+    }
+    fn dimensions(&self) -> Size<Length> {
+        match self.axis {
+            Axis::Horizontal => Size::new(self.width, Length::Fixed(self.thickness())),
+            Axis::Vertical => Size::new(Length::Fixed(self.thickness()), self.height),
+        }
+    }
     fn enabled(&self) -> bool {
         !self.disabled && self.on_change.is_some()
     }
-    fn height(&self) -> f32 {
+    fn thickness(&self) -> f32 {
         2.0 * R + if self.marks.is_empty() { 0.0 } else { MARKS }
     }
-    /// The horizontal travel of a thumb's centre.
-    fn travel(b: Rectangle) -> (f32, f32) {
-        (b.x + R, (b.width - 2.0 * R).max(1.0))
+    /// Low-value endpoint and usable thumb travel.
+    fn travel(&self, b: Rectangle) -> ((f32, f32), f32) {
+        match self.axis {
+            Axis::Horizontal => ((b.x + R, b.y + R), (b.width - 2.0 * R).max(0.0)),
+            Axis::Vertical => ((b.x + R, b.y + b.height - R), (b.height - 2.0 * R).max(0.0)),
+        }
     }
-    fn center(&self, b: Rectangle, v: f32) -> Point {
-        let (x0, w) = Self::travel(b);
-        Point::new(x0 + self.track.fraction(v) * w, b.y + R)
+    fn center(&self, b: Rectangle, v: T) -> Point {
+        let (origin, length) = self.travel(b);
+        let p = self.axis.point(origin, length, self.track.fraction(v));
+        Point::new(p.0, p.1)
     }
-    /// The value under a pointer `x`, without snapping to a thumb.
-    fn value_at(&self, b: Rectangle, x: f32) -> f32 {
-        let (x0, w) = Self::travel(b);
-        self.track.value_at((x - x0) / w)
+    fn value_at(&self, b: Rectangle, p: Point) -> T {
+        let (origin, length) = self.travel(b);
+        self.track
+            .value_at(self.axis.fraction((p.x, p.y), origin, length))
     }
     /// The thumb whose handle `p` is on, the nearer when both are.
     fn thumb_at(&self, b: Rectangle, p: Point) -> Option<Thumb> {
         let d = |t: Thumb| self.center(b, self.value.get(t)).distance(p);
         let hit = |t: Thumb| d(t) <= R + 2.0;
+        if self.single {
+            return hit(Thumb::Hi).then_some(Thumb::Hi);
+        }
         match (hit(Thumb::Lo), hit(Thumb::Hi)) {
-            (true, true) => Some(self.track.nearest(self.value, self.value_at(b, p.x))),
+            (true, true) => Some(self.track.nearest(self.value, self.value_at(b, p))),
             (true, false) => Some(Thumb::Lo),
             (false, true) => Some(Thumb::Hi),
             _ => None,
@@ -170,7 +218,7 @@ impl Focusable for Focus {
 #[derive(Default)]
 struct State {
     /// The thumb being dragged, and how far the pointer was from its centre when it was grabbed.
-    drag: Option<(Thumb, f32)>,
+    drag: Option<(Thumb, Grab)>,
     focus: [Focus; 2],
 }
 
@@ -180,7 +228,7 @@ impl State {
     }
 }
 
-impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
+impl<'a, M, T: Scalar> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M, T> {
     fn tag(&self) -> tree::Tag {
         tree::Tag::of::<State>()
     }
@@ -188,7 +236,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
         tree::State::new(State::default())
     }
     fn size(&self) -> Size<Length> {
-        Size::new(self.width, Length::Fixed(self.height()))
+        self.dimensions()
     }
     fn layout(
         &mut self,
@@ -196,7 +244,8 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
         _: &iced::Renderer,
         limits: &layout::Limits,
     ) -> layout::Node {
-        layout::atomic(limits, self.width, Length::Fixed(self.height()))
+        let size = self.dimensions();
+        layout::atomic(limits, size.width, size.height)
     }
 
     fn operate(
@@ -211,7 +260,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
         }
         let state = tree.state.downcast_mut::<State>();
         let b = layout.bounds();
-        for t in [Thumb::Lo, Thumb::Hi] {
+        for t in self.thumbs() {
             let c = self.center(b, self.value.get(t));
             let area = Rectangle::new(Point::new(c.x - R, c.y - R), Size::new(2.0 * R, 2.0 * R));
             operation.focusable(None, area, state.focus_of(t));
@@ -236,10 +285,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
         let b = layout.bounds();
 
         // Move `thumb` to the pointer at `x` and report the pair when it changed.
-        let drag_to = |this: &Self, shell: &mut Shell<'_, M>, thumb: Thumb, x: f32| {
+        let drag_to = |this: &Self, shell: &mut Shell<'_, M>, thumb: Thumb, p: Point| {
             let next = this
                 .track
-                .move_thumb(this.value, thumb, this.value_at(b, x));
+                .move_thumb(this.value, thumb, this.value_at(b, p));
             if next != this.value
                 && let Some(f) = &this.on_change
             {
@@ -249,16 +298,24 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
 
         let press = |this: &Self, state: &mut State, shell: &mut Shell<'_, M>, p: Point| {
             let (thumb, offset) = match this.thumb_at(b, p) {
-                Some(t) => (t, p.x - this.center(b, this.value.get(t)).x),
+                Some(t) => {
+                    let c = this.center(b, this.value.get(t));
+                    (t, Grab::new(this.axis, (p.x, p.y), (c.x, c.y)))
+                }
                 None => {
-                    let t = this.track.nearest(this.value, this.value_at(b, p.x));
-                    (t, 0.0)
+                    let t = if this.single {
+                        Thumb::Hi
+                    } else {
+                        this.track.nearest(this.value, this.value_at(b, p))
+                    };
+                    (t, Grab::default())
                 }
             };
             state.drag = Some((thumb, offset));
             state.focus_of(thumb).focus();
             state.focus_of(thumb.other()).unfocus();
-            drag_to(this, shell, thumb, p.x - offset);
+            let adjusted = offset.center(this.axis, (p.x, p.y));
+            drag_to(this, shell, thumb, Point::new(adjusted.0, adjusted.1));
             shell.capture_event();
             shell.request_redraw();
         };
@@ -281,7 +338,8 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
             Event::Mouse(mouse::Event::CursorMoved { position })
             | Event::Touch(touch::Event::FingerMoved { position, .. }) => {
                 if let Some((thumb, offset)) = state.drag {
-                    drag_to(self, shell, thumb, position.x - offset);
+                    let adjusted = offset.center(self.axis, (position.x, position.y));
+                    drag_to(self, shell, thumb, Point::new(adjusted.0, adjusted.1));
                     shell.capture_event();
                     shell.request_redraw();
                 } else if cursor.is_over(b) {
@@ -293,6 +351,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
                 if state.drag.is_some() =>
             {
                 state.drag = None;
+                if let Some(message) = &self.on_release {
+                    shell.publish(message());
+                }
                 shell.capture_event();
                 shell.request_redraw();
             }
@@ -366,16 +427,23 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
         };
         let dim = |c: Color| crate::color::fade(c, k);
         let base = slider::default(theme, Status::Active);
-        let (x0, w) = Self::travel(b);
-        let y = b.y + R;
+        let (origin, length) = self.travel(b);
 
         // Rail: the trough, then the accent fill between the thumbs.
         let rail = base.rail;
-        let rail_bounds = |from: f32, to: f32| Rectangle {
-            x: from,
-            y: y - rail.width / 2.0,
-            width: (to - from).max(0.0),
-            height: rail.width,
+        let rail_bounds = |from: Point, to: Point| match self.axis {
+            Axis::Horizontal => Rectangle {
+                x: from.x,
+                y: from.y - rail.width / 2.0,
+                width: (to.x - from.x).max(0.0),
+                height: rail.width,
+            },
+            Axis::Vertical => Rectangle {
+                x: from.x - rail.width / 2.0,
+                y: to.y,
+                width: rail.width,
+                height: (from.y - to.y).max(0.0),
+            },
         };
         let fill = |renderer: &mut iced::Renderer, r: Rectangle, bg: Background| {
             let bg = match bg {
@@ -392,13 +460,13 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
                 bg,
             );
         };
-        let (cl, ch) = (
-            self.center(b, self.value.lo).x,
-            self.center(b, self.value.hi).x,
-        );
+        let (cl, ch) = (self.center(b, self.value.lo), self.center(b, self.value.hi));
         fill(
             renderer,
-            rail_bounds(b.x, b.x + b.width),
+            rail_bounds(
+                self.center(b, self.track.min),
+                self.center(b, self.track.max),
+            ),
             rail.backgrounds.1,
         );
         fill(renderer, rail_bounds(cl, ch), rail.backgrounds.0);
@@ -406,13 +474,19 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
         // Marks under the rail.
         let tick = dim(crate::color::alpha(theme.semantic.window.fg, 0.35));
         for m in &self.marks {
-            let x = x0 + self.track.fraction(*m) * w;
+            let p = self.axis.point(origin, length, self.track.fraction(*m));
             renderer.fill_quad(
                 Quad {
-                    bounds: Rectangle::new(
-                        Point::new(x - 0.5, b.y + 2.0 * R + 3.0),
-                        Size::new(1.0, 5.0),
-                    ),
+                    bounds: match self.axis {
+                        Axis::Horizontal => Rectangle::new(
+                            Point::new(p.0 - 0.5, b.y + 2.0 * R + 3.0),
+                            Size::new(1.0, 5.0),
+                        ),
+                        Axis::Vertical => Rectangle::new(
+                            Point::new(b.x + 2.0 * R + 3.0, p.1 - 0.5),
+                            Size::new(5.0, 1.0),
+                        ),
+                    },
                     border: Border::default(),
                     shadow: Shadow::default(),
                     snap: true,
@@ -442,7 +516,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
                     .find(|t| state.focus[*t as usize].0)
             })
             .unwrap_or(Thumb::Hi);
-        for t in [top.other(), top] {
+        for t in [top.other(), top]
+            .into_iter()
+            .filter(|t| !self.single || *t == Thumb::Hi)
+        {
             let st = slider::default(theme, status(t));
             let c = self.center(b, self.value.get(t));
             if enabled && state.focus[t as usize].0 {
@@ -492,8 +569,93 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M> {
     }
 }
 
-impl<'a, M: 'a> From<RangeSlider<'a, M>> for Element<'a, M, Theme> {
-    fn from(s: RangeSlider<'a, M>) -> Self {
+impl<'a, M: 'a, T: Scalar + 'a> From<RangeSlider<'a, M, T>> for Element<'a, M, Theme> {
+    fn from(s: RangeSlider<'a, M, T>) -> Self {
         Element::new(s)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iced::advanced::{clipboard, renderer::Headless};
+
+    #[test]
+    fn single_and_range_controls_follow_orientation_and_preserve_grabs() {
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer");
+        for axis in [Axis::Horizontal, Axis::Vertical] {
+            for single in [false, true] {
+                let mut control =
+                    RangeSlider::new(0.0..=100.0, (if single { 0.0 } else { 20.0 }, 60.0), |v| v)
+                        .orientation(axis)
+                        .width(220.0)
+                        .height(220.0)
+                        .step(5.0);
+                control.single = single;
+                let mut tree = Tree::new(&control as &dyn Widget<_, _, _>);
+                let node = control.layout(
+                    &mut tree,
+                    &renderer,
+                    &layout::Limits::new(Size::ZERO, Size::new(220.0, 220.0)),
+                );
+                let layout = Layout::new(&node);
+                let bounds = layout.bounds();
+                let center = control.center(bounds, 60.0);
+                let grab = match axis {
+                    Axis::Horizontal => Point::new(center.x + 3.0, center.y),
+                    Axis::Vertical => Point::new(center.x, center.y - 3.0),
+                };
+                let target = control.center(bounds, 80.0);
+                let target = match axis {
+                    Axis::Horizontal => Point::new(target.x + 3.0, target.y),
+                    Axis::Vertical => Point::new(target.x, target.y - 3.0),
+                };
+                let mut messages = vec![];
+                for (event, point) in [
+                    (mouse::Event::ButtonPressed(mouse::Button::Left), grab),
+                    (mouse::Event::CursorMoved { position: target }, target),
+                    (mouse::Event::ButtonReleased(mouse::Button::Left), target),
+                ] {
+                    control.update(
+                        &mut tree,
+                        &Event::Mouse(event),
+                        layout,
+                        mouse::Cursor::Available(point),
+                        &renderer,
+                        &mut clipboard::Null,
+                        &mut Shell::new(&mut messages),
+                        &bounds,
+                    );
+                }
+                assert_eq!(
+                    messages,
+                    vec![(if single { 0.0 } else { 20.0 }, 80.0)],
+                    "{axis:?}, single={single}"
+                );
+                assert!(tree.state.downcast_ref::<State>().drag.is_none());
+
+                // A rail press must move the high thumb even near the minimum for single controls.
+                if single {
+                    let point = control.center(bounds, 10.0);
+                    messages.clear();
+                    control.update(
+                        &mut tree,
+                        &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                        layout,
+                        mouse::Cursor::Available(point),
+                        &renderer,
+                        &mut clipboard::Null,
+                        &mut Shell::new(&mut messages),
+                        &bounds,
+                    );
+                    assert_eq!(messages, vec![(0.0, 10.0)]);
+                }
+            }
+        }
     }
 }

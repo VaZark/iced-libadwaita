@@ -34,8 +34,8 @@ use crate::Element;
 use crate::Metrics;
 use crate::Theme;
 use crate::components::{EntryState, entry};
-use crate::primitives::numeric::{Axis, Precision, Scrub};
 use crate::primitives::numeric::{Decimal, Numeric};
+use crate::primitives::scrub::{Axis, Gesture, Precision, Scrub};
 use crate::primitives::validation::{self, Presentation, Validity};
 use crate::styles::button as sb;
 use iced::advanced::layout::{self, Layout};
@@ -262,15 +262,9 @@ struct Scrubber<'a, M> {
 /// A press that may become a drag.
 #[derive(Debug, Clone, Copy)]
 struct Press {
-    /// Where the press landed: a drag has begun once the pointer is far enough from it.
-    from: (f32, f32),
-    /// The value reached so far; each step is taken from it, so a modifier changing mid-drag
-    /// changes only the steps still to come.
-    value: Option<crate::primitives::numeric::Decimal>,
-    /// Where the steps are counted from: the press, moved on by the travel each step used.
-    anchor: (f32, f32),
-    /// Travelled far enough to be a drag.
-    dragging: bool,
+    gesture: Gesture,
+    /// The last emitted value, so changing modifiers only affects subsequent steps.
+    value: Option<Decimal>,
 }
 
 #[derive(Default)]
@@ -337,9 +331,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Scrubber<'a, M> {
                 if let Some(from) = cursor.position() {
                     state.press = Some(Press {
                         value: self.numeric.parse(&self.text),
-                        anchor: (from.x, from.y),
-                        from: (from.x, from.y),
-                        dragging: false,
+                        gesture: Gesture::new((from.x, from.y)),
                     });
                 }
             }
@@ -347,17 +339,11 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Scrubber<'a, M> {
                 let precision = Precision::from_modifiers(state.shift, state.alt);
                 if let (Some(press), Some(at)) = (&mut state.press, cursor.position()) {
                     let to = (at.x, at.y);
-                    if !press.dragging && self.scrub.started(press.from, to) {
-                        press.dragging = true;
-                        // Steps count from where the drag began.
-                        press.anchor = press.from;
-                    }
-                    if press.dragging {
-                        let steps = self.scrub.steps(press.anchor, to);
+                    let steps = press.gesture.update(self.scrub, to);
+                    if press.gesture.dragging() {
                         if steps != 0 {
                             let value = self.numeric.offset_by(press.value, steps, precision);
                             press.value = Some(value);
-                            press.anchor = self.scrub.advance(press.anchor, steps);
                             let text = self.numeric.format(value);
                             if text != self.text {
                                 shell.publish((self.on_input)(text));
@@ -371,7 +357,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Scrubber<'a, M> {
                 }
             }
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-                if state.press.take().is_some_and(|p| p.dragging) =>
+                if state.press.take().is_some_and(|p| p.gesture.dragging()) =>
             {
                 shell.capture_event();
                 return;
@@ -402,7 +388,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Scrubber<'a, M> {
             .state
             .downcast_ref::<ScrubState>()
             .press
-            .is_some_and(|p| p.dragging)
+            .is_some_and(|p| p.gesture.dragging())
         {
             return match self.scrub.axis {
                 Axis::Horizontal => mouse::Interaction::ResizingHorizontally,

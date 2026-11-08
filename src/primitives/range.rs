@@ -45,6 +45,14 @@ impl Scalar for i32 {
     }
 }
 
+macro_rules! integer_scalars {
+    ($($t:ty),*) => { $(impl Scalar for $t {
+        fn to_f64(self) -> f64 { self as f64 }
+        fn from_f64(value: f64) -> Self { value.round() as Self }
+    })* };
+}
+integer_scalars!(u8, u16, u32, i8, i16);
+
 fn days_from_civil(d: Date) -> i64 {
     d.to_days()
 }

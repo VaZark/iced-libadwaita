@@ -61,6 +61,7 @@ pub mod relative;
 pub mod reorder;
 pub mod resize;
 pub mod responsive;
+pub mod scrub;
 pub mod sections;
 pub mod selection;
 pub mod sorting;
