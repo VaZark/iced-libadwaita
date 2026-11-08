@@ -1,5 +1,6 @@
 //! System-theme icons and bundled SVG artwork for entry controls.
 mod appearance;
+mod bundled;
 mod chevron;
 mod entry;
 mod window;
@@ -64,6 +65,8 @@ pub enum Icon {
     Play,
     /// Two bars (`media-playback-pause-symbolic`).
     Pause,
+    /// A square: stop playback.
+    Stop,
     /// A bar and a triangle pointing left (`media-skip-backward-symbolic`).
     SkipBackward,
     /// A bar and a triangle pointing right (`media-skip-forward-symbolic`).
@@ -146,6 +149,7 @@ impl Icon {
         Icon::DragHandle,
         Icon::Play,
         Icon::Pause,
+        Icon::Stop,
         Icon::SkipBackward,
         Icon::SkipForward,
         Icon::Dice,
@@ -212,6 +216,7 @@ impl Icon {
             Self::DragHandle => "list-drag-handle",
             Self::Play => "media-playback-start",
             Self::Pause => "media-playback-pause",
+            Self::Stop => "media-playback-stop",
             Self::SkipBackward => "media-skip-backward",
             Self::SkipForward => "media-skip-forward",
             Self::Dice => "dice",
@@ -276,6 +281,7 @@ impl Icon {
             Self::DragHandle => "list-drag-handle-symbolic",
             Self::Play => "media-playback-start-symbolic",
             Self::Pause => "media-playback-pause-symbolic",
+            Self::Stop => "media-playback-stop-symbolic",
             Self::SkipBackward => "media-skip-backward-symbolic",
             Self::SkipForward => "media-skip-forward-symbolic",
             Self::Dice => "dice-symbolic",
@@ -366,22 +372,9 @@ impl From<Icon> for IconSource {
         if let Some(source) = icon_overrides().read().unwrap().get(&icon).cloned() {
             return source;
         }
-        match icon {
-            Icon::GoNext => ChevronIcon::Right.into(),
-            Icon::GoPrevious => ChevronIcon::Left.into(),
-            Icon::GoDown => ChevronIcon::Down.into(),
-            Icon::GoUp => ChevronIcon::Up.into(),
-            Icon::GoUpDown => ChevronIcon::UpDown.into(),
-            Icon::GoFirst => ChevronIcon::First.into(),
-            Icon::GoLast => ChevronIcon::Last.into(),
-            Icon::WindowClose => WindowIcon::Close.into(),
-            Icon::WindowMinimize => WindowIcon::Minimize.into(),
-            Icon::WindowMaximize => WindowIcon::Maximize.into(),
-            Icon::WindowRestore => WindowIcon::Restore.into(),
-            Icon::Search => EntryIcon::Search.into(),
-            Icon::DragHandle => EntryIcon::DragHandle.into(),
-            _ => Self::Icon(icon),
-        }
+        icon.bundled_source()
+            .map(Self::svg)
+            .unwrap_or(Self::Icon(icon))
     }
 }
 impl From<svg::Handle> for IconSource {

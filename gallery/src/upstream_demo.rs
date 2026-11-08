@@ -340,7 +340,7 @@ impl State {
         });
         Self::group(
             "Icons",
-            "The installed theme’s symbolic icons, revealed a row at a time. Missing icons leave empty slots. Configure [icons] theme to choose an installed theme. IconSource also accepts system names and application SVGs.",
+            "Bundled control and media SVGs alongside installed symbolic icons, revealed a row at a time. Configure [icons] theme for system artwork. Global icon overrides replace predefined defaults; IconSource also accepts explicit system names and application SVGs.",
             m,
         )
         .push(w::card(container(grid).height(Length::Fixed(380.0))))

@@ -36,7 +36,7 @@ Surface foregrounds are contrast-adjusted when automatic contrast is enabled, in
 
 ## Predefined identifier mappings
 
-Every existing enum variant is preserved. Names outside the standardized list are conventional theme extensions; their availability depends on the installed theme. Symbolic requests append `-symbolic` automatically.
+Every existing enum variant is preserved. Names outside the standardized list are conventional theme extensions; their availability depends on the installed theme unless bundled defaults are provided below. Symbolic requests append `-symbolic` automatically.
 
 | Variant | Base identifier |
 | --- | --- |
@@ -165,3 +165,13 @@ iced_adaptive_design::icon::clear_icon_overrides(); // restore all defaults
 
 Overrides apply when constructing views, including default header-bar controls.
 Explicit SVGs, named system icons and per-header custom artwork stay explicit.
+
+Bundled common artwork is available through existing `Icon` variants: `ListAdd`
+(plus), `Delete` (trash), `DialogInformation` and `HelpAbout` (circled i), `Edit`
+(pencil), `ViewMore` (three dots), `Play`, `Pause`, `Stop`, `SkipForward`,
+`SkipBackward`, `Heart`, `Volume`, `VolumeMute`, `Fullscreen`, and `FullscreenExit`
+(return to a window). `WindowRestore` retains its bundled overlapping-window SVG.
+These defaults use the same 16px viewbox and follow the parent's foreground.
+`icon::set_icon_override` replaces any of them globally; explicitly named system
+icons still use the installed theme. `Icon::bundled_source()` exposes the original
+SVG when one exists.
