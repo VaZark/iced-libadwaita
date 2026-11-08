@@ -20,10 +20,10 @@ pub(crate) mod sections;
 pub(crate) mod spectrum;
 pub(crate) mod spinner;
 pub(crate) mod switch;
-pub(crate) mod theme_toggle;
 pub(crate) mod tooltip;
 pub mod typography;
 
+pub use crate::widgets::{ThemeMode, ThemeToggle};
 pub use avatar::{Avatar, AvatarShape, avatar};
 pub use badge::{Badge, Chip, ChipSize, RoundBadge};
 pub use button::{
@@ -44,7 +44,6 @@ pub use sections::{SectionButton, SectionIcon, section_button, section_icon, sec
 pub use spectrum::{SpectrumBars, spectrum_bars};
 pub use spinner::{Spinner, spinner};
 pub use switch::{Switch, switch};
-pub use theme_toggle::{ThemeMode, ThemeToggle};
 pub use tooltip::{TooltipPosition, tooltip};
 
 /// Label, description and validation wrapper for custom input components.

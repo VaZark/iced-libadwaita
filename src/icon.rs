@@ -1,8 +1,12 @@
 //! System-theme icons and bundled SVG artwork for entry controls.
 mod appearance;
+mod chevron;
 mod entry;
+mod window;
 pub use appearance::AppearanceIcon;
+pub use chevron::ChevronIcon;
 pub use entry::EntryIcon;
+pub use window::WindowIcon;
 mod resolver;
 mod widget;
 use crate::Theme;
@@ -332,9 +336,48 @@ pub enum IconSource {
     Svg(svg::Handle),
     Named { name: String, symbolic: bool },
 }
+static ICON_OVERRIDES: std::sync::OnceLock<
+    std::sync::RwLock<std::collections::HashMap<Icon, IconSource>>,
+> = std::sync::OnceLock::new();
+
+fn icon_overrides() -> &'static std::sync::RwLock<std::collections::HashMap<Icon, IconSource>> {
+    ICON_OVERRIDES.get_or_init(Default::default)
+}
+
+/// Globally replaces a predefined icon for subsequently built views.
+/// Pass `None` to restore its default bundled or system artwork.
+/// Explicit SVGs and named system icons are unaffected.
+pub fn set_icon_override(icon: Icon, source: Option<IconSource>) {
+    let mut overrides = icon_overrides().write().unwrap();
+    if let Some(source) = source {
+        overrides.insert(icon, source);
+    } else {
+        overrides.remove(&icon);
+    }
+}
+
+/// Restores default artwork for every predefined icon in subsequently built views.
+pub fn clear_icon_overrides() {
+    icon_overrides().write().unwrap().clear();
+}
+
 impl From<Icon> for IconSource {
     fn from(icon: Icon) -> Self {
+        if let Some(source) = icon_overrides().read().unwrap().get(&icon).cloned() {
+            return source;
+        }
         match icon {
+            Icon::GoNext => ChevronIcon::Right.into(),
+            Icon::GoPrevious => ChevronIcon::Left.into(),
+            Icon::GoDown => ChevronIcon::Down.into(),
+            Icon::GoUp => ChevronIcon::Up.into(),
+            Icon::GoUpDown => ChevronIcon::UpDown.into(),
+            Icon::GoFirst => ChevronIcon::First.into(),
+            Icon::GoLast => ChevronIcon::Last.into(),
+            Icon::WindowClose => WindowIcon::Close.into(),
+            Icon::WindowMinimize => WindowIcon::Minimize.into(),
+            Icon::WindowMaximize => WindowIcon::Maximize.into(),
+            Icon::WindowRestore => WindowIcon::Restore.into(),
             Icon::Search => EntryIcon::Search.into(),
             Icon::DragHandle => EntryIcon::DragHandle.into(),
             _ => Self::Icon(icon),
@@ -372,6 +415,22 @@ impl IconSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn global_override_can_be_replaced_and_reset() {
+        let icon = Icon::Compact;
+        set_icon_override(icon, Some(IconSource::symbolic("custom-compact")));
+        assert!(
+            matches!(IconSource::from(icon), IconSource::Named { name, symbolic: true } if name == "custom-compact")
+        );
+        let svg = svg::Handle::from_memory(WindowIcon::Close.source().as_bytes());
+        set_icon_override(icon, Some(svg.clone().into()));
+        assert!(matches!(IconSource::from(icon), IconSource::Svg(handle) if handle == svg));
+        set_icon_override(icon, None);
+        assert!(matches!(
+            IconSource::from(icon),
+            IconSource::Icon(Icon::Compact)
+        ));
+    }
     #[test]
     fn every_variant_has_a_unique_mapping() {
         let mut seen = std::collections::HashSet::new();

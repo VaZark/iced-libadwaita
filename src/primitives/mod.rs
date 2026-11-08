@@ -39,6 +39,7 @@
 //! Layout rules (anchor, dock, flex, overlay, splitter, virtualize) and the animation and transition
 //! engines are in `layouts`, next to the widgets that place things with them.
 
+pub mod appearance;
 pub mod calendar;
 pub mod chart;
 pub mod color_picker;

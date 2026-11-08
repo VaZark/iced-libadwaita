@@ -1,54 +1,18 @@
 //! A controlled System → Light → Dark → System appearance button.
-use crate::{AppearanceIcon, Element, Metrics, Scheme};
+use crate::{AppearanceIcon, Element, Metrics};
 use iced::{
     Length,
     widget::{button, container},
 };
 
-/// Application appearance preference. System is the default and clears the app override.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ThemeMode {
-    #[default]
-    System,
-    Light,
-    Dark,
-}
+pub use crate::primitives::appearance::ThemeMode;
+
 impl ThemeMode {
-    pub fn next(self) -> Self {
-        match self {
-            Self::System => Self::Light,
-            Self::Light => Self::Dark,
-            Self::Dark => Self::System,
-        }
-    }
-    pub fn scheme_override(self) -> Option<Scheme> {
-        match self {
-            Self::System => None,
-            Self::Light => Some(Scheme::Light),
-            Self::Dark => Some(Scheme::Dark),
-        }
-    }
     pub fn icon(self) -> AppearanceIcon {
         match self {
             Self::System => AppearanceIcon::System,
             Self::Light => AppearanceIcon::Light,
             Self::Dark => AppearanceIcon::Dark,
-        }
-    }
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::System => "System",
-            Self::Light => "Light",
-            Self::Dark => "Dark",
-        }
-    }
-}
-impl From<Option<Scheme>> for ThemeMode {
-    fn from(scheme: Option<Scheme>) -> Self {
-        match scheme {
-            None => Self::System,
-            Some(Scheme::Light) => Self::Light,
-            Some(Scheme::Dark) => Self::Dark,
         }
     }
 }
@@ -98,14 +62,14 @@ impl<'a, M: Clone + 'a> From<ThemeToggle<'a, M>> for Element<'a, M> {
             .padding(0)
             .style(crate::styles::button::flat)
             .on_press_maybe(toggle.press());
-        super::tooltip(
+        crate::components::tooltip(
             control,
             format!(
                 "Appearance: {} · Switch to {}",
                 toggle.mode.label(),
                 toggle.mode.next().label()
             ),
-            super::TooltipPosition::Bottom,
+            crate::components::TooltipPosition::Bottom,
         )
     }
 }

@@ -420,7 +420,7 @@ impl Gallery {
                         })).spacing(m.space_s).wrap()
                     )),
                     g("Appearance · bundled SVGs").push(w::card(
-                        row([cmp::ThemeMode::System, cmp::ThemeMode::Light, cmp::ThemeMode::Dark].into_iter().map(|mode| {
+                        row([w::ThemeMode::System, w::ThemeMode::Light, w::ThemeMode::Dark].into_iter().map(|mode| {
                             container(column![mode.icon().view(18.0), text(mode.label()).size(11)]
                                 .spacing(m.space_s).align_x(iced::Alignment::Center))
                                 .padding(m.space_s).width(90.0).into()

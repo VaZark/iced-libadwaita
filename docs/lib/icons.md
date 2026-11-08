@@ -113,3 +113,55 @@ color and scale from their square viewbox.
 `AppearanceIcon::{System, Light, Dark}` supplies bundled monitor, sun and moon
 SVGs for `ThemeToggle`. `Icon::Search` also uses the bundled search SVG, so the
 header search button has the same proportions as entry search prefixes.
+
+`ChevronIcon` supplies bundled left, right, up, down, up/down, first and last
+SVGs. The shared `IconSource` conversion applies them to `Icon::GoNext`,
+`GoPrevious`, `GoUp`, `GoDown`, `GoUpDown`, `GoFirst` and `GoLast`, so navigation,
+entry rows, disclosure controls and sorting use consistent artwork. Explicitly
+named system icons still follow the installed theme.
+
+The standard `widgets::ThemeToggle` is the gallery's top-bar appearance switcher:
+
+```rust,ignore
+use iced_adaptive_design::widgets::{ThemeMode, ThemeToggle};
+
+ThemeToggle::new(ThemeMode::from(iced_adaptive_design::utils::scheme_override()))
+    .on_toggle(Message::Appearance)
+    .metrics(metrics)
+```
+
+Handle the message with `utils::set_scheme_override(mode.scheme_override())`.
+The headless `primitives::appearance::ThemeMode` owns the System → Light → Dark
+cycle and override conversion. The widget supplies artwork, tooltip and disabled
+behavior. The previous `components` exports remain available.
+
+Window controls use bundled `WindowIcon::{Close, Minimize, Maximize, Restore}`
+artwork through the shared `IconSource` conversion. `EntryIcon::Clear` shares the
+close SVG. Override individual header-bar symbols with custom SVGs or system names:
+
+```rust,ignore
+use iced_adaptive_design::{IconSource, widgets::{HeaderBar, WindowControlIcons}};
+
+HeaderBar::new().window_control_icons(WindowControlIcons {
+    close: IconSource::svg(include_str!("my-close.svg")),
+    minimize: IconSource::symbolic("window-minimize"),
+    ..Default::default()
+})
+```
+
+Unspecified symbols retain the bundled defaults; button layout and actions follow
+`WindowControls` as before.
+
+Set application-wide replacements for any predefined `Icon` before building views:
+
+```rust,ignore
+use iced_adaptive_design::{Icon, IconSource, icon::set_icon_override};
+
+set_icon_override(Icon::WindowClose, Some(IconSource::svg(include_str!("close.svg"))));
+set_icon_override(Icon::WindowMinimize, Some(IconSource::symbolic("window-minimize")));
+set_icon_override(Icon::WindowClose, None); // restore this default
+iced_adaptive_design::icon::clear_icon_overrides(); // restore all defaults
+```
+
+Overrides apply when constructing views, including default header-bar controls.
+Explicit SVGs, named system icons and per-header custom artwork stay explicit.

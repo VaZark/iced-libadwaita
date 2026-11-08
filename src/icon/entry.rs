@@ -50,10 +50,10 @@ impl EntryIcon {
             Self::Chips => include_str!("entry/chips.svg"),
             Self::Multiline => include_str!("entry/multiline.svg"),
             Self::Search => include_str!("entry/search.svg"),
-            Self::Clear => include_str!("entry/clear.svg"),
+            Self::Clear => super::WindowIcon::Close.source(),
             Self::Increment => include_str!("entry/increment.svg"),
             Self::Decrement => include_str!("entry/decrement.svg"),
-            Self::Navigation => include_str!("entry/navigation.svg"),
+            Self::Navigation => super::ChevronIcon::Right.source(),
             Self::DragHandle => include_str!("entry/draghandle.svg"),
         }
     }

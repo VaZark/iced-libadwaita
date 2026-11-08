@@ -83,7 +83,7 @@ pub use extra::{
 pub use field::{Field, FieldLayout, outlined as field_outline};
 pub use floating_indicator::FloatingIndicator;
 pub use form::{Form, FormActions, Step, StepIndicator};
-pub use header_bar::{HeaderBar, WindowControls, header_bar, window_title};
+pub use header_bar::{HeaderBar, WindowControlIcons, WindowControls, header_bar, window_title};
 pub use histogram_range_slider::HistogramRangeSlider;
 pub use infinite::{InfiniteList, LoadTrigger};
 pub use item_card::ItemCard;
@@ -143,3 +143,6 @@ pub use entries::{
 };
 
 pub use crate::components::InputWrapper;
+
+pub(crate) mod theme_toggle;
+pub use theme_toggle::{ThemeMode, ThemeToggle};

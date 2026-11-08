@@ -84,3 +84,7 @@ flowchart TD
 - Logic goes in `src/primitives/` with its tests. A widget that needs a decision calls the primitive. It does not re-derive it. Widget-level helpers (`Collapsible`, `MetaComponent`) are thin wrappers that apply one.
 - A primitive has no style. Its component supplies colors, metrics and typography.
 - Fixed-point, not float, for anything the user types as a number.
+
+`appearance::ThemeMode` represents the controlled system/light/dark preference,
+cycles it with `next()`, and converts it to and from an optional `Scheme` override.
+`widgets::ThemeToggle` supplies its standard button.

@@ -52,7 +52,7 @@ pub use layouts::animation;
 /// The ordered-transition coordinator, a [primitive](layouts::transition); kept at its old path.
 pub use layouts::transition;
 
-pub use icon::{AppearanceIcon, EntryIcon, Icon, IconSource, IconView};
+pub use icon::{AppearanceIcon, ChevronIcon, EntryIcon, Icon, IconSource, IconView, WindowIcon};
 pub use metrics::{CollapseBehavior, Metrics, Typography};
 pub use palette::{AccentColor, Palette, Scheme};
 pub use semantic::{Opacity, Role, Semantic, Surface, Swatch};

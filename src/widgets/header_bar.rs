@@ -3,7 +3,7 @@
 use crate::Element;
 use crate::components::typography;
 use crate::styles::container as sc;
-use crate::{DecorationLayout, Icon, Metrics, Theme, WindowButton};
+use crate::{DecorationLayout, Icon, IconSource, Metrics, Theme, WindowButton};
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{column, container, mouse_area, row, space, text};
 use iced::{Length, Padding};
@@ -13,7 +13,7 @@ use iced::{Length, Padding};
 /// Which buttons appear, and on which side, follows the user's GNOME
 /// `button-layout` (`DecorationLayout::detect`, GNOME's default is a lone close
 /// button at the end). A button is shown only if the layout includes it *and* you
-/// provide its message. The icons come from the current icon theme.
+/// provide its message. The icons use bundled SVGs; override them with `HeaderBar::window_control_icons`.
 ///
 /// In mobile mode ([`breakpoints::is_mobile`](crate::breakpoints::is_mobile)) don't add
 /// controls at all.
@@ -39,6 +39,26 @@ impl<M> Default for WindowControls<M> {
     }
 }
 
+/// Artwork overrides for a header bar's window buttons.
+/// Each source accepts a bundled icon, custom SVG, or named system icon.
+#[derive(Debug, Clone)]
+pub struct WindowControlIcons {
+    pub close: IconSource,
+    pub minimize: IconSource,
+    pub maximize: IconSource,
+    pub restore: IconSource,
+}
+impl Default for WindowControlIcons {
+    fn default() -> Self {
+        Self {
+            close: Icon::WindowClose.into(),
+            minimize: Icon::WindowMinimize.into(),
+            maximize: Icon::WindowMaximize.into(),
+            restore: Icon::WindowRestore.into(),
+        }
+    }
+}
+
 /// `AdwWindowTitle`: centered title with optional subtitle.
 pub fn window_title<'a, M: 'a>(title: &str, subtitle: Option<&str>) -> Element<'a, M> {
     let mut c = column![typography::heading(title.to_string())].align_x(Horizontal::Center);
@@ -60,6 +80,7 @@ pub struct HeaderBar<'a, M> {
     subtitle: Option<String>,
     title_widget: Option<Element<'a, M>>,
     controls: Option<WindowControls<M>>,
+    control_icons: WindowControlIcons,
     show_start_buttons: bool,
     show_end_buttons: bool,
     on_drag: Option<M>,
@@ -83,6 +104,7 @@ impl<'a, M> HeaderBar<'a, M> {
             subtitle: None,
             title_widget: None,
             controls: None,
+            control_icons: WindowControlIcons::default(),
             show_start_buttons: true,
             show_end_buttons: true,
             on_drag: None,
@@ -133,6 +155,11 @@ impl<'a, M> HeaderBar<'a, M> {
     /// Message sent on press of the empty header area (use `window::drag`).
     pub fn on_drag(mut self, m: M) -> Self {
         self.on_drag = Some(m);
+        self
+    }
+    /// Replaces window-control artwork without changing layout or actions.
+    pub fn window_control_icons(mut self, icons: WindowControlIcons) -> Self {
+        self.control_icons = icons;
         self
     }
     /// Message for double-click (use `window::toggle_maximize`).
@@ -212,8 +239,8 @@ impl<'a, M: Clone + 'a> Default for HeaderBar<'a, M> {
     }
 }
 
-/// A window button: a 24px circle with the icon theme's symbol.
-fn ctl<'a, M: Clone + 'a>(icon: Icon, msg: M, flat: Option<bool>) -> Element<'a, M> {
+/// A window button: a 24px circle with the chosen artwork.
+fn ctl<'a, M: Clone + 'a>(icon: IconSource, msg: M, flat: Option<bool>) -> Element<'a, M> {
     let m = Metrics::desktop();
     iced::widget::button(container(icon.view(m.icon_size)).center(Length::Fixed(24.0)))
         .padding(0)
@@ -244,21 +271,22 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
                     WindowButton::Minimize => c
                         .on_minimize
                         .clone()
-                        .map(|m| ctl(Icon::WindowMinimize, m, flat)),
+                        .map(|m| ctl(h.control_icons.minimize.clone(), m, flat)),
                     WindowButton::Maximize => c.on_maximize.clone().map(|m| {
                         ctl(
                             if c.maximized {
-                                Icon::WindowRestore
+                                h.control_icons.restore.clone()
                             } else {
-                                Icon::WindowMaximize
+                                h.control_icons.maximize.clone()
                             },
                             m,
                             flat,
                         )
                     }),
-                    WindowButton::Close => {
-                        c.on_close.clone().map(|m| ctl(Icon::WindowClose, m, flat))
-                    }
+                    WindowButton::Close => c
+                        .on_close
+                        .clone()
+                        .map(|m| ctl(h.control_icons.close.clone(), m, flat)),
                 }
             };
             if h.show_start_buttons {

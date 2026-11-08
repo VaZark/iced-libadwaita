@@ -286,7 +286,7 @@ enum Message {
     Combo2(&'static str),
     SplitChoice(&'static str),
     SplitRun(&'static str),
-    Appearance(cmp::ThemeMode),
+    Appearance(w::ThemeMode),
     SystemTheme,
     Accent(AccentColor),
     AccentText(String),
@@ -1141,10 +1141,10 @@ impl Gallery {
             // Exercise the complete appearance cycle through the header's update path.
             if kind == "theme" {
                 let (mode, tag) = match i {
-                    0 => (cmp::ThemeMode::System, "theme-system"),
-                    1 => (cmp::ThemeMode::Light, "theme-light"),
-                    2 => (cmp::ThemeMode::Dark, "theme-dark"),
-                    3 => (cmp::ThemeMode::System, "theme-restored"),
+                    0 => (w::ThemeMode::System, "theme-system"),
+                    1 => (w::ThemeMode::Light, "theme-light"),
+                    2 => (w::ThemeMode::Dark, "theme-dark"),
+                    3 => (w::ThemeMode::System, "theme-restored"),
                     _ => return iced::exit(),
                 };
                 return self.update(Message::Appearance(mode)).chain(wait(500, tag, self));
@@ -1469,7 +1469,7 @@ impl Gallery {
         // swaps the header's title for a search entry (an on-select trigger of a
         // `MetaComponent`); the path bar (or the plain title) is its other variant.
         content_bar = content_bar.pack_end(
-            cmp::ThemeToggle::new(cmp::ThemeMode::from(iad::utils::scheme_override()))
+            w::ThemeToggle::new(w::ThemeMode::from(iad::utils::scheme_override()))
                 .on_toggle(Message::Appearance)
                 .disabled(!iad::config::current().allow_app_overrides)
                 .metrics(m),
