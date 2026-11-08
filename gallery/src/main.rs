@@ -25,7 +25,6 @@ mod composed_demo;
 mod data_demo;
 mod date_demo;
 mod details;
-mod field_demo;
 mod form_demo;
 mod entries_demo;
 mod nav;
@@ -195,7 +194,6 @@ struct Gallery {
     picked: Option<&'static str>,
     multi: Vec<&'static str>,
     date: date_demo::State,
-    field: field_demo::State,
     form: form_demo::State,
     entries: entries_demo::State,
     autocomplete: autocomplete_demo::State,
@@ -326,7 +324,6 @@ enum Message {
     Picked(&'static str),
     MultiToggle(&'static str),
     Date(date_demo::Msg),
-    Field(field_demo::Msg),
     Form(form_demo::Msg),
     Entries(entries_demo::Msg),
     Autocomplete(autocomplete_demo::Msg),
@@ -598,13 +595,6 @@ impl Gallery {
             widgets_demo,
             plays,
             reorder: reorder_demo::State::default(),
-            field: {
-                let mut f = field_demo::State::default();
-                if std::env::var_os("GALLERY_FIELD_SUBMIT").is_some() {
-                    f.submit();
-                }
-                f
-            },
             form: form_demo::State::default(),
             entries: entries_demo::State::default(),
             autocomplete: autocomplete_demo::State::default(),
@@ -900,7 +890,6 @@ impl Gallery {
                 None => self.multi.push(s),
             },
             Message::Date(m) => self.date.update(m),
-            Message::Field(m) => self.field.update(m),
             Message::Form(m) => self.form.update(m),
             Message::Entries(m) => self.entries.update(m),
             Message::Autocomplete(m) => {

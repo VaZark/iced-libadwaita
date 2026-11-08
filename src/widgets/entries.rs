@@ -37,6 +37,7 @@ pub struct EntryRow<'a, M> {
     validity: Validity,
     interaction: Interaction,
     required: bool,
+    flat: bool,
     metrics: Metrics,
 }
 impl<'a, M: 'a> EntryRow<'a, M> {
@@ -48,8 +49,14 @@ impl<'a, M: 'a> EntryRow<'a, M> {
             validity: Validity::Ok,
             interaction: Interaction::default(),
             required: false,
+            flat: false,
             metrics: Metrics::desktop(),
         }
+    }
+    /// Transparent controls with flat row hover styling, suitable outside a boxed list.
+    pub fn flat(mut self, flat: bool) -> Self {
+        self.flat = flat;
+        self
     }
     pub fn description(mut self, value: impl Into<String>) -> Self {
         self.description = Some(value.into());
@@ -96,6 +103,7 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
         let content = match e.input {
             EntryInput::Text(input) | EntryInput::Action(input) => surface(
                 input
+                    .flat(e.flat)
                     .embedded()
                     .row_label(label_text.clone())
                     .metrics(m)
@@ -104,6 +112,7 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
             ),
             EntryInput::Number(input) => surface(
                 input
+                    .flat(e.flat)
                     .embedded()
                     .row_label(label_text.clone())
                     .metrics(m)
@@ -112,13 +121,14 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
             ),
             EntryInput::Date(input) => surface(
                 input
+                    .flat(e.flat)
                     .embedded()
                     .row_label(label_text.clone())
                     .metrics(m)
                     .width(Length::Fill),
                 m,
             ),
-            EntryInput::Multiline(input) => surface(line(input.embedded(m).into()), m),
+            EntryInput::Multiline(input) => surface(line(input.flat(e.flat).embedded(m).into()), m),
             EntryInput::Custom(input) => surface(line(input), m),
             EntryInput::Switch { active, on_toggle } => {
                 let toggle = on_toggle(!active);
@@ -158,7 +168,11 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                 super::Popover::new(surface(trigger, m), options)
                     .width(Length::Fill)
                     .padding(0)
-                    .appearance(super::PopoverAppearance::Row)
+                    .appearance(if e.flat {
+                        super::PopoverAppearance::Flat
+                    } else {
+                        super::PopoverAppearance::Row
+                    })
                     .keep_open(multiple)
                     .into()
             }
@@ -178,6 +192,10 @@ macro_rules! entry_type {
     ($name:ident) => {
         pub struct $name<'a, M>(EntryRow<'a, M>);
         impl<'a, M: 'a> $name<'a, M> {
+            pub fn flat(mut self, flat: bool) -> Self {
+                self.0 = self.0.flat(flat);
+                self
+            }
             pub fn description(mut self, value: impl Into<String>) -> Self {
                 self.0 = self.0.description(value);
                 self
@@ -268,6 +286,21 @@ impl<'a, M: Clone + 'a> DateEntry<'a, M> {
     }
     pub fn from_input(label: impl Into<String>, input: DateInput<'a, M>) -> Self {
         Self(EntryRow::new(label, EntryInput::Date(input)))
+    }
+    pub fn calendar(mut self, calendar: crate::primitives::calendar::CalendarView) -> Self {
+        if let EntryInput::Date(input) = self.0.input {
+            self.0.input = EntryInput::Date(input.calendar(calendar));
+        }
+        self
+    }
+    pub fn on_nav(
+        mut self,
+        on_nav: impl Fn(crate::primitives::calendar::CalendarView) -> M + 'a,
+    ) -> Self {
+        if let EntryInput::Date(input) = self.0.input {
+            self.0.input = EntryInput::Date(input.on_nav(on_nav));
+        }
+        self
     }
     /// false: dropdown calendar; true: modal calendar.
     pub fn dialog(mut self, modal: bool) -> Self {

@@ -11,9 +11,9 @@ use iad::components::typography as ty;
 use iad::primitives::form::{FormSpec, FormState, Outcome as FormOutcome, StepStatus};
 use iad::primitives::validation::Validity;
 use iad::primitives::validation::{chain, required};
+use iad::widgets as w;
 use iad::widgets::{Form, Step, StepIndicator};
 use iad::{Element, Metrics};
-use iad::{components as cmp, widgets as w};
 use iced::Length;
 use iced::widget::{column, container, text};
 
@@ -40,6 +40,7 @@ pub enum Edit {
     Password(String),
     Fruit(&'static str),
     Date(String),
+    Calendar(iad::primitives::calendar::CalendarView),
     Agree(bool),
     Next,
     Back,
@@ -134,6 +135,7 @@ struct Demo {
     form: FormState<Key>,
     spec: FormSpec<Key>,
     result: Option<String>,
+    calendar: iad::primitives::calendar::CalendarView,
 }
 
 impl Demo {
@@ -143,6 +145,10 @@ impl Demo {
             form: FormState::new(),
             spec,
             result: None,
+            calendar: iad::primitives::calendar::CalendarView::new(
+                iad::primitives::date::Date::today(),
+                Default::default(),
+            ),
         }
     }
 
@@ -162,7 +168,11 @@ impl Demo {
                 self.values.fruit = Some(f);
                 self.form.touch(Key::Fruit);
             }
+            Edit::Calendar(calendar) => self.calendar = calendar,
             Edit::Date(s) => {
+                if let Some(date) = iad::primitives::date::Date::parse(&s) {
+                    self.calendar.date = date;
+                }
                 self.values.date = s;
                 self.form.touch(Key::Birthday);
             }
@@ -193,52 +203,41 @@ impl Demo {
 
     fn account<'a>(&'a self, m: Metrics) -> Element<'a, Edit> {
         let v = &self.values;
-        column![
+        w::boxed_list(vec![
             w::TextEntry::new("Name", &v.name, Edit::Name)
                 .validity(v.validity(&Key::Name))
                 .interaction(self.form.interaction(&self.spec, &Key::Name))
                 .required(true)
-                .metrics(m),
-            w::TextEntry::from_input(
-                "Password",
-                cmp::password_entry("Password", &v.password)
-                    .on_input(Edit::Password)
-                    .metrics(m)
-            )
-            .validity(v.validity(&Key::Password))
-            .interaction(self.form.interaction(&self.spec, &Key::Password))
-            .required(true)
-            .metrics(m),
-        ]
-        .spacing(m.space_m)
-        .into()
+                .metrics(m)
+                .into(),
+            w::TextEntry::new("Password", &v.password, Edit::Password)
+                .password(true)
+                .validity(v.validity(&Key::Password))
+                .interaction(self.form.interaction(&self.spec, &Key::Password))
+                .required(true)
+                .metrics(m)
+                .into(),
+        ])
     }
 
     fn profile<'a>(&'a self, m: Metrics) -> Element<'a, Edit> {
         let v = &self.values;
-        column![
+        w::boxed_list(vec![
             w::SelectEntry::new("Favorite fruit", &FRUITS, v.fruit, Edit::Fruit)
                 .validity(v.validity(&Key::Fruit))
                 .interaction(self.form.interaction(&self.spec, &Key::Fruit))
                 .required(true)
-                .metrics(m),
-            w::DateEntry::from_input(
-                "Birthday",
-                w::DateInput::new(
-                    &v.date,
-                    iad::primitives::date::Date::new(2026, 11, 1).unwrap(),
-                    Edit::Date
-                )
-                .revealed(self.form.revealed(&self.spec, &Key::Birthday))
                 .metrics(m)
-            )
-            .validity(v.validity(&Key::Birthday))
-            .interaction(self.form.interaction(&self.spec, &Key::Birthday))
-            .description("YYYY-MM-DD")
-            .metrics(m),
-        ]
-        .spacing(m.space_m)
-        .into()
+                .into(),
+            w::DateEntry::new("Birthday", &v.date, self.calendar.date, Edit::Date)
+                .calendar(self.calendar)
+                .on_nav(Edit::Calendar)
+                .validity(v.validity(&Key::Birthday))
+                .interaction(self.form.interaction(&self.spec, &Key::Birthday))
+                .required(true)
+                .metrics(m)
+                .into(),
+        ])
     }
 
     fn agree<'a>(&'a self, m: Metrics) -> Element<'a, Edit> {
@@ -253,7 +252,8 @@ impl Demo {
     fn review<'a>(&'a self, m: Metrics) -> Element<'a, Edit> {
         let v = &self.values;
         let line = |k: &'static str, val: String| {
-            w::EntryRow::<Edit>::new(k, w::EntryInput::Custom(iced::widget::text(val).into())).metrics(m)
+            w::EntryRow::<Edit>::new(k, w::EntryInput::Custom(iced::widget::text(val).into()))
+                .metrics(m)
         };
         column![
             w::boxed_list([
@@ -416,5 +416,24 @@ impl State {
         column![single, wizard, strips]
             .spacing(m.group_spacing)
             .into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn entry_row_form_still_validates_submits_and_resets() {
+        let mut state = State::default();
+        state.single.update(Edit::Submit);
+        assert!(state.single.result.is_none());
+        state.single.values = Values::filled();
+        state.single.update(Edit::Agree(true));
+        state.single.update(Edit::Submit);
+        assert!(state.single.result.is_some());
+        state.single.update(Edit::Reset);
+        assert!(state.single.result.is_none());
+        assert!(state.single.values.name.is_empty());
+        assert!(!state.single.values.agree);
     }
 }

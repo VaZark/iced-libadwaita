@@ -374,7 +374,6 @@ impl Gallery {
                 .spacing(m.group_spacing)
                 .into()
             }
-            Detail::Field => self.field.view(m).map(Message::Field),
             Detail::Form => self.form.view(m).map(Message::Form),
             Detail::PathBar => self.inline(Inline::PathBar),
             Detail::MenuButton => self.inline(Inline::MenuButton),

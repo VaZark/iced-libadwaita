@@ -128,6 +128,14 @@ impl State {
             .metrics(m)
         };
         column![
+            group("Flat entries")
+                .description("Transparent page rows, like Explore navigation. Typing stays available; the date modal is a picking helper.")
+                .flat(true)
+                .push(w::TextEntry::new("Display name", &self.name, Msg::Name).flat(true).metrics(m))
+                .push(w::NumberEntry::new("Amount", &self.number, Msg::Number).flat(true).metrics(m))
+                .push(date(true).flat(true))
+                .push(w::SelectEntry::new("Team", &OPTIONS, self.selected, Msg::Select).flat(true).metrics(m))
+                .push(w::SwitchEntry::new("Notifications", self.enabled, Msg::Enabled).flat(true).metrics(m)),
             group("Text entries")
                 .description(
                     "Full-width application controls. Clear the name to reveal validation."

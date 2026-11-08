@@ -132,3 +132,22 @@ fn disclosure_does_not_flash_gallery_chrome_in_either_scheme() {
         }
     }
 }
+
+#[test]
+fn review_application_forms() {
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let _runtime = runtime.enter();
+    let mut renderer = iced::futures::executor::block_on(iced::Renderer::new(iced::Font::DEFAULT, iced::Pixels(14.67), Some("tiny-skia"))).unwrap();
+    let (mut gallery, _) = Gallery::new();
+    for scheme in [Scheme::Light, Scheme::Dark] {
+        gallery.scheme = scheme;
+        for detail in [Detail::Entries, Detail::Form] {
+            gallery.page = detail.page(); gallery.detail = Some(detail);
+            let mut tree = Tree::empty();
+            let start = Instant::now();
+            let _ = frame(&gallery, &mut tree, &mut renderer, start);
+            let pixels = frame(&gallery, &mut tree, &mut renderer, start + Duration::from_secs(2));
+            image::save_buffer(format!("/tmp/iad-{scheme:?}-{detail:?}.png"), &pixels, 1100, 900, image::ColorType::Rgba8).unwrap();
+        }
+    }
+}

@@ -14,6 +14,7 @@ pub struct PreferencesGroup<'a, M> {
     header_suffix: Option<Element<'a, M>>,
     rows: Vec<Element<'a, M>>,
     metrics: Metrics,
+    flat: bool,
 }
 
 pub fn preferences_group<'a, M>() -> PreferencesGroup<'a, M> {
@@ -28,7 +29,13 @@ impl<'a, M> PreferencesGroup<'a, M> {
             header_suffix: None,
             rows: Vec::new(),
             metrics: Metrics::desktop(),
+            flat: false,
         }
+    }
+    /// Show rows directly on the page, without the boxed surface or separators.
+    pub fn flat(mut self, flat: bool) -> Self {
+        self.flat = flat;
+        self
     }
     pub fn title(mut self, t: impl Into<String>) -> Self {
         self.title = Some(t.into());
@@ -87,7 +94,15 @@ impl<'a, M: 'a> From<PreferencesGroup<'a, M>> for Element<'a, M> {
             });
         }
         if !g.rows.is_empty() {
-            col = col.push(boxed_list(g.rows));
+            col = col.push(if g.flat {
+                Element::from(
+                    column(g.rows)
+                        .spacing(g.metrics.space_xs)
+                        .width(Length::Fill),
+                )
+            } else {
+                boxed_list(g.rows)
+            });
         }
         col.into()
     }

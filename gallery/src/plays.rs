@@ -2337,11 +2337,8 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
         Detail::TreeDocs => {
             "Tree::new(&self.docs, &self.tree)\n    .draggable(DragMode::Row)\n    .highlight(&self.search)\n    .label(|p| {\n        let n = p.node.children.len();\n        if n == 0 { return p.text; }\n        row![p.text, Badge::count(n as u32, 99)].spacing(8).into()   // a count per branch\n    })\n    .on_event(Msg::Tree)\n\n// search: self.tree.set_expanded(tree::matching_ancestors(&self.docs, &query))"
         }
-        Detail::Field => {
-            "Field::new(\"Name\", entry(\"Ada\", &self.name).on_input(Msg::Name))\n    .required(true)\n    .validity(self.validity(&\"name\"))\n    .interaction(self.form.interaction(&spec, &\"name\"))\n    .layout(FieldLayout::Row) // or Stacked\n    .plain_label(true)"
-        }
         Detail::Form => {
-            "Form::new()\n    .step(Step::new(\"Profile\", move || {\n        Field::new(\"Name\", entry(\"Ada\", &self.name).on_input(Msg::Name))\n            .validity(self.validity(&\"name\"))\n            .into()\n    }))\n    .on_submit(Msg::Submit)\n    .on_reset(Msg::Reset)\n\n// update: self.form.submit(&spec, &|k| self.validity(k))"
+            "Form::new()\n    .step(Step::new(\"Profile\", move || {\n        TextEntry::new(\"Name\", &self.name, Msg::Name)\n            .validity(self.validity(&\"name\"))\n            .into()\n    }))\n    .on_submit(Msg::Submit)\n    .on_reset(Msg::Reset)\n\n// update: self.form.submit(&spec, &|k| self.validity(k))"
         }
         Detail::Stepper => {
             "Stepper::new()\n    .active(state.active())\n    .orientation(StepperOrientation::Horizontal)\n    .on_step_click(Msg::Go)\n    .step(StepperStep::new(\"Account\").content(|| body(\"...\")))\n    .step(StepperStep::new(\"Profile\").description(\"Fruit and birthday\"))\n    .step(StepperStep::new(\"Review\").allow_click(true))\n    .completed(done)\n\n// state: StepperState::new(3), .forward() / .back() / .goto(i)"

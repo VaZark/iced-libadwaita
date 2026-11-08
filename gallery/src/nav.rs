@@ -101,7 +101,10 @@ impl Page {
                 ("Icons", vec![n(Icons)]),
             ],
             Page::Inputs => vec![
-                ("Application forms", vec![n(Entries), n(MultilineEntry), n(Form)]),
+                (
+                    "Application forms",
+                    vec![n(Entries), n(MultilineEntry), n(Form)],
+                ),
                 (
                     "Base input elements (for custom widgets)",
                     vec![
@@ -122,7 +125,7 @@ impl Page {
                         n(ColorPicker),
                     ],
                 ),
-                ("Form components", vec![n(Field), n(Stepper)]),
+                ("Form components", vec![n(Stepper)]),
             ],
             Page::Lists => vec![
                 (
@@ -273,7 +276,6 @@ pub enum Detail {
     // Inputs
     TextInput,
     TextView,
-    Field,
     Form,
     Stepper,
     Data,
@@ -462,7 +464,6 @@ impl Detail {
             Detail::ToggleGroup => "Toggle group",
             Detail::TextInput => "Text input",
             Detail::TextView => "Multi-line text",
-            Detail::Field => "Form field",
             Detail::Form => "Form",
             Detail::Stepper => "Stepper",
             Detail::Data => "Sorting and pagination",
@@ -570,7 +571,6 @@ impl Detail {
             Detail::ToggleGroup => "Text, icons, crowded and as a row",
             Detail::TextInput => "Validation, password, color override and width",
             Detail::TextView => "Editable, placeholder and read-only",
-            Detail::Field => "Label, control and message with shared validation",
             Detail::Form => "Submit, reset and a multi-step wizard with gated Next",
             Detail::Stepper => "Steps with statuses, click-to-jump, icons, vertical, narrow",
             Detail::Data => "Sortable table and cards, pager, infinite scroll, load more",
@@ -578,7 +578,9 @@ impl Detail {
             Detail::Dropdown => "Selected, empty and disabled; combo rows with disabled options",
             Detail::ActionRow => "Subtitle, prefix, suffix and chevron",
             Detail::SwitchAndComboRows => "Switch, combo, spin and slider rows, with disabled",
-            Detail::Entries => "Full-width text, number, date, switch, action and selection entries",
+            Detail::Entries => {
+                "Full-width text, number, date, switch, action and selection entries"
+            }
             Detail::PreferencesGroup => "Title, description and a header suffix",
             Detail::Card => "Padding, chained children, separators and size",
             Detail::Toast => "Call to action, status dot, radius, placement and colors",

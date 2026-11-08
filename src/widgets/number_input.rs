@@ -69,12 +69,18 @@ pub struct NumberInput<'a, M> {
     width: Length,
     metrics: Metrics,
     embedded: bool,
+    flat: bool,
     row_label: Option<String>,
 }
 
 impl<'a, M> NumberInput<'a, M> {
     pub(crate) fn row_label(mut self, label: String) -> Self {
         self.row_label = Some(label);
+        self
+    }
+    /// Transparent page-surface entry style.
+    pub fn flat(mut self, flat: bool) -> Self {
+        self.flat = flat;
         self
     }
     pub(crate) fn embedded(mut self) -> Self {
@@ -95,6 +101,7 @@ impl<'a, M> NumberInput<'a, M> {
             width: Length::Fixed(160.0),
             metrics: Metrics::desktop(),
             embedded: false,
+            flat: false,
             row_label: None,
         }
     }
@@ -177,6 +184,7 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
     fn from(n: NumberInput<'a, M>) -> Self {
         let m = n.metrics;
         let mut field = entry::<M>(n.placeholder.clone(), n.text)
+            .flat(n.flat)
             .state(n.text_state())
             .width(n.width)
             .metrics(m);

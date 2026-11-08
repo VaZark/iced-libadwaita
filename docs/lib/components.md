@@ -39,7 +39,7 @@ NumberInput::new(&self.text, Msg::Text)   // the app keeps only the text
 
 The app owns the values and one `FormState<Key>`. A `FormSpec` lists the keys (one step is a single-page form). The state remembers what the user touched or submitted, and says per key whether the field may show its validity.
 
-- `Field` draws label, control and message.
+- `EntryRow` and typed descendants (`TextEntry`, `DateEntry`, `SelectEntry`, and others) share label, control, and validation messages.
 - `Form` (optional) adds Submit and Reset, and Back and Next with several steps.
 
 ```rust
@@ -79,7 +79,7 @@ impl App {
         let spec = spec();
         Form::new()
             .step(Step::new("Profile", move || {
-                Field::new("Name", entry("Ada", &self.name).on_input(Msg::Name))
+                TextEntry::new("Name", &self.name, Msg::Name)
                     .required(true)
                     .validity(self.validity(&"name"))
                     .interaction(self.form.interaction(&spec, &"name"))
@@ -92,7 +92,7 @@ impl App {
 }
 ```
 
-Do not keep your own `touched` list or `submitted` flag. `touch`, `interaction`, `submit` and `reset` are those. Live examples: the gallery's Field and Range slider pages.
+Do not keep your own `touched` list or `submitted` flag. `touch`, `interaction`, `submit` and `reset` are those. Live examples: the gallery's Form and Range slider pages.
 
 **Labels.** `Field` is the label idiom outside forms too.
 
@@ -201,3 +201,14 @@ They schedule their own expiry; no timer subscription is needed. Use
 open. Set `on_dismiss` to remove a toast from application state when it expires
 or its close button is pressed. Queue-backed toast stacks preserve each toast's
 clock when another notification is removed.
+
+Entry rows and their typed descendants support `.flat(true)`: transparent inputs
+with normal editing, validation, and focus behavior. Use `PreferencesGroup::flat(true)`
+to place rows directly on the page without a boxed background or separators,
+matching flat navigation rows such as Weave's Explore links.
+
+`DateInput::dialog(true)` keeps the page's date display editable. The modal is a
+calendar helper with the same editable value above its calendar. Picking a day
+calls `on_pick` when supplied, otherwise it sends the formatted date through
+`on_input`; typed dates are highlighted automatically. `DateEntry` exposes
+`calendar` and `on_nav` for controlled navigation without building raw inputs.

@@ -47,6 +47,7 @@ pub struct Entry<'a, M> {
     color: Option<iced::Color>,
     secure: bool,
     embedded: bool,
+    flat: bool,
     width: Length,
     metrics: Metrics,
     left: Option<Element<'a, M>>,
@@ -82,6 +83,7 @@ impl<'a, M> Entry<'a, M> {
             color: None,
             secure: false,
             embedded: false,
+            flat: false,
             width: Length::Fill,
             metrics: Metrics::desktop(),
             left: None,
@@ -92,6 +94,11 @@ impl<'a, M> Entry<'a, M> {
             row_label: None,
             id: None,
         }
+    }
+    /// Transparent page-surface style, like a flat navigation row.
+    pub fn flat(mut self, flat: bool) -> Self {
+        self.flat = flat;
+        self
     }
     /// Embed in an EntryRow, which supplies the surface and outer padding.
     pub(crate) fn embedded(mut self) -> Self {
@@ -221,6 +228,23 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
         if e.embedded {
             input = input.style(styles::text_input::embedded);
         }
+        if e.flat {
+            let state = e.state;
+            input = input.style(move |theme, status| {
+                let mut style = styles::text_input::flat(theme, status);
+                let color = match state {
+                    EntryState::Error => Some(theme.semantic.error.color),
+                    EntryState::Warning => Some(theme.semantic.warning.color),
+                    EntryState::Success => Some(theme.semantic.success.color),
+                    EntryState::Normal => None,
+                };
+                if let Some(color) = color {
+                    style.border.color = color;
+                    style.border.width = theme.metrics.focus_ring_width;
+                }
+                style
+            });
+        }
         if let Some(c) = e.color {
             input = input.style(move |t: &Theme, status| {
                 let mut st = styles::text_input::default(t, status);
@@ -310,6 +334,7 @@ pub struct TextView<'a, M> {
     max_height: Option<f32>,
     single_line: bool,
     embedded: bool,
+    flat: bool,
     metrics: Metrics,
 }
 
@@ -324,11 +349,17 @@ pub fn text_view<'a, M>(content: &'a text_editor::Content) -> TextView<'a, M> {
         max_height: None,
         single_line: false,
         embedded: false,
+        flat: false,
         metrics: Metrics::desktop(),
     }
 }
 
 impl<'a, M> TextView<'a, M> {
+    /// Transparent editor surface with normal focus and validation behavior.
+    pub fn flat(mut self, flat: bool) -> Self {
+        self.flat = flat;
+        self
+    }
     pub(crate) fn embedded(mut self, metrics: Metrics) -> Self {
         self.embedded = true;
         self.metrics = metrics;
@@ -398,11 +429,14 @@ impl<'a, M: Clone + 'a> From<TextView<'a, M>> for Element<'a, M> {
             .size(TEXT_SIZE)
             .padding(t.metrics.entry_padding)
             .style(styles::text_editor::default);
-        if t.embedded {
-            e = e.style(|theme, status| {
+        if t.embedded || t.flat {
+            let embedded = t.embedded;
+            e = e.style(move |theme, status| {
                 let mut style = styles::text_editor::default(theme, status);
                 style.background = iced::Color::TRANSPARENT.into();
-                style.border = iced::Border::default();
+                if embedded {
+                    style.border = iced::Border::default();
+                }
                 style
             });
         }
