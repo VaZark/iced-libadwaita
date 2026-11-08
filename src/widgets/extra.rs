@@ -3,11 +3,12 @@
 
 use crate::Element;
 use crate::components::button::{ToggleGroup, ToggleItem, toggle_group};
+use crate::layouts::responsive;
 use crate::styles::{button as sb, container as sc, text as st};
 use crate::widgets::navigation::Breakpoint;
 use crate::{Icon, Metrics, Theme, Typography};
 use iced::alignment::Vertical;
-use iced::widget::{button, container, responsive, row, space, text};
+use iced::widget::{button, container, row, space, text};
 use iced::{Length, Size};
 
 /// `AdwWrapBox`: children flow onto new lines.

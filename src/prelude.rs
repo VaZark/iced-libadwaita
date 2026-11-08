@@ -32,4 +32,4 @@ pub use crate::{
     AccentColor, CollapseBehavior, Icon, IconSource, Metrics, Role, Scheme, Shadows, Theme,
     Typography, config,
 };
-pub use iced::widget::{column, container, responsive, row, space, text};
+pub use iced::widget::{column, container, row, space, text};

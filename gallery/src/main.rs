@@ -1361,7 +1361,7 @@ impl Gallery {
         {
             return c.state.view().map(Message::Shell);
         }
-        iced::widget::responsive(|size| self.root(size)).into()
+        iad::layouts::responsive(|size| self.root(size)).into()
     }
 
     /// Whether the window draws its own decorations: the toolkit's setting, nothing of ours.
@@ -1861,3 +1861,6 @@ fn main() -> iced::Result {
         })
         .run()
 }
+
+#[cfg(test)]
+mod flash_tests;

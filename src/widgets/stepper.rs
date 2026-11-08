@@ -32,9 +32,10 @@
 
 use crate::Element;
 use crate::components::flat_button;
+use crate::layouts::responsive;
 use crate::primitives::stepper::{self as prim, Fill, Status};
 use crate::{Icon, Metrics, Theme};
-use iced::widget::{column, container, responsive, row, space, svg, text};
+use iced::widget::{column, container, row, space, svg, text};
 use iced::{Alignment, Border, Color, Length, Padding};
 
 /// How the steps are laid out.

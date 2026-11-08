@@ -314,7 +314,7 @@ impl State {
     /// The icons in a plain grid, revealed a row a frame (the first draw of an SVG is its cost).
     pub fn icons_view(&self, m: Metrics, revealed: usize) -> Element<'_, Msg> {
         const CELL: f32 = 110.0;
-        let grid = iced::widget::responsive(move |size| {
+        let grid = iad::layouts::responsive(move |size| {
             let per_row = ((size.width / CELL).floor() as usize).max(1);
             let rows = Icon::ALL.len().div_ceil(per_row);
             // A plain grid. Rows not yet revealed hold an outline: their icons are drawn a row a
