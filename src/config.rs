@@ -67,6 +67,7 @@ pub enum Setting {
     MobileSidebar,
     MenuPresentation,
     RowCollapse,
+    ToastTimeout,
     ToastPosition,
     ToastTarget,
     PopoverBounds,
@@ -167,6 +168,8 @@ pub struct Config {
     pub mobile_sidebar: CollapsedSidebar,
     pub menu_presentation: MenuPresentationSetting,
     pub row_collapse: CollapseBehavior,
+    /// `[toasts] timeout`: auto-dismiss delay in milliseconds; 0 keeps toasts open.
+    pub toast_timeout: u32,
     /// `[toasts] position`: where toasts sit in their target.
     pub toast_position: crate::widgets::ToastPosition,
     /// `[toasts] target`: the whole window or only the content area.
@@ -233,6 +236,7 @@ impl Default for Config {
             mobile_sidebar: CollapsedSidebar::Drawer,
             menu_presentation: MenuPresentationSetting::Auto,
             row_collapse: CollapseBehavior::Stacked,
+            toast_timeout: 3000,
             toast_position: Default::default(),
             toast_target: Default::default(),
             popover_bounds: Default::default(),
@@ -567,6 +571,12 @@ impl Config {
                 _ => bad!("menus", "presentation", v),
             }
         }
+        if let Some(v) = get("toasts", "timeout") {
+            match v.parse::<u32>() {
+                Ok(ms) => self.toast_timeout = ms,
+                Err(_) => bad!("toasts", "timeout", v),
+            }
+        }
         if let Some(v) = get("toasts", "position") {
             crate::widgets::ToastPosition::from_key(v)
                 .map(|p| self.toast_position = p)
@@ -793,6 +803,7 @@ pub struct Overrides {
     mobile_sidebar: Option<CollapsedSidebar>,
     menu_presentation: Option<MenuPresentationSetting>,
     row_collapse: Option<CollapseBehavior>,
+    toast_timeout: Option<u32>,
     toast_position: Option<crate::widgets::ToastPosition>,
     toast_target: Option<crate::widgets::ToastTarget>,
     popover_bounds: Option<crate::widgets::PopoverBounds>,
@@ -873,6 +884,7 @@ impl Overrides {
         CollapseBehavior,
         Setting::RowCollapse
     );
+    override_fn!(toast_timeout, toast_timeout, u32, Setting::ToastTimeout);
     override_fn!(
         toast_position,
         toast_position,
@@ -1019,6 +1031,9 @@ impl Overrides {
         }
         if let Some(v) = self.row_collapse {
             c.row_collapse = v
+        }
+        if let Some(v) = self.toast_timeout {
+            c.toast_timeout = v
         }
         if let Some(v) = self.toast_position {
             c.toast_position = v
@@ -1289,6 +1304,32 @@ thing=1
         assert!(c.warnings().is_empty());
         let bad = Config::from_keyfile("[appearance]\naccent=#35\n");
         assert!(!bad.warnings().is_empty());
+    }
+
+    #[test]
+    fn toast_timeout_is_integer_milliseconds_and_supports_policy_overrides() {
+        assert_eq!(Config::default().toast_timeout, 3000);
+        for value in [0u32, 75, 5000, u32::MAX] {
+            let config = Config::from_keyfile(&format!("[toasts]\ntimeout={value}\n"));
+            assert_eq!(config.toast_timeout, value);
+            assert!(config.warnings().is_empty());
+        }
+        for value in ["-1", "1.5", "NaN", "inf", "4294967296", "3s"] {
+            let config = Config::from_keyfile(&format!("[toasts]\ntimeout={value}\n"));
+            assert_eq!(config.toast_timeout, 3000);
+            assert!(!config.warnings().is_empty());
+            assert!(!crate::config_history::ValueType::Milliseconds.accepts(value));
+        }
+        let config = Config::default().opt_out(|o| {
+            o.toast_timeout(100);
+        });
+        assert_eq!(config.toast_timeout, 100);
+        assert!(config.overridden().contains(&Setting::ToastTimeout));
+        let config = Config::from_keyfile("[policy]\nallow-app-overrides=false\n").opt_out(|o| {
+            o.toast_timeout(100);
+        });
+        assert_eq!(config.toast_timeout, 3000);
+        assert!(config.denied().contains(&Setting::ToastTimeout));
     }
 
     #[test]

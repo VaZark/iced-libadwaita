@@ -187,3 +187,17 @@ keep relative scrubbing via `NumberDrag::{Vertical, Horizontal}` and
 `NumberDrag::Select` for text selection. Scales now return the library's `Scale`
 widget rather than iced's `Slider`, sharing range controls' keyboard, touch,
 focus and drag-offset handling.
+
+`Accordion` composes `TreeRow` disclosures under its single/multiple selection
+rule. A tree row's whole header surface, including padding and blank space, runs
+`on_activate`; when no activation is set, it runs `on_toggle` instead. With both
+callbacks, the arrow remains a separate toggle target. Interactive prefixes and
+suffixes keep their own actions, and expanded child content is outside the header
+action surface.
+
+Toasts close automatically after `[toasts] timeout` milliseconds (default 3000).
+They schedule their own expiry; no timer subscription is needed. Use
+`Toast::timeout(5000)` for an individual delay, or `Toast::timeout(0)` to keep it
+open. Set `on_dismiss` to remove a toast from application state when it expires
+or its close button is pressed. Queue-backed toast stacks preserve each toast's
+clock when another notification is removed.

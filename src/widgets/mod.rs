@@ -149,3 +149,5 @@ pub use theme_toggle::{ThemeMode, ThemeToggle};
 
 mod scale;
 pub use scale::Scale;
+
+mod toast_timeout;

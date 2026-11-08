@@ -236,7 +236,7 @@ struct Gallery {
     /// The toasts on screen, oldest first, each with its id (stacked notifications).
     toasts: iad::primitives::notifications::Queue<ToastSpec>,
     toast_seq: u32,
-    /// Whether toasts dismiss themselves after 4 s (the queue's timeout).
+    /// Whether toasts use the configured auto-dismiss timeout.
     toast_auto: bool,
     /// Screenshot harness: behave as if the window were narrow.
     narrow: bool,
@@ -365,7 +365,6 @@ enum Message {
     ToastAction(iad::primitives::notifications::Id),
     DismissToast(iad::primitives::notifications::Id),
     ToastAuto(bool),
-    ToastTick(Instant),
     ClearToasts,
     Frame(std::time::Instant),
     Animations(bool),
@@ -634,7 +633,7 @@ impl Gallery {
             carousel_indicator: w::CarouselIndicator::default(),
             toasts: iad::primitives::notifications::Queue::new(),
             toast_seq: 0,
-            toast_auto: false,
+            toast_auto: true,
             narrow: false,
             toast_position: cfg.toast_position,
             toast_target: cfg.toast_target,
@@ -994,11 +993,6 @@ impl Gallery {
             }
             Message::ToastAuto(on) => {
                 self.toast_auto = on;
-                self.toasts
-                    .set_timeout(on.then_some(Duration::from_secs(4)));
-            }
-            Message::ToastTick(now) => {
-                self.toasts.expire(now);
             }
             Message::ClearToasts => self.toasts.clear(),
             Message::Frame(now) => {
@@ -1342,12 +1336,6 @@ impl Gallery {
         } else {
             Subscription::none()
         };
-        // Tick only while a toast can expire.
-        let toast_clock = if self.toasts.next_expiry().is_some() {
-            iced::time::every(Duration::from_millis(250)).map(Message::ToastTick)
-        } else {
-            Subscription::none()
-        };
         let system_theme = if self.shots.is_none() {
             iad::utils::follow_theme().map(|_| Message::SystemTheme)
         } else {
@@ -1356,7 +1344,6 @@ impl Gallery {
         Subscription::batch([
             system_theme,
             frames,
-            toast_clock,
             self.autocomplete.subscription().map(Message::Autocomplete),
             self.resizable.subscription().map(Message::Resizable),
             iad::windows::changes().map(|_| Message::WindowChanged),
@@ -1611,6 +1598,7 @@ impl Gallery {
             let mut t = w::Toast::new(spec.title)
                 .on_dismiss(Message::DismissToast(id))
                 .position(self.toast_position);
+            if !self.toast_auto { t = t.timeout(0); }
             if let Some(label) = spec.action {
                 t = t.action(label, Message::ToastAction(id));
             }

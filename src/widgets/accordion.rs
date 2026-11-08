@@ -1,5 +1,5 @@
 //! `Accordion`: a group of collapsible items under a [`Selection`] rule (Radix `Accordion`).
-//! One surface (a boxed list), one chevron header per item, bodies that slide.
+//! One surface (a boxed list), one full-surface TreeRow disclosure header per item, bodies that slide.
 //!
 //! ```ignore
 //! Accordion::new(&self.open, Msg::Open)            // open: Vec<Key>
@@ -67,9 +67,9 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> From<Accordion<'a, K, M>> for
             let is_open = a.open.contains(&item.key);
             let (open, on_change, rule, key) =
                 (a.open.clone(), a.on_change.clone(), a.selection, item.key);
-            let mut row = crate::widgets::ExpanderRow::new(item.title, is_open, move |_| {
-                on_change(rule.toggle(&open, &key))
-            });
+            let mut row = crate::widgets::TreeRow::new(item.title)
+                .expanded(is_open)
+                .on_toggle(move |_| on_change(rule.toggle(&open, &key)));
             if let Some(s) = item.subtitle {
                 row = row.subtitle(s);
             }

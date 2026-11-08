@@ -605,8 +605,8 @@ impl Gallery {
                             .wrap(),
                         )),
                     g("Auto-dismiss")
-                        .description("The queue's timeout: each toast leaves on its own clock, restarted when its content is replaced (try Undo). Off, they stay until dismissed.")
-                        .push(w::SwitchRow::new("Dismiss after 4 s", self.toast_auto, Message::ToastAuto).metrics(m)),
+                        .description("Each toast closes after the configured timeout (3000 ms by default), without a timer subscription. Off, they stay until dismissed.")
+                        .push(w::SwitchRow::new("Auto-dismiss (configured timeout)", self.toast_auto, Message::ToastAuto).metrics(m)),
                     g("Radius")
                         .description("A toast's corner radius is its own theme token (default: a full pill).")
                         .push(

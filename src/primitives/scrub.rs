@@ -182,6 +182,19 @@ mod tests {
     }
     #[test]
     fn oriented_tracks_roundtrip_clamp_and_preserve_grab_offset() {
+        assert_eq!(
+            Axis::Horizontal.fraction((70.0, 0.0), (20.0, 0.0), 200.0),
+            0.25
+        );
+        assert_eq!(
+            Axis::Vertical.fraction((0.0, 170.0), (0.0, 220.0), 200.0),
+            0.25
+        );
+        assert_eq!(
+            Axis::Horizontal.point((20.0, 0.0), 200.0, 1.0),
+            (220.0, 0.0)
+        );
+        assert_eq!(Axis::Vertical.point((0.0, 220.0), 200.0, 1.0), (0.0, 20.0));
         for axis in [Axis::Horizontal, Axis::Vertical] {
             let origin = (20.0, 220.0);
             for fraction in [0.0, 0.25, 0.5, 1.0] {

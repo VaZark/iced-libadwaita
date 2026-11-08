@@ -95,6 +95,7 @@ Defaults are in parentheses. Every key is optional.
 
 | Section      | Key        | Values                                                                              | Drives                                           |
 | ------------ | ---------- | ----------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `[toasts]`   | `timeout` | integer milliseconds, 0–4294967295 (3000); 0 disables auto-dismiss | `Toast::timeout` default |
 | `[toasts]`   | `position` | top-left, top-center, top-right, bottom-left, bottom-center, bottom-right (bottom-center) | `Toast::position` default                  |
 | `[toasts]`   | `target`   | window, content (content)                                                           | where `toast_overlay` is placed                  |
 | `[popovers]` | `bounds`   | content, window (content)                                                           | `Popover::bounds` default: the content area a popover opened from, or the window |

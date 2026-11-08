@@ -78,6 +78,7 @@ enabled=true             # keyboard shortcuts work (and are shown)
 hints=auto               # auto | always | never: accelerator hints in menus (auto: not in touch menus)
 
 [toasts]
+timeout=3000             # milliseconds; 0 disables auto-dismiss
 position=bottom-center   # top|bottom - left|center|right, e.g. top-right
 target=content           # content (content area only, centered on it) | window (over the sidebar too)
 

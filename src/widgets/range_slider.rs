@@ -18,6 +18,10 @@
 //! Each thumb is a focus stop: arrows step it, `PageUp`/`PageDown` move ten steps, `Home` and
 //! `End` go to the ends. Pressing on a thumb drags it; pressing on the rail moves the nearest
 //! thumb there and keeps dragging it.
+//!
+//! [`orientation`](RangeSlider::orientation) defaults to horizontal (right increases).
+//! Vertical tracks increase upward and use [`height`](RangeSlider::height) for length.
+//! Pointer coordinates and grab offsets come from [`primitives::scrub`](crate::primitives::scrub).
 
 use crate::Theme;
 use crate::primitives::range::{Collide, Key, Range, Scalar, Thumb, Track};
@@ -284,7 +288,7 @@ impl<'a, M, T: Scalar> Widget<M, Theme, iced::Renderer> for RangeSlider<'a, M, T
         let state = tree.state.downcast_mut::<State>();
         let b = layout.bounds();
 
-        // Move `thumb` to the pointer at `x` and report the pair when it changed.
+        // Move `thumb` to the oriented pointer position and report changes.
         let drag_to = |this: &Self, shell: &mut Shell<'_, M>, thumb: Thumb, p: Point| {
             let next = this
                 .track
