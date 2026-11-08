@@ -55,7 +55,6 @@ pub struct Entry<'a, M> {
     left_width: Option<f32>,
     right_width: Option<f32>,
     section_height: Option<f32>,
-    row_label: Option<String>,
     id: Option<iced::widget::Id>,
 }
 
@@ -91,7 +90,6 @@ impl<'a, M> Entry<'a, M> {
             left_width: None,
             right_width: None,
             section_height: None,
-            row_label: None,
             id: None,
         }
     }
@@ -105,9 +103,20 @@ impl<'a, M> Entry<'a, M> {
         self.embedded = true;
         self
     }
-    pub(crate) fn row_label(mut self, label: String) -> Self {
-        self.row_label = Some(label);
-        self
+    /// Align the EntryRow label with the editable text after its optional sections.
+    pub(crate) fn label_insets(&self, metrics: &Metrics) -> iced::Padding {
+        let size = crate::components::section_size(metrics);
+        text_padding(
+            iced::Padding::ZERO,
+            0.0,
+            0.0,
+            self.left
+                .as_ref()
+                .map(|_| slot_width(self.left_width, size)),
+            self.right
+                .as_ref()
+                .map(|_| slot_width(self.right_width, size)),
+        )
     }
     pub(crate) fn section_height(mut self, height: f32) -> Self {
         self.section_height = Some(height);
@@ -206,7 +215,7 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
             rw,
         );
         let text_size = crate::Typography::default().body;
-        if e.row_label.is_none() && (lw.is_some() || rw.is_some()) {
+        if lw.is_some() || rw.is_some() {
             let inset = ((e.section_height.unwrap_or(default_w).max(default_w) - text_size * 1.3)
                 / 2.0)
                 .max(0.0);
@@ -228,7 +237,7 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
         if e.embedded {
             input = input.style(styles::text_input::embedded);
         }
-        if e.flat {
+        if e.flat && !e.embedded {
             let state = e.state;
             input = input.style(move |theme, status| {
                 let mut style = styles::text_input::flat(theme, status);
@@ -246,12 +255,23 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
             });
         }
         if let Some(c) = e.color {
+            let (embedded, flat) = (e.embedded, e.flat);
             input = input.style(move |t: &Theme, status| {
-                let mut st = styles::text_input::default(t, status);
-                st.border.color = c;
-                st.border.width = t.metrics.focus_ring_width;
-                st.value = c;
-                st
+                let mut style = if embedded {
+                    styles::text_input::embedded(t, status)
+                } else if flat {
+                    styles::text_input::flat(t, status)
+                } else {
+                    styles::text_input::default(t, status)
+                };
+                style.border.color = c;
+                style.border.width = if embedded {
+                    0.0
+                } else {
+                    t.metrics.focus_ring_width
+                };
+                style.value = c;
+                style
             });
         }
         if let Some(id) = e.id {
@@ -263,26 +283,7 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
         if let Some(m) = e.on_submit {
             input = input.on_submit(m);
         }
-        let content: Element<'a, M> = if let Some(label) = e.row_label {
-            iced::widget::column![
-                container(
-                    crate::Typography::default()
-                        .caption(label)
-                        .style(styles::text::dim)
-                )
-                .padding(iced::Padding {
-                    left: padding.left,
-                    right: padding.right,
-                    ..iced::Padding::ZERO
-                }),
-                input
-            ]
-            .spacing(2)
-            .width(e.width)
-            .into()
-        } else {
-            input.into()
-        };
+        let content: Element<'a, M> = input.into();
         if lw.is_none() && rw.is_none() {
             return content;
         }
@@ -536,7 +537,7 @@ mod section_alignment_tests {
         ))
         .unwrap();
         for metrics in [Metrics::desktop(), Metrics::compact()] {
-            for (embedded, labelled) in [(false, false), (true, false), (true, true)] {
+            for embedded in [false, true] {
                 let mut input = entry("", "Centered")
                     .on_input(|_| ())
                     .left_section(crate::EntryIcon::Search.view(16.0))
@@ -552,9 +553,6 @@ mod section_alignment_tests {
                 if embedded {
                     input = input.embedded();
                 }
-                if labelled {
-                    input = input.row_label("Label".into());
-                }
                 let mut element: Element<'_, ()> = input.into();
                 let mut tree = Tree::new(&element);
                 let node = element.as_widget_mut().layout(
@@ -565,11 +563,7 @@ mod section_alignment_tests {
                 let root = layout::Layout::new(&node);
                 let mut layers = root.children();
                 let control = layers.next().unwrap();
-                let text = if labelled {
-                    control.bounds()
-                } else {
-                    control.children().next().unwrap().bounds()
-                };
+                let text = control.children().next().unwrap().bounds();
                 let layer = layers.next().unwrap();
                 let slots: Vec<_> = layer.children().collect();
                 for slot in [slots[0], slots[2]] {

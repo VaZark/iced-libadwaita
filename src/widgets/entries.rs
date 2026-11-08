@@ -1,5 +1,7 @@
 //! Full-width application rows. EntryInput selects the rendered control; typed entries
 //! construct the same EntryRow with an appropriate input.
+mod surface;
+
 use super::{ChipGroup, ChipOption, DateInput, NumberInput};
 use crate::components::{Entry, InputWrapper, TextView};
 use crate::primitives::validation::{Interaction, Validity};
@@ -101,31 +103,36 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                 .into()
         };
         let content = match e.input {
-            EntryInput::Text(input) | EntryInput::Action(input) => surface(
-                input
-                    .flat(e.flat)
-                    .embedded()
-                    .row_label(label_text.clone())
-                    .metrics(m)
-                    .width(Length::Fill),
-                m,
-            ),
+            EntryInput::Text(input) | EntryInput::Action(input) => {
+                let insets = input.label_insets(&m);
+                let input = input.flat(e.flat).embedded().metrics(m).width(Length::Fill);
+                surface(
+                    column![container(label()).padding(insets), input]
+                        .spacing(2)
+                        .width(Length::Fill),
+                    m,
+                )
+            }
             EntryInput::Number(input) => surface(
-                input
-                    .flat(e.flat)
-                    .embedded()
-                    .row_label(label_text.clone())
-                    .metrics(m)
-                    .width(Length::Fill),
+                line(
+                    input
+                        .flat(e.flat)
+                        .embedded()
+                        .metrics(m)
+                        .width(Length::Fill)
+                        .into(),
+                ),
                 m,
             ),
             EntryInput::Date(input) => surface(
-                input
-                    .flat(e.flat)
-                    .embedded()
-                    .row_label(label_text.clone())
-                    .metrics(m)
-                    .width(Length::Fill),
+                line(
+                    input
+                        .flat(e.flat)
+                        .embedded()
+                        .metrics(m)
+                        .width(Length::Fill)
+                        .into(),
+                ),
                 m,
             ),
             EntryInput::Multiline(input) => surface(line(input.flat(e.flat).embedded(m).into()), m),
@@ -177,6 +184,15 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                     .into()
             }
         };
+        let presentation =
+            crate::primitives::validation::present(&e.validity, e.interaction.revealed());
+        let focus_ring = e.flat
+            && !matches!(
+                presentation,
+                crate::primitives::validation::Presentation::Invalid
+                    | crate::primitives::validation::Presentation::Warning
+            );
+        let content = surface::EntryRowSurface::new(content, focus_ring, m);
         let mut wrapper = InputWrapper::new("", content)
             .hide_label()
             .validity(e.validity)
@@ -460,6 +476,201 @@ mod tests {
     use super::*;
     use iced::advanced::{Shell, clipboard, layout, renderer::Headless, widget::Tree};
     use iced::{Event, Point, Rectangle, Size, Vector, mouse};
+
+    #[test]
+    fn row_sections_center_on_the_input_line_below_the_label() {
+        use iced::advanced::widget::Operation;
+        #[derive(Default)]
+        struct Geometry {
+            label: Option<Rectangle>,
+            input: Option<Rectangle>,
+            prefix: Option<Rectangle>,
+            suffix: Option<Rectangle>,
+        }
+        impl Operation for Geometry {
+            fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation)) {
+                operate(self);
+            }
+            fn text(&mut self, _: Option<&iced::widget::Id>, bounds: Rectangle, value: &str) {
+                match value {
+                    "Label" => self.label = Some(bounds),
+                    "P" => self.prefix = Some(bounds),
+                    "S" => self.suffix = Some(bounds),
+                    _ => {}
+                }
+            }
+            fn text_input(
+                &mut self,
+                _: Option<&iced::widget::Id>,
+                bounds: Rectangle,
+                _: &mut dyn iced::advanced::widget::operation::TextInput,
+            ) {
+                self.input = Some(bounds);
+            }
+        }
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        for metrics in [Metrics::desktop(), Metrics::compact()] {
+            for flat in [false, true] {
+                let mut row: Element<'_, ()> = TextEntry::new("Label", "Value", |_| ())
+                    .prefix(text("P"))
+                    .suffix(text("S"))
+                    .flat(flat)
+                    .metrics(metrics)
+                    .into();
+                let mut tree = Tree::new(&row);
+                let node = row.as_widget_mut().layout(
+                    &mut tree,
+                    &renderer,
+                    &layout::Limits::new(Size::ZERO, Size::new(360.0, 200.0)),
+                );
+                let mut geometry = Geometry::default();
+                row.as_widget_mut().operate(
+                    &mut tree,
+                    layout::Layout::new(&node),
+                    &renderer,
+                    &mut geometry,
+                );
+                let label = geometry.label.unwrap();
+                let input = geometry.input.unwrap();
+                assert!(
+                    label.y + label.height <= input.y,
+                    "label stays above the input line"
+                );
+                for section in [geometry.prefix.unwrap(), geometry.suffix.unwrap()] {
+                    assert!(
+                        (section.center_y() - input.center_y()).abs() < 0.01,
+                        "section {section:?} must align with input {input:?}"
+                    );
+                    assert!(
+                        section.y >= label.y + label.height,
+                        "sections must not overlap the label"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn flat_focus_ring_encloses_the_label_prefix_and_suffix_in_both_schemes() {
+        use iced::advanced::{
+            Renderer as _,
+            widget::{Operation, operation::Focusable},
+        };
+        struct Focus(bool);
+        impl Operation for Focus {
+            fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation)) {
+                operate(self);
+            }
+            fn focusable(
+                &mut self,
+                _: Option<&iced::widget::Id>,
+                _: Rectangle,
+                state: &mut dyn Focusable,
+            ) {
+                if self.0 {
+                    state.focus();
+                } else {
+                    state.unfocus();
+                }
+            }
+        }
+        let mut renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        for theme in [crate::Theme::light(), crate::Theme::dark()] {
+            for kind in 0..4 {
+                let text_content = iced::widget::text_editor::Content::with_text("Notes");
+                let mut element: Element<'_, ()> = match kind {
+                    0 => TextEntry::new("Name", "Ada", |_| ())
+                        .prefix(crate::Icon::Search.view(16.0))
+                        .suffix(text("@app"))
+                        .flat(true)
+                        .into(),
+                    1 => NumberEntry::new("Amount", "12", |_| ()).flat(true).into(),
+                    2 => DateEntry::new(
+                        "Date",
+                        "2026-11-08",
+                        crate::primitives::date::Date::today(),
+                        |_| (),
+                    )
+                    .flat(true)
+                    .into(),
+                    _ => MultilineEntry::new("Notes", &text_content, |_| ())
+                        .flat(true)
+                        .into(),
+                };
+                let mut tree = Tree::new(&element);
+                let node = element.as_widget_mut().layout(
+                    &mut tree,
+                    &renderer,
+                    &layout::Limits::new(Size::ZERO, Size::new(360.0, 300.0)),
+                );
+                let bounds = node.bounds();
+                let viewport = Rectangle::new(Point::ORIGIN, Size::new(360.0, 300.0));
+                for focused in [true, false] {
+                    element.as_widget_mut().operate(
+                        &mut tree,
+                        layout::Layout::new(&node),
+                        &renderer,
+                        &mut Focus(focused),
+                    );
+                    element.as_widget_mut().update(
+                        &mut tree,
+                        &Event::Window(iced::window::Event::RedrawRequested(
+                            std::time::Instant::now(),
+                        )),
+                        layout::Layout::new(&node),
+                        mouse::Cursor::Unavailable,
+                        &renderer,
+                        &mut clipboard::Null,
+                        &mut Shell::new(&mut vec![]),
+                        &viewport,
+                    );
+                    renderer.reset(viewport);
+                    element.as_widget().draw(
+                        &tree,
+                        &mut renderer,
+                        &theme,
+                        &iced::advanced::renderer::Style {
+                            text_color: theme.semantic.window.fg,
+                        },
+                        layout::Layout::new(&node),
+                        mouse::Cursor::Unavailable,
+                        &viewport,
+                    );
+                    let pixels =
+                        renderer.screenshot(Size::new(360, 300), 1.0, theme.semantic.window.bg);
+                    let expected = if focused {
+                        theme.semantic.accent.bg
+                    } else {
+                        theme.semantic.window.bg
+                    }
+                    .into_rgba8();
+                    // Top border is above the label; side borders are outside every section.
+                    for (x, y) in [
+                        (180usize, 1usize),
+                        (1, bounds.height as usize / 2),
+                        (358, bounds.height as usize / 2),
+                    ] {
+                        let offset = (y * 360 + x) * 4;
+                        assert_eq!(
+                            &pixels[offset..offset + 4],
+                            &expected,
+                            "kind={kind} focused={focused} at {x},{y}"
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn selection_rows_open_from_the_label_padding_and_right_edge() {

@@ -212,3 +212,12 @@ calendar helper with the same editable value above its calendar. Picking a day
 calls `on_pick` when supplied, otherwise it sends the formatted date through
 `on_input`; typed dates are highlighted automatically. `DateEntry` exposes
 `calendar` and `on_nav` for controlled navigation without building raw inputs.
+
+For flat entries, `EntryRow` owns the focus border for every typed descendant.
+Focusing an editable child outlines the entire row, including its label, prefix,
+suffix and padding. Embedded controls do not draw a second inner focus border.
+Validation keeps its full-row error or warning border, with help text outside it.
+
+`EntryRow` places its label above the input line. Prefixes and suffixes align to
+the input line rather than the combined row height; the outer focus border
+continues to surround the label and every section.

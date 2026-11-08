@@ -70,14 +70,9 @@ pub struct NumberInput<'a, M> {
     metrics: Metrics,
     embedded: bool,
     flat: bool,
-    row_label: Option<String>,
 }
 
 impl<'a, M> NumberInput<'a, M> {
-    pub(crate) fn row_label(mut self, label: String) -> Self {
-        self.row_label = Some(label);
-        self
-    }
     /// Transparent page-surface entry style.
     pub fn flat(mut self, flat: bool) -> Self {
         self.flat = flat;
@@ -102,7 +97,6 @@ impl<'a, M> NumberInput<'a, M> {
             metrics: Metrics::desktop(),
             embedded: false,
             flat: false,
-            row_label: None,
         }
     }
     /// All the rules at once.
@@ -188,9 +182,6 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
             .state(n.text_state())
             .width(n.width)
             .metrics(m);
-        if let Some(label) = n.row_label {
-            field = field.row_label(label);
-        }
         if n.disabled {
             return field.into();
         }

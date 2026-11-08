@@ -53,14 +53,9 @@ pub struct DateInput<'a, M> {
     metrics: Metrics,
     embedded: bool,
     flat: bool,
-    row_label: Option<String>,
 }
 
 impl<'a, M> DateInput<'a, M> {
-    pub(crate) fn row_label(mut self, label: String) -> Self {
-        self.row_label = Some(label);
-        self
-    }
     /// Transparent page-surface entry style.
     pub fn flat(mut self, flat: bool) -> Self {
         self.flat = flat;
@@ -97,7 +92,6 @@ impl<'a, M> DateInput<'a, M> {
             metrics: Metrics::desktop(),
             embedded: false,
             flat: false,
-            row_label: None,
         }
     }
     /// The chosen date, highlighted in the calendar.
@@ -525,16 +519,13 @@ pub(crate) fn calendar<'a, M: Clone + 'a>(
 }
 
 impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
-    fn from(mut d: DateInput<'a, M>) -> Self {
+    fn from(d: DateInput<'a, M>) -> Self {
         let m = d.metrics;
         let state = d.text_state();
         let mut field = entry::<M>("YYYY-MM-DD", d.text)
             .state(state)
             .flat(d.flat)
             .metrics(m);
-        if let Some(label) = d.row_label.take() {
-            field = field.row_label(label);
-        }
         if d.embedded {
             field = field.embedded();
         }
