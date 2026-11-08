@@ -2,7 +2,7 @@
 
 Every UI element is a component with the same shape. Layouts can be written in code, or generated from a description (XML, JSX-like, a macro) that maps tags to components.
 
-This page is the guide. The API of each component (constructors, properties, slots, events) is its man page: `iad-<alias>(3)`, for example `man -l man/iad-dock.3`. `iad-components(3)` is the index. `iced_adaptive_design::prelude::*` imports everything.
+This page is the guide. The API of each component (constructors, properties, slots, events) is its man page: `iad-<alias>(3)`, for example `man -l target/man/iad-dock.3`. `iad-components(3)` is the index. `iced_adaptive_design::prelude::*` imports everything.
 
 ## Conventions
 

@@ -2,7 +2,7 @@
 
 The user guide: when and how to use the library. It ships with the crate.
 
-It is not the API reference. The API is in the man pages (`man/`), generated from the doc comments:
+It is not the API reference. The API is in the man pages (`target/man/`). Run `cargo xtask man` from the repository root to generate the component references and copy the handwritten overview and config pages:
 
 | Page                              | Holds                                                          |
 | --------------------------------- | -------------------------------------------------------------- |
@@ -11,7 +11,7 @@ It is not the API reference. The API is in the man pages (`man/`), generated fro
 | `iad-components(3)`   | index of the components                                        |
 | `iad-desktop.conf(5)` | every key of the desktop config                                |
 
-Read one: `man -l man/iad-dock.3`. Or put them under `man3`, `man5`, `man7` of your `MANPATH`.
+Read one: `man -l target/man/iad-dock.3`. Or put them under `man3`, `man5`, `man7` of your `MANPATH`.
 
 In this guide a component is named by its type. Its page is its snake_case alias with dashes: `NumberInput` is `iad-number-input(3)`.
 
