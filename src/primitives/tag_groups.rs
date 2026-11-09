@@ -54,6 +54,15 @@ impl<K: PartialEq + Clone> TagGroups<K> {
     pub fn new() -> Self {
         Self::default()
     }
+    /// Groups built from the app's own state, with `active` the one being edited. At least one
+    /// group is kept, and `active` is clamped into range. Empty groups are kept as they are.
+    pub fn from_parts(mut groups: Vec<Vec<K>>, active: usize) -> Self {
+        if groups.is_empty() {
+            groups.push(vec![]);
+        }
+        let active = active.min(groups.len() - 1);
+        Self { groups, active }
+    }
     /// All groups, in order. There is always at least one.
     pub fn groups(&self) -> &[Vec<K>] {
         &self.groups
@@ -157,6 +166,14 @@ fn toggle<K: PartialEq>(group: &mut Vec<K>, key: K) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn from_parts_keeps_a_group_and_clamps_the_active_one() {
+        let g = TagGroups::from_parts(vec![vec!["a"], vec![]], 7);
+        assert_eq!((g.groups().len(), g.active()), (2, 1));
+        let g = TagGroups::<&str>::from_parts(vec![], 3);
+        assert_eq!((g.groups().len(), g.active()), (1, 0));
+    }
 
     #[test]
     fn one_group_is_all_of() {

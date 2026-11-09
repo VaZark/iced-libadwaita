@@ -78,9 +78,9 @@ struct Expansion<'a, M> {
 }
 
 /// See the [module](self).
-pub struct ChipGroup<'a, K, M> {
+pub struct ChipGroup<'a, K: Clone, M> {
     options: Vec<ChipOption<K>>,
-    selected: &'a [K],
+    selected: std::borrow::Cow<'a, [K]>,
     on_toggle: Box<dyn Fn(K) -> M + 'a>,
     query: Option<&'a str>,
     on_query: Option<Box<dyn Fn(String) -> M + 'a>>,
@@ -98,12 +98,12 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
     /// `selected` are the keys that are on; `on_toggle` gets the key of a pressed chip.
     pub fn new(
         options: impl IntoIterator<Item = ChipOption<K>>,
-        selected: &'a [K],
+        selected: impl Into<std::borrow::Cow<'a, [K]>>,
         on_toggle: impl Fn(K) -> M + 'a,
     ) -> Self {
         Self {
             options: options.into_iter().collect(),
-            selected,
+            selected: selected.into(),
             on_toggle: Box::new(on_toggle),
             query: None,
             on_query: None,
