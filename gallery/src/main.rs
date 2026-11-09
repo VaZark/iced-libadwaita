@@ -5,6 +5,7 @@
 //! cargo run --example gallery -- --screenshot target/shots   # renders every page, light + dark
 //! ```
 
+mod example_detail_header;
 use iad::components::typography as ty;
 use iad::styles as style;
 use iad::{AccentColor, Icon, Metrics, Role, Scheme, Theme};
@@ -24,8 +25,8 @@ mod composed_demo;
 mod data_demo;
 mod date_demo;
 mod details;
-mod field_demo;
 mod form_demo;
+mod entries_demo;
 mod nav;
 mod playground;
 mod plays;
@@ -193,8 +194,8 @@ struct Gallery {
     picked: Option<&'static str>,
     multi: Vec<&'static str>,
     date: date_demo::State,
-    field: field_demo::State,
     form: form_demo::State,
+    entries: entries_demo::State,
     autocomplete: autocomplete_demo::State,
     sections: sections_demo::State,
     range: range_demo::State,
@@ -233,7 +234,7 @@ struct Gallery {
     /// The toasts on screen, oldest first, each with its id (stacked notifications).
     toasts: iad::primitives::notifications::Queue<ToastSpec>,
     toast_seq: u32,
-    /// Whether toasts dismiss themselves after 4 s (the queue's timeout).
+    /// Whether toasts use the configured auto-dismiss timeout.
     toast_auto: bool,
     /// Screenshot harness: behave as if the window were narrow.
     narrow: bool,
@@ -283,7 +284,8 @@ enum Message {
     Combo2(&'static str),
     SplitChoice(&'static str),
     SplitRun(&'static str),
-    Scheme(bool),
+    Appearance(w::ThemeMode),
+    SystemTheme,
     Accent(AccentColor),
     AccentText(String),
     Transparency(String),
@@ -322,8 +324,8 @@ enum Message {
     Picked(&'static str),
     MultiToggle(&'static str),
     Date(date_demo::Msg),
-    Field(field_demo::Msg),
     Form(form_demo::Msg),
+    Entries(entries_demo::Msg),
     Autocomplete(autocomplete_demo::Msg),
     Sections(sections_demo::Msg),
     Range(range_demo::Msg),
@@ -360,7 +362,6 @@ enum Message {
     ToastAction(iad::primitives::notifications::Id),
     DismissToast(iad::primitives::notifications::Id),
     ToastAuto(bool),
-    ToastTick(Instant),
     ClearToasts,
     Frame(std::time::Instant),
     Animations(bool),
@@ -441,7 +442,7 @@ impl Gallery {
         // Desktop-level behavior comes from the shared config; the gallery's own switches
         // below are demos layered on top of it.
         let cfg = iad::config::current();
-        let from_cfg = Theme::from_config(&cfg);
+        let from_cfg = iad::utils::theme();
         let args: Vec<String> = std::env::args().collect();
         let shots = args
             .iter()
@@ -487,7 +488,13 @@ impl Gallery {
         let tint_color = cfg
             .tint
             .unwrap_or(iced::Color::from_rgba(0.21, 0.52, 0.89, 0.25));
+        let detect_theme = if shots.is_none() {
+            iad::utils::detect_theme().map(|_| Message::SystemTheme)
+        } else {
+            Task::none()
+        };
         let boot = Task::batch([
+            detect_theme,
             open_main,
             boot,
             virtual_boot.map(Message::Virtual),
@@ -588,14 +595,8 @@ impl Gallery {
             widgets_demo,
             plays,
             reorder: reorder_demo::State::default(),
-            field: {
-                let mut f = field_demo::State::default();
-                if std::env::var_os("GALLERY_FIELD_SUBMIT").is_some() {
-                    f.submit();
-                }
-                f
-            },
             form: form_demo::State::default(),
+            entries: entries_demo::State::default(),
             autocomplete: autocomplete_demo::State::default(),
             chips: vec!["Rust", "iced", "GTK"],
             acc_single: vec![0],
@@ -622,7 +623,7 @@ impl Gallery {
             carousel_indicator: w::CarouselIndicator::default(),
             toasts: iad::primitives::notifications::Queue::new(),
             toast_seq: 0,
-            toast_auto: false,
+            toast_auto: true,
             narrow: false,
             toast_position: cfg.toast_position,
             toast_target: cfg.toast_target,
@@ -781,7 +782,15 @@ impl Gallery {
             Message::Back => self.show_content = false,
             Message::MenuMode(m) => self.menu_mode = m,
             Message::SidebarPadding(p) => self.sidebar_padding = p,
-            Message::Scheme(dark) => self.scheme = if dark { Scheme::Dark } else { Scheme::Light },
+            Message::Appearance(mode) => {
+                iad::utils::set_scheme_override(mode.scheme_override());
+                self.scheme = iad::utils::theme_settings().scheme;
+            }
+            Message::SystemTheme => {
+                if self.shots.is_none() {
+                    self.scheme = iad::utils::theme_settings().scheme;
+                }
+            }
             Message::Accent(a) => {
                 self.accent = a;
                 self.accent_text = a.key();
@@ -881,8 +890,8 @@ impl Gallery {
                 None => self.multi.push(s),
             },
             Message::Date(m) => self.date.update(m),
-            Message::Field(m) => self.field.update(m),
             Message::Form(m) => self.form.update(m),
+            Message::Entries(m) => self.entries.update(m),
             Message::Autocomplete(m) => {
                 return self.autocomplete.update(m).map(Message::Autocomplete);
             }
@@ -973,11 +982,6 @@ impl Gallery {
             }
             Message::ToastAuto(on) => {
                 self.toast_auto = on;
-                self.toasts
-                    .set_timeout(on.then_some(Duration::from_secs(4)));
-            }
-            Message::ToastTick(now) => {
-                self.toasts.expire(now);
             }
             Message::ClearToasts => self.toasts.clear(),
             Message::Frame(now) => {
@@ -1117,16 +1121,23 @@ impl Gallery {
                     Message::Capture(i)
                 })
             };
+            // Exercise the complete appearance cycle through the header's update path.
+            if kind == "theme" {
+                let (mode, tag) = match i {
+                    0 => (w::ThemeMode::System, "theme-system"),
+                    1 => (w::ThemeMode::Light, "theme-light"),
+                    2 => (w::ThemeMode::Dark, "theme-dark"),
+                    3 => (w::ThemeMode::System, "theme-restored"),
+                    _ => return iced::exit(),
+                };
+                return self.update(Message::Appearance(mode)).chain(wait(500, tag, self));
+            }
             // GALLERY_ANIM=appshell: open the AppShell window (GALLERY_SHELL_SIZE=WxH) and capture
             // it.
             if kind == "appshell" {
                 return match i {
                     0 => {
-                        self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
-                            Scheme::Dark
-                        } else {
-                            Scheme::Light
-                        };
+                        self.scheme = iad::utils::theme_settings().scheme;
                         let open = self.open_shell();
                         self.shot_tag = Some("parent");
                         open.chain(Task::perform(
@@ -1147,11 +1158,7 @@ impl Gallery {
             if kind == "shell-back" {
                 return match i {
                     0 => {
-                        self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
-                            Scheme::Dark
-                        } else {
-                            Scheme::Light
-                        };
+                        self.scheme = iad::utils::theme_settings().scheme;
                         let open = self.open_shell();
                         self.shot_tag = Some("a0-child");
                         open.chain(Task::perform(
@@ -1176,11 +1183,7 @@ impl Gallery {
             if kind == "embedded-back" {
                 return match i {
                     0 => {
-                        self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
-                            Scheme::Dark
-                        } else {
-                            Scheme::Light
-                        };
+                        self.scheme = iad::utils::theme_settings().scheme;
                         wait(900, "a0-child", self)
                     }
                     1 => {
@@ -1197,11 +1200,7 @@ impl Gallery {
             }
             return match i {
                 0 => {
-                    self.scheme = if std::env::var_os("GALLERY_DARK").is_some() {
-                        Scheme::Dark
-                    } else {
-                        Scheme::Light
-                    };
+                    self.scheme = iad::utils::theme_settings().scheme;
                     wait(700, "a0-start", self)
                 }
                 // GALLERY_ANIM=keys: no trigger; send keys from outside during the wait.
@@ -1231,7 +1230,7 @@ impl Gallery {
             };
         }
         // Every group page, then every component page (light), then the groups again (dark).
-        // GALLERY_SHOT_ONLY=<detail name> captures that one page (light) and exits.
+        // GALLERY_SHOT_ONLY=<detail name> captures that page in the detected scheme and exits.
         let only = std::env::var("GALLERY_SHOT_ONLY").ok();
         let views: Vec<(Page, Option<Detail>)> = Page::ALL
             .iter()
@@ -1269,7 +1268,11 @@ impl Gallery {
             ));
         }
         if i < views.len() {
-            self.scheme = Scheme::Light;
+            self.scheme = if only.is_some() {
+                iad::utils::theme_settings().scheme
+            } else {
+                Scheme::Light
+            };
             (self.page, self.detail) = views[i];
         } else {
             self.scheme = Scheme::Dark;
@@ -1322,15 +1325,14 @@ impl Gallery {
         } else {
             Subscription::none()
         };
-        // Tick only while a toast can expire.
-        let toast_clock = if self.toasts.next_expiry().is_some() {
-            iced::time::every(Duration::from_millis(250)).map(Message::ToastTick)
+        let system_theme = if self.shots.is_none() {
+            iad::utils::follow_theme().map(|_| Message::SystemTheme)
         } else {
             Subscription::none()
         };
         Subscription::batch([
+            system_theme,
             frames,
-            toast_clock,
             self.autocomplete.subscription().map(Message::Autocomplete),
             self.resizable.subscription().map(Message::Resizable),
             iad::windows::changes().map(|_| Message::WindowChanged),
@@ -1348,7 +1350,7 @@ impl Gallery {
         {
             return c.state.view().map(Message::Shell);
         }
-        iced::widget::responsive(|size| self.root(size)).into()
+        iad::layouts::responsive(|size| self.root(size)).into()
     }
 
     /// Whether the window draws its own decorations: the toolkit's setting, nothing of ours.
@@ -1386,14 +1388,8 @@ impl Gallery {
             MenuMode::Dropdown => w::MenuPresentation::Dropdown,
             MenuMode::FullPage => w::MenuPresentation::FullPage,
         };
-        let dark = self.scheme.is_dark();
         let primary = w::primary_menu(
             w::Menu::new("Main Menu")
-                .section([w::MenuItem::check(
-                    "Dark Style",
-                    dark,
-                    Message::Scheme(!dark),
-                )])
                 .section([
                     w::MenuItem::action("Preferences", Message::OpenDialog(Dialog::Preferences))
                         .accel("Ctrl+,"),
@@ -1449,10 +1445,22 @@ impl Gallery {
         // swaps the header's title for a search entry (an on-select trigger of a
         // `MetaComponent`); the path bar (or the plain title) is its other variant.
         content_bar = content_bar.pack_end(
-            cmp::section_button(Icon::Search, Message::ToggleSearch)
-                .active(self.searching)
+            w::ThemeToggle::new(w::ThemeMode::from(iad::utils::scheme_override()))
+                .on_toggle(Message::Appearance)
+                .disabled(!iad::config::current().allow_app_overrides)
                 .metrics(m),
         );
+        content_bar = content_bar.pack_end(cmp::tooltip(
+            iced::widget::button(
+                container(Icon::Search.view(m.icon_size + 2.0).weight(0.3))
+                    .center(Length::Fixed(m.button_min_height)),
+            )
+            .padding(0)
+            .style(style::button::flat)
+            .on_press(Message::ToggleSearch),
+            "Search",
+            cmp::TooltipPosition::Bottom,
+        ));
         if self.searching || self.path_bar_title {
             let title = self.detail.map_or(self.page.title(), Detail::title);
             let path = self.path_bar_title;
@@ -1579,6 +1587,7 @@ impl Gallery {
             let mut t = w::Toast::new(spec.title)
                 .on_dismiss(Message::DismissToast(id))
                 .position(self.toast_position);
+            if !self.toast_auto { t = t.timeout(0); }
             if let Some(label) = spec.action {
                 t = t.action(label, Message::ToastAction(id));
             }
@@ -1746,11 +1755,6 @@ impl Gallery {
                 .title("Appearance")
                 .description("Rows, switches and choosers.")
                 .metrics(m)
-                .push(
-                    w::SwitchRow::new("Dark Style", self.scheme.is_dark(), Message::Scheme)
-                        .subtitle("Switches the whole gallery")
-                        .metrics(m),
-                )
                 .push(w::SwitchRow::new("Wi-Fi", self.wifi, Message::Wifi).metrics(m))
                 .push(
                     w::ComboRow::new("Font", &COMBO, self.combo, Message::Combo)
@@ -1781,14 +1785,11 @@ impl Gallery {
                         .metrics(m),
                 )
                 .push(
-                    w::EntryRow::new("Display name", &self.name)
-                        .on_input(Message::Name)
+                    w::TextEntry::new("Display name", &self.name, Message::Name)
                         .metrics(m),
                 )
                 .push(
-                    w::EntryRow::new("Password", &self.password)
-                        .on_input(Message::Password)
-                        .password(true)
+                    w::TextEntry::from_input("Password", cmp::password_entry("", &self.password).on_input(Message::Password))
                         .metrics(m),
                 ),
         );
@@ -1849,3 +1850,6 @@ fn main() -> iced::Result {
         })
         .run()
 }
+
+#[cfg(test)]
+mod flash_tests;

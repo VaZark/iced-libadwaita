@@ -3,7 +3,7 @@
 
 use iced_adaptive_design as iad;
 
-use iad::theme_config::{Schema, Source, ThemeConfig, Value};
+use iad::theme_config::{Schema, Source, ThemeConfig, Value, VariableType};
 use iad::widgets::PreferencesGroup;
 use iad::{Element, Metrics};
 use iad::{components as cmp, widgets as w};
@@ -16,22 +16,44 @@ pub enum Msg {
     App(iced::widget::text_editor::Action),
     Hardcode(bool),
     Reset,
+    Variation(&'static str),
 }
 
 pub struct State {
     toolkit: iced::widget::text_editor::Content,
     app: iced::widget::text_editor::Content,
     hardcode: bool,
+    variation: &'static str,
 }
 
 const TOOLKIT: &str = "[metrics]\nradius-l=6\ncard-padding=14\n";
-const APP: &str = "[cover]\nsize=120\n[colors]\naccent=#e01b24\n[metrics]\nradius-l=24\n";
+const APP: &str = "[cover]\nsize=120px\n[colors]\naccent=#e01b24\n[metrics]\nradius-l=24\n[dark:cover]\nbackground=hsla(270,50%,30%,1)\n[high-contrast:cover]\nsize=160px\nbackground=#000000\n";
 
 /// The tokens this demo "app" declares for its own objects.
 fn schema() -> Schema {
     Schema::new()
+        .variations(["high-contrast"])
         .color("cover", "background", "#9c4ad1", "Behind a missing cover")
-        .number("cover", "size", 88.0, "The cover edge in px")
+        .variable(
+            "cover",
+            "size",
+            VariableType::Length {
+                min: Some(32.0),
+                max: Some(200.0),
+            },
+            Some(Value::Length(88.0)),
+            "Cover edge: 32–200px",
+        )
+        .variable(
+            "brand",
+            "badge",
+            VariableType::String {
+                values: vec!["preview".into(), "release".into()],
+                accepts_random: false,
+            },
+            None,
+            "Optional badge; no default",
+        )
         .boolean("cover", "rounded", true, "Round the cover's corners")
         .text("brand", "name", "Weave", "Shown in the header")
 }
@@ -42,6 +64,7 @@ impl Default for State {
             toolkit: iced::widget::text_editor::Content::with_text(TOOLKIT),
             app: iced::widget::text_editor::Content::with_text(APP),
             hardcode: false,
+            variation: "light",
         }
     }
 }
@@ -52,6 +75,7 @@ impl State {
             Msg::Toolkit(a) => self.toolkit.perform(a),
             Msg::App(a) => self.app.perform(a),
             Msg::Hardcode(h) => self.hardcode = h,
+            Msg::Variation(key) => self.variation = key,
             Msg::Reset => *self = Self::default(),
         }
     }
@@ -61,9 +85,10 @@ impl State {
             .schema(schema())
             .files(false)
             .toolkit_text(self.toolkit.text())
-            .app_text(self.app.text());
+            .app_text(self.app.text())
+            .variation(self.variation);
         if self.hardcode {
-            b = b.hardcode("cover", "size", Value::Number(64.0));
+            b = b.hardcode("cover", "size", Value::Length(64.0));
         }
         b.build()
     }
@@ -176,6 +201,9 @@ impl State {
         }
 
         column![
+            PreferencesGroup::new().title("Typed variables and variations").metrics(m)
+                .description("Size accepts 32–200px. Invalid app values use the toolkit value, then the fallback. Optional values without a fallback remain unset.")
+                .push(w::SelectEntry::new("Variation", &["light", "dark", "high-contrast"], Some(self.variation), Msg::Variation).metrics(m)),
             edit(
                 m,
                 "Toolkit theme file",
@@ -194,7 +222,7 @@ impl State {
                 .title("In code")
                 .description("Highest, and extremely discouraged: nobody can change it without a rebuild, and every one is reported at startup.")
                 .metrics(m)
-                .push(w::SwitchRow::new("Hardcode [cover] size = 64", self.hardcode, Msg::Hardcode).metrics(m)),
+                .push(w::SwitchRow::new("Hardcode [cover] size = 64px", self.hardcode, Msg::Hardcode).metrics(m)),
             table,
             PreferencesGroup::<Msg>::new()
                 .title("An object styled by tokens")

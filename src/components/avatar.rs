@@ -56,7 +56,7 @@ impl Avatar {
             shape: AvatarShape::Circle,
         }
     }
-    /// An icon (a built-in [`Icon`](crate::Icon) or your own SVG) in place of the initials. The
+    /// An icon (a system [`Icon`](crate::Icon) or your own SVG) in place of the initials. The
     /// background color still comes from the text, so the same name keeps the same color.
     pub fn icon(mut self, icon: impl Into<IconSource>) -> Self {
         self.icon = Some(icon.into());

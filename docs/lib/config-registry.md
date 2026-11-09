@@ -7,7 +7,7 @@ Many applications read the shared [desktop config](desktop-config.md) at once, e
 | Metadata         | Purpose                                                                |
 | ---------------- | ---------------------------------------------------------------------- |
 | `section`, `key` | the property identifier                                                |
-| `ty`             | the value type: `Bool`, `Number { min, max }`, `Choice([...])`, `Text` |
+| `ty`             | the value type: `Bool`, `Number { min, max }`, `Choice([...])`, `Text`, `Milliseconds` |
 | `default`        | the value used when the property is missing                            |
 | `since`          | the first toolkit version that supports it                             |
 | `deprecated`     | the first version in which **new builds** must not reference it        |
@@ -41,3 +41,7 @@ flowchart TD
 The tests tie the registry to the parser: every registered property is read with its own default without a warning, and a file made of all the defaults reads back as the built-in defaults. Every animation trigger must have a `[motion]` entry. When you add a property to the parser, add it to the registry in the same change.
 
 A settings UI can list the active properties as the latest and the historical ones as deprecated, with their version metadata.
+
+`Milliseconds` accepts nonnegative integer millisecond counts from 0 to 4294967295.
+Fractions, negative values, non-finite values and overflow are invalid.
+`[toasts] timeout=3000` uses this type; 0 disables automatic dismissal.

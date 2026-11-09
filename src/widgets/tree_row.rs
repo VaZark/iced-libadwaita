@@ -1,7 +1,8 @@
 //! `TreeRow`: a row that can hold other rows, or any elements, nested under it. Inspired by
 //! [`ExpanderRow`](crate::widgets::ExpanderRow), made for hierarchies: the **arrow** at the start opens
-//! and closes it (GTK's `GtkTreeExpander`), the **title** is a separate target that activates
-//! the row (select it, open it), and a leaf keeps the arrow's width so labels line up.
+//! and closes it (GTK's `GtkTreeExpander`). The **whole header surface** activates the row
+//! (select it, open it), or toggles it when no separate activation is set. A leaf keeps the
+//! arrow's width so labels line up.
 //!
 //! **Scope.** A `TreeRow` nests elements *within a page*: a group of settings, an outline, a
 //! file list, rows that belong together on one screen. It is **not for logic that spans pages**:
@@ -42,6 +43,7 @@ pub struct TreeRow<'a, M> {
     selected: bool,
     expanded: bool,
     expandable: bool,
+    on_activate: Option<M>,
     on_toggle: Option<Box<dyn Fn(bool) -> M + 'a>>,
     children: Vec<Element<'a, M>>,
     indent: f32,
@@ -56,6 +58,7 @@ impl<'a, M: 'a> TreeRow<'a, M> {
             selected: false,
             expanded: false,
             expandable: false,
+            on_activate: None,
             on_toggle: None,
             children: Vec::new(),
             // The toolkit's default; `indent(..)` overrides it for this row.
@@ -76,9 +79,10 @@ impl<'a, M: 'a> TreeRow<'a, M> {
         self.row = self.row.suffix(e);
         self
     }
-    /// Pressing the title (not the arrow): select it, open it, run it.
+    /// Pressing the header surface: select it, open it, run it.
+    /// With a separate toggle action, the arrow toggles without activating.
     pub fn on_activate(mut self, m: M) -> Self {
-        self.row = self.row.on_activate(m);
+        self.on_activate = Some(m);
         self
     }
     /// The row is the current selection: it lies on the selection highlight.
@@ -91,7 +95,8 @@ impl<'a, M: 'a> TreeRow<'a, M> {
         self.expanded = expanded;
         self
     }
-    /// Pressing the arrow, with the state the row would take. Without it the arrow is inert.
+    /// The state the row would take when toggled. Without `on_activate`, the whole
+    /// header toggles; otherwise only the arrow does.
     pub fn on_toggle(mut self, f: impl Fn(bool) -> M + 'a) -> Self {
         self.on_toggle = Some(Box::new(f));
         self
@@ -131,6 +136,9 @@ impl<'a, M: 'a> TreeRow<'a, M> {
 impl<'a, M: Clone + 'a> From<TreeRow<'a, M>> for Element<'a, M> {
     fn from(x: TreeRow<'a, M>) -> Self {
         let m = x.metrics;
+        let toggle = x.has_arrow().then(|| x.toggle()).flatten();
+        let action = x.on_activate.clone().or_else(|| toggle.clone());
+        let separate_toggle = x.on_activate.is_some();
         // The arrow cell; a leaf keeps its width (GTK's indent-for-icon).
         let cell = m.icon_size + 8.0;
         let handle: Element<'a, M> = if x.has_arrow() {
@@ -139,11 +147,16 @@ impl<'a, M: Clone + 'a> From<TreeRow<'a, M>> for Element<'a, M> {
             } else {
                 Icon::GoNext
             };
-            button(container(icon.view(m.icon_size - 2.0)).center(cell))
-                .padding(0)
-                .style(sb::flat)
-                .on_press_maybe(x.toggle())
-                .into()
+            let glyph = container(icon.view(m.icon_size - 2.0)).center(cell);
+            if separate_toggle {
+                button(glyph)
+                    .padding(0)
+                    .style(sb::flat)
+                    .on_press_maybe(toggle)
+                    .into()
+            } else {
+                glyph.into()
+            }
         } else {
             space().width(cell).into()
         };
@@ -153,6 +166,15 @@ impl<'a, M: Clone + 'a> From<TreeRow<'a, M>> for Element<'a, M> {
             Element::from(x.row),
         ]
         .align_y(Vertical::Center);
+        let header: Element<'a, M> = match action {
+            Some(message) => button(header)
+                .padding(0)
+                .width(Length::Fill)
+                .style(sb::list_row)
+                .on_press(message)
+                .into(),
+            None => header.into(),
+        };
         let header: Element<'a, M> = container(header)
             .width(Length::Fill)
             .style(move |t: &Theme| iced::widget::container::Style {
@@ -204,6 +226,130 @@ impl<'a, M: Clone + 'a> From<TreeRow<'a, M>> for Element<'a, M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn renderer() -> iced::Renderer {
+        use iced::advanced::renderer::Headless;
+        iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer")
+    }
+
+    fn click<M: Clone>(
+        element: &mut Element<'_, M>,
+        renderer: &iced::Renderer,
+        at: iced::Point,
+    ) -> Vec<M> {
+        use iced::advanced::{Shell, clipboard, layout, widget::Tree};
+        use iced::{Event, Rectangle, Size, mouse};
+        let mut tree = Tree::new(&*element);
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(320.0, 1000.0)),
+        );
+        let mut messages = vec![];
+        for event in [
+            mouse::Event::ButtonPressed(mouse::Button::Left),
+            mouse::Event::ButtonReleased(mouse::Button::Left),
+        ] {
+            element.as_widget_mut().update(
+                &mut tree,
+                &Event::Mouse(event),
+                layout::Layout::new(&node),
+                mouse::Cursor::Available(at),
+                renderer,
+                &mut clipboard::Null,
+                &mut Shell::new(&mut messages),
+                &Rectangle::new(iced::Point::ORIGIN, Size::new(320.0, 1000.0)),
+            );
+        }
+        messages
+    }
+
+    #[test]
+    fn the_whole_header_toggles_or_activates_and_the_arrow_stays_independent() {
+        let renderer = renderer();
+        for activate in [false, true] {
+            for at in [
+                iced::Point::new(1.0, 1.0),
+                iced::Point::new(140.0, 20.0),
+                iced::Point::new(319.0, 20.0),
+            ] {
+                let mut row = TreeRow::new("Branch").expandable(true).on_toggle(|_| 1u8);
+                if activate {
+                    row = row.on_activate(2);
+                }
+                let mut element = Element::from(row);
+                assert_eq!(
+                    click(&mut element, &renderer, at),
+                    vec![if activate { 2 } else { 1 }]
+                );
+            }
+            let m = Metrics::desktop();
+            let at = iced::Point::new(
+                m.row_padding.left + (m.icon_size + 8.0) / 2.0,
+                m.row_min_height / 2.0,
+            );
+            let mut row = TreeRow::new("Branch").expandable(true).on_toggle(|_| 1u8);
+            if activate {
+                row = row.on_activate(2);
+            }
+            assert_eq!(
+                click(&mut row.into(), &renderer, at),
+                vec![1],
+                "arrow never also activates"
+            );
+        }
+        let mut leaf = TreeRow::new("Leaf").on_activate(2u8).into();
+        assert_eq!(
+            click(&mut leaf, &renderer, iced::Point::new(319.0, 20.0)),
+            vec![2]
+        );
+        let mut inert = TreeRow::<u8>::new("Inert").expandable(true).into();
+        assert!(click(&mut inert, &renderer, iced::Point::new(319.0, 20.0)).is_empty());
+    }
+
+    #[test]
+    fn an_interactive_suffix_keeps_its_own_action() {
+        let renderer = renderer();
+        let mut row = TreeRow::new("Branch")
+            .expandable(true)
+            .on_toggle(|_| 1u8)
+            .on_activate(2)
+            .suffix(
+                button(space().width(40.0).height(24.0))
+                    .padding(0)
+                    .on_press(3),
+            )
+            .into();
+        assert_eq!(
+            click(&mut row, &renderer, iced::Point::new(288.0, 24.0)),
+            vec![3]
+        );
+    }
+
+    #[test]
+    fn accordion_uses_full_surface_disclosure_and_keeps_its_selection_rule() {
+        use crate::primitives::Selection;
+        use crate::widgets::{Accordion, AccordionItem};
+        let renderer = renderer();
+        for (rule, expected) in [
+            (Selection::Multiple, vec![2, 1]),
+            (Selection::SINGLE, vec![1]),
+        ] {
+            let mut element = Accordion::new(&[2u8], |keys| keys)
+                .selection(rule)
+                .item(AccordionItem::new(1, "First", space()))
+                .into();
+            assert_eq!(
+                click(&mut element, &renderer, iced::Point::new(319.0, 20.0)),
+                vec![expected]
+            );
+        }
+    }
 
     fn row() -> TreeRow<'static, u8> {
         TreeRow::new("A")

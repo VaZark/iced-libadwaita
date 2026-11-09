@@ -38,6 +38,17 @@ pub mod text_input {
         }
     }
 
+    /// Page-surface entry: transparent at rest, with a subtle hover and the normal focus ring.
+    pub fn flat(theme: &Theme, status: Status) -> Style {
+        let mut style = default(theme, status);
+        style.background = Background::Color(if status == Status::Hovered {
+            alpha(theme.semantic.window.fg, 0.03)
+        } else {
+            iced::Color::TRANSPARENT
+        });
+        style
+    }
+
     /// Entry marked `.error`.
     pub fn error(theme: &Theme, status: Status) -> Style {
         let mut st = default(theme, status);
@@ -447,6 +458,34 @@ pub mod menu {
             selected_text_color: s.accent.fg,
             selected_background: Background::Color(s.accent.bg),
             shadow: theme.shadows.popover().shadow,
+        }
+    }
+}
+
+#[cfg(test)]
+mod flat_entry_tests {
+    use super::*;
+    use iced::widget::text_input::Status;
+    #[test]
+    fn flat_entries_are_transparent_but_keep_focus_and_disabled_foregrounds() {
+        for theme in [crate::Theme::light(), crate::Theme::dark()] {
+            let active = text_input::flat(&theme, Status::Active);
+            assert_eq!(
+                active.background,
+                iced::Background::Color(iced::Color::TRANSPARENT)
+            );
+            assert_eq!(active.value, theme.semantic.window.fg);
+            assert_eq!(
+                text_input::flat(&theme, Status::Hovered).background,
+                iced::Background::Color(crate::color::alpha(theme.semantic.window.fg, 0.03))
+            );
+            let focused = text_input::flat(&theme, Status::Focused { is_hovered: false });
+            assert_eq!(focused.border.width, theme.metrics.focus_ring_width);
+            assert_eq!(focused.border.color, theme.semantic.accent.bg);
+            assert_eq!(
+                text_input::flat(&theme, Status::Disabled).value,
+                crate::color::fade(theme.semantic.window.fg, theme.semantic.opacity.disabled)
+            );
         }
     }
 }

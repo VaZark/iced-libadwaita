@@ -438,15 +438,15 @@ fn header_cell<'a, T: 'a, M: Clone + 'a>(
         Some(Direction::Desc) => Icon::GoDown,
         None => Icon::GoUpDown,
     };
-    // SVG tints ignore alpha: a solid foreground when sorted, a solid dim mix otherwise.
+    // Sorted arrows use the foreground; unsorted arrows use dim opacity.
     let icon =
         arrow
             .view(m.icon_size * 0.75)
             .style(move |th: &Theme, _| iced::widget::svg::Style {
                 color: Some(if sorted {
-                    th.semantic.icon_solid(false)
+                    th.semantic.icon_color(false)
                 } else {
-                    th.semantic.dim_solid()
+                    th.semantic.dim()
                 }),
             });
     let mut content = row![
@@ -527,7 +527,7 @@ fn sort_control<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Opti
         button(
             container(arrow.view(m.icon_size).style(move |th: &Theme, _| {
                 iced::widget::svg::Style {
-                    color: Some(th.semantic.icon_solid(!enabled)),
+                    color: Some(th.semantic.icon_color(!enabled)),
                 }
             }))
             .center(Length::Fixed(side)),

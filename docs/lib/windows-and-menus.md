@@ -25,7 +25,7 @@ iad::windows::frame(
 ```
 
 - Track the window state with `windows::changes()` and `refresh()`. Corners round only while the window floats.
-- Buttons and their places follow GNOME's `button-layout`. Icons follow the icon theme. In mobile mode they are hidden.
+- Buttons and their places follow GNOME's `button-layout`. Icons use the configured XDG theme (see [system icons](icons.md)); `system` follows desktop toolkit settings, with `hicolor` as fallback. In mobile mode they are hidden.
 - Anything on a window corner takes the window radius: `NavigationSplitView::window_radius`, `dialog_in_window`, `Dock` (window scope), `HeaderBar::window_corners`.
 - In a split view each pane has its own header bar. Only the pane on a window edge shows the window buttons.
 
@@ -42,7 +42,7 @@ The desktop (GNOME Resources, the shell) shows a window as an app only if the wi
 
 ## Dark mode
 
-With `[appearance] color-scheme=system` the theme follows the desktop's light/dark setting. That setting is the settings portal's `org.freedesktop.appearance color-scheme` (not a Wayland protocol), the only source inside a Flatpak. Run `iad::system::detect_color_scheme()` at start-up and subscribe to `iad::system::follow_color_scheme()`, mapping both to any message that redraws; `Theme::from_config` then uses the result. In style code, `theme.light_dark(light, dark)` picks a value by the theme's scheme (like CSS `light-dark()`), so one theme serves both modes.
+With `[appearance] color-scheme=system` the theme follows the desktop's light/dark setting. That setting is the settings portal's `org.freedesktop.appearance color-scheme` (not a Wayland protocol), the only source inside a Flatpak. Run `iad::utils::detect_theme()` at start-up and subscribe to `iad::utils::follow_theme()`, mapping both to any message that redraws; `Theme::from_config` then uses the result. In style code, `theme.light_dark(light, dark)` picks a value by the theme's scheme (like CSS `light-dark()`), so one theme serves both modes.
 
 ## Dialogs are modals, not windows
 
@@ -94,10 +94,13 @@ A surface on an edge: footer, drawer, bottom sheet.
 | `margin`     | px off the docked edge, that edge only                         | `0` (flush)  |
 | `mode`       | `Push` (makes room), `Overlay` (over a faded base)             | `Push`       |
 | `scope`      | `Content` (the base as given), `Window` (corners take the window radius) | `Content` |
+| `radius`     | explicit uniform or per-corner surface radii                   | adaptive corners |
 | `border`     | hairline on the sides that are not flush                       | on           |
 | `scrim`      | fade the base (`Overlay`)                                      | on           |
 | `open`       | show it                                                        | `true`       |
 | `on_outside` | message for a press outside (`Overlay`)                        | none         |
+
+`Dock::radius(0.0)` makes the surface square; a uniform value or `iced::border::Radius` overrides generated corners, including edge corners. Surface and outline share the override. Omit it to preserve the adaptive sheet geometry.
 
 `FullScreen` as the size covers the base. All borders are flush: no margin, no border.
 

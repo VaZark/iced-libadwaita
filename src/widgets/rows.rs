@@ -3,11 +3,11 @@
 
 use crate::Element;
 use crate::components::typography;
-use crate::styles::{button as sb, container as sc, text as st, text_input as si};
+use crate::styles::{button as sb, container as sc, text as st};
 use crate::{CollapseBehavior, Icon, Metrics, Role, Theme, Typography};
 use iced::Length;
 use iced::alignment::{Horizontal, Vertical};
-use iced::widget::{button, column, container, row, space, text, text_input};
+use iced::widget::{button, column, container, row, space, text};
 
 /// `.boxed-list`: rows in a rounded card separated by hairlines (a [`Card`](crate::widgets::Card)
 /// of rows with no padding).
@@ -22,7 +22,7 @@ pub fn boxed_list<'a, M: 'a>(rows: impl IntoIterator<Item = Element<'a, M>>) -> 
     .into()
 }
 
-fn row_frame<'a, M: 'a>(
+pub(crate) fn row_frame<'a, M: 'a>(
     inner: impl Into<Element<'a, M>>,
     m: &Metrics,
 ) -> iced::widget::Row<'a, M, Theme> {
@@ -159,7 +159,7 @@ impl<'a, M: Clone + 'a> From<ActionRow<'a, M>> for Element<'a, M> {
         if r.chevron {
             main = main.push(Icon::GoNext.view(m.icon_size).style(|t: &Theme, _| {
                 iced::widget::svg::Style {
-                    color: Some(t.semantic.dim_solid()),
+                    color: Some(t.semantic.dim()),
                 }
             }));
         }
@@ -296,92 +296,6 @@ impl<'a, M: Clone + 'a> From<ButtonRow<M>> for Element<'a, M> {
             btn = btn.on_press(msg);
         }
         btn.into()
-    }
-}
-
-/// `AdwEntryRow`: a title that floats above an inline entry.
-pub struct EntryRow<'a, M> {
-    title: String,
-    value: String,
-    on_input: Option<Box<dyn Fn(String) -> M + 'a>>,
-    on_submit: Option<M>,
-    secure: bool,
-    suffix: Option<Element<'a, M>>,
-    collapse: CollapseBehavior,
-    metrics: Metrics,
-}
-
-impl<'a, M> EntryRow<'a, M> {
-    pub fn new(title: impl Into<String>, value: impl Into<String>) -> Self {
-        Self {
-            title: title.into(),
-            value: value.into(),
-            on_input: None,
-            on_submit: None,
-            secure: false,
-            suffix: None,
-            collapse: Metrics::desktop().row_collapse,
-            metrics: Metrics::desktop(),
-        }
-    }
-    /// Behavior of the suffix when it wraps (see [`CollapseBehavior`]).
-    pub fn collapse(mut self, c: CollapseBehavior) -> Self {
-        self.collapse = c;
-        self
-    }
-    pub fn on_input(mut self, f: impl Fn(String) -> M + 'a) -> Self {
-        self.on_input = Some(Box::new(f));
-        self
-    }
-    pub fn on_submit(mut self, m: M) -> Self {
-        self.on_submit = Some(m);
-        self
-    }
-    /// `AdwPasswordEntryRow`.
-    pub fn password(mut self, secure: bool) -> Self {
-        self.secure = secure;
-        self
-    }
-    pub fn suffix(mut self, e: impl Into<Element<'a, M>>) -> Self {
-        self.suffix = Some(e.into());
-        self
-    }
-    pub fn metrics(mut self, m: Metrics) -> Self {
-        self.metrics = m;
-        self
-    }
-}
-
-impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
-    fn from(e: EntryRow<'a, M>) -> Self {
-        let m = e.metrics;
-        let t = Typography::default();
-        let mut input = text_input("", &e.value)
-            .padding(0)
-            .secure(e.secure)
-            .style(si::embedded);
-        if let Some(f) = e.on_input {
-            input = input.on_input(f);
-        }
-        if let Some(s) = e.on_submit {
-            input = input.on_submit(s);
-        }
-        let main = column![t.caption(e.title).style(st::dim), input]
-            .spacing(2)
-            .width(Length::Fill);
-        let line: Element<'a, M> = match e.suffix {
-            Some(s) => crate::layouts::FlexRow::new(main, s)
-                .spacing(m.row_spacing)
-                .line_spacing(m.space_s)
-                .main_basis(m.row_wrap_basis)
-                .collapse(e.collapse)
-                .into(),
-            None => main.into(),
-        };
-        container(row_frame(line, &m))
-            .padding(m.row_padding)
-            .width(Length::Fill)
-            .into()
     }
 }
 

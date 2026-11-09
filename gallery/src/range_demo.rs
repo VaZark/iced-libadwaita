@@ -286,6 +286,15 @@ impl State {
         };
         let sliders = column![
             Field::new(
+                format!("Vertical: {}", pair(self.basic)),
+                rs(0.0..=100.0, self.basic, Msg::Basic)
+                    .orientation(iad::primitives::scrub::Axis::Vertical)
+                    .height(180.0)
+                    .marks_every(20.0)
+            )
+            .plain_label(true)
+            .metrics(m),
+            Field::new(
                 format!("Basic: {}", pair(self.basic)),
                 rs(0.0..=100.0, self.basic, Msg::Basic)
             )

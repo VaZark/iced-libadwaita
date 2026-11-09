@@ -16,11 +16,21 @@ use crate::{Icon, Metrics, Theme};
 use iced::widget::{container, mouse_area, row};
 use iced::{Alignment, Length, mouse};
 
+/// Initial state for a section whose open state is owned by the application.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CollapseState {
+    Expanded,
+    Collapsed,
+}
+
 /// See the [module](self).
 pub struct SectionDivider<'a, M> {
     title: String,
     detail: Option<String>,
     open: bool,
+    collapsible: Option<bool>,
+    chevron: bool,
+    trailing: Option<Element<'a, M>>,
     on_toggle: Option<M>,
     action: Option<Element<'a, M>>,
     metrics: Metrics,
@@ -32,12 +42,33 @@ impl<'a, M> SectionDivider<'a, M> {
             title: title.into(),
             detail: None,
             open: true,
+            collapsible: None,
+            chevron: true,
+            trailing: None,
             on_toggle: None,
             action: None,
             metrics: Metrics::desktop(),
         }
     }
 
+    /// Whether presses toggle the caller-owned section. With no callback it remains a heading.
+    pub fn collapsible(mut self, enabled: bool) -> Self {
+        self.collapsible = Some(enabled);
+        self
+    }
+    pub fn default_collapse_state(mut self, state: CollapseState) -> Self {
+        self.open = state == CollapseState::Expanded;
+        self
+    }
+    pub fn chevron(mut self, show: bool) -> Self {
+        self.chevron = show;
+        self
+    }
+    /// Extra actions beside the collapse control, without replacing it.
+    pub fn trailing(mut self, action: impl Into<Element<'a, M>>) -> Self {
+        self.trailing = Some(action.into());
+        self
+    }
     /// A dimmed note after the name (a count).
     pub fn detail(mut self, detail: impl Into<String>) -> Self {
         self.detail = Some(detail.into());
@@ -71,7 +102,10 @@ impl<'a, M> SectionDivider<'a, M> {
 }
 
 impl<'a, M: Clone + 'a> From<SectionDivider<'a, M>> for Element<'a, M> {
-    fn from(d: SectionDivider<'a, M>) -> Self {
+    fn from(mut d: SectionDivider<'a, M>) -> Self {
+        if !d.collapsible.unwrap_or(d.on_toggle.is_some()) {
+            d.on_toggle = None;
+        }
         let m = d.metrics;
         let line = container(iced::widget::space())
             .width(Length::Fill)
@@ -96,15 +130,22 @@ impl<'a, M: Clone + 'a> From<SectionDivider<'a, M>> for Element<'a, M> {
         };
         let end: Element<'a, M> = match (d.action, d.on_toggle) {
             (Some(action), _) => action,
-            (None, Some(msg)) => icon_button(if d.open { Icon::GoDown } else { Icon::GoPrevious })
-                .on_press(msg)
-                .into(),
-            (None, None) => iced::widget::space().width(0).into(),
+            (None, Some(msg)) if d.chevron => icon_button(if d.open {
+                Icon::GoDown
+            } else {
+                Icon::GoPrevious
+            })
+            .on_press(msg)
+            .into(),
+            (None, _) => iced::widget::space().width(0).into(),
         };
-        row![head, end]
+        let mut row = row![head, end]
             .spacing(m.space_s)
-            .align_y(Alignment::Center)
-            .into()
+            .align_y(Alignment::Center);
+        if let Some(trailing) = d.trailing {
+            row = row.push(trailing);
+        }
+        row.into()
     }
 }
 

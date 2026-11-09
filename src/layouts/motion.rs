@@ -258,8 +258,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Reveal<'a, M> {
         if bounds.height <= 0.5 {
             return;
         }
-        // Clip to the revealed part; the child stays put and is uncovered downward.
-        renderer.with_layer(bounds, |r| {
+        // Nested render layers do not inherit this layer's clip. Give descendants the
+        // same visible viewport so their own layers cannot escape the revealed area.
+        let Some(visible) = bounds.intersection(viewport) else {
+            return;
+        };
+        renderer.with_layer(visible, |r| {
             self.content.as_widget().draw(
                 &tree.children[0],
                 r,
@@ -267,7 +271,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Reveal<'a, M> {
                 style,
                 layout.children().next().unwrap(),
                 cursor,
-                viewport,
+                &visible,
             );
         });
     }
@@ -1576,5 +1580,122 @@ mod viewport_tests {
         let narrow = Rectangle::new(Point::new(150.0, 0.0), Size::new(100.0, 800.0));
         let v = translated_viewport(bounds, &narrow, Vector::ZERO);
         assert_eq!((v.x, v.width), (150.0, 100.0));
+    }
+}
+
+#[cfg(test)]
+mod reveal_clip_tests {
+    use super::*;
+    use iced::advanced::renderer::Headless;
+    use std::{cell::Cell, rc::Rc};
+
+    // A descendant opening its own render layer, as scrollables and nested reveals do.
+    struct NestedLayer(Rc<Cell<Option<Rectangle>>>);
+    impl Widget<(), Theme, iced::Renderer> for NestedLayer {
+        fn size(&self) -> Size<Length> {
+            Size::new(Length::Fill, Length::Fixed(100.0))
+        }
+        fn layout(
+            &mut self,
+            _: &mut Tree,
+            _: &iced::Renderer,
+            limits: &layout::Limits,
+        ) -> layout::Node {
+            layout::Node::new(Size::new(limits.max().width, 100.0))
+        }
+        fn update(
+            &mut self,
+            _: &mut Tree,
+            _: &Event,
+            _: Layout<'_>,
+            _: mouse::Cursor,
+            _: &iced::Renderer,
+            _: &mut dyn Clipboard,
+            _: &mut Shell<'_, ()>,
+            _: &Rectangle,
+        ) {
+        }
+        fn draw(
+            &self,
+            _: &Tree,
+            renderer: &mut iced::Renderer,
+            _: &Theme,
+            _: &renderer::Style,
+            _: Layout<'_>,
+            _: mouse::Cursor,
+            viewport: &Rectangle,
+        ) {
+            self.0.set(Some(*viewport));
+            renderer.with_layer(*viewport, |r| {
+                r.fill_quad(
+                    Quad {
+                        bounds: *viewport,
+                        ..Default::default()
+                    },
+                    Color::from_rgb(0.5, 0.5, 0.5),
+                )
+            });
+        }
+    }
+
+    #[test]
+    fn reveal_confines_nested_layers_to_its_visible_area_while_opening_and_closing() {
+        let mut renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        let seen = Rc::new(Cell::new(None));
+        let child: Element<'_, (), Theme> = Element::new(NestedLayer(seen.clone()));
+        let mut reveal = reveal(child, false);
+        let mut tree = Tree::new(&reveal as &dyn Widget<(), Theme, iced::Renderer>);
+        let window = Rectangle::new(iced::Point::ORIGIN, Size::new(320.0, 240.0));
+        for progress in [0.25, 0.5, 1.0, 0.5, 0.25, 0.0] {
+            tree.state
+                .downcast_mut::<RevealState>()
+                .progress
+                .set_immediate(progress);
+            let node = reveal
+                .layout(
+                    &mut tree,
+                    &renderer,
+                    &layout::Limits::new(Size::ZERO, Size::new(160.0, 240.0)),
+                )
+                .move_to(iced::Point::new(80.0, 60.0));
+            let layout = Layout::new(&node);
+            renderer.reset(window);
+            seen.set(None);
+            reveal.draw(
+                &tree,
+                &mut renderer,
+                &Theme::light(),
+                &renderer::Style {
+                    text_color: Color::BLACK,
+                },
+                layout,
+                mouse::Cursor::Unavailable,
+                &window,
+            );
+            if progress > 0.0 {
+                assert_eq!(
+                    seen.get(),
+                    Some(layout.bounds()),
+                    "descendants must receive the reveal's clipped viewport"
+                );
+            } else {
+                assert_eq!(seen.get(), None);
+            }
+            let pixels = renderer.screenshot(Size::new(320, 240), 1.0, Color::WHITE);
+            // Sidebar/top bar and the space below the disclosure must stay untouched.
+            for (x, y) in [(20, 100), (120, 20), (120, 200), (300, 100)] {
+                let offset = (y * 320 + x) * 4;
+                assert_eq!(
+                    &pixels[offset..offset + 4],
+                    &[255, 255, 255, 255],
+                    "outside reveal at {progress}"
+                );
+            }
+        }
     }
 }

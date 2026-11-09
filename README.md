@@ -33,7 +33,7 @@ Use `iad::Theme` as the application theme: `iad::Theme::from_config(&iad::config
 | Path                | Holds                                                                           |
 | ------------------- | ------------------------------------------------------------------------------- |
 | `src/`              | the library: `layouts/`, `primitives/` (headless rules), `binds/`, `components/`, `metas/`, `widgets/`, `styles/`, `windows/`, theme, config |
-| `man/`              | man pages: overview, desktop config, one per component                          |
+| `docs/man/`         | handwritten man sources; built pages go in `target/man/`                          |
 | `docs/lib/`         | the user guide (published with the crate)                                       |
 | `docs/hig-inferences/` | design rationale for contributors (not published)                            |
 | `gallery/`          | the gallery: a separate crate that depends on the library                       |
@@ -43,7 +43,7 @@ Use `iad::Theme` as the application theme: `iad::Theme::from_config(&iad::config
 
 ## Reference
 
-- API: man pages. `man -l man/iad.7` (overview), `man -l man/iad-dock.3` (one component), `man -l man/iad-desktop.conf.5` (config).
+- API: run `cargo xtask man` to build the man pages in `target/man/`. `man -l target/man/iad.7` (overview), `man -l target/man/iad-dock.3` (one component), `man -l target/man/iad-desktop.conf.5` (config).
 - Usage: [docs/lib/](docs/lib/README.md).
 - Gallery: `cargo run -p iced-adaptive-design-gallery`.
 
@@ -55,3 +55,5 @@ Every new property goes into the library first: the component, its doc comment, 
 
 - [DESIGN.md](DESIGN.md): structure and targets.
 - [CONTRIBUTING.md](CONTRIBUTING.md): build, test, work on it.
+
+Icons come from installed XDG themes; no icon artwork is bundled. Configure `[icons] theme` to select a theme (`system` follows shared desktop toolkit settings, then falls back to `hicolor`). See [system icons and migration](docs/lib/icons.md).

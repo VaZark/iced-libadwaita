@@ -14,6 +14,7 @@ pub(crate) mod divider;
 pub(crate) mod elevated;
 pub(crate) mod entry;
 pub(crate) mod icon_toggle;
+pub(crate) mod input_wrapper;
 pub(crate) mod search_bar;
 pub(crate) mod sections;
 pub(crate) mod spectrum;
@@ -22,6 +23,7 @@ pub(crate) mod switch;
 pub(crate) mod tooltip;
 pub mod typography;
 
+pub use crate::widgets::{ThemeMode, ThemeToggle};
 pub use avatar::{Avatar, AvatarShape, avatar};
 pub use badge::{Badge, Chip, ChipSize, RoundBadge};
 pub use button::{
@@ -43,3 +45,6 @@ pub use spectrum::{SpectrumBars, spectrum_bars};
 pub use spinner::{Spinner, spinner};
 pub use switch::{Switch, switch};
 pub use tooltip::{TooltipPosition, tooltip};
+
+/// Label, description and validation wrapper for custom input components.
+pub use input_wrapper::{InputWrapper, InputWrapperLayout, outlined as input_outline};

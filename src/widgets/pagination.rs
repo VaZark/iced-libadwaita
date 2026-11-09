@@ -147,7 +147,7 @@ impl<'a, M: Clone + 'a> From<Pagination<'a, M>> for Element<'a, M> {
         let icon = |icon: Icon, enabled: bool| -> Element<'a, M> {
             icon.view(p.metrics.icon_size)
                 .style(move |t: &Theme, _| iced::widget::svg::Style {
-                    color: Some(t.semantic.icon_solid(!enabled)),
+                    color: Some(t.semantic.icon_color(!enabled)),
                 })
                 .into()
         };

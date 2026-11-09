@@ -197,12 +197,38 @@ impl Semantic {
         }
     }
 
-    /// Chooses the text color on every status fill (`accent`, `destructive`, `success`,
+    /// Ensures readable surface foregrounds and chooses the text color on every status fill (`accent`, `destructive`, `success`,
     /// `warning`, `error`) with the CSS `color-contrast()` rule: light or dark, whichever
     /// contrasts more with the fill ([`crate::color::readable_on`]). Replaces the palette's
     /// fixed `*_fg_color`s; [`Theme::with_auto_contrast`](crate::Theme::with_auto_contrast)
     /// turns it off, and a component's own `text_color` overrides it.
     pub fn apply_contrast(&mut self) {
+        // Card/toggle backgrounds are translucent white in dark mode. Compare against
+        // their composited appearance, not the white RGB channels of the layer itself.
+        let backdrop = Color {
+            a: 1.0,
+            ..self.window.bg
+        };
+        for surface in [
+            &mut self.window,
+            &mut self.view,
+            &mut self.headerbar,
+            &mut self.card,
+            &mut self.sidebar,
+            &mut self.secondary_sidebar,
+            &mut self.thumbnail,
+            &mut self.overview,
+            &mut self.active_toggle,
+            &mut self.dialog,
+            &mut self.popover,
+            &mut self.osd,
+        ] {
+            surface.fg = crate::color::ensure_contrast(
+                surface.fg,
+                crate::color::composite_over(surface.bg, backdrop),
+                4.5,
+            );
+        }
         for sw in [
             &mut self.accent,
             &mut self.destructive,
@@ -311,6 +337,14 @@ impl Semantic {
     /// background). Use for SVG tints, which ignore alpha.
     pub fn dim_solid(&self) -> Color {
         crate::color::mix(self.window.bg, self.window.fg, self.opacity.dim)
+    }
+
+    /// Foreground for symbolic icons, retaining disabled alpha against their actual background.
+    pub fn icon_color(&self, disabled: bool) -> Color {
+        crate::color::fade(
+            self.window.fg,
+            if disabled { self.opacity.disabled } else { 1.0 },
+        )
     }
 
     /// The tint for an icon that follows the window foreground, as an opaque color; a disabled

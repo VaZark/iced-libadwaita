@@ -301,86 +301,8 @@ impl Numeric {
     }
 }
 
-/// How large a step of a drag is: a modifier key trades speed for precision, as in a design tool.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Precision {
-    /// One `step`.
-    #[default]
-    Normal,
-    /// Ten steps (Shift).
-    Coarse,
-    /// One unit of the last digit (Alt).
-    Fine,
-}
-
-impl Precision {
-    /// Shift is coarse and Alt fine; both, or neither, is normal.
-    pub fn from_modifiers(shift: bool, alt: bool) -> Self {
-        match (shift, alt) {
-            (true, false) => Self::Coarse,
-            (false, true) => Self::Fine,
-            _ => Self::Normal,
-        }
-    }
-}
-
-/// The direction a drag changes a value in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Axis {
-    /// Dragging right increases, left decreases.
-    Horizontal,
-    /// Dragging up increases, down decreases.
-    #[default]
-    Vertical,
-}
-
-/// A drag along an [`Axis`] as steps: `px_per_step` of travel is one step, and nothing counts as
-/// a drag until it has travelled `threshold` px along the axis (so a click stays a click).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Scrub {
-    pub axis: Axis,
-    pub px_per_step: f32,
-    pub threshold: f32,
-}
-
-impl Scrub {
-    pub fn new(axis: Axis) -> Self {
-        Self {
-            axis,
-            px_per_step: 4.0,
-            threshold: 4.0,
-        }
-    }
-    pub fn px_per_step(mut self, px: f32) -> Self {
-        self.px_per_step = px.max(0.5);
-        self
-    }
-
-    /// Travel from `from` to `to` along the axis: positive in the direction that increases.
-    pub fn travel(&self, from: (f32, f32), to: (f32, f32)) -> f32 {
-        match self.axis {
-            Axis::Horizontal => to.0 - from.0,
-            Axis::Vertical => from.1 - to.1,
-        }
-    }
-    /// Whether the pointer has moved far enough along the axis for this to be a drag.
-    pub fn started(&self, from: (f32, f32), to: (f32, f32)) -> bool {
-        self.travel(from, to).abs() >= self.threshold
-    }
-    /// Where the drag's anchor goes after `steps` steps were taken from it: moved along the axis
-    /// by the travel they used, keeping the part of the pointer's travel that is not yet a step.
-    pub fn advance(&self, anchor: (f32, f32), steps: i64) -> (f32, f32) {
-        let travel = steps as f32 * self.px_per_step;
-        match self.axis {
-            Axis::Horizontal => (anchor.0 + travel, anchor.1),
-            Axis::Vertical => (anchor.0, anchor.1 - travel),
-        }
-    }
-    /// The steps a drag from `from` to `to` has made: whole steps, towards zero.
-    pub fn steps(&self, from: (f32, f32), to: (f32, f32)) -> i64 {
-        (self.travel(from, to) / self.px_per_step).trunc() as i64
-    }
-}
+// Compatibility exports; pointer interaction belongs to the shared scrub primitive.
+pub use super::scrub::{Axis, Precision, Scrub};
 
 #[cfg(test)]
 mod tests {

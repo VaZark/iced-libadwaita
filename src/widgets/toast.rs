@@ -135,6 +135,8 @@ pub fn toast_target() -> ToastTarget {
 /// * [`text_color`](Toast::text_color): a hard-coded text color.
 pub struct Toast<M> {
     title: String,
+    timeout: Option<u32>,
+    id: Option<u64>,
     action: Option<(String, M)>,
     on_dismiss: Option<M>,
     background: Option<iced::Color>,
@@ -149,6 +151,8 @@ impl<M> Toast<M> {
     pub fn new(title: impl Into<String>) -> Self {
         Self {
             title: title.into(),
+            timeout: None,
+            id: None,
             action: None,
             on_dismiss: None,
             background: None,
@@ -158,6 +162,12 @@ impl<M> Toast<M> {
             position: None,
             radius: None,
         }
+    }
+    /// Auto-dismiss delay in milliseconds, overriding `[toasts] timeout` (default 3000).
+    /// Zero keeps the toast open until dismissed. Expiry emits `on_dismiss` once when set.
+    pub fn timeout(mut self, milliseconds: u32) -> Self {
+        self.timeout = Some(milliseconds);
+        self
     }
     /// The corner radius of this toast. Without it the theme's `radius_toast` applies
     /// (a full pill by default).
@@ -242,6 +252,11 @@ fn colors(
 
 /// One toast as an element: the surface, its content and its entrance.
 fn toast_element<'a, M: Clone + 'a>(t: Toast<M>, position: ToastPosition) -> Element<'a, M> {
+    let timeout = t
+        .timeout
+        .unwrap_or_else(|| crate::config::current().toast_timeout);
+    let key = (t.title.clone(), timeout);
+    let on_dismiss = t.on_dismiss.clone();
     let m = Metrics::desktop();
     let (background, text_color, role) = (t.background, t.text_color, t.role);
     let radius = t.radius;
@@ -340,12 +355,16 @@ fn toast_element<'a, M: Clone + 'a>(t: Toast<M>, position: ToastPosition) -> Ele
             crate::layouts::animation::presets::TOAST_SHOW.0,
             crate::layouts::animation::presets::TOAST_SHOW.1,
         ));
-    toast.into()
+    iced::Element::new(super::toast_timeout::Timeout {
+        content: toast.into(),
+        key,
+        on_dismiss,
+    })
 }
 
 /// `AdwToastOverlay`: shows `toast` floating over `content`, at its position (default: the
-/// desktop config's, bottom center). The app is responsible for clearing it (e.g. after a
-/// timeout).
+/// desktop config's, bottom center). Toasts auto-dismiss after `[toasts] timeout` milliseconds
+/// and emit `on_dismiss` so controlled application state can remove them.
 pub fn toast_overlay<'a, M: Clone + 'a>(
     content: impl Into<Element<'a, M>>,
     toast: Option<Toast<M>>,
@@ -370,9 +389,14 @@ pub fn toast_stack<'a, M: Clone + 'a>(
     let position = first
         .position
         .unwrap_or_else(|| crate::config::current().toast_position);
-    let stack = iced::widget::column(toasts.into_iter().map(|t| toast_element(t, position)))
-        .spacing(m.space_s)
-        .align_x(position.horizontal());
+    let stack = iced::widget::keyed_column(
+        toasts
+            .into_iter()
+            .enumerate()
+            .map(|(index, t)| (t.id.unwrap_or(index as u64), toast_element(t, position))),
+    )
+    .spacing(m.space_s)
+    .align_items(position.horizontal().into());
     crate::layouts::layered(
         content,
         Some(
@@ -389,13 +413,20 @@ pub fn toast_stack<'a, M: Clone + 'a>(
 
 /// [`toast_stack`] over a [`notifications::Queue`](crate::primitives::notifications::Queue):
 /// `toast` turns each live item (with its id, for the dismiss and action messages) into a
-/// [`Toast`]. The queue owns the limit, the ids and the auto-dismiss; this only draws it.
+/// [`Toast`]. The queue owns the limit and ids; toast expiry emits each dismiss message.
 pub fn toast_stack_from<'a, M: Clone + 'a, T>(
     content: impl Into<Element<'a, M>>,
     queue: &crate::primitives::notifications::Queue<T>,
     toast: impl Fn(crate::primitives::notifications::Id, &T) -> Toast<M>,
 ) -> Element<'a, M> {
-    toast_stack(content, queue.iter().map(|(id, t)| toast(id, t)))
+    toast_stack(
+        content,
+        queue.iter().map(|(id, t)| {
+            let mut toast = toast(id, t);
+            toast.id = Some(id as u64);
+            toast
+        }),
+    )
 }
 
 #[cfg(test)]

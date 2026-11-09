@@ -1,4 +1,6 @@
-//! `Entry` (`GtkEntry` / `GtkPasswordEntry`) and `TextView` (`GtkTextView`): the text components.
+//! Text input components for building custom widgets. Application forms should use
+//! [`TextEntry`](crate::widgets::TextEntry) and [`MultilineEntry`](crate::widgets::MultilineEntry),
+//! which share EntryRow framing and label/error presentation.
 
 use crate::Element;
 use crate::primitives::sections::{slot_width, text_padding};
@@ -44,12 +46,15 @@ pub struct Entry<'a, M> {
     state: EntryState,
     color: Option<iced::Color>,
     secure: bool,
+    embedded: bool,
+    flat: bool,
     width: Length,
     metrics: Metrics,
     left: Option<Element<'a, M>>,
     right: Option<Element<'a, M>>,
     left_width: Option<f32>,
     right_width: Option<f32>,
+    section_height: Option<f32>,
     id: Option<iced::widget::Id>,
 }
 
@@ -76,14 +81,46 @@ impl<'a, M> Entry<'a, M> {
             state: EntryState::Normal,
             color: None,
             secure: false,
+            embedded: false,
+            flat: false,
             width: Length::Fill,
             metrics: Metrics::desktop(),
             left: None,
             right: None,
             left_width: None,
             right_width: None,
+            section_height: None,
             id: None,
         }
+    }
+    /// Transparent page-surface style, like a flat navigation row.
+    pub fn flat(mut self, flat: bool) -> Self {
+        self.flat = flat;
+        self
+    }
+    /// Embed in an EntryRow, which supplies the surface and outer padding.
+    pub(crate) fn embedded(mut self) -> Self {
+        self.embedded = true;
+        self
+    }
+    /// Align the EntryRow label with the editable text after its optional sections.
+    pub(crate) fn label_insets(&self, metrics: &Metrics) -> iced::Padding {
+        let size = crate::components::section_size(metrics);
+        text_padding(
+            iced::Padding::ZERO,
+            0.0,
+            0.0,
+            self.left
+                .as_ref()
+                .map(|_| slot_width(self.left_width, size)),
+            self.right
+                .as_ref()
+                .map(|_| slot_width(self.right_width, size)),
+        )
+    }
+    pub(crate) fn section_height(mut self, height: f32) -> Self {
+        self.section_height = Some(height);
+        self
     }
     pub fn on_input(mut self, f: impl Fn(String) -> M + 'a) -> Self {
         self.on_input = Some(Box::new(f));
@@ -166,8 +203,28 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
             .right
             .as_ref()
             .map(|_| slot_width(e.right_width, default_w));
-        let padding = text_padding(m.entry_padding, m.space_xs, m.space_xs, lw, rw);
+        let mut padding = text_padding(
+            if e.embedded {
+                iced::Padding::ZERO
+            } else {
+                m.entry_padding
+            },
+            if e.embedded { 0.0 } else { m.space_xs },
+            if e.embedded { 0.0 } else { m.space_xs },
+            lw,
+            rw,
+        );
+        let text_size = crate::Typography::default().body;
+        if lw.is_some() || rw.is_some() {
+            let inset = ((e.section_height.unwrap_or(default_w).max(default_w) - text_size * 1.3)
+                / 2.0)
+                .max(0.0);
+            padding.top = padding.top.max(inset);
+            padding.bottom = padding.bottom.max(inset);
+        }
         let mut input = text_input(&e.placeholder, &e.value)
+            .size(text_size)
+            .line_height(iced::widget::text::LineHeight::Relative(1.3))
             .padding(padding)
             .secure(e.secure)
             .width(e.width);
@@ -177,13 +234,44 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
             EntryState::Warning => input.style(styles::text_input::warning),
             EntryState::Success => input.style(styles::text_input::success),
         };
+        if e.embedded {
+            input = input.style(styles::text_input::embedded);
+        }
+        if e.flat && !e.embedded {
+            let state = e.state;
+            input = input.style(move |theme, status| {
+                let mut style = styles::text_input::flat(theme, status);
+                let color = match state {
+                    EntryState::Error => Some(theme.semantic.error.color),
+                    EntryState::Warning => Some(theme.semantic.warning.color),
+                    EntryState::Success => Some(theme.semantic.success.color),
+                    EntryState::Normal => None,
+                };
+                if let Some(color) = color {
+                    style.border.color = color;
+                    style.border.width = theme.metrics.focus_ring_width;
+                }
+                style
+            });
+        }
         if let Some(c) = e.color {
+            let (embedded, flat) = (e.embedded, e.flat);
             input = input.style(move |t: &Theme, status| {
-                let mut st = styles::text_input::default(t, status);
-                st.border.color = c;
-                st.border.width = t.metrics.focus_ring_width;
-                st.value = c;
-                st
+                let mut style = if embedded {
+                    styles::text_input::embedded(t, status)
+                } else if flat {
+                    styles::text_input::flat(t, status)
+                } else {
+                    styles::text_input::default(t, status)
+                };
+                style.border.color = c;
+                style.border.width = if embedded {
+                    0.0
+                } else {
+                    t.metrics.focus_ring_width
+                };
+                style.value = c;
+                style
             });
         }
         if let Some(id) = e.id {
@@ -195,8 +283,9 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
         if let Some(m) = e.on_submit {
             input = input.on_submit(m);
         }
+        let content: Element<'a, M> = input.into();
         if lw.is_none() && rw.is_none() {
-            return input.into();
+            return content;
         }
         // The sections sit in a transparent layer over the input, inside its border and ring;
         // the input's padding keeps the text clear of them.
@@ -215,10 +304,10 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
             iced::widget::space().width(Length::Fill),
             slot(e.right, rw)
         ]
-        .padding([0.0, m.space_xs])
+        .padding([0.0, if e.embedded { 0.0 } else { m.space_xs }])
         .height(Length::Fill)
         .width(Length::Fill);
-        iced::widget::stack![input, layer].width(e.width).into()
+        iced::widget::stack![content, layer].width(e.width).into()
     }
 }
 
@@ -244,6 +333,9 @@ pub struct TextView<'a, M> {
     min_lines: usize,
     max_lines: Option<usize>,
     max_height: Option<f32>,
+    single_line: bool,
+    embedded: bool,
+    flat: bool,
     metrics: Metrics,
 }
 
@@ -256,17 +348,40 @@ pub fn text_view<'a, M>(content: &'a text_editor::Content) -> TextView<'a, M> {
         min_lines: 1,
         max_lines: None,
         max_height: None,
+        single_line: false,
+        embedded: false,
+        flat: false,
         metrics: Metrics::desktop(),
     }
 }
 
 impl<'a, M> TextView<'a, M> {
+    /// Transparent editor surface with normal focus and validation behavior.
+    pub fn flat(mut self, flat: bool) -> Self {
+        self.flat = flat;
+        self
+    }
+    pub(crate) fn embedded(mut self, metrics: Metrics) -> Self {
+        self.embedded = true;
+        self.metrics = metrics;
+        self.metrics.entry_padding = iced::Padding::ZERO;
+        self
+    }
     pub fn on_action(mut self, f: impl Fn(text_editor::Action) -> M + 'a) -> Self {
         self.on_action = Some(Box::new(f));
         self
     }
     pub fn placeholder(mut self, p: impl Into<String>) -> Self {
         self.placeholder = Some(p.into());
+        self
+    }
+    /// Keep input to a single line: ignore Enter and normalize pasted line breaks to spaces.
+    pub fn single_line(mut self, enabled: bool) -> Self {
+        self.single_line = enabled;
+        if enabled {
+            self.max_lines = Some(1);
+            self.min_lines = 1;
+        }
         self
     }
     /// The fixed height of a view that does not grow (default 90). Ignored once a maximum is set.
@@ -315,6 +430,17 @@ impl<'a, M: Clone + 'a> From<TextView<'a, M>> for Element<'a, M> {
             .size(TEXT_SIZE)
             .padding(t.metrics.entry_padding)
             .style(styles::text_editor::default);
+        if t.embedded || t.flat {
+            let embedded = t.embedded;
+            e = e.style(move |theme, status| {
+                let mut style = styles::text_editor::default(theme, status);
+                style.background = iced::Color::TRANSPARENT.into();
+                if embedded {
+                    style.border = iced::Border::default();
+                }
+                style
+            });
+        }
         e = match growth {
             // Fits its text, between the two bounds.
             Some((min, max)) => e.height(Length::Shrink).min_height(min).max_height(max),
@@ -324,7 +450,26 @@ impl<'a, M: Clone + 'a> From<TextView<'a, M>> for Element<'a, M> {
             e = e.placeholder(p);
         }
         if let Some(f) = t.on_action {
-            e = e.on_action(f);
+            let single_line = t.single_line;
+            e = e.on_action(move |action| {
+                use iced::widget::text_editor::{Action, Edit};
+                let action = if single_line {
+                    match action {
+                        Action::Edit(Edit::Enter | Edit::Insert('\n' | '\r')) => {
+                            Action::Scroll { lines: 0 }
+                        }
+                        Action::Edit(Edit::Paste(text)) => {
+                            Action::Edit(Edit::Paste(std::sync::Arc::new(
+                                text.replace("\r\n", " ").replace(['\n', '\r'], " "),
+                            )))
+                        }
+                        other => other,
+                    }
+                } else {
+                    action
+                };
+                f(action)
+            });
         }
         e.into()
     }
@@ -375,5 +520,64 @@ mod text_view_tests {
         // The maximum is never below the minimum.
         let (min, max) = view(&c).min_lines(5).max_height(10.0).growth().unwrap();
         assert_eq!(max, min);
+    }
+}
+
+#[cfg(test)]
+mod section_alignment_tests {
+    use super::*;
+    use iced::Size;
+    use iced::advanced::{layout, renderer::Headless, widget::Tree};
+    #[test]
+    fn sections_and_text_share_a_center_and_fit_without_overflow() {
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        for metrics in [Metrics::desktop(), Metrics::compact()] {
+            for embedded in [false, true] {
+                let mut input = entry("", "Centered")
+                    .on_input(|_| ())
+                    .left_section(crate::EntryIcon::Search.view(16.0))
+                    .right_section(
+                        iced::widget::column![
+                            crate::EntryIcon::Increment.view(12.0),
+                            crate::EntryIcon::Decrement.view(12.0)
+                        ]
+                        .spacing(4),
+                    )
+                    .section_height(28.0)
+                    .metrics(metrics);
+                if embedded {
+                    input = input.embedded();
+                }
+                let mut element: Element<'_, ()> = input.into();
+                let mut tree = Tree::new(&element);
+                let node = element.as_widget_mut().layout(
+                    &mut tree,
+                    &renderer,
+                    &layout::Limits::new(Size::ZERO, Size::new(300.0, 200.0)),
+                );
+                let root = layout::Layout::new(&node);
+                let mut layers = root.children();
+                let control = layers.next().unwrap();
+                let text = control.children().next().unwrap().bounds();
+                let layer = layers.next().unwrap();
+                let slots: Vec<_> = layer.children().collect();
+                for slot in [slots[0], slots[2]] {
+                    let content = slot.children().next().unwrap().bounds();
+                    assert!(
+                        (content.center_y() - text.center_y()).abs() < 0.01,
+                        "{content:?} vs {text:?}"
+                    );
+                    assert!(
+                        content.y >= root.bounds().y
+                            && content.y + content.height <= root.bounds().height + 0.01
+                    );
+                }
+            }
+        }
     }
 }

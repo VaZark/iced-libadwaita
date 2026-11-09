@@ -78,6 +78,7 @@ enabled=true             # keyboard shortcuts work (and are shown)
 hints=auto               # auto | always | never: accelerator hints in menus (auto: not in touch menus)
 
 [toasts]
+timeout=3000             # milliseconds; 0 disables auto-dismiss
 position=bottom-center   # top|bottom - left|center|right, e.g. top-right
 target=content           # content (content area only, centered on it) | window (over the sidebar too)
 
@@ -90,7 +91,7 @@ wrap-basis=128           # minimum title width before the suffix wraps
 expander-indent=24       # px a row nested in an expander row is indented (0 = libadwaita's flush nesting)
 
 [icons]
-theme=system             # system | an icon theme name
+theme=system             # system (desktop toolkit settings, then hicolor) | an installed XDG icon theme name
 
 [policy]
 # Desktop policy: may individual apps opt out of the settings above? Opt-outs are highly

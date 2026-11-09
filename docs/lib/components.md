@@ -2,7 +2,7 @@
 
 Every UI element is a component with the same shape. Layouts can be written in code, or generated from a description (XML, JSX-like, a macro) that maps tags to components.
 
-This page is the guide. The API of each component (constructors, properties, slots, events) is its man page: `iad-<alias>(3)`, for example `man -l man/iad-dock.3`. `iad-components(3)` is the index. `iced_adaptive_design::prelude::*` imports everything.
+This page is the guide. The API of each component (constructors, properties, slots, events) is its man page: `iad-<alias>(3)`, for example `man -l target/man/iad-dock.3`. `iad-components(3)` is the index. `iced_adaptive_design::prelude::*` imports everything.
 
 ## Conventions
 
@@ -39,7 +39,7 @@ NumberInput::new(&self.text, Msg::Text)   // the app keeps only the text
 
 The app owns the values and one `FormState<Key>`. A `FormSpec` lists the keys (one step is a single-page form). The state remembers what the user touched or submitted, and says per key whether the field may show its validity.
 
-- `Field` draws label, control and message.
+- `EntryRow` and typed descendants (`TextEntry`, `DateEntry`, `SelectEntry`, and others) share label, control, and validation messages.
 - `Form` (optional) adds Submit and Reset, and Back and Next with several steps.
 
 ```rust
@@ -79,7 +79,7 @@ impl App {
         let spec = spec();
         Form::new()
             .step(Step::new("Profile", move || {
-                Field::new("Name", entry("Ada", &self.name).on_input(Msg::Name))
+                TextEntry::new("Name", &self.name, Msg::Name)
                     .required(true)
                     .validity(self.validity(&"name"))
                     .interaction(self.form.interaction(&spec, &"name"))
@@ -92,7 +92,7 @@ impl App {
 }
 ```
 
-Do not keep your own `touched` list or `submitted` flag. `touch`, `interaction`, `submit` and `reset` are those. Live examples: the gallery's Field and Range slider pages.
+Do not keep your own `touched` list or `submitted` flag. `touch`, `interaction`, `submit` and `reset` are those. Live examples: the gallery's Form and Range slider pages.
 
 **Labels.** `Field` is the label idiom outside forms too.
 
@@ -111,7 +111,7 @@ use iced_adaptive_design::prelude::*;
 toolbar_view(page(
     preferences_group()
         .title("Appearance")
-        .push(SwitchRow::new("Dark Style", dark, Msg::Dark))
+        .push(SwitchEntry::new("Notifications", notifications, Msg::Notifications))
         .push(ToggleGroupRow::new("Menus", items, Some(mode), Msg::Mode))
         .push(SliderRow::new("Shadow", shadow, 0.0..=2.0, Msg::Shadow)),
 ))
@@ -125,7 +125,7 @@ toolbar_view(page(
   <header_bar slot="top_bar" title="Settings"/>
   <page>
     <preferences_group title="Appearance">
-      <switch_row title="Dark Style" active="{dark}" on_toggle="Dark"/>
+      <switch_entry title="Notifications" active="{notifications}" on_toggle="Notifications"/>
       <toggle_group_row title="Menus" active="{mode}" on_select="Mode"/>
       <slider_row title="Shadow" value="{shadow}" min="0" max="2" on_change="Shadow"/>
     </preferences_group>
@@ -134,3 +134,90 @@ toolbar_view(page(
 ```
 
 Tag names are the snake_case constructors. Attribute names are the properties. Child elements go to the slot named in the component's man page (SLOTS), `push` by default. `on_*` attributes name messages.
+
+### Application entries and custom inputs
+
+Use `widgets::EntryRow` and its typed entries for application forms. Every entry
+fills its parent width and shares `components::InputWrapper` for the label,
+required marker, description and validation message. `InputWrapper` is the shared
+`Field` presentation; use `.validity(...)` and `.interaction(...)` to reveal errors
+from your form state.
+
+- `TextEntry` edits a single-line string. `from_input` accepts an `Entry` configured
+  with password mode, submit behavior and left/right sections for prefixes/suffixes.
+- `NumberEntry::from_input` accepts a configured `NumberInput`, retaining numeric
+  limits, precision and drag behavior, with step controls at the right edge.
+- `DateEntry::from_input` accepts a `DateInput`; `.dialog(false)` opens a dropdown
+  calendar and `.dialog(true)` opens a modal. Its calendar icon is on the right.
+- `SwitchEntry` edits a boolean. `ActionEntry` shows a read-only value with one
+  trailing action. Use `NavigationRow` for navigation destinations.
+- `SelectEntry`, `MultiselectEntry` and `ChipGroupEntry` present selections from
+  the left edge; dropdown triggers span the available width.
+- `MultilineEntry` uses an application-owned `text_editor::Content`. Perform the
+  received actions on that content. It grows from one to twelve lines, then
+  scrolls. `from_input(text_view(...).max_lines(6))` changes that limit;
+  `.single_line(true)` ignores Enter and normalizes pasted line breaks to spaces.
+
+`EntryRow::new(label, EntryInput::Text(entry(...)))` selects the input type explicitly.
+`EntryInput` also has Number, Date, Switch, Action, Select, Multiline and Custom variants. Low-level
+`Entry`, `TextView`, `NumberInput` and `DateInput` components are building blocks
+for custom widgets; prefer the typed entries in application forms. `EntryRow` now accepts an `EntryInput` rather than a text value; use
+`TextEntry::new(label, value, on_input)` for text. `EditableText` and
+`password_entry_row` have been removed; use `MultilineEntry` and
+`TextEntry::from_input(label, password_entry(...))` instead.
+
+Single-value scales and two-thumb ranges share oriented pointer handling:
+
+```rust,ignore
+use iced_adaptive_design::{components::scale, widgets::range_slider};
+use iced_adaptive_design::primitives::scrub::Axis;
+
+scale(0.0..=100.0, self.value, Msg::Value)
+    .orientation(Axis::Vertical)
+    .height(180.0);
+range_slider(0.0..=100.0, (self.lo, self.hi), Msg::Range)
+    .orientation(Axis::Vertical)
+    .height(180.0)
+    .step(5.0);
+```
+
+Both default to horizontal. Vertical controls increase upward; their height is
+the track length, and horizontal controls use width for length. Number entries
+keep relative scrubbing via `NumberDrag::{Vertical, Horizontal}` and
+`NumberDrag::Select` for text selection. Scales now return the library's `Scale`
+widget rather than iced's `Slider`, sharing range controls' keyboard, touch,
+focus and drag-offset handling.
+
+`Accordion` composes `TreeRow` disclosures under its single/multiple selection
+rule. A tree row's whole header surface, including padding and blank space, runs
+`on_activate`; when no activation is set, it runs `on_toggle` instead. With both
+callbacks, the arrow remains a separate toggle target. Interactive prefixes and
+suffixes keep their own actions, and expanded child content is outside the header
+action surface.
+
+Toasts close automatically after `[toasts] timeout` milliseconds (default 3000).
+They schedule their own expiry; no timer subscription is needed. Use
+`Toast::timeout(5000)` for an individual delay, or `Toast::timeout(0)` to keep it
+open. Set `on_dismiss` to remove a toast from application state when it expires
+or its close button is pressed. Queue-backed toast stacks preserve each toast's
+clock when another notification is removed.
+
+Entry rows and their typed descendants support `.flat(true)`: transparent inputs
+with normal editing, validation, and focus behavior. Use `PreferencesGroup::flat(true)`
+to place rows directly on the page without a boxed background or separators,
+matching flat navigation rows such as Weave's Explore links.
+
+`DateInput::dialog(true)` keeps the page's date display editable. The modal is a
+calendar helper with the same editable value above its calendar. Picking a day
+calls `on_pick` when supplied, otherwise it sends the formatted date through
+`on_input`; typed dates are highlighted automatically. `DateEntry` exposes
+`calendar` and `on_nav` for controlled navigation without building raw inputs.
+
+For flat entries, `EntryRow` owns the focus border for every typed descendant.
+Focusing an editable child outlines the entire row, including its label, prefix,
+suffix and padding. Embedded controls do not draw a second inner focus border.
+Validation keeps its full-row error or warning border, with help text outside it.
+
+`EntryRow` places its label above the input line. Prefixes and suffixes align to
+the input line rather than the combined row height; the outer focus border
+continues to surround the label and every section.

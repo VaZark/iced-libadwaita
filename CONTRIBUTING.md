@@ -9,7 +9,7 @@ cargo build                       # the library only
 cargo build --workspace           # library, gallery, xtask
 cargo test
 cargo clippy --all-targets --workspace
-cargo xtask man --check           # man pages are current
+cargo xtask man                   # build man pages in target/man/
 ```
 
 `cargo test` and `cargo clippy` must be clean before you commit.
@@ -25,13 +25,13 @@ Local pre-commit hooks: dprint formats JSON, Markdown and TOML; `cargo fmt --all
 | `src/`                 | the library, in layers (see DESIGN.md): `layouts/`, `primitives/` (headless rules), `binds/`, `components/`, `metas/`, `widgets/`, `styles/`, `windows/`, theme, config |
 | `gallery/`             | the gallery, a separate crate                                                                  |
 | `xtask/`               | repository tasks                                                                               |
-| `man/`                 | man pages. `iad(7)` and `iad-desktop.conf(5)` are written by hand. `iad-<alias>(3)` and the index `iad-components(3)` are generated |
-| `docs/lib/`            | user guide. Published with the crate and `man/`                                                |
+| `docs/man/`            | handwritten overview and config man sources; all built pages go in `target/man/` |
+| `docs/lib/`            | user guide. Published with the crate and `docs/man/`                                                |
 | `docs/hig-inferences/` | design rationale. Not published (`include` in `Cargo.toml`)                                    |
 
 ## Man pages
 
-`cargo xtask man` reads the `///` and `//!` comments and the public API of `src/layouts`, `src/components`, `src/binds`, `src/metas` and `src/widgets`, and writes one page per component. `--check` fails when a page is stale.
+`cargo xtask man` reads the `///` and `//!` comments and the public API of `src/layouts`, `src/components`, `src/binds`, `src/metas` and `src/widgets`, and writes one page per component to `target/man/`, alongside copies of the handwritten pages in `docs/man/`. These build artifacts are ignored by Git. `--check` checks an existing build for stale or missing pages; it requires `cargo xtask man` first on a clean checkout.
 
 A component is an item exported from the `mod.rs` of one of those layers:
 
@@ -53,11 +53,11 @@ GALLERY_PAGE=inputs               open a group
 GALLERY_SEARCH=text               open the search with this text
 GALLERY_SHOT_ONLY=Docked          with --screenshot: that page only (the `Detail` name)
 GALLERY_SHOT_DELAY_MS=2500        with --screenshot: wait per page (slow debug builds)
-GALLERY_DARK=1                    dark scheme for GALLERY_ANIM captures
 GALLERY_SIDEBAR_MODE=parent-page
 GALLERY_MENU=page|dropdown
 GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push|breakpoint
 GALLERY_ANIM=keys                 wait 6 s, then capture: send keys meanwhile
+GALLERY_ANIM=theme                capture system appearance, app override, then system again
 GALLERY_ANIM=appshell             open the AppShell window (GALLERY_SHELL_SIZE=WxH)
 GALLERY_ANIM=shell-back|embedded-back
 APPSHELL_PIN=mobile|tablet|desktop
@@ -89,7 +89,7 @@ Not done until it works end to end. Add it to the library, never only to an exam
 - A `///` comment on the method, then `cargo xtask man`.
 - A control in the component's playground (`gallery/src/plays.rs`): the `specs` entry, its use in `build`, its line in the generated code.
 - A line in its `docs/hig-inferences/widgets/` page.
-- If a desktop config key backs the default: `docs/lib/desktop-config.md`, `docs/lib/desktop.conf.example`, `man/iad-desktop.conf.5`.
+- If a desktop config key backs the default: `docs/lib/desktop-config.md`, `docs/lib/desktop.conf.example`, `docs/man/iad-desktop.conf.5`.
 
 A property whose default comes from the toolkit or the config is a plain value that starts at that default. The builder overrides it. No `Option` with a `None` case. The playground control shows the default, and the generated code mentions the call only once it changes.
 
@@ -111,3 +111,5 @@ Small logical groups. Each commit builds. The project is managed mostly by AI: r
 ## Status
 
 No license chosen yet.
+
+The gallery follows shared desktop appearance by default. Its header Light/Dark toggle overrides the scheme for this app; “Use System Appearance” in the primary menu resumes following it.

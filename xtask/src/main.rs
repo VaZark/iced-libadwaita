@@ -1,8 +1,8 @@
 //! Repository tasks.
 //!
 //! ```text
-//! cargo xtask man            # write man/iad-<component>.3 for every component
-//! cargo xtask man --check    # fail if the checked-in pages are out of date (for CI)
+//! cargo xtask man            # build all man pages in target/man/
+//! cargo xtask man --check    # check previously built pages for staleness
 //! ```
 //!
 //! The man pages are generated from the source, as rustdoc or JSDoc generates reference pages:
@@ -852,7 +852,7 @@ fn man(check: bool) -> bool {
     all.sort_by_key(|c| c.alias.clone());
     all.dedup_by_key(|c| c.alias.clone());
 
-    let dir = root.join("man");
+    let dir = root.join("target/man");
     let mut pages: Vec<(PathBuf, String)> = all
         .iter()
         .map(|c| {
@@ -863,6 +863,17 @@ fn man(check: bool) -> bool {
         })
         .collect();
     pages.push((dir.join("iad-components.3"), index(&all, &version)));
+
+    // Handwritten overview and configuration references join the generated API pages.
+    for entry in fs::read_dir(root.join("docs/man")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_file() {
+            pages.push((
+                dir.join(path.file_name().unwrap()),
+                fs::read_to_string(&path).unwrap(),
+            ));
+        }
+    }
 
     if check {
         let mut stale = Vec::new();

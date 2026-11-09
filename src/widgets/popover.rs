@@ -743,6 +743,20 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
         }
     }
 
+    fn operate(
+        &mut self,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn iced::advanced::widget::Operation,
+    ) {
+        self.content.as_widget_mut().operate(
+            self.tree,
+            layout.children().next().unwrap(),
+            renderer,
+            operation,
+        );
+    }
+
     fn mouse_interaction(
         &self,
         layout: Layout<'_>,

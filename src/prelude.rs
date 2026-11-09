@@ -9,7 +9,7 @@
 //!         page(
 //!             preferences_group()
 //!                 .title("General")
-//!                 .push(SwitchRow::new("Dark Style", self.dark, Msg::Dark)),
+//!                 .push(SwitchEntry::new("Notifications", self.notifications, Msg::Notifications)),
 //!         ),
 //!     )
 //!     .top_bar(header_bar().title("Settings"))
@@ -32,4 +32,4 @@ pub use crate::{
     AccentColor, CollapseBehavior, Icon, IconSource, Metrics, Role, Scheme, Shadows, Theme,
     Typography, config,
 };
-pub use iced::widget::{column, container, responsive, row, space, text};
+pub use iced::widget::{column, container, row, space, text};

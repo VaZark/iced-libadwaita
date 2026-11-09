@@ -23,6 +23,8 @@ pub enum ValueType {
     Bool,
     /// A number in `min..=max`.
     Number { min: f64, max: f64 },
+    /// Nonnegative integer time in milliseconds.
+    Milliseconds,
     /// One of a fixed set of words.
     Choice(&'static [&'static str]),
     /// Free text.
@@ -40,6 +42,7 @@ impl ValueType {
             Self::Number { min, max } => value
                 .parse::<f64>()
                 .is_ok_and(|n| (*min..=*max).contains(&n)),
+            Self::Milliseconds => value.parse::<u32>().is_ok(),
             Self::Choice(words) => words.contains(&value),
             Self::Text => true,
         }
@@ -111,7 +114,7 @@ const fn p(
     }
 }
 
-use ValueType::{Bool, Choice, Number, Text};
+use ValueType::{Bool, Choice, Milliseconds, Number, Text};
 
 const ACCENTS: &[&str] = &[
     "system", "blue", "teal", "green", "yellow", "orange", "red", "pink", "purple", "slate",
@@ -365,6 +368,7 @@ pub const PROPERTIES: &[Property] = &[
         Choice(&["auto", "always", "never"]),
         "auto",
     ),
+    p("toasts", "timeout", Milliseconds, "3000"),
     p("toasts", "position", Choice(POSITIONS), "bottom-center"),
     p(
         "toasts",

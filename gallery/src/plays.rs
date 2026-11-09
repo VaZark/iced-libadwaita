@@ -8,7 +8,7 @@ use super::*;
 use crate::playground::{Msg as PMsg, Spec};
 use iced::widget::{column, container, row};
 
-/// The icon of a playground's icon choice: none, built-ins, or an SVG of its own.
+/// The icon of a playground's icon choice: none, system icons, or an application SVG.
 fn icon_source(choice: usize) -> Option<iad::IconSource> {
     match choice {
         1 => Some(Icon::Check.into()),
@@ -173,6 +173,7 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::bool("disabled", "Disabled", false),
         ],
         Detail::Scale => vec![
+            S::bool("vertical", "Vertical", false),
             S::slider("value", "Value", 0.0..=100.0, 40.0),
             S::bool("readout", "Show the value", true),
         ],
@@ -192,12 +193,7 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::bool("suffix", "Suffix button", false),
             S::bool("chevron", "Chevron", false),
         ],
-        Detail::EntryRow => vec![
-            S::text("title", "Title", "Display name"),
-            S::text("value", "Value", "Ada"),
-            S::bool("password", "Password", false),
-            S::bool("disabled", "Disabled", false),
-        ],
+
         Detail::TreeRow => vec![
             S::bool("expanded", "Expanded", true),
             S::bool("selected", "Selected", false),
@@ -837,12 +833,14 @@ pub fn build<'a>(
         }
         Detail::Scale => {
             let v = p.number("value");
-            let mut col =
-                column![cmp::scale(0.0..=100.0, v, on_num(d, "value"))].spacing(m.space_s);
+            let vertical = p.bool("vertical");
+            let axis = if vertical { iad::primitives::scrub::Axis::Vertical } else { iad::primitives::scrub::Axis::Horizontal };
+            let mut col = column![cmp::scale(0.0..=100.0, v, on_num(d, "value")).orientation(axis).height(180.0)].spacing(m.space_s);
             if p.bool("readout") {
                 col = col.push(ty::dim_label(format!("value {v:.0}")));
             }
-            let code = Code::new("scale(0.0..=100.0, self.value, Msg::Value)").done();
+            let code = Code::new("scale(0.0..=100.0, self.value, Msg::Value)")
+                .add(vertical, ".orientation(Axis::Vertical).height(180.0)").done();
             (col.into(), code)
         }
         Detail::Dropdown => {
@@ -891,24 +889,6 @@ pub fn build<'a>(
                 )
                 .add(p.bool("chevron"), ".chevron(true).on_activate(Msg::Open)")
                 .done();
-            (stage(Element::from(r)), code)
-        }
-        Detail::EntryRow => {
-            let mut r = w::EntryRow::new(p.text("title").to_string(), p.text("value").to_string())
-                .metrics(m);
-            if !p.bool("disabled") {
-                r = r.on_input(on_text(d, "value"));
-            }
-            if p.bool("password") {
-                r = r.password(true);
-            }
-            let code = Code::new(&format!(
-                "EntryRow::new(\"{}\", &self.value)",
-                p.text("title")
-            ))
-            .add(!p.bool("disabled"), ".on_input(Msg::Value)")
-            .add(p.bool("password"), ".password(true)")
-            .done();
             (stage(Element::from(r)), code)
         }
         Detail::TreeRow => {
@@ -2357,11 +2337,8 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
         Detail::TreeDocs => {
             "Tree::new(&self.docs, &self.tree)\n    .draggable(DragMode::Row)\n    .highlight(&self.search)\n    .label(|p| {\n        let n = p.node.children.len();\n        if n == 0 { return p.text; }\n        row![p.text, Badge::count(n as u32, 99)].spacing(8).into()   // a count per branch\n    })\n    .on_event(Msg::Tree)\n\n// search: self.tree.set_expanded(tree::matching_ancestors(&self.docs, &query))"
         }
-        Detail::Field => {
-            "Field::new(\"Name\", entry(\"Ada\", &self.name).on_input(Msg::Name))\n    .required(true)\n    .validity(self.validity(&\"name\"))\n    .interaction(self.form.interaction(&spec, &\"name\"))\n    .layout(FieldLayout::Row) // or Stacked\n    .plain_label(true)"
-        }
         Detail::Form => {
-            "Form::new()\n    .step(Step::new(\"Profile\", move || {\n        Field::new(\"Name\", entry(\"Ada\", &self.name).on_input(Msg::Name))\n            .validity(self.validity(&\"name\"))\n            .into()\n    }))\n    .on_submit(Msg::Submit)\n    .on_reset(Msg::Reset)\n\n// update: self.form.submit(&spec, &|k| self.validity(k))"
+            "Form::new()\n    .step(Step::new(\"Profile\", move || {\n        TextEntry::new(\"Name\", &self.name, Msg::Name)\n            .validity(self.validity(&\"name\"))\n            .into()\n    }))\n    .on_submit(Msg::Submit)\n    .on_reset(Msg::Reset)\n\n// update: self.form.submit(&spec, &|k| self.validity(k))"
         }
         Detail::Stepper => {
             "Stepper::new()\n    .active(state.active())\n    .orientation(StepperOrientation::Horizontal)\n    .on_step_click(Msg::Go)\n    .step(StepperStep::new(\"Account\").content(|| body(\"...\")))\n    .step(StepperStep::new(\"Profile\").description(\"Fruit and birthday\"))\n    .step(StepperStep::new(\"Review\").allow_click(true))\n    .completed(done)\n\n// state: StepperState::new(3), .forward() / .back() / .goto(i)"
@@ -2429,14 +2406,14 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
         Detail::VirtualList => {
             "// the app keeps the viewport; the list builds only the rows in it\nVirtualList::new(10_000, 40.0, &self.viewport, |i| {\n    // the whole row is the target: rounded, with a hover you can see on a plain page\n    button(row_for(i)).width(Length::Fill).style(style::button::flat_row(8.0, 0.08, 0.14)).on_press(Msg::Play(i)).into()\n})\n    .on_scroll(Msg::Scroll)   // Msg::Scroll(vp) => self.viewport = vp\n    .overscan(4)               // rows built past each edge\n    .id(LIST)                  // for scroll_to / snap_to"
         }
-        Detail::EditableText => {
-            "EditableText::new(&self.bio, Msg::Input)\n    .placeholder(\"Add a description\")\n    .editing(self.editing)        // controlled: the entry shows\n    .expanded(self.expanded)      // a long text shows whole\n    .max_height(60.0)\n    .on_edit(Msg::Edit)\n    .on_done(Msg::Done)\n    .on_expand(Msg::Expand)"
+        Detail::MultilineEntry => {
+            "MultilineEntry::new(\"Description\", &self.bio, Msg::Input)\n\n// update\nMsg::Input(action) => self.bio.perform(action)\n\n// restrict input to one line\nMultilineEntry::from_input(\"Nickname\", text_view(&self.nick)\n    .single_line(true).on_action(Msg::NickInput))"
         }
         Detail::PageHeader => {
             "DetailHeader::new(\"Evening drive\")\n    .kind(\"Playlist\")\n    .cover(cover)\n    .description(body(\"Slow songs for a long road.\"))\n    .facts(caption(\"24 songs, 1 hr 32 min\"))\n    .primary(suggested_circular_button(Icon::Play.view(16.0)).on_press(Msg::Play))\n    .action(icon_button(Icon::Heart))\n    .end(flat_button(text(\"Share\")))\n    .tint(cover_color)            // the wash: style::container::wash(color)\n    .narrow(width < 576.0)        // the arrangement, from the app's width"
         }
         Detail::Icons => {
-            "Icon::Star.view(16.0)                 // a built-in\n\n// anything that takes an icon takes your own SVG too\nlet mine = IconSource::svg(include_str!(\"vinyl.svg\"));\nMenuItem::action(\"Rate\", Msg::Rate).icon(mine.clone())\nmenu_button(mine, menu)\nChip::new(\"Jazz\").icon(mine).color(tag_color)"
+            "Icon::Star.view(16.0)                 // from the installed theme\n\n// anything that takes an icon takes your own SVG too\nlet mine = IconSource::svg(include_str!(\"vinyl.svg\"));\nMenuItem::action(\"Rate\", Msg::Rate).icon(mine.clone())\nmenu_button(mine, menu)\nChip::new(\"Jazz\").icon(mine).color(tag_color)"
         }
         Detail::Composed => {
             "// HistogramRangeSlider is in the library; this is how it is DEFINED with ComposedComponent:\n// data + callback, and a conversion\npub struct HistogramRangeSlider<'a, M> {\n    histogram: &'a Histogram,\n    range: (f32, f32),                       // the shared state\n    on_change: Box<dyn Fn((f32, f32)) -> M + 'a>,\n}\n\nimpl<'a, M: 'a> From<HistogramRangeSlider<'a, M>> for Element<'a, M> {\n    fn from(c: HistogramRangeSlider<'a, M>) -> Self {\n        let h = c.histogram;\n        ComposedComponent::new(c.range, c.on_change)   // state + one message for every part\n            // each part is built from the state and answers with the NEXT state\n            .part(move |r| BarChart::histogram(h)\n                .minimal()                                  // only the bars, as a range picker\n                .selected(move |i| h.selected(i, *r))      // bars inside the range\n                .on_pick(move |i| h.bin_range(i))           // a pressed bar is a range\n                .into())\n            .part(|r| range_slider(0.0..=100.0, *r, |moved| moved).into())\n            .normalize(|(lo, hi)| (lo.min(hi), lo.max(hi))) // the rule, in one place\n            .into()\n    }\n}\n\n// USE it like any component; the slider's bounds are the histogram's own\nHistogramRangeSlider::new(&self.histogram, self.range, Msg::Range).step(1.0)\n\n// or build one in the view when it depends on a filter, and pass it owned\nHistogramRangeSlider::new(Histogram::from_values(filtered, 0.0, 100.0, 20), self.range, Msg::Range)"
@@ -2460,7 +2437,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "SwitchRow::new(\"Enabled\", self.on, Msg::Toggle)\nComboRow::new(\"Font\", &FONTS, self.font, Msg::Font).disabled_when(|o| *o == \"Inter\")\nSpinRow::new(\"Text scale\", self.scale, 1.0..=10.0, 1.0, Msg::Scale)\nSliderRow::new(\"Volume\", self.volume, 0.0..=100.0, Msg::Volume)"
         }
         Detail::PreferencesGroup => {
-            "preferences_group()\n    .title(\"Appearance\")\n    .description(\"How the app looks\")\n    .header_suffix(flat_button(label(\"Reset\")))\n    .push(SwitchRow::new(\"Dark Style\", self.dark, Msg::Dark))"
+            "preferences_group()\n    .title(\"Appearance\")\n    .description(\"How the app looks\")\n    .header_suffix(flat_button(label(\"Reset\")))\n    .push(SwitchEntry::new(\"Notifications\", self.notifications, Msg::Notifications))"
         }
         Detail::ThemeColors => {
             "Theme::new(Scheme::Dark)\n    .accent(AccentColor::Teal)\n    .with_semantic(|s| s.card.bg = hex(0x3d2c5a))\n\n// desktop config: [appearance] color-scheme=dark, accent=teal, density=compact"

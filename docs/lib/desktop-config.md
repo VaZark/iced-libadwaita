@@ -31,7 +31,7 @@ Defaults are in parentheses. Every key is optional.
 
 | Key                                          | Values                                    | Drives                                               |
 | -------------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
-| `color-scheme`                               | system, light, dark (system)              | `Theme::from_config`. System reads GNOME's `color-scheme` |
+| `color-scheme`                               | system, light, dark (system)              | `Theme::from_config`. System follows the settings portal, then shared toolkit settings |
 | `accent`                                     | system, a name, `#rrggbb` (system)        | the accent. System reads GNOME's `accent-color`      |
 | `flat-headerbars`                            | bool (true)                               | continuous, Nautilus-style header bars               |
 | `auto-contrast`                              | bool (true)                               | text on colored fills by contrast (`color-contrast()`) |
@@ -95,6 +95,7 @@ Defaults are in parentheses. Every key is optional.
 
 | Section      | Key        | Values                                                                              | Drives                                           |
 | ------------ | ---------- | ----------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `[toasts]`   | `timeout` | integer milliseconds, 0–4294967295 (3000); 0 disables auto-dismiss | `Toast::timeout` default |
 | `[toasts]`   | `position` | top-left, top-center, top-right, bottom-left, bottom-center, bottom-right (bottom-center) | `Toast::position` default                  |
 | `[toasts]`   | `target`   | window, content (content)                                                           | where `toast_overlay` is placed                  |
 | `[popovers]` | `bounds`   | content, window (content)                                                           | `Popover::bounds` default: the content area a popover opened from, or the window |
@@ -106,7 +107,7 @@ Defaults are in parentheses. Every key is optional.
 | `[rows]`    | `collapse`            | stacked, flex (stacked)   | a wrapped suffix                                              |
 | `[rows]`    | `wrap-basis`          | px (128)                  | when a suffix wraps                                           |
 | `[rows]`    | `expander-indent`     | px (24)                   | indent of rows in an `ExpanderRow`. `ExpanderRow::indent(px)` overrides per row; 0 is libadwaita's |
-| `[icons]`   | `theme`               | system, a name (system)   | window-control icon lookup                                    |
+| `[icons]`   | `theme`               | system, a name (system)   | system icon lookup for every widget                                    |
 | `[policy]`  | `allow-app-overrides` | bool (true)               | may apps opt out                                              |
 
 Every number used for adaptive layout is a named fallback constant (`breakpoints::MD`, `widgets::MIN_CONTENT_WIDTH`, `widgets::SIDEBAR_MAX_WIDTH`). The config overrides it. Widgets read the installed config, never the constant.
@@ -137,3 +138,18 @@ The app then differs from every other app and ignores what the user set. Keep it
 - It is never silent: `install` prints one line to stderr. `Config::overridden()` lists the settings.
 - A desktop forbids it with `[policy] allow-app-overrides=false`. The opt-outs are ignored and listed in `Config::denied()`.
 - A widget's own setter for a desktop-level behavior (`.collapsed_sidebar(..)`) is the same kind of opt-out.
+
+Icon selection uses `[icons] theme`: an installed XDG theme name, or `system` to follow shared toolkit settings (falling back to `hicolor`). Theme changes take effect after configuration installation and redraw, invalidating cached lookups. See [system icons](icons.md).
+
+## Shared theme utilities
+
+The library's `utils` module provides one application setup path:
+
+- `utils::theme()` builds a `Theme` from the installed global configuration.
+- `utils::theme_settings()` returns the effective color scheme and icon-theme name.
+- Run `utils::detect_theme().map(Message::SystemTheme)` at startup.
+- Include `utils::follow_theme().map(Message::SystemTheme)` in the application's subscription; handling that message redraws with `utils::theme()`.
+
+Color-scheme detection uses iced's native settings/portal integration. Icon selection reads `gtk-icon-theme-name` from `/etc/gtk-{3,4}.0/settings.ini` and the corresponding XDG config directories, with user settings taking precedence. The same files supply a light/dark fallback when the portal has no preference. Files are checked once per second; changed icon-theme names invalidate icon caches. Fixed values in global configuration remain authoritative. The gallery uses the same API for its header System/Light/Dark button.
+
+`components::ThemeToggle::new(mode).on_toggle(Message::Appearance)` cycles `ThemeMode::System` (the default), `Light`, `Dark`, then back to `System`. Handle it with `utils::set_scheme_override(mode.scheme_override())`; `utils::theme()` and `Theme::from_config` then use that app-level choice. `set_scheme_override(None)` resumes following the desktop. This process-local override never changes desktop preferences or writes the shared configuration, and respects `allow-app-overrides`.

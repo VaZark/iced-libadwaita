@@ -31,7 +31,7 @@ use iced::{Background, Border, Length, Shadow};
 pub struct DateInput<'a, M> {
     text: &'a str,
     view: Date,
-    on_input: Option<Box<dyn Fn(String) -> M + 'a>>,
+    on_input: Option<std::rc::Rc<dyn Fn(String) -> M + 'a>>,
     on_pick: Option<Box<dyn Fn(Date) -> M + 'a>>,
     on_view: Option<OnView<'a, M>>,
     on_nav: Option<OnNav<'a, M>>,
@@ -51,15 +51,26 @@ pub struct DateInput<'a, M> {
     window_radius: f32,
     revealed: bool,
     metrics: Metrics,
+    embedded: bool,
+    flat: bool,
 }
 
 impl<'a, M> DateInput<'a, M> {
+    /// Transparent page-surface entry style.
+    pub fn flat(mut self, flat: bool) -> Self {
+        self.flat = flat;
+        self
+    }
+    pub(crate) fn embedded(mut self) -> Self {
+        self.embedded = true;
+        self
+    }
     /// `text` is the entry's content, `view` any date in the month the calendar shows.
     pub fn new(text: &'a str, view: Date, on_input: impl Fn(String) -> M + 'a) -> Self {
         Self {
             text,
             view: view.month_start(),
-            on_input: Some(Box::new(on_input)),
+            on_input: Some(std::rc::Rc::new(on_input)),
             on_pick: None,
             on_view: None,
             on_nav: None,
@@ -79,6 +90,8 @@ impl<'a, M> DateInput<'a, M> {
             window_radius: Metrics::desktop().radius_window,
             revealed: true,
             metrics: Metrics::desktop(),
+            embedded: false,
+            flat: false,
         }
     }
     /// The chosen date, highlighted in the calendar.
@@ -191,6 +204,16 @@ impl<'a, M> DateInput<'a, M> {
         self
     }
 
+    fn pick_message(&self, date: Date) -> Option<M> {
+        if self.disabled || !within(date, self.min, self.max) {
+            return None;
+        }
+        self.on_pick
+            .as_ref()
+            .map(|f| f(date))
+            .or_else(|| self.on_input.as_ref().map(|f| f(date.format())))
+    }
+
     /// The validity of the typed text ([`crate::primitives::date::validate`]).
     pub fn validity(&self) -> crate::primitives::validation::Validity {
         crate::primitives::date::validate(self.text, self.min, self.max)
@@ -233,7 +256,7 @@ pub(crate) fn opener<'a, M: 'a>(
     o: Opening,
     m: Metrics,
 ) -> Element<'a, M> {
-    let mut p = Popover::new(Icon::Calendar.view(m.icon_size), calendar)
+    let mut p = Popover::new(crate::EntryIcon::Calendar.view(m.icon_size), calendar)
         .appearance(Appearance::Flat)
         .padding(m.space_xs)
         .align(Align::Start)
@@ -369,13 +392,13 @@ pub(crate) fn calendar<'a, M: Clone + 'a>(
         // An icon takes no part in the button's disabled look: dim it here.
         let on = msg.is_some();
         let glyph = icon.view(m.icon_size).style(move |t: &Theme, _| {
-            let (fg, bg) = (t.semantic.popover.fg, t.semantic.popover.bg);
-            // Mixed toward the popover, not faded: a tinted icon ignores alpha.
+            let fg = t.semantic.popover.fg;
+            // Preserve disabled opacity against the actual popover surface.
             iced::widget::svg::Style {
                 color: Some(if on {
                     fg
                 } else {
-                    crate::color::mix(bg, fg, t.semantic.opacity.disabled)
+                    crate::color::fade(fg, t.semantic.opacity.disabled)
                 }),
             }
         });
@@ -496,20 +519,26 @@ pub(crate) fn calendar<'a, M: Clone + 'a>(
 }
 
 impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
-    fn from(mut d: DateInput<'a, M>) -> Self {
+    fn from(d: DateInput<'a, M>) -> Self {
         let m = d.metrics;
         let state = d.text_state();
-        let mut field = entry::<M>("YYYY-MM-DD", d.text).state(state).metrics(m);
-        if !d.disabled
-            && let Some(f) = d.on_input.take()
-        {
-            field = field.on_input(f);
+        let mut field = entry::<M>("YYYY-MM-DD", d.text)
+            .state(state)
+            .flat(d.flat)
+            .metrics(m);
+        if d.embedded {
+            field = field.embedded();
         }
-        let selected = d.selected;
+        let on_input: Option<std::rc::Rc<dyn Fn(String) -> M + 'a>> =
+            if d.disabled { None } else { d.on_input.clone() };
+        if let Some(f) = on_input.clone() {
+            field = field.on_input(move |value| f(value));
+        }
+        let selected = d.selected.or_else(|| Date::parse(d.text));
         let (min, max) = (d.min, d.max);
         let view = CalendarView::new(d.view, d.level).clamped(d.min_level, d.max_level);
         let nav = nav_message(&d.on_nav, &d.on_view);
-        let select = |date: Date| d.on_pick.as_ref().map(|f| f(date));
+        let select = |date: Date| d.pick_message(date);
         let grid = calendar(
             Cal {
                 view,
@@ -533,13 +562,26 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
                 .padding(0)
                 .style(sb::menu_item(selected == Some(date)));
                 if within(date, min, max)
-                    && let Some(f) = &d.on_pick
+                    && let Some(message) = select(date)
                 {
-                    b = b.on_press(f(date));
+                    b = b.on_press(message);
                 }
                 b.into()
             },
         );
+        let grid = if d.dialog {
+            // The modal helps with picking; its editable display shares the page entry's value.
+            let mut display = entry("YYYY-MM-DD", d.text)
+                .state(state)
+                .flat(d.flat)
+                .metrics(m);
+            if let Some(f) = on_input {
+                display = display.on_input(move |value| f(value));
+            }
+            column![display, grid].spacing(m.space_s).into()
+        } else {
+            grid
+        };
         let calendar = popover([grid], 400.0);
         let opener = opener(
             calendar,
@@ -553,7 +595,7 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
             },
             m,
         );
-        field.left_section(opener).width(d.width).into()
+        field.right_section(opener).width(d.width).into()
     }
 }
 
@@ -563,6 +605,91 @@ mod tests {
 
     fn d(y: i32, m: u8, dd: u8) -> Date {
         Date::new(y, m, dd).unwrap()
+    }
+
+    #[test]
+    fn calendar_helper_updates_the_editable_display_and_respects_explicit_handlers() {
+        let date = d(2026, 11, 8);
+        for modal in [false, true] {
+            let input = DateInput::new("2026-11-01", date, |value| format!("text:{value}"))
+                .dialog(modal)
+                .min(d(2026, 11, 1))
+                .max(d(2026, 11, 30));
+            assert_eq!(input.pick_message(date), Some("text:2026-11-08".into()));
+            assert_eq!(input.pick_message(d(2026, 12, 1)), None);
+            let input = input.on_pick(|date| format!("picked:{}", date.format()));
+            assert_eq!(input.pick_message(date), Some("picked:2026-11-08".into()));
+            assert_eq!(input.disabled(true).pick_message(date), None);
+        }
+    }
+
+    #[test]
+    fn modal_mode_keeps_an_editor_on_the_page_and_in_the_helper() {
+        use iced::advanced::{
+            layout,
+            renderer::Headless,
+            widget::{Operation, Tree},
+        };
+        use iced::{Point, Rectangle, Size, Vector};
+        #[derive(Default)]
+        struct Editors(usize);
+        impl Operation for Editors {
+            fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation)) {
+                operate(self);
+            }
+            fn text_input(
+                &mut self,
+                _: Option<&iced::widget::Id>,
+                _: Rectangle,
+                _: &mut dyn iced::advanced::widget::operation::TextInput,
+            ) {
+                self.0 += 1;
+            }
+        }
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        let mut element: Element<'_, String> = DateInput::new("2026-11-08", d(2026, 11, 8), |v| v)
+            .dialog(true)
+            .open_initially(true)
+            .into();
+        let mut tree = Tree::new(&element);
+        let viewport = Rectangle::new(Point::ORIGIN, Size::new(640.0, 640.0));
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport.size()),
+        );
+        let mut editors = Editors::default();
+        element.as_widget_mut().operate(
+            &mut tree,
+            layout::Layout::new(&node),
+            &renderer,
+            &mut editors,
+        );
+        assert_eq!(editors.0, 1, "the page display remains an editable entry");
+        let mut overlay = element
+            .as_widget_mut()
+            .overlay(
+                &mut tree,
+                layout::Layout::new(&node),
+                &renderer,
+                &viewport,
+                Vector::ZERO,
+            )
+            .unwrap();
+        let node = overlay.as_overlay_mut().layout(&renderer, viewport.size());
+        let mut editors = Editors::default();
+        overlay
+            .as_overlay_mut()
+            .operate(layout::Layout::new(&node), &renderer, &mut editors);
+        assert_eq!(
+            editors.0, 1,
+            "the calendar helper displays the same editable value"
+        );
     }
 
     #[test]

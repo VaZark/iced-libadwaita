@@ -84,3 +84,18 @@ flowchart TD
 - Logic goes in `src/primitives/` with its tests. A widget that needs a decision calls the primitive. It does not re-derive it. Widget-level helpers (`Collapsible`, `MetaComponent`) are thin wrappers that apply one.
 - A primitive has no style. Its component supplies colors, metrics and typography.
 - Fixed-point, not float, for anything the user types as a number.
+
+`appearance::ThemeMode` represents the controlled system/light/dark preference,
+cycles it with `next()`, and converts it to and from an optional `Scheme` override.
+`widgets::ThemeToggle` supplies its standard button.
+
+`primitives::scrub` owns pointer interaction for numeric controls: `Axis` maps
+horizontal movement rightward and vertical movement upward, `Gesture` handles a
+relative scrub's threshold and retained partial steps, and `Grab` retains the
+pointer's offset from a slider thumb. `Precision` maps Shift/Alt to coarse/fine
+number-input steps. The `numeric` primitive keeps fixed-point arithmetic and
+validation; its previous scrub type exports remain compatible.
+
+`NumberInput` uses the relative gesture. `Scale` and `RangeSlider` share one track
+widget and use the same axis and grab rules for mouse and touch. Their numeric
+bounds, snapping and thumb collision rules remain in `primitives::range::Track`.

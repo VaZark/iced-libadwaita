@@ -67,10 +67,7 @@ impl Theme {
     /// app's theme; building one by hand is an opt-out of the shared desktop behavior.
     pub fn from_config(c: &crate::config::Config) -> Self {
         use crate::config::Pick;
-        let scheme = match c.color_scheme {
-            Pick::Fixed(s) => s,
-            Pick::System => crate::system::color_scheme().unwrap_or(Scheme::Light),
-        };
+        let scheme = crate::utils::effective_scheme(c, crate::system::color_scheme());
         let mut t = Self::new(scheme);
         let accent = match c.accent {
             Pick::Fixed(a) => Some(a),
@@ -137,6 +134,14 @@ impl Theme {
     #[must_use]
     pub fn with_theme_config(mut self, cfg: &crate::theme_config::ThemeConfig) -> Self {
         let scheme = self.scheme;
+        let resolved =
+            cfg.clone()
+                .with_variation(cfg.active_variation().unwrap_or(if scheme.is_dark() {
+                    "dark"
+                } else {
+                    "light"
+                }));
+        let cfg = &resolved;
         self = self.with_palette(|p| cfg.apply_to_palette(p, scheme));
         let mut metrics = self.metrics;
         cfg.apply_to_metrics(&mut metrics);
@@ -176,10 +181,10 @@ impl Theme {
     pub fn with_palette(mut self, f: impl FnOnce(&mut Palette)) -> Self {
         f(&mut self.palette);
         self.semantic = Semantic::from_palette(&self.palette, self.scheme);
+        self.semantic.apply_tint(self.tint);
         if self.auto_contrast {
             self.semantic.apply_contrast();
         }
-        self.semantic.apply_tint(self.tint);
         self.semantic.apply_transparency(self.transparency);
         self.iced = build_iced(&self.name, &self.semantic);
         self
@@ -206,7 +211,51 @@ impl Theme {
 
     /// Edits semantic tokens directly (card color, opacities, …).
     pub fn with_semantic(mut self, f: impl FnOnce(&mut Semantic)) -> Self {
+        let previous = self.semantic.clone();
         f(&mut self.semantic);
+        if self.auto_contrast {
+            // Recompute defaults after background edits, preserving explicit foreground edits.
+            let backdrop = iced::Color {
+                a: 1.0,
+                ..self.semantic.window.bg
+            };
+            for (surface, old) in [
+                (&mut self.semantic.window, previous.window),
+                (&mut self.semantic.view, previous.view),
+                (&mut self.semantic.headerbar, previous.headerbar),
+                (&mut self.semantic.card, previous.card),
+                (&mut self.semantic.sidebar, previous.sidebar),
+                (
+                    &mut self.semantic.secondary_sidebar,
+                    previous.secondary_sidebar,
+                ),
+                (&mut self.semantic.thumbnail, previous.thumbnail),
+                (&mut self.semantic.overview, previous.overview),
+                (&mut self.semantic.active_toggle, previous.active_toggle),
+                (&mut self.semantic.dialog, previous.dialog),
+                (&mut self.semantic.popover, previous.popover),
+                (&mut self.semantic.osd, previous.osd),
+            ] {
+                if surface.fg == old.fg {
+                    surface.fg = crate::color::ensure_contrast(
+                        surface.fg,
+                        crate::color::composite_over(surface.bg, backdrop),
+                        4.5,
+                    );
+                }
+            }
+            for (swatch, old) in [
+                (&mut self.semantic.accent, previous.accent),
+                (&mut self.semantic.destructive, previous.destructive),
+                (&mut self.semantic.success, previous.success),
+                (&mut self.semantic.warning, previous.warning),
+                (&mut self.semantic.error, previous.error),
+            ] {
+                if swatch.fg == old.fg && swatch.bg != old.bg {
+                    swatch.fg = crate::color::readable_on(swatch.bg);
+                }
+            }
+        }
         self.iced = build_iced(&self.name, &self.semantic);
         self
     }
@@ -530,6 +579,38 @@ impl svg::Catalog for Theme {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dark_cards_and_selected_toggles_keep_readable_foregrounds() {
+        for theme in [
+            Theme::dark(),
+            Theme::dark().with_tint(Some(Color::from_rgba(0.2, 0.3, 0.4, 0.5))),
+            Theme::dark().with_semantic(|s| s.card.bg = crate::color::white(0.12)),
+        ] {
+            for surface in [theme.semantic.card, theme.semantic.active_toggle] {
+                let effective = crate::color::composite_over(surface.bg, theme.semantic.window.bg);
+                assert_eq!(surface.fg, Color::WHITE);
+                assert!(crate::color::contrast_ratio(surface.fg, effective) >= 4.5);
+            }
+        }
+    }
+
+    #[test]
+    fn background_edits_update_inherited_foregrounds_but_preserve_overrides() {
+        let changed = Theme::light().with_semantic(|s| {
+            s.headerbar.bg = Color::BLACK;
+            s.active_toggle.bg = Color::BLACK;
+        });
+        for surface in [changed.semantic.headerbar, changed.semantic.active_toggle] {
+            assert!(crate::color::contrast_ratio(surface.fg, surface.bg) >= 4.5);
+        }
+        let explicit = Color::from_rgb(0.1, 0.2, 0.3);
+        let changed = Theme::light().with_semantic(|s| {
+            s.headerbar.bg = Color::BLACK;
+            s.headerbar.fg = explicit;
+        });
+        assert_eq!(changed.semantic.headerbar.fg, explicit);
+    }
+
     #[test]
     fn light_dark_picks_by_scheme() {
         use crate::Scheme;

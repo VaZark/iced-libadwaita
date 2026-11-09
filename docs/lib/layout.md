@@ -91,3 +91,8 @@ The gallery's Layout page has an AppShell (header, navbar, drawer, footer) with 
 ## Nested pages
 
 When a topic has several groups of options, give it a page: a chevron row in the parent list, a back button in the header. Not for a single control.
+
+Use `layouts::responsive` (also exported by the prelude) for size-aware views.
+It rebuilds content for a new view or available size and reuses it for repeated
+layouts at the same size. This keeps updated button and icon presentation state
+intact while a disclosure or other layout animation changes child geometry.

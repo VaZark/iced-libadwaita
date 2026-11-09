@@ -3,7 +3,7 @@
 //! [`Entry`](crate::components::Entry). Any other element can be a section too (spinner, badge, label).
 
 use crate::Element;
-use crate::{Icon, Metrics, Theme};
+use crate::{IconSource, Metrics, Theme};
 use iced::widget::{button, container, svg};
 use iced::{Border, Length};
 
@@ -12,33 +12,27 @@ pub fn section_size(m: &Metrics) -> f32 {
     m.icon_size + 2.0 * m.space_xs
 }
 
-/// The icon tint as a solid color: iced's svg tint ignores alpha, so a dim or disabled icon is
-/// mixed towards the background instead of faded.
+/// Semantic tint with real alpha, preserving the effective background.
 fn tint(t: &Theme, active: bool, disabled: bool) -> iced::Color {
     let s = &t.semantic;
-    let (bg, fg, level) = if active {
-        (s.window.bg, s.accent.color, 1.0)
+    let (fg, level) = if active {
+        (s.accent.color, 1.0)
     } else {
-        (s.window.bg, s.window.fg, s.opacity.dim)
+        (s.window.fg, s.opacity.dim)
     };
-    let level = if disabled {
-        level * s.opacity.disabled
-    } else {
-        level
-    };
-    crate::color::mix(bg, iced::Color { a: 1.0, ..fg }, level)
+    crate::color::fade(fg, level * if disabled { s.opacity.disabled } else { 1.0 })
 }
 
 /// A dim, non-interactive icon sized to sit inside an entry.
 pub struct SectionIcon {
-    icon: Icon,
+    icon: IconSource,
     disabled: bool,
     metrics: Metrics,
 }
 
-pub fn section_icon(icon: Icon) -> SectionIcon {
+pub fn section_icon(icon: impl Into<IconSource>) -> SectionIcon {
     SectionIcon {
-        icon,
+        icon: icon.into(),
         disabled: false,
         metrics: Metrics::desktop(),
     }
@@ -74,7 +68,7 @@ impl<'a, M: 'a> From<SectionIcon> for Element<'a, M> {
 /// A flat circular icon button sized to fit inside an entry: a clear "x", a filter button.
 /// `active` highlights it in the accent color (e.g. a filter is applied).
 pub struct SectionButton<'a, M> {
-    icon: Icon,
+    icon: IconSource,
     on_press: Option<M>,
     active: bool,
     disabled: bool,
@@ -82,9 +76,9 @@ pub struct SectionButton<'a, M> {
     _p: std::marker::PhantomData<&'a ()>,
 }
 
-pub fn section_button<'a, M>(icon: Icon, on_press: M) -> SectionButton<'a, M> {
+pub fn section_button<'a, M>(icon: impl Into<IconSource>, on_press: M) -> SectionButton<'a, M> {
     SectionButton {
-        icon,
+        icon: icon.into(),
         on_press: Some(on_press),
         active: false,
         disabled: false,
@@ -110,13 +104,14 @@ impl<'a, M> SectionButton<'a, M> {
     }
     /// The button's look with no press handler, for a trigger that handles the press itself
     /// (a [`Popover`](crate::widgets::Popover) anchored to it).
-    pub fn face(icon: Icon, active: bool) -> Element<'a, M>
+    pub fn face(icon: impl Into<IconSource>, active: bool) -> Element<'a, M>
     where
         M: 'a,
     {
         let m = Metrics::desktop();
         container(
-            icon.view(m.icon_size - 2.0)
+            icon.into()
+                .view(m.icon_size - 2.0)
                 .style(move |t: &Theme, _| svg::Style {
                     color: Some(tint(t, active, false)),
                 }),

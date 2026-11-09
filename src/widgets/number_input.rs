@@ -31,13 +31,13 @@
 //! model to hang them on.
 
 use crate::Element;
+use crate::Metrics;
 use crate::Theme;
 use crate::components::{EntryState, entry};
-use crate::primitives::numeric::{Axis, Precision, Scrub};
 use crate::primitives::numeric::{Decimal, Numeric};
+use crate::primitives::scrub::{Axis, Gesture, Precision, Scrub};
 use crate::primitives::validation::{self, Presentation, Validity};
 use crate::styles::button as sb;
-use crate::{Icon, Metrics};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer;
 use iced::advanced::widget::{Operation, Tree, Widget, tree};
@@ -68,9 +68,20 @@ pub struct NumberInput<'a, M> {
     revealed: bool,
     width: Length,
     metrics: Metrics,
+    embedded: bool,
+    flat: bool,
 }
 
 impl<'a, M> NumberInput<'a, M> {
+    /// Transparent page-surface entry style.
+    pub fn flat(mut self, flat: bool) -> Self {
+        self.flat = flat;
+        self
+    }
+    pub(crate) fn embedded(mut self) -> Self {
+        self.embedded = true;
+        self
+    }
     /// An integer input with no limits, stepping by 1. `text` is the entry's content.
     pub fn new(text: &'a str, on_input: impl Fn(String) -> M + 'a) -> Self {
         Self {
@@ -84,6 +95,8 @@ impl<'a, M> NumberInput<'a, M> {
             revealed: true,
             width: Length::Fixed(160.0),
             metrics: Metrics::desktop(),
+            embedded: false,
+            flat: false,
         }
     }
     /// All the rules at once.
@@ -165,11 +178,15 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
     fn from(n: NumberInput<'a, M>) -> Self {
         let m = n.metrics;
         let mut field = entry::<M>(n.placeholder.clone(), n.text)
+            .flat(n.flat)
             .state(n.text_state())
             .width(n.width)
             .metrics(m);
         if n.disabled {
             return field.into();
+        }
+        if n.embedded {
+            field = field.embedded();
         }
         if let Some(f) = &n.on_input {
             let f = f.clone();
@@ -181,8 +198,8 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
             let value = n.numeric.parse(n.text);
             let up = value.is_none_or(|v| n.numeric.can_up(v));
             let down = value.is_none_or(|v| n.numeric.can_down(v));
-            let handle = |icon: Icon, enabled: bool, text: String| {
-                let glyph = container(icon.view(10.0))
+            let handle = |icon: crate::EntryIcon, enabled: bool, text: String| {
+                let glyph = container(icon.view(12.0))
                     .center(Length::Fill)
                     .width(Length::Fixed(HANDLE_W))
                     .height(Length::Fixed(14.0));
@@ -193,10 +210,17 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
                 b
             };
             let handles = column![
-                handle(Icon::GoUp, up, n.numeric.up_text(n.text)),
-                handle(Icon::GoDown, down, n.numeric.down_text(n.text)),
+                handle(crate::EntryIcon::Increment, up, n.numeric.up_text(n.text)),
+                handle(
+                    crate::EntryIcon::Decrement,
+                    down,
+                    n.numeric.down_text(n.text)
+                ),
             ];
-            field = field.right_section(handles).right_section_width(HANDLE_W);
+            field = field
+                .right_section(handles)
+                .right_section_width(HANDLE_W)
+                .section_height(28.0);
         }
         let field: Element<'a, M> = field.into();
         let axis = match n.drag {
@@ -237,15 +261,9 @@ struct Scrubber<'a, M> {
 /// A press that may become a drag.
 #[derive(Debug, Clone, Copy)]
 struct Press {
-    /// Where the press landed: a drag has begun once the pointer is far enough from it.
-    from: (f32, f32),
-    /// The value reached so far; each step is taken from it, so a modifier changing mid-drag
-    /// changes only the steps still to come.
-    value: Option<crate::primitives::numeric::Decimal>,
-    /// Where the steps are counted from: the press, moved on by the travel each step used.
-    anchor: (f32, f32),
-    /// Travelled far enough to be a drag.
-    dragging: bool,
+    gesture: Gesture,
+    /// The last emitted value, so changing modifiers only affects subsequent steps.
+    value: Option<Decimal>,
 }
 
 #[derive(Default)]
@@ -312,9 +330,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Scrubber<'a, M> {
                 if let Some(from) = cursor.position() {
                     state.press = Some(Press {
                         value: self.numeric.parse(&self.text),
-                        anchor: (from.x, from.y),
-                        from: (from.x, from.y),
-                        dragging: false,
+                        gesture: Gesture::new((from.x, from.y)),
                     });
                 }
             }
@@ -322,17 +338,11 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Scrubber<'a, M> {
                 let precision = Precision::from_modifiers(state.shift, state.alt);
                 if let (Some(press), Some(at)) = (&mut state.press, cursor.position()) {
                     let to = (at.x, at.y);
-                    if !press.dragging && self.scrub.started(press.from, to) {
-                        press.dragging = true;
-                        // Steps count from where the drag began.
-                        press.anchor = press.from;
-                    }
-                    if press.dragging {
-                        let steps = self.scrub.steps(press.anchor, to);
+                    let steps = press.gesture.update(self.scrub, to);
+                    if press.gesture.dragging() {
                         if steps != 0 {
                             let value = self.numeric.offset_by(press.value, steps, precision);
                             press.value = Some(value);
-                            press.anchor = self.scrub.advance(press.anchor, steps);
                             let text = self.numeric.format(value);
                             if text != self.text {
                                 shell.publish((self.on_input)(text));
@@ -346,7 +356,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Scrubber<'a, M> {
                 }
             }
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-                if state.press.take().is_some_and(|p| p.dragging) =>
+                if state.press.take().is_some_and(|p| p.gesture.dragging()) =>
             {
                 shell.capture_event();
                 return;
@@ -377,7 +387,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Scrubber<'a, M> {
             .state
             .downcast_ref::<ScrubState>()
             .press
-            .is_some_and(|p| p.dragging)
+            .is_some_and(|p| p.gesture.dragging())
         {
             return match self.scrub.axis {
                 Axis::Horizontal => mouse::Interaction::ResizingHorizontally,

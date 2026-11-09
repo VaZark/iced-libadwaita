@@ -103,3 +103,11 @@ More switches are in [CONTRIBUTING.md](../CONTRIBUTING.md#the-gallery). `GALLERY
 Add it to the playground in the same change: a control in `specs`, its use in `build`, its line in the generated code. A property with a toolkit default is a plain value that starts at it. The control shows the default. The generated code adds the call once it changes. Example: Expander row > Indent, default 24 px from `[rows] expander-indent`.
 
 Also update the method's doc comment (`cargo xtask man`) and the component's page. See [CONTRIBUTING.md](../CONTRIBUTING.md#working-on-a-component).
+
+The gallery uses `iad::utils::theme`, `detect_theme`, and `follow_theme` for shared desktop appearance. Normal startup follows the system color scheme and icon theme. The single appearance icon button cycles System → Light → Dark → System. `GALLERY_SHOT_ONLY=Entries` captures the detected scheme. Light and Dark apply a process-local override; System clears it and follows desktop appearance changes.
+
+The Inputs page opens with **Application forms**: **Entries** demonstrates every
+typed EntryRow control, including both date presentations and full-row selections;
+**Form** uses Entries for its single-page and wizard examples. Low-level controls are grouped under
+**Base input elements (for custom widgets)**; use Entries for application forms. To open Entries directly, run
+`GALLERY_DETAIL=Entries cargo run -p iced-adaptive-design-gallery`.

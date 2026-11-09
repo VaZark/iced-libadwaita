@@ -26,12 +26,12 @@
 //! ```
 //!
 //! The choice is the pure function [`MetaComponent::pick`] over `primitives::meta`. Like
-//! [`responsive`](iced::widget::responsive), the result fills its container by default.
+//! [`responsive`](crate::layouts::responsive), the result fills its container by default.
 
 use crate::Element;
 use crate::breakpoints::Breakpoints;
+use crate::layouts::responsive;
 use crate::primitives::meta::{self, Trigger};
-use iced::widget::responsive;
 use iced::{Length, Size};
 use std::rc::Rc;
 
@@ -137,7 +137,7 @@ impl<'a, P: PartialEq + 'a, M: 'a> MetaComponent<'a, P, M> {
 
     /// Builds the variant a container of `width` gets, **without measuring the container**, so the
     /// result takes its content's size and flows with the page. The normal conversion is built on
-    /// [`responsive`](iced::widget::responsive), which fills its container and cannot shrink to
+    /// [`responsive`](crate::layouts::responsive), which fills its container and cannot shrink to
     /// its content's height. Use this where the content decides the height (a paragraph that
     /// swaps to an entry) and the width is known to the application, or irrelevant because the
     /// variants answer to [`selected`](Self::selected) rather than to a breakpoint: pass the

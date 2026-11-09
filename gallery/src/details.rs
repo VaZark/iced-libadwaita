@@ -374,7 +374,6 @@ impl Gallery {
                 .spacing(m.group_spacing)
                 .into()
             }
-            Detail::Field => self.field.view(m).map(Message::Field),
             Detail::Form => self.form.view(m).map(Message::Form),
             Detail::PathBar => self.inline(Inline::PathBar),
             Detail::MenuButton => self.inline(Inline::MenuButton),
@@ -398,7 +397,7 @@ impl Gallery {
             Detail::MetaParent => self.reorder.parent_view(m).map(Message::Reorder),
             Detail::Composed => self.composed.view(m).map(Message::Composed),
             Detail::VirtualList => self.upstream.virtual_view(m).map(Message::Upstream),
-            Detail::EditableText => self.upstream.editable_view(m).map(Message::Upstream),
+            Detail::MultilineEntry => self.upstream.editable_view(m).map(Message::Upstream),
             Detail::PageHeader => self.upstream.header_view(m).map(Message::Upstream),
             Detail::ThemeConfig => self.theme_cfg.view(m).map(Message::ThemeCfg),
             Detail::Surface => self.upstream.surface_view(m).map(Message::Upstream),
@@ -411,7 +410,23 @@ impl Gallery {
             Detail::Icons => {
                 // Screenshots want every row at once.
                 let revealed = if self.shots.is_some() { usize::MAX } else { self.icons_revealed };
-                self.upstream.icons_view(m, revealed).map(Message::Upstream)
+                column![
+                    g("Entry controls · bundled SVGs").push(w::card(
+                        row(iad::EntryIcon::ALL.iter().map(|icon| {
+                            container(column![icon.view(16.0), text(format!("{icon:?}")).size(11)]
+                                .spacing(m.space_s).align_x(iced::Alignment::Center))
+                                .padding(m.space_s).width(90.0).into()
+                        })).spacing(m.space_s).wrap()
+                    )),
+                    g("Appearance · bundled SVGs").push(w::card(
+                        row([w::ThemeMode::System, w::ThemeMode::Light, w::ThemeMode::Dark].into_iter().map(|mode| {
+                            container(column![mode.icon().view(18.0), text(mode.label()).size(11)]
+                                .spacing(m.space_s).align_x(iced::Alignment::Center))
+                                .padding(m.space_s).width(90.0).into()
+                        })).spacing(m.space_s)
+                    )),
+                    self.upstream.icons_view(m, revealed).map(Message::Upstream),
+                ].spacing(m.group_spacing).into()
             }
             Detail::SyncedText => self.synced.view(m).map(Message::Synced),
             Detail::Reorderable => column![
@@ -546,13 +561,7 @@ impl Gallery {
             ]
             .spacing(m.group_spacing)
             .into(),
-            Detail::EntryRow => column![
-                g("Entry rows")
-                    .push(w::EntryRow::new("Display name", &self.name).on_input(Message::Name).metrics(m))
-                    .push(w::EntryRow::new("Password", &self.password).on_input(Message::Password).password(true).metrics(m))
-                    .push(w::EntryRow::new("Read-only", "disabled row").metrics(m)),
-            ]
-            .into(),
+            Detail::Entries => self.entries.view(m).map(Message::Entries),
             Detail::PreferencesGroup => column![
                 self.preferences_demo(),
             ]
@@ -595,8 +604,8 @@ impl Gallery {
                             .wrap(),
                         )),
                     g("Auto-dismiss")
-                        .description("The queue's timeout: each toast leaves on its own clock, restarted when its content is replaced (try Undo). Off, they stay until dismissed.")
-                        .push(w::SwitchRow::new("Dismiss after 4 s", self.toast_auto, Message::ToastAuto).metrics(m)),
+                        .description("Each toast closes after the configured timeout (3000 ms by default), without a timer subscription. Off, they stay until dismissed.")
+                        .push(w::SwitchRow::new("Auto-dismiss (configured timeout)", self.toast_auto, Message::ToastAuto).metrics(m)),
                     g("Radius")
                         .description("A toast's corner radius is its own theme token (default: a full pill).")
                         .push(
@@ -624,7 +633,7 @@ impl Gallery {
             }
             // ------------------------------------------------------------ theming
             Detail::ThemeColors => {
-                let scheme = g("Scheme and accent").push(w::SwitchRow::new("Dark", self.scheme.is_dark(), Message::Scheme).metrics(m)).push(
+                let scheme = g("Accent").push(
                     w::ActionRow::new("Accent color")
                         .suffix(
                             w::accent_picker(self.accent, Message::Accent)
@@ -994,7 +1003,6 @@ impl Gallery {
                 };
                 let menu = w::primary_menu(
                     w::Menu::new("Menu")
-                        .section([w::MenuItem::check("Dark Style", self.scheme.is_dark(), Message::Scheme(!self.scheme.is_dark()))])
                         .section([
                             w::MenuItem::action("Preferences", Message::OpenDialog(Dialog::Preferences)).accel("Ctrl+,"),
                             w::MenuItem::action("Unavailable", Message::Noop).disabled(),
@@ -1026,7 +1034,7 @@ impl Gallery {
                         w::Menu::new("Settings")
                             .check_style(style)
                             .section([
-                                w::MenuItem::check("Dark Style", self.scheme.is_dark(), Message::Noop),
+                                w::MenuItem::check("Notifications", self.notifications, Message::Notifications(!self.notifications)),
                                 w::MenuItem::check("Compact", false, Message::Noop),
                                 w::MenuItem::check("Wi-Fi", true, Message::Noop).state_labels("Connected", "Disconnected"),
                             ]),

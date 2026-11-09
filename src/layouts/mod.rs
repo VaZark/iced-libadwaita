@@ -45,3 +45,6 @@ pub use splitter::{Splitter, SplitterOrientation};
 pub use surface::window;
 pub use table_grid::{TableCell, TableGrid};
 pub use virtual_list::VirtualList;
+
+mod responsive;
+pub use responsive::{Responsive, responsive};

@@ -32,9 +32,10 @@
 
 use crate::Element;
 use crate::components::flat_button;
+use crate::layouts::responsive;
 use crate::primitives::stepper::{self as prim, Fill, Status};
 use crate::{Icon, Metrics, Theme};
-use iced::widget::{column, container, responsive, row, space, svg, text};
+use iced::widget::{column, container, row, space, svg, text};
 use iced::{Alignment, Border, Color, Length, Padding};
 
 /// How the steps are laid out.
@@ -314,15 +315,16 @@ fn bold() -> iced::Font {
     }
 }
 
-/// A solid tint for an svg (iced ignores a tint's alpha): `c` mixed towards the window
-/// background when disabled.
+/// Symbolic tint retaining alpha against the actual surface.
 fn solid(t: &Theme, c: Color, disabled: bool) -> Color {
-    let c = Color { a: 1.0, ..c };
-    if disabled {
-        crate::color::mix(t.semantic.window.bg, c, t.semantic.opacity.disabled)
-    } else {
-        c
-    }
+    crate::color::fade(
+        c,
+        if disabled {
+            t.semantic.opacity.disabled
+        } else {
+            1.0
+        },
+    )
 }
 
 fn dim_fg(t: &Theme, disabled: bool) -> Color {

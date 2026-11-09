@@ -6,8 +6,8 @@
 use crate::Element;
 use crate::styles;
 use crate::{Metrics, Role, Surface, Swatch, Theme};
-use iced::widget::{Button, Checkbox, Radio, Slider};
-use iced::widget::{button, checkbox, container, radio, slider, text};
+use iced::widget::{Button, Checkbox, Radio};
+use iced::widget::{button, checkbox, container, radio, text};
 use iced::{Length, Padding};
 use std::ops::RangeInclusive;
 
@@ -35,18 +35,18 @@ where
 
 // ------------------------------------------------------------------ Scale
 
-/// `GtkScale`: a horizontal slider filling the available width.
+/// `GtkScale`: a single-thumb slider using the shared oriented scrub track.
+/// Horizontal by default; vertical values increase upward.
 pub fn scale<'a, T, M>(
     range: RangeInclusive<T>,
     value: T,
     on_change: impl Fn(T) -> M + 'a,
-) -> Slider<'a, T, M, Theme>
+) -> crate::widgets::Scale<'a, T, M>
 where
-    T: Copy + From<u8> + PartialOrd + 'a,
-    f64: From<T>,
-    M: Clone + 'a,
+    T: crate::primitives::range::Scalar + 'a,
+    M: 'a,
 {
-    slider(range, value, on_change).width(Length::Fill)
+    crate::widgets::Scale::new(range, value, on_change)
 }
 
 // --------------------------------------------------- LinkButton / card button

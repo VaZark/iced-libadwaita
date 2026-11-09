@@ -5,10 +5,10 @@ categories = ["gui"]
 edition = "2024"
 keywords = ["iced", "gui", "gnome", "design-system", "theme"]
 description = "Adaptive design system for iced: theme, components and behavior primitives after the GNOME HIG"
-# What the published crate contains: the library, its user docs and its man pages. The HIG
+# What the published crate contains: the library, its user docs and handwritten man sources. The HIG
 # reference notes (docs/hig-inferences/) are for contributors and are not bundled; the gallery and
 # xtask are separate crates.
-include = ["/src/**", "/man/**", "/docs/lib/**", "/README.md", "/LICENSE*", "/Cargo.toml"]
+include = ["/src/**", "/docs/man/**", "/docs/lib/**", "/README.md", "/LICENSE*", "/Cargo.toml"]
 
 # Dependencies are optimized even in a debug build. The SVG rasterizer and the GPU stack are far
 # too slow unoptimized: a page of icons stalled for seconds the first time it drew. This costs
@@ -24,6 +24,12 @@ default-members = ["."]
 # Wayland only on Linux: no `x11` feature. An app that depends on this crate should also set
 # `default-features = false` on its own `iced`, or Cargo turns the X11 backend back on.
 iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "crisp", "web-colors", "thread-pool", "linux-theme-detection", "wayland", "advanced", "svg", "image", "tokio", "canvas"] }
-# Only to write the PNG of a development screenshot ([`dev`]).
+# Decode installed PNG icons and write development screenshots ([`dev`]).
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+# Parse and normalize installed symbolic SVGs while retaining semantic color roles.
+resvg = { version = "0.45.1", default-features = false }
+roxmltree = "0.20"
+svgtypes = "0.15.3"
+regex = "1"
+tokio = { version = "1", features = ["time"] }

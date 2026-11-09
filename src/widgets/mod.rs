@@ -16,10 +16,9 @@ pub(crate) mod collapsible;
 pub(crate) mod color_picker;
 pub(crate) mod date_input;
 pub(crate) mod date_range_input;
-pub(crate) mod detail_header;
 pub(crate) mod dialog;
 pub(crate) mod dropdown;
-pub(crate) mod editable_text;
+pub(crate) mod entries;
 pub(crate) mod extra;
 pub(crate) mod field;
 pub(crate) mod floating_indicator;
@@ -36,6 +35,7 @@ pub(crate) mod number_input;
 pub(crate) mod pagination;
 pub(crate) mod popover;
 pub(crate) mod preferences;
+pub(crate) mod profile_header;
 pub(crate) mod range_slider;
 pub(crate) mod reorderable_list;
 pub(crate) mod resizable;
@@ -71,22 +71,19 @@ pub use collapsible::Collapsible;
 pub use color_picker::{ColorInput, ColorPicker};
 pub use date_input::DateInput;
 pub use date_range_input::DateRangeInput;
-pub use detail_header::DetailHeader;
 pub use dialog::{
     AboutDialog, AlertDialog, ResponseAppearance, dialog, dialog_in_window, preferences_dialog,
     present_dialog, shortcuts_dialog,
 };
 pub use dropdown::{dropdown, dropdown_disabled, menu_item, menu_item_disabled};
-pub use editable_text::EditableText;
 pub use extra::{
     breakpoint_bin, carousel_indicator_dots, carousel_indicator_lines, inline_view_switcher,
-    password_entry_row, path_bar, shortcut_label, sidebar, tab_button, view_switcher,
-    view_switcher_bar, wrap_box,
+    path_bar, shortcut_label, sidebar, tab_button, view_switcher, view_switcher_bar, wrap_box,
 };
 pub use field::{Field, FieldLayout, outlined as field_outline};
 pub use floating_indicator::FloatingIndicator;
 pub use form::{Form, FormActions, Step, StepIndicator};
-pub use header_bar::{HeaderBar, WindowControls, header_bar, window_title};
+pub use header_bar::{HeaderBar, WindowControlIcons, WindowControls, header_bar, window_title};
 pub use histogram_range_slider::HistogramRangeSlider;
 pub use infinite::{InfiniteList, LoadTrigger};
 pub use item_card::ItemCard;
@@ -112,6 +109,7 @@ pub use popover::{
     Presentation as PopoverPresentation, popover, popover_bounds,
 };
 pub use preferences::{PreferencesGroup, PreferencesPage, preferences_group, preferences_page};
+pub use profile_header::ProfileHeader;
 pub use range_slider::{RangeSlider, range_slider};
 pub use reorderable_list::ReorderableList;
 pub use resizable::Resizable;
@@ -119,10 +117,10 @@ pub use responsive_table::{
     Column, Mode as TableMode, Presentation as TablePresentation, ResponsiveTable,
 };
 pub use rows::{
-    ActionRow, ButtonRow, ComboRow, EntryRow, ExpanderRow, RangeSliderRow, SliderRow, SpinRow,
-    SwitchRow, ToggleGroupRow, action_row, boxed_list,
+    ActionRow, ButtonRow, ComboRow, ExpanderRow, RangeSliderRow, SliderRow, SpinRow, SwitchRow,
+    ToggleGroupRow, action_row, boxed_list,
 };
-pub use section_divider::SectionDivider;
+pub use section_divider::{CollapseState, SectionDivider};
 pub use section_heading::SectionHeading;
 pub use sort_header::SortHeader;
 pub use split::{SplitAction, SplitButton, SplitButtonAction, split_button};
@@ -138,3 +136,18 @@ pub use toast::{
 pub use toolbar::{ActionBar, BarStyle, ToolbarView, action_bar, toolbar_view};
 pub use tree::{DragMode, Payload as TreeNodePayload, ROW_HEIGHT as TREE_ROW_HEIGHT, Tree};
 pub use tree_row::TreeRow;
+
+pub use entries::{
+    ActionEntry, ChipGroupEntry, DateEntry, EntryInput, EntryRow, MultilineEntry, MultiselectEntry,
+    NavigationRow, NumberEntry, SelectEntry, SwitchEntry, TextEntry,
+};
+
+pub use crate::components::InputWrapper;
+
+pub(crate) mod theme_toggle;
+pub use theme_toggle::{ThemeMode, ThemeToggle};
+
+mod scale;
+pub use scale::Scale;
+
+mod toast_timeout;
