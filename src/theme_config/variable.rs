@@ -42,6 +42,19 @@ pub enum VariableType {
     Bool,
 }
 impl VariableType {
+    /// The unconstrained type for a kind that has no parameters (color, number, bool, text).
+    pub(crate) fn untyped(kind: Kind) -> Option<Self> {
+        match kind {
+            Kind::Color => Some(Self::Color),
+            Kind::Number => Some(Self::Number),
+            Kind::Bool => Some(Self::Bool),
+            Kind::Text => Some(Self::String {
+                values: vec![],
+                accepts_random: true,
+            }),
+            _ => None,
+        }
+    }
     pub fn kind(&self) -> Kind {
         match self {
             Self::Integer { .. } => Kind::Integer,
@@ -135,8 +148,16 @@ impl VariableType {
             } => (!raw.contains(['\n', '\r'])
                 && (*accepts_random || values.iter().any(|v| v == raw)))
             .then(|| Value::Text(raw.into())),
-            Self::Number => Value::parse(Kind::Number, raw),
-            Self::Bool => Value::parse(Kind::Bool, raw),
+            Self::Number => raw
+                .parse::<f32>()
+                .ok()
+                .filter(|n| n.is_finite())
+                .map(Value::Number),
+            Self::Bool => match raw.to_ascii_lowercase().as_str() {
+                "true" | "yes" | "on" | "1" => Some(Value::Bool(true)),
+                "false" | "no" | "off" | "0" => Some(Value::Bool(false)),
+                _ => None,
+            },
         }
     }
     pub(crate) fn well_formed(&self) -> bool {

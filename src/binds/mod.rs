@@ -4,6 +4,8 @@
 
 pub(crate) mod focus;
 pub(crate) mod shortcut_scope;
+pub(crate) mod token_nav;
+pub(crate) mod wrap;
 
 pub use focus::{FocusScope, focus_return};
 pub use shortcut_scope::shortcuts;

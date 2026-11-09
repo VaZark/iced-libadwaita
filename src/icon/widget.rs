@@ -6,6 +6,7 @@ use iced::widget::svg;
 use iced::{Color, ContentFit, Length, Rectangle, Rotation, Size};
 use std::{
     collections::HashMap,
+    hash::Hash,
     sync::{Mutex, OnceLock},
 };
 
@@ -102,7 +103,28 @@ struct RenderKey {
     palette: [[u8; 4]; 4],
     symbolic: bool,
 }
-static RENDERS: OnceLock<Mutex<(String, HashMap<RenderKey, Option<Asset>>)>> = OnceLock::new();
+
+/// Memoized icon work, dropped whenever the icon theme changes.
+struct ThemeCache<K, V> {
+    /// The icon theme the entries belong to, then the entries.
+    state: Mutex<(String, HashMap<K, V>)>,
+}
+impl<K: Hash + Eq, V: Clone> ThemeCache<K, V> {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(Default::default()),
+        }
+    }
+    fn get_or_insert_with(&self, key: K, make: impl FnOnce() -> V) -> V {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let theme = crate::system::icon_theme();
+        if state.0 != theme {
+            *state = (theme, HashMap::new());
+        }
+        state.1.entry(key).or_insert_with(make).clone()
+    }
+}
+static RENDERS: OnceLock<ThemeCache<RenderKey, Option<Asset>>> = OnceLock::new();
 fn rgba(c: Color) -> [u8; 4] {
     c.into_rgba8()
 }
@@ -297,24 +319,14 @@ fn asset(icon: ResolvedIcon, theme: &Theme, foreground: Color) -> Option<Asset> 
         palette: if icon.symbolic { palette } else { [[0; 4]; 4] },
         symbolic: icon.symbolic,
     };
-    let mut cache = RENDERS
-        .get_or_init(Default::default)
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    let current = crate::system::icon_theme();
-    if cache.0 != current {
-        cache.0 = current;
-        cache.1.clear();
-    }
     let declared_symbolic = icon
         .path
         .file_stem()
         .and_then(|s| s.to_str())
         .is_some_and(|s| s.ends_with("-symbolic"));
-    cache
-        .1
-        .entry(key)
-        .or_insert_with(|| match icon.path.extension()?.to_str()? {
+    RENDERS
+        .get_or_init(ThemeCache::new)
+        .get_or_insert_with(key, || match icon.path.extension()?.to_str()? {
             "svg" => {
                 let bytes = if icon.symbolic && (declared_symbolic || monochrome_svg(&icon.bytes)) {
                     symbolic_svg(&icon.bytes, palette)?
@@ -362,26 +374,16 @@ fn asset(icon: ResolvedIcon, theme: &Theme, foreground: Color) -> Option<Asset> 
             }
             _ => None,
         })
-        .clone()
 }
 
 type WeightKey = (u64, u32, u32);
-static WEIGHTED: OnceLock<Mutex<(String, HashMap<WeightKey, svg::Handle>)>> = OnceLock::new();
+static WEIGHTED: OnceLock<ThemeCache<WeightKey, svg::Handle>> = OnceLock::new();
 fn weighted_svg(handle: svg::Handle, weight: f32, logical_size: f32) -> svg::Handle {
     if weight <= 0.0 || logical_size <= 0.0 {
         return handle;
     }
     let key = (handle.id(), weight.to_bits(), logical_size.to_bits());
-    let mut cache = WEIGHTED
-        .get_or_init(Default::default)
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    let theme = crate::system::icon_theme();
-    if cache.0 != theme {
-        cache.0 = theme;
-        cache.1.clear();
-    }
-    cache.1.entry(key).or_insert_with(|| {
+    WEIGHTED.get_or_init(ThemeCache::new).get_or_insert_with(key, || {
         let data = match handle.data() {
             core_svg::Data::Bytes(bytes) => bytes.to_vec(),
             core_svg::Data::Path(path) => std::fs::read(path).unwrap_or_default(),
@@ -394,7 +396,7 @@ fn weighted_svg(handle: svg::Handle, weight: f32, logical_size: f32) -> svg::Han
         source.insert_str(close,"</g>");
         source.insert_str(open+1,&format!("<defs><filter id=\"iad-icon-weight\" x=\"-20%\" y=\"-20%\" width=\"140%\" height=\"140%\"><feMorphology in=\"SourceGraphic\" operator=\"dilate\" radius=\"{radius}\"/></filter></defs><g filter=\"url(#iad-icon-weight)\">"));
         svg::Handle::from_memory(source.into_bytes())
-    }).clone()
+    })
 }
 
 fn tint_pixels(pixels: &mut [u8], foreground: [u8; 4]) {

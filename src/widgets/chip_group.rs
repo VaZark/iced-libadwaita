@@ -37,8 +37,8 @@ use iced::widget::{column, row};
 pub struct ChipOption<K> {
     pub(crate) key: K,
     pub(crate) label: String,
-    icon: Option<IconSource>,
-    color: Option<Color>,
+    pub(crate) icon: Option<IconSource>,
+    pub(crate) color: Option<Color>,
 }
 
 impl<K> ChipOption<K> {
@@ -222,15 +222,11 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for
             }) = g.expand
             {
                 let height = g.size.height(&m);
-                let control = crate::components::flat_button(
-                    crate::Icon::GoUp.view(14.0),
-                );
+                let control = crate::components::flat_button(crate::Icon::GoUp.view(14.0));
                 let control = if expanded {
                     control
                 } else {
-                    crate::components::flat_button(
-                        crate::Icon::GoDown.view(14.0),
-                    )
+                    crate::components::flat_button(crate::Icon::GoDown.view(14.0))
                 }
                 .width(iced::Length::Fixed(height))
                 .height(iced::Length::Fixed(height))

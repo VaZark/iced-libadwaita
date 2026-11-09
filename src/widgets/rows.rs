@@ -56,6 +56,10 @@ pub fn action_row<'a, M>(title: impl Into<String>) -> ActionRow<'a, M> {
 }
 
 impl<'a, M> ActionRow<'a, M> {
+    /// A row that opens a destination. Value actions belong in `EntryRow::action`.
+    pub fn navigation(title: impl Into<String>, destination: M) -> Self {
+        Self::new(title).chevron(true).on_activate(destination)
+    }
     pub fn new(title: impl Into<String>) -> Self {
         Self {
             title: title.into(),

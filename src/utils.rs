@@ -6,14 +6,10 @@
 
 use crate::{Scheme, Theme, config};
 use iced::{Subscription, Task};
-use std::{
-    path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
-    time::{Duration, Instant},
-};
+use std::time::Duration;
 
 // Per-process user choice; never writes desktop settings or the shared config file.
-static SCHEME_OVERRIDE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+static SCHEME_OVERRIDE: crate::system::AtomicScheme = crate::system::AtomicScheme::new();
 
 /// Override the system/configured scheme for this application process.
 /// `None` resumes following global settings. Returns false if app overrides are forbidden.
@@ -21,24 +17,13 @@ pub fn set_scheme_override(scheme: Option<Scheme>) -> bool {
     if scheme.is_some() && !config::current().allow_app_overrides {
         return false;
     }
-    SCHEME_OVERRIDE.store(
-        match scheme {
-            None => 0,
-            Some(Scheme::Light) => 1,
-            Some(Scheme::Dark) => 2,
-        },
-        std::sync::atomic::Ordering::Relaxed,
-    );
+    SCHEME_OVERRIDE.store(scheme);
     true
 }
 
 /// The application's requested override, or `None` when following global configuration.
 pub fn scheme_override() -> Option<Scheme> {
-    match SCHEME_OVERRIDE.load(std::sync::atomic::Ordering::Relaxed) {
-        1 => Some(Scheme::Light),
-        2 => Some(Scheme::Dark),
-        _ => None,
-    }
+    SCHEME_OVERRIDE.load()
 }
 
 pub(crate) fn effective_scheme(config: &config::Config, detected: Option<Scheme>) -> Scheme {
@@ -78,7 +63,7 @@ pub fn theme_settings() -> ThemeSettings {
     effective_settings(
         &config,
         crate::system::color_scheme(),
-        desktop_preferences().icon_theme,
+        crate::system::desktop_preferences().icon_theme,
     )
 }
 
@@ -123,97 +108,6 @@ fn theme_file_changes() -> impl iced::futures::Stream<Item = ThemeSettings> {
             }
         }
     })
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct DesktopPreferences {
-    pub icon_theme: Option<String>,
-    pub scheme: Option<Scheme>,
-}
-
-fn settings_paths() -> Vec<PathBuf> {
-    let mut roots: Vec<PathBuf> = std::env::var("XDG_CONFIG_DIRS")
-        .unwrap_or_else(|_| "/etc/xdg".into())
-        .split(':')
-        .filter(|p| Path::new(p).is_absolute())
-        .map(PathBuf::from)
-        .collect();
-    roots.reverse();
-    roots.insert(0, PathBuf::from("/etc"));
-    if let Some(home) = std::env::var_os("XDG_CONFIG_HOME").filter(|p| Path::new(p).is_absolute()) {
-        roots.push(home.into());
-    } else if let Some(home) = std::env::var_os("HOME") {
-        roots.push(PathBuf::from(home).join(".config"));
-    }
-    roots
-        .into_iter()
-        .flat_map(|root| {
-            [
-                root.join("gtk-3.0/settings.ini"),
-                root.join("gtk-4.0/settings.ini"),
-            ]
-        })
-        .collect()
-}
-
-fn read_preferences(paths: &[PathBuf]) -> DesktopPreferences {
-    let mut preferences = DesktopPreferences::default();
-    for path in paths {
-        if let Ok(text) = std::fs::read_to_string(path) {
-            merge_preferences(&mut preferences, &text);
-        }
-    }
-    preferences
-}
-
-fn merge_preferences(preferences: &mut DesktopPreferences, text: &str) {
-    let mut settings = false;
-    for line in text
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.starts_with('#') && !l.starts_with(';'))
-    {
-        if line.starts_with('[') {
-            settings = line == "[Settings]";
-            continue;
-        }
-        if !settings {
-            continue;
-        }
-        let Some((key, value)) = line.split_once('=') else {
-            continue;
-        };
-        let value = value.trim().trim_matches('"').trim_matches('\'');
-        match key.trim() {
-            "gtk-icon-theme-name"
-                if !value.is_empty()
-                    && value != "."
-                    && value != ".."
-                    && !value.contains(['/', '\\']) =>
-            {
-                preferences.icon_theme = Some(value.into())
-            }
-            "gtk-application-prefer-dark-theme" => match value {
-                "true" | "1" => preferences.scheme = Some(Scheme::Dark),
-                "false" | "0" => preferences.scheme = Some(Scheme::Light),
-                _ => (),
-            },
-            _ => (),
-        }
-    }
-}
-
-/// Shared file snapshot, refreshed at most once per second rather than once per icon draw.
-pub(crate) fn desktop_preferences() -> DesktopPreferences {
-    static CACHE: OnceLock<Mutex<(Instant, DesktopPreferences)>> = OnceLock::new();
-    let mut cache = CACHE
-        .get_or_init(|| Mutex::new((Instant::now(), read_preferences(&settings_paths()))))
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
-    if cache.0.elapsed() >= Duration::from_secs(1) {
-        *cache = (Instant::now(), read_preferences(&settings_paths()));
-    }
-    cache.1.clone()
 }
 
 #[cfg(test)]
@@ -272,32 +166,5 @@ mod tests {
                 icon_theme: "hicolor".into()
             }
         );
-    }
-
-    #[test]
-    fn toolkit_preferences_are_section_aware_and_overlay_lower_priority_settings() {
-        let mut settings = DesktopPreferences::default();
-        merge_preferences(
-            &mut settings,
-            "[Settings]\ngtk-icon-theme-name=breeze-dark\ngtk-application-prefer-dark-theme=true\n",
-        );
-        assert_eq!(settings.icon_theme.as_deref(), Some("breeze-dark"));
-        assert_eq!(settings.scheme, Some(Scheme::Dark));
-        merge_preferences(
-            &mut settings,
-            "[Other]\ngtk-icon-theme-name=ignored\n[Settings]\ngtk-icon-theme-name=Papirus\ngtk-application-prefer-dark-theme=false\n",
-        );
-        assert_eq!(settings.icon_theme.as_deref(), Some("Papirus"));
-        assert_eq!(settings.scheme, Some(Scheme::Light));
-        merge_preferences(
-            &mut settings,
-            "[Settings]\ngtk-icon-theme-name=../bad\ngtk-application-prefer-dark-theme=invalid\n",
-        );
-        assert_eq!(settings.icon_theme.as_deref(), Some("Papirus"));
-        assert_eq!(settings.scheme, Some(Scheme::Light));
-    }
-    #[test]
-    fn absent_settings_do_not_invent_a_desktop_theme() {
-        assert_eq!(read_preferences(&[]), DesktopPreferences::default());
     }
 }

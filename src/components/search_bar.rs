@@ -21,10 +21,7 @@ pub struct SearchBar<'a, M> {
 }
 
 /// A search bar showing `value` and sending each edit through `on_input`.
-pub fn search_bar<'a, M>(
-    value: &'a str,
-    on_input: impl Fn(String) -> M + 'a,
-) -> SearchBar<'a, M> {
+pub fn search_bar<'a, M>(value: &'a str, on_input: impl Fn(String) -> M + 'a) -> SearchBar<'a, M> {
     SearchBar {
         value,
         placeholder: "Search".into(),

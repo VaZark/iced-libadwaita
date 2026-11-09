@@ -9,7 +9,7 @@
 //!         page(
 //!             preferences_group()
 //!                 .title("General")
-//!                 .push(SwitchEntry::new("Notifications", self.notifications, Msg::Notifications)),
+//!                 .push(EntryRow::switch("Notifications", self.notifications, Msg::Notifications)),
 //!         ),
 //!     )
 //!     .top_bar(header_bar().title("Settings"))

@@ -20,6 +20,7 @@ pub(crate) mod split_view;
 pub mod splitter;
 pub mod surface;
 pub(crate) mod table_grid;
+pub(crate) mod token_flow;
 pub mod transition;
 pub(crate) mod virtual_list;
 pub mod virtualize;
@@ -44,6 +45,7 @@ pub use split_view::{AdaptiveSplit, adaptive_split};
 pub use splitter::{Splitter, SplitterOrientation};
 pub use surface::window;
 pub use table_grid::{TableCell, TableGrid};
+pub use token_flow::{token_flow, token_flow_with_caret};
 pub use virtual_list::VirtualList;
 
 mod responsive;

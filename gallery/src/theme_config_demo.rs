@@ -203,7 +203,7 @@ impl State {
         column![
             PreferencesGroup::new().title("Typed variables and variations").metrics(m)
                 .description("Size accepts 32–200px. Invalid app values use the toolkit value, then the fallback. Optional values without a fallback remain unset.")
-                .push(w::SelectEntry::new("Variation", &["light", "dark", "high-contrast"], Some(self.variation), Msg::Variation).metrics(m)),
+                .push(w::EntryRow::select("Variation", &["light", "dark", "high-contrast"], Some(self.variation), Msg::Variation).metrics(m)),
             edit(
                 m,
                 "Toolkit theme file",

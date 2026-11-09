@@ -40,6 +40,9 @@ flowchart LR
 | `layouts::dock::rule` | a panel on an edge: push or overlay, slide-in geometry on all four sides, extent                  | `AdaptiveSplit` (split view, drawer), `Dock`     |
 | `layouts::overlay::rule` | a layer over another: scrim, modality, close on outside or Escape, a stack of layers, centering   | `Overlay`, `Dock`, `Popover` as dialog, dialogs  |
 | `focus`         | Tab trap that wraps, initial focus, focus return, focus within                                    | `FocusScope`, `focus_return`, `Overlay`          |
+| `draft`         | an edited value and its initial value: reset, commit, dirty                                       | Reset or Cancel for any controlled value         |
+| `tag_groups`    | tag groups: every tag of one group, any group; the active group, a slot for a new one              | `TagFilter`                                      |
+| `countdown`     | a one-shot timer: starts at its first tick, fires once, zero never fires                          | toast auto-dismiss                               |
 | `numeric`       | fixed-point numbers (never float): parse, format, min, max, step, validate; drag scrub, precision | `NumberInput`                                    |
 | `color_picker`  | a color as H, S, V, A; 8-bit RGB and HSL; text forms; parsing                                     | `ColorPicker`, `ColorInput`, `accent_picker`     |
 | `date`          | dates, month math, parsing, validation (no dependencies)                                          | `DateInput`, `DateRangeInput`                    |

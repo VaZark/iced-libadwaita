@@ -12,6 +12,7 @@ pub(crate) mod banner;
 pub(crate) mod carousel;
 pub(crate) mod chart;
 pub(crate) mod chip_group;
+mod tag_filter;
 pub(crate) mod collapsible;
 pub(crate) mod color_picker;
 pub(crate) mod date_input;
@@ -67,6 +68,7 @@ pub use chart::{
 };
 pub use chart::{BubbleChart, BubblePoint, BubbleSeries, ComboChart, DonutChart};
 pub use chip_group::{ChipGroup, ChipOption};
+pub use tag_filter::TagFilter;
 pub use collapsible::Collapsible;
 pub use color_picker::{ColorInput, ColorPicker};
 pub use date_input::DateInput;
@@ -137,10 +139,7 @@ pub use toolbar::{ActionBar, BarStyle, ToolbarView, action_bar, toolbar_view};
 pub use tree::{DragMode, Payload as TreeNodePayload, ROW_HEIGHT as TREE_ROW_HEIGHT, Tree};
 pub use tree_row::TreeRow;
 
-pub use entries::{
-    ActionEntry, ChipGroupEntry, DateEntry, EntryInput, EntryRow, MultilineEntry, MultiselectEntry,
-    NavigationRow, NumberEntry, SelectEntry, SwitchEntry, TextEntry,
-};
+pub use entries::{EntryInput, EntryRow};
 
 pub use crate::components::InputWrapper;
 

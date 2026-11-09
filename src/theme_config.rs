@@ -119,44 +119,6 @@ impl Value {
             _ => None,
         }
     }
-    /// Reads `text` as a value of `kind`.
-    pub fn parse(kind: Kind, text: &str) -> Option<Self> {
-        let t = text.trim();
-        match kind {
-            Kind::Integer => t.parse().ok().map(Self::Integer),
-            Kind::Decimal => t
-                .parse::<f64>()
-                .ok()
-                .filter(|n| n.is_finite())
-                .map(Self::Decimal),
-            Kind::Length => t
-                .strip_suffix("px")?
-                .trim()
-                .parse::<f64>()
-                .ok()
-                .filter(|n| n.is_finite())
-                .map(Self::Length),
-            Kind::Percentage => t
-                .strip_suffix('%')?
-                .trim()
-                .parse::<f64>()
-                .ok()
-                .filter(|n| n.is_finite())
-                .map(Self::Percentage),
-            Kind::Color => VariableType::Color.parse(t),
-            Kind::Number => t
-                .parse::<f32>()
-                .ok()
-                .filter(|n| n.is_finite())
-                .map(Self::Number),
-            Kind::Bool => match t.to_ascii_lowercase().as_str() {
-                "true" | "yes" | "on" | "1" => Some(Self::Bool(true)),
-                "false" | "no" | "off" | "0" => Some(Self::Bool(false)),
-                _ => None,
-            },
-            Kind::Text => Some(Self::Text(t.to_string())),
-        }
-    }
     /// The value as it is written in a file.
     pub fn to_text(&self) -> String {
         match self {
@@ -290,19 +252,10 @@ impl Schema {
         });
         self
     }
-    fn push(mut self, section: &str, key: &str, default: Value, doc: &str) -> Self {
-        let ty = match default.kind() {
-            Kind::Color => VariableType::Color,
-            Kind::Number => VariableType::Number,
-            Kind::Bool => VariableType::Bool,
-            Kind::Text => VariableType::String {
-                values: vec![],
-                accepts_random: true,
-            },
-            _ => unreachable!("typed variables use Schema::variable"),
-        };
-        self = self.variable(section, key, ty, Some(default), doc);
-        self
+    fn push(self, section: &str, key: &str, default: Value, doc: &str) -> Self {
+        let ty = VariableType::untyped(default.kind())
+            .expect("typed variables use Schema::variable");
+        self.variable(section, key, ty, Some(default), doc)
     }
     /// A color token; the fallback accepts any supported color format.
     ///

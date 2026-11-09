@@ -379,9 +379,11 @@ fn control<'a, M: Clone + 'a>(
             .metrics(m)
             .into()
         }
-        (Kind::Text(_), Value::Text(t)) => w::TextEntry::new(s.label, t.clone(), move |t| wrap(Msg::Text(key, t)))
-            .metrics(m)
-            .into(),
+        (Kind::Text(_), Value::Text(t)) => {
+            w::EntryRow::text(s.label, t.clone(), move |t| wrap(Msg::Text(key, t)))
+                .metrics(m)
+                .into()
+        }
         _ => unreachable!("a control keeps the kind of its value"),
     }
 }

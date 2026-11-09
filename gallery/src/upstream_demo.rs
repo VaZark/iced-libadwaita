@@ -241,13 +241,15 @@ impl State {
 
     pub fn editable_view(&self, m: Metrics) -> Element<'_, Msg> {
         column![
-            w::MultilineEntry::new("Description", &self.bio, Msg::Input).metrics(m),
-            w::MultilineEntry::from_input(
+            w::EntryRow::multiline("Description", &self.bio, Msg::Input).metrics(m),
+            w::EntryRow::new(
                 "Nickname",
-                cmp::text_view(&self.nick)
-                    .single_line(true)
-                    .placeholder("Add a nickname")
-                    .on_action(Msg::NickInput)
+                w::EntryInput::Multiline(
+                    cmp::text_view(&self.nick)
+                        .single_line(true)
+                        .placeholder("Add a nickname")
+                        .on_action(Msg::NickInput)
+                )
             )
             .metrics(m),
             text("Content below the text moves as the description grows"),
@@ -677,7 +679,7 @@ impl State {
             "The editor grows with its text, then scrolls at twelve lines.",
             m,
         )
-        .push(w::MultilineEntry::new("Notes", &self.flow_text, Msg::FlowText).metrics(m))
+        .push(w::EntryRow::multiline("Notes", &self.flow_text, Msg::FlowText).metrics(m))
         .push(text("Content below the editor"))
         .into()
     }

@@ -62,18 +62,16 @@ impl Theme {
     }
 
     /// Builds the theme the **desktop config** describes: color scheme and accent (`system`
-    /// reads GSettings), density, text scale, shadows, flat header bars, and a transparent
+    /// is the default accent until the desktop's can be read), density, text scale, shadows, flat header bars, and a transparent
     /// window base when decorations are client-side. This is the intended way to create an
     /// app's theme; building one by hand is an opt-out of the shared desktop behavior.
     pub fn from_config(c: &crate::config::Config) -> Self {
         use crate::config::Pick;
         let scheme = crate::utils::effective_scheme(c, crate::system::color_scheme());
         let mut t = Self::new(scheme);
-        let accent = match c.accent {
-            Pick::Fixed(a) => Some(a),
-            Pick::System => crate::system::accent_color(),
-        };
-        if let Some(a) = accent {
+        // TODO: `Pick::System` should read the portal's `org.freedesktop.appearance accent-color`
+        // once iced exposes it; until then it is the default accent.
+        if let Pick::Fixed(a) = c.accent {
             t = t.accent(a);
         }
         let shadows = if c.shadows {

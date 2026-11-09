@@ -204,14 +204,18 @@ impl Demo {
     fn account<'a>(&'a self, m: Metrics) -> Element<'a, Edit> {
         let v = &self.values;
         w::boxed_list(vec![
-            w::TextEntry::new("Name", &v.name, Edit::Name)
+            w::EntryRow::text("Name", &v.name, Edit::Name)
                 .validity(v.validity(&Key::Name))
                 .interaction(self.form.interaction(&self.spec, &Key::Name))
                 .required(true)
                 .metrics(m)
                 .into(),
-            w::TextEntry::new("Password", &v.password, Edit::Password)
-                .password(true)
+            w::EntryRow::new(
+                "Password",
+                w::EntryInput::Text(
+                    iad::components::password_entry("", &v.password).on_input(Edit::Password),
+                ),
+            )
                 .validity(v.validity(&Key::Password))
                 .interaction(self.form.interaction(&self.spec, &Key::Password))
                 .required(true)
@@ -223,15 +227,20 @@ impl Demo {
     fn profile<'a>(&'a self, m: Metrics) -> Element<'a, Edit> {
         let v = &self.values;
         w::boxed_list(vec![
-            w::SelectEntry::new("Favorite fruit", &FRUITS, v.fruit, Edit::Fruit)
+            w::EntryRow::select("Favorite fruit", &FRUITS, v.fruit, Edit::Fruit)
                 .validity(v.validity(&Key::Fruit))
                 .interaction(self.form.interaction(&self.spec, &Key::Fruit))
                 .required(true)
                 .metrics(m)
                 .into(),
-            w::DateEntry::new("Birthday", &v.date, self.calendar.date, Edit::Date)
-                .calendar(self.calendar)
-                .on_nav(Edit::Calendar)
+            w::EntryRow::new(
+                "Birthday",
+                w::EntryInput::Date(
+                    w::DateInput::new(&v.date, self.calendar.date, Edit::Date)
+                        .calendar(self.calendar)
+                        .on_nav(Edit::Calendar),
+                ),
+            )
                 .validity(v.validity(&Key::Birthday))
                 .interaction(self.form.interaction(&self.spec, &Key::Birthday))
                 .required(true)
@@ -241,7 +250,7 @@ impl Demo {
     }
 
     fn agree<'a>(&'a self, m: Metrics) -> Element<'a, Edit> {
-        w::SwitchEntry::new("I agree to the terms", self.values.agree, Edit::Agree)
+        w::EntryRow::switch("I agree to the terms", self.values.agree, Edit::Agree)
             .validity(self.values.validity(&Key::Agree))
             .interaction(self.form.interaction(&self.spec, &Key::Agree))
             .required(true)

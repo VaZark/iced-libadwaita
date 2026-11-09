@@ -20,25 +20,33 @@
 //! FocusScope::new(form).initial_focus("email") // or the child with this id
 //! ```
 
+use super::wrap::{Behavior, Content, Wrap};
 use crate::Element;
-use crate::Theme;
 use crate::primitives::focus::{Dir, Return, Within, WithinEvent, index_of, initial, trap_step};
-use iced::advanced::layout::{self, Layout};
-use iced::advanced::renderer;
+use iced::advanced::Shell;
+use iced::advanced::widget::Id;
 use iced::advanced::widget::operation::{Focusable, Operation};
-use iced::advanced::widget::{Id, Tree, Widget, tree};
-use iced::advanced::{Clipboard, Shell, overlay};
 use iced::keyboard::{self, Key, key::Named};
-use iced::{Event, Length, Rectangle, Size, Vector, mouse};
+use iced::{Event, Rectangle};
 use std::rc::Rc;
 
 /// The focusable widgets under a widget, in tree order, and which one is focused.
 #[derive(Debug, Default)]
-struct Probe {
-    total: usize,
-    focused: Option<usize>,
-    /// The id of each focusable widget, or `None`.
-    ids: Vec<Option<Id>>,
+pub(crate) struct Probe {
+    pub total: usize,
+    pub focused: Option<usize>,
+    /// The id of each focusable widget, or `None`. Left empty by [`contains_focus`].
+    pub ids: Vec<Option<Id>>,
+    skip_ids: bool,
+}
+
+impl Probe {
+    pub(crate) fn new(collect_ids: bool) -> Self {
+        Self {
+            skip_ids: !collect_ids,
+            ..Self::default()
+        }
+    }
 }
 
 impl Operation for Probe {
@@ -49,15 +57,22 @@ impl Operation for Probe {
         if state.is_focused() {
             self.focused = Some(self.total);
         }
-        self.ids.push(id.cloned());
+        if !self.skip_ids {
+            self.ids.push(id.cloned());
+        }
         self.total += 1;
     }
 }
 
 /// Focuses the `target`-th focusable widget and unfocuses the others.
-struct FocusAt {
+pub(crate) struct FocusAt {
     target: usize,
     at: usize,
+}
+impl FocusAt {
+    pub(crate) fn new(target: usize) -> Self {
+        Self { target, at: 0 }
+    }
 }
 
 impl Operation for FocusAt {
@@ -135,15 +150,16 @@ impl<'a, M: 'a> FocusScope<'a, M> {
 
 impl<'a, M: 'a> From<FocusScope<'a, M>> for Element<'a, M> {
     fn from(s: FocusScope<'a, M>) -> Self {
-        iced::Element::new(Wrapper {
-            content: s.content,
-            kind: Kind::Scope {
+        Wrap::new(
+            s.content,
+            Kind::Scope {
                 trap: s.trap,
                 auto_focus: s.auto_focus,
                 initial_focus: s.initial_focus,
                 on_change: s.on_change,
             },
-        })
+        )
+        .into()
     }
 }
 
@@ -151,18 +167,14 @@ impl<'a, M: 'a> From<FocusScope<'a, M>> for Element<'a, M> {
 /// had it when `active` turned on. Keep it in the tree whether or not the layer is up (pass
 /// `false` when it is not), so its memory survives.
 pub fn focus_return<'a, M: 'a>(content: impl Into<Element<'a, M>>, active: bool) -> Element<'a, M> {
-    iced::Element::new(Wrapper {
-        content: content.into(),
-        kind: Kind::Return {
+    Wrap::new(
+        content,
+        Kind::Return {
             active,
             enabled: true,
         },
-    })
-}
-
-struct Wrapper<'a, M> {
-    content: Element<'a, M>,
-    kind: Kind<'a, M>,
+    )
+    .into()
 }
 
 #[derive(Default)]
@@ -172,208 +184,81 @@ struct State {
     ret: Return,
 }
 
-impl<M> Wrapper<'_, M> {
-    fn probe(&mut self, tree: &mut Tree, layout: Layout<'_>, renderer: &iced::Renderer) -> Probe {
-        let mut p = Probe::default();
-        self.content
-            .as_widget_mut()
-            .operate(&mut tree.children[0], layout, renderer, &mut p);
-        p
+impl<'a, M: 'a> Behavior<M> for Kind<'a, M> {
+    type State = State;
+    fn state(&self) -> State {
+        State::default()
     }
-    fn focus(
+    fn before_update(
         &mut self,
-        tree: &mut Tree,
-        layout: Layout<'_>,
-        renderer: &iced::Renderer,
-        index: usize,
-    ) {
-        let mut op = FocusAt {
-            target: index,
-            at: 0,
-        };
-        self.content
-            .as_widget_mut()
-            .operate(&mut tree.children[0], layout, renderer, &mut op);
-    }
-}
-
-impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Wrapper<'a, M> {
-    fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<State>()
-    }
-    fn state(&self) -> tree::State {
-        tree::State::new(State::default())
-    }
-    fn children(&self) -> Vec<Tree> {
-        vec![Tree::new(&self.content)]
-    }
-    fn diff(&self, tree: &mut Tree) {
-        tree.diff_children(&[self.content.as_widget()]);
-    }
-    fn size(&self) -> Size<Length> {
-        self.content.as_widget().size()
-    }
-    fn layout(
-        &mut self,
-        tree: &mut Tree,
-        renderer: &iced::Renderer,
-        limits: &layout::Limits,
-    ) -> layout::Node {
-        self.content
-            .as_widget_mut()
-            .layout(&mut tree.children[0], renderer, limits)
-    }
-
-    fn update(
-        &mut self,
-        tree: &mut Tree,
+        state: &mut State,
         event: &Event,
-        layout: Layout<'_>,
-        cursor: mouse::Cursor,
-        renderer: &iced::Renderer,
-        clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, M>,
-        viewport: &Rectangle,
-    ) {
-        match &self.kind {
+        content: &mut Content<'_, '_, M>,
+    ) -> bool {
+        match self {
             Kind::Scope {
                 trap,
                 auto_focus,
                 initial_focus,
                 ..
             } => {
-                let (trap, auto_focus, initial_focus) = (*trap, *auto_focus, initial_focus.clone());
-                if !tree.state.downcast_ref::<State>().mounted {
-                    tree.state.downcast_mut::<State>().mounted = true;
-                    if auto_focus {
-                        let p = self.probe(tree, layout, renderer);
+                if !state.mounted {
+                    state.mounted = true;
+                    if *auto_focus {
+                        let p = content.probe();
                         let wanted = initial_focus.as_ref().and_then(|id| index_of(&p.ids, id));
                         if let Some(i) = initial(p.total, wanted) {
-                            self.focus(tree, layout, renderer, i);
+                            content.focus(i);
                             shell.request_redraw();
                         }
                     }
                 }
-                if trap
+                if *trap
                     && let Event::Keyboard(keyboard::Event::KeyPressed {
                         key: Key::Named(Named::Tab),
                         modifiers,
                         ..
                     }) = event
                 {
-                    let p = self.probe(tree, layout, renderer);
+                    let p = content.probe();
                     if let Some(i) =
                         trap_step(p.focused, p.total, Dir::from_shift(modifiers.shift()))
                     {
-                        self.focus(tree, layout, renderer, i);
+                        content.focus(i);
                     }
                     shell.capture_event();
                     shell.request_redraw();
-                    return;
+                    return true;
                 }
             }
             Kind::Return { active, enabled } => {
-                let (active, enabled) = (*active, *enabled);
-                let state = tree.state.downcast_mut::<State>();
-                state.ret.enabled = enabled;
-                if active != state.ret.is_open() {
-                    let p = self.probe(tree, layout, renderer);
-                    let back = tree
-                        .state
-                        .downcast_mut::<State>()
-                        .ret
-                        .update(active, p.focused);
-                    if let Some(i) = back {
-                        self.focus(tree, layout, renderer, i);
+                state.ret.enabled = *enabled;
+                if *active != state.ret.is_open() {
+                    let p = content.probe();
+                    if let Some(i) = state.ret.update(*active, p.focused) {
+                        content.focus(i);
                         shell.request_redraw();
                     }
                 }
             }
         }
-        self.content.as_widget_mut().update(
-            &mut tree.children[0],
-            event,
-            layout,
-            cursor,
-            renderer,
-            clipboard,
-            shell,
-            viewport,
-        );
+        false
+    }
+    fn after_update(
+        &mut self,
+        state: &mut State,
+        _event: &Event,
+        shell: &mut Shell<'_, M>,
+        content: &mut Content<'_, '_, M>,
+    ) {
         if let Kind::Scope {
             on_change: Some(f), ..
-        } = &self.kind
+        } = self
+            && let Some(ev) = state.within.update(content.contains_focus())
         {
-            let f = f.clone();
-            let inside = self.probe(tree, layout, renderer).focused.is_some();
-            if let Some(ev) = tree.state.downcast_mut::<State>().within.update(inside) {
-                shell.publish(f(ev == WithinEvent::Focus));
-            }
+            shell.publish(f(ev == WithinEvent::Focus));
         }
-    }
-
-    fn mouse_interaction(
-        &self,
-        tree: &Tree,
-        layout: Layout<'_>,
-        cursor: mouse::Cursor,
-        viewport: &Rectangle,
-        renderer: &iced::Renderer,
-    ) -> mouse::Interaction {
-        self.content.as_widget().mouse_interaction(
-            &tree.children[0],
-            layout,
-            cursor,
-            viewport,
-            renderer,
-        )
-    }
-    fn draw(
-        &self,
-        tree: &Tree,
-        renderer: &mut iced::Renderer,
-        theme: &Theme,
-        style: &renderer::Style,
-        layout: Layout<'_>,
-        cursor: mouse::Cursor,
-        viewport: &Rectangle,
-    ) {
-        self.content.as_widget().draw(
-            &tree.children[0],
-            renderer,
-            theme,
-            style,
-            layout,
-            cursor,
-            viewport,
-        );
-    }
-    fn operate(
-        &mut self,
-        tree: &mut Tree,
-        layout: Layout<'_>,
-        renderer: &iced::Renderer,
-        operation: &mut dyn Operation,
-    ) {
-        self.content
-            .as_widget_mut()
-            .operate(&mut tree.children[0], layout, renderer, operation);
-    }
-    fn overlay<'b>(
-        &'b mut self,
-        tree: &'b mut Tree,
-        layout: Layout<'b>,
-        renderer: &iced::Renderer,
-        viewport: &Rectangle,
-        translation: Vector,
-    ) -> Option<overlay::Element<'b, M, Theme, iced::Renderer>> {
-        self.content.as_widget_mut().overlay(
-            &mut tree.children[0],
-            layout,
-            renderer,
-            viewport,
-            translation,
-        )
     }
 }
 

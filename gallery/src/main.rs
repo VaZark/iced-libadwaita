@@ -25,8 +25,8 @@ mod composed_demo;
 mod data_demo;
 mod date_demo;
 mod details;
-mod form_demo;
 mod entries_demo;
+mod form_demo;
 mod nav;
 mod playground;
 mod plays;
@@ -483,7 +483,7 @@ impl Gallery {
         widgets_demo.sync(plays.get(&Detail::Splitter), plays.get(&Detail::Spoiler));
         let accent = match cfg.accent {
             iad::config::Pick::Fixed(a) => a,
-            iad::config::Pick::System => iad::system::accent_color().unwrap_or(AccentColor::Blue),
+            iad::config::Pick::System => AccentColor::Blue,
         };
         let tint_color = cfg
             .tint
@@ -1130,7 +1130,9 @@ impl Gallery {
                     3 => (w::ThemeMode::System, "theme-restored"),
                     _ => return iced::exit(),
                 };
-                return self.update(Message::Appearance(mode)).chain(wait(500, tag, self));
+                return self
+                    .update(Message::Appearance(mode))
+                    .chain(wait(500, tag, self));
             }
             // GALLERY_ANIM=appshell: open the AppShell window (GALLERY_SHELL_SIZE=WxH) and capture
             // it.
@@ -1389,21 +1391,17 @@ impl Gallery {
             MenuMode::FullPage => w::MenuPresentation::FullPage,
         };
         let primary = w::primary_menu(
-            w::Menu::new("Main Menu")
-                .section([
-                    w::MenuItem::action("Preferences", Message::OpenDialog(Dialog::Preferences))
-                        .accel("Ctrl+,"),
-                    w::MenuItem::action(
-                        "Keyboard Shortcuts",
-                        Message::OpenDialog(Dialog::Shortcuts),
-                    )
+            w::Menu::new("Main Menu").section([
+                w::MenuItem::action("Preferences", Message::OpenDialog(Dialog::Preferences))
+                    .accel("Ctrl+,"),
+                w::MenuItem::action("Keyboard Shortcuts", Message::OpenDialog(Dialog::Shortcuts))
                     .accel("Ctrl+?"),
-                    w::MenuItem::action("Help", Message::ShowToast("Opening Help…")).accel("F1"),
-                    w::MenuItem::action(
-                        "About iced-adaptive-design",
-                        Message::OpenDialog(Dialog::About),
-                    ),
-                ]),
+                w::MenuItem::action("Help", Message::ShowToast("Opening Help…")).accel("F1"),
+                w::MenuItem::action(
+                    "About iced-adaptive-design",
+                    Message::OpenDialog(Dialog::About),
+                ),
+            ]),
         )
         .presentation(presentation)
         .window_radius(corner)
@@ -1587,7 +1585,9 @@ impl Gallery {
             let mut t = w::Toast::new(spec.title)
                 .on_dismiss(Message::DismissToast(id))
                 .position(self.toast_position);
-            if !self.toast_auto { t = t.timeout(0); }
+            if !self.toast_auto {
+                t = t.timeout(0);
+            }
             if let Some(label) = spec.action {
                 t = t.action(label, Message::ToastAction(id));
             }
@@ -1784,13 +1784,15 @@ impl Gallery {
                         .on_activate(Message::ShowToast("Opened account"))
                         .metrics(m),
                 )
+                .push(w::EntryRow::text("Display name", &self.name, Message::Name).metrics(m))
                 .push(
-                    w::TextEntry::new("Display name", &self.name, Message::Name)
-                        .metrics(m),
-                )
-                .push(
-                    w::TextEntry::from_input("Password", cmp::password_entry("", &self.password).on_input(Message::Password))
-                        .metrics(m),
+                    w::EntryRow::new(
+                        "Password",
+                        w::EntryInput::Text(
+                            cmp::password_entry("", &self.password).on_input(Message::Password),
+                        ),
+                    )
+                    .metrics(m),
                 ),
         );
 

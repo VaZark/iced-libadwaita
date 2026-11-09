@@ -30,6 +30,11 @@ The design rationale (HIG notes, libadwaita sources) is for contributors. It is 
 - [desktop-config.md](desktop-config.md): the shared desktop config. [Sample](desktop.conf.example).
 - [config-registry.md](config-registry.md): the versioned registry behind it: types, defaults, `since`, deprecation.
 
+`TagFilter` is a tags entry (picked tags as pills, find-as-you-type) over a `ChipGroup`. It edits
+one group by default (a track needs every picked tag); `.multiple(true)` edits several
+alternative groups (every tag of at least one). The app owns a `TagGroups` and passes the
+`GroupEvent`s to `TagGroups::apply`; `TagGroups::matches(tags)` is the filter.
+
 `ChipGroup::max_lines(n).expandable(open, on_toggle)` limits wrapping chips to `n`
 lines (three when omitted). An inline downward chevron follows the last visible chip
 on the final allowed line, reserving space by hiding the last chip if necessary.

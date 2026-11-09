@@ -60,7 +60,7 @@ Disable what is unavailable. Do not hide it. Say why in a subtitle when it is no
 
 ## Text
 
-`TextEntry` for one line, `MultilineEntry` for growing paragraphs, and `NumberEntry`, `DateEntry`, `SwitchEntry`, `SelectEntry`, `MultiselectEntry` or `ChipGroupEntry` for application forms. `EntryRow::new(label, EntryInput::Custom(input))` composes a custom input. Low-level `entry`, `password_entry` and `text_view` components are for building custom widgets.
+`EntryRow::text` for one line, `EntryRow::multiline` for growing paragraphs, and `EntryRow::number`, `date`, `switch`, `select`, `multiselect` or `chips` for application forms. `EntryRow::new(label, EntryInput::Custom(input))` composes a custom input. Low-level `entry`, `password_entry` and `text_view` components are for building custom widgets.
 
 ## Settings and lists
 

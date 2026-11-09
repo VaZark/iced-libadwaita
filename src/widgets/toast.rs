@@ -355,11 +355,7 @@ fn toast_element<'a, M: Clone + 'a>(t: Toast<M>, position: ToastPosition) -> Ele
             crate::layouts::animation::presets::TOAST_SHOW.0,
             crate::layouts::animation::presets::TOAST_SHOW.1,
         ));
-    iced::Element::new(super::toast_timeout::Timeout {
-        content: toast.into(),
-        key,
-        on_dismiss,
-    })
+    super::toast_timeout::timeout(toast, key, on_dismiss)
 }
 
 /// `AdwToastOverlay`: shows `toast` floating over `content`, at its position (default: the

@@ -1,5 +1,5 @@
 //! Text input components for building custom widgets. Application forms should use
-//! [`TextEntry`](crate::widgets::TextEntry) and [`MultilineEntry`](crate::widgets::MultilineEntry),
+//! [`EntryRow`](crate::widgets::EntryRow),
 //! which share EntryRow framing and label/error presentation.
 
 use crate::Element;

@@ -4,9 +4,35 @@
 //! Appearance detection and updates are shared through [`crate::utils`]. Icons follow
 //! desktop toolkit settings, without desktop-specific icon integrations.
 
+use crate::Scheme;
+use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
+/// A `Scheme` that can be set and cleared from any thread.
+pub(crate) struct AtomicScheme(AtomicU8);
+impl AtomicScheme {
+    pub(crate) const fn new() -> Self {
+        Self(AtomicU8::new(0))
+    }
+    pub(crate) fn load(&self) -> Option<Scheme> {
+        match self.0.load(Ordering::Relaxed) {
+            1 => Some(Scheme::Light),
+            2 => Some(Scheme::Dark),
+            _ => None,
+        }
+    }
+    pub(crate) fn store(&self, scheme: Option<Scheme>) {
+        let v = match scheme {
+            None => 0,
+            Some(Scheme::Light) => 1,
+            Some(Scheme::Dark) => 2,
+        };
+        self.0.store(v, Ordering::Relaxed);
+    }
+}
 
 /// A window button that can appear in a header bar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -102,8 +128,8 @@ pub fn animations_enabled() -> bool {
 }
 
 /// The color scheme the desktop reported through the **settings portal**
-/// (`org.freedesktop.appearance color-scheme`), as `0` unknown, `1` light, `2` dark.
-static PORTAL_SCHEME: AtomicU8 = AtomicU8::new(0);
+/// (`org.freedesktop.appearance color-scheme`); unset until it has reported.
+static PORTAL_SCHEME: AtomicScheme = AtomicScheme::new();
 
 /// Maps iced's system theme mode (read from the settings portal) to a scheme. "No preference" is
 /// not an answer: iced reports it too when a window opens (a Wayland window has no theme of its
@@ -128,30 +154,17 @@ fn resolve_scheme(mode: iced::theme::Mode) -> crate::Scheme {
 }
 
 fn remember_scheme(scheme: crate::Scheme) {
-    let v = if scheme == crate::Scheme::Dark { 2 } else { 1 };
-    PORTAL_SCHEME.store(v, Ordering::Relaxed);
+    PORTAL_SCHEME.store(Some(scheme));
 }
 
 /// The desktop color scheme. It comes from the settings portal once [`follow_color_scheme`] has
 /// reported it (that is the only source inside a sandbox such as Flatpak, and it is not a Wayland
-/// protocol), else from shared GTK settings files, then GSettings (`org.gnome.desktop.interface color-scheme`: `prefer-dark` is
-/// dark, everything else light). `None` when neither is available.
+/// protocol), else from shared GTK settings files. `None` when neither is available.
 pub fn color_scheme() -> Option<crate::Scheme> {
-    match PORTAL_SCHEME.load(Ordering::Relaxed) {
-        1 => return Some(crate::Scheme::Light),
-        2 => return Some(crate::Scheme::Dark),
-        _ => {}
-    }
-    if let Some(scheme) = crate::utils::desktop_preferences().scheme {
+    if let Some(scheme) = PORTAL_SCHEME.load() {
         return Some(scheme);
     }
-    gsettings("org.gnome.desktop.interface", "color-scheme").map(|v| {
-        if v == "prefer-dark" {
-            crate::Scheme::Dark
-        } else {
-            crate::Scheme::Light
-        }
-    })
+    desktop_preferences().scheme
 }
 
 /// Reads the desktop color scheme from the settings portal now, and from then on
@@ -168,19 +181,11 @@ pub fn follow_color_scheme() -> iced::Subscription<crate::Scheme> {
     iced::system::theme_changes().map(resolve_scheme)
 }
 
-/// The desktop accent color (`org.gnome.desktop.interface accent-color`, GNOME 47+).
-pub fn accent_color() -> Option<crate::AccentColor> {
-    let v = gsettings("org.gnome.desktop.interface", "accent-color")?;
-    crate::AccentColor::ALL
-        .into_iter()
-        .find(|a| format!("{a:?}").eq_ignore_ascii_case(&v))
-}
-
 /// The configured icon theme. `System` follows shared toolkit settings, falling back to `hicolor`.
 pub fn icon_theme() -> String {
     match &crate::config::current().icon_theme {
         crate::config::Pick::Fixed(name) => name.clone(),
-        _ => crate::utils::desktop_preferences()
+        _ => desktop_preferences()
             .icon_theme
             .unwrap_or_else(|| "hicolor".into()),
     }
@@ -190,6 +195,97 @@ pub fn icon_theme() -> String {
 pub fn find_icon(name: &str) -> Option<Vec<u8>> {
     crate::icon::resolve(name, 16, 1, name.ends_with("-symbolic"))
         .map(|icon| icon.bytes.as_ref().to_vec())
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct DesktopPreferences {
+    pub icon_theme: Option<String>,
+    pub scheme: Option<Scheme>,
+}
+
+fn settings_paths() -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = std::env::var("XDG_CONFIG_DIRS")
+        .unwrap_or_else(|_| "/etc/xdg".into())
+        .split(':')
+        .filter(|p| Path::new(p).is_absolute())
+        .map(PathBuf::from)
+        .collect();
+    roots.reverse();
+    roots.insert(0, PathBuf::from("/etc"));
+    if let Some(home) = std::env::var_os("XDG_CONFIG_HOME").filter(|p| Path::new(p).is_absolute()) {
+        roots.push(home.into());
+    } else if let Some(home) = std::env::var_os("HOME") {
+        roots.push(PathBuf::from(home).join(".config"));
+    }
+    roots
+        .into_iter()
+        .flat_map(|root| {
+            [
+                root.join("gtk-3.0/settings.ini"),
+                root.join("gtk-4.0/settings.ini"),
+            ]
+        })
+        .collect()
+}
+
+fn read_preferences(paths: &[PathBuf]) -> DesktopPreferences {
+    let mut preferences = DesktopPreferences::default();
+    for path in paths {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            merge_preferences(&mut preferences, &text);
+        }
+    }
+    preferences
+}
+
+fn merge_preferences(preferences: &mut DesktopPreferences, text: &str) {
+    let mut settings = false;
+    for line in text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.starts_with('#') && !l.starts_with(';'))
+    {
+        if line.starts_with('[') {
+            settings = line == "[Settings]";
+            continue;
+        }
+        if !settings {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let value = value.trim().trim_matches('"').trim_matches('\'');
+        match key.trim() {
+            "gtk-icon-theme-name"
+                if !value.is_empty()
+                    && value != "."
+                    && value != ".."
+                    && !value.contains(['/', '\\']) =>
+            {
+                preferences.icon_theme = Some(value.into())
+            }
+            "gtk-application-prefer-dark-theme" => match value {
+                "true" | "1" => preferences.scheme = Some(Scheme::Dark),
+                "false" | "0" => preferences.scheme = Some(Scheme::Light),
+                _ => (),
+            },
+            _ => (),
+        }
+    }
+}
+
+/// Shared file snapshot, refreshed at most once per second rather than once per icon draw.
+pub(crate) fn desktop_preferences() -> DesktopPreferences {
+    static CACHE: OnceLock<Mutex<(Instant, DesktopPreferences)>> = OnceLock::new();
+    let mut cache = CACHE
+        .get_or_init(|| Mutex::new((Instant::now(), read_preferences(&settings_paths()))))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if cache.0.elapsed() >= Duration::from_secs(1) {
+        *cache = (Instant::now(), read_preferences(&settings_paths()));
+    }
+    cache.1.clone()
 }
 
 #[cfg(test)]
@@ -228,5 +324,32 @@ mod tests {
         let d = DecorationLayout::gnome_default();
         assert!(d.start.is_empty());
         assert_eq!(d.end, vec![Close]);
+    }
+
+    #[test]
+    fn toolkit_preferences_are_section_aware_and_overlay_lower_priority_settings() {
+        let mut settings = DesktopPreferences::default();
+        merge_preferences(
+            &mut settings,
+            "[Settings]\ngtk-icon-theme-name=breeze-dark\ngtk-application-prefer-dark-theme=true\n",
+        );
+        assert_eq!(settings.icon_theme.as_deref(), Some("breeze-dark"));
+        assert_eq!(settings.scheme, Some(Scheme::Dark));
+        merge_preferences(
+            &mut settings,
+            "[Other]\ngtk-icon-theme-name=ignored\n[Settings]\ngtk-icon-theme-name=Papirus\ngtk-application-prefer-dark-theme=false\n",
+        );
+        assert_eq!(settings.icon_theme.as_deref(), Some("Papirus"));
+        assert_eq!(settings.scheme, Some(Scheme::Light));
+        merge_preferences(
+            &mut settings,
+            "[Settings]\ngtk-icon-theme-name=../bad\ngtk-application-prefer-dark-theme=invalid\n",
+        );
+        assert_eq!(settings.icon_theme.as_deref(), Some("Papirus"));
+        assert_eq!(settings.scheme, Some(Scheme::Light));
+    }
+    #[test]
+    fn absent_settings_do_not_invent_a_desktop_theme() {
+        assert_eq!(read_preferences(&[]), DesktopPreferences::default());
     }
 }

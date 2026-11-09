@@ -1,4 +1,4 @@
-//! Full-width application rows. EntryInput selects the rendered control; typed entries
+//! Full-width application rows. EntryInput selects the rendered control; rows
 //! construct the same EntryRow with an appropriate input.
 mod surface;
 
@@ -81,6 +81,16 @@ impl<'a, M: 'a> EntryRow<'a, M> {
         self
     }
 }
+/// The shared framing for an input inside a row: flat or boxed, embedded, full width.
+macro_rules! embedded {
+    ($input:expr, $flat:expr, $metrics:expr) => {
+        $input
+            .flat($flat)
+            .embedded()
+            .metrics($metrics)
+            .width(Length::Fill)
+    };
+}
 fn surface<'a, M: 'a>(content: impl Into<Element<'a, M>>, m: Metrics) -> Element<'a, M> {
     container(super::rows::row_frame(content, &m))
         .padding(m.row_padding)
@@ -105,7 +115,7 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
         let content = match e.input {
             EntryInput::Text(input) | EntryInput::Action(input) => {
                 let insets = input.label_insets(&m);
-                let input = input.flat(e.flat).embedded().metrics(m).width(Length::Fill);
+                let input = embedded!(input, e.flat, m);
                 surface(
                     column![container(label()).padding(insets), input]
                         .spacing(2)
@@ -113,28 +123,8 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                     m,
                 )
             }
-            EntryInput::Number(input) => surface(
-                line(
-                    input
-                        .flat(e.flat)
-                        .embedded()
-                        .metrics(m)
-                        .width(Length::Fill)
-                        .into(),
-                ),
-                m,
-            ),
-            EntryInput::Date(input) => surface(
-                line(
-                    input
-                        .flat(e.flat)
-                        .embedded()
-                        .metrics(m)
-                        .width(Length::Fill)
-                        .into(),
-                ),
-                m,
-            ),
+            EntryInput::Number(input) => surface(line(embedded!(input, e.flat, m).into()), m),
+            EntryInput::Date(input) => surface(line(embedded!(input, e.flat, m).into()), m),
             EntryInput::Multiline(input) => surface(line(input.flat(e.flat).embedded(m).into()), m),
             EntryInput::Custom(input) => surface(line(input), m),
             EntryInput::Switch { active, on_toggle } => {
@@ -192,7 +182,7 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                 crate::primitives::validation::Presentation::Invalid
                     | crate::primitives::validation::Presentation::Warning
             );
-        let content = surface::EntryRowSurface::new(content, focus_ring, m);
+        let content = surface::outlined(content, focus_ring, m);
         let mut wrapper = InputWrapper::new("", content)
             .hide_label()
             .validity(e.validity)
@@ -204,158 +194,66 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
         wrapper.into()
     }
 }
-macro_rules! entry_type {
-    ($name:ident) => {
-        pub struct $name<'a, M>(EntryRow<'a, M>);
-        impl<'a, M: 'a> $name<'a, M> {
-            pub fn flat(mut self, flat: bool) -> Self {
-                self.0 = self.0.flat(flat);
-                self
-            }
-            pub fn description(mut self, value: impl Into<String>) -> Self {
-                self.0 = self.0.description(value);
-                self
-            }
-            pub fn validity(mut self, value: Validity) -> Self {
-                self.0 = self.0.validity(value);
-                self
-            }
-            pub fn interaction(mut self, value: Interaction) -> Self {
-                self.0 = self.0.interaction(value);
-                self
-            }
-            pub fn required(mut self, value: bool) -> Self {
-                self.0 = self.0.required(value);
-                self
-            }
-            pub fn metrics(mut self, value: Metrics) -> Self {
-                self.0 = self.0.metrics(value);
-                self
-            }
-        }
-        impl<'a, M: Clone + 'a> From<$name<'a, M>> for Element<'a, M> {
-            fn from(value: $name<'a, M>) -> Self {
-                value.0.into()
-            }
-        }
-    };
-}
-entry_type!(TextEntry);
-entry_type!(NumberEntry);
-entry_type!(DateEntry);
-entry_type!(SwitchEntry);
-entry_type!(ActionEntry);
-entry_type!(SelectEntry);
-entry_type!(MultiselectEntry);
-entry_type!(ChipGroupEntry);
-entry_type!(MultilineEntry);
-impl<'a, M: Clone + 'a> TextEntry<'a, M> {
-    pub fn new(
+impl<'a, M: Clone + 'a> EntryRow<'a, M> {
+    /// A single-line text entry. Configure it further (sections, password) with
+    /// `EntryRow::new(label, EntryInput::Text(entry))`.
+    pub fn text(
         label: impl Into<String>,
         value: impl Into<String>,
         on_input: impl Fn(String) -> M + 'a,
     ) -> Self {
-        Self::from_input(label, Entry::new("", value).on_input(on_input))
+        Self::new(
+            label,
+            EntryInput::Text(Entry::new("", value).on_input(on_input)),
+        )
     }
-    pub fn from_input(label: impl Into<String>, input: Entry<'a, M>) -> Self {
-        Self(EntryRow::new(label, EntryInput::Text(input)))
-    }
-    pub fn prefix(mut self, prefix: impl Into<Element<'a, M>>) -> Self {
-        if let EntryInput::Text(input) = self.0.input {
-            self.0.input = EntryInput::Text(input.left_section(prefix));
-        }
-        self
-    }
-    pub fn suffix(mut self, suffix: impl Into<Element<'a, M>>) -> Self {
-        if let EntryInput::Text(input) = self.0.input {
-            self.0.input = EntryInput::Text(input.right_section(suffix));
-        }
-        self
-    }
-    pub fn password(mut self, secure: bool) -> Self {
-        if let EntryInput::Text(input) = self.0.input {
-            self.0.input = EntryInput::Text(input.password(secure));
-        }
-        self
-    }
-}
-impl<'a, M: Clone + 'a> NumberEntry<'a, M> {
-    pub fn new(
+    pub fn number(
         label: impl Into<String>,
         value: &'a str,
         on_input: impl Fn(String) -> M + 'a,
     ) -> Self {
-        Self::from_input(label, NumberInput::new(value, on_input))
+        Self::new(label, EntryInput::Number(NumberInput::new(value, on_input)))
     }
-    pub fn from_input(label: impl Into<String>, input: NumberInput<'a, M>) -> Self {
-        Self(EntryRow::new(label, EntryInput::Number(input)))
-    }
-}
-impl<'a, M: Clone + 'a> DateEntry<'a, M> {
-    pub fn new(
+    pub fn date(
         label: impl Into<String>,
         value: &'a str,
         view: crate::primitives::date::Date,
         on_input: impl Fn(String) -> M + 'a,
     ) -> Self {
-        Self::from_input(label, DateInput::new(value, view, on_input))
+        Self::new(
+            label,
+            EntryInput::Date(DateInput::new(value, view, on_input)),
+        )
     }
-    pub fn from_input(label: impl Into<String>, input: DateInput<'a, M>) -> Self {
-        Self(EntryRow::new(label, EntryInput::Date(input)))
-    }
-    pub fn calendar(mut self, calendar: crate::primitives::calendar::CalendarView) -> Self {
-        if let EntryInput::Date(input) = self.0.input {
-            self.0.input = EntryInput::Date(input.calendar(calendar));
-        }
-        self
-    }
-    pub fn on_nav(
-        mut self,
-        on_nav: impl Fn(crate::primitives::calendar::CalendarView) -> M + 'a,
+    pub fn switch(
+        label: impl Into<String>,
+        active: bool,
+        on_toggle: impl Fn(bool) -> M + 'a,
     ) -> Self {
-        if let EntryInput::Date(input) = self.0.input {
-            self.0.input = EntryInput::Date(input.on_nav(on_nav));
-        }
-        self
-    }
-    /// false: dropdown calendar; true: modal calendar.
-    pub fn dialog(mut self, modal: bool) -> Self {
-        if let EntryInput::Date(input) = self.0.input {
-            self.0.input = EntryInput::Date(input.dialog(modal));
-        }
-        self
-    }
-}
-impl<'a, M: Clone + 'a> SwitchEntry<'a, M> {
-    pub fn new(label: impl Into<String>, active: bool, on_toggle: impl Fn(bool) -> M + 'a) -> Self {
-        Self(EntryRow::new(
+        Self::new(
             label,
             EntryInput::Switch {
                 active,
                 on_toggle: Box::new(on_toggle),
             },
-        ))
+        )
     }
-}
-impl<'a, M: Clone + 'a> ActionEntry<'a, M> {
-    /// The same text renderer as TextEntry, read-only with exactly one trailing action.
-    pub fn new(
+    /// The text renderer, read-only with exactly one trailing action.
+    pub fn action(
         label: impl Into<String>,
         value: impl Into<String>,
         icon: impl Into<IconSource>,
         action: M,
     ) -> Self {
-        Self(EntryRow::new(
+        Self::new(
             label,
             EntryInput::Action(
                 Entry::new("", value)
                     .right_section(crate::components::section_button(icon, action)),
             ),
-        ))
+        )
     }
-}
-impl<'a, M: Clone + 'a> SelectEntry<'a, M> {
-    pub fn new<T: ToString + PartialEq + Clone + 'a>(
+    pub fn select<T: ToString + PartialEq + Clone + 'a>(
         label: impl Into<String>,
         options: &'a [T],
         selected: Option<T>,
@@ -367,18 +265,16 @@ impl<'a, M: Clone + 'a> SelectEntry<'a, M> {
             .unwrap_or_default();
         let items =
             super::dropdown::option_items(options, |o| selected.as_ref() == Some(o), on_select);
-        Self(EntryRow::new(
+        Self::new(
             label,
             EntryInput::Select {
                 value,
                 options: super::popover(items, 280.0),
                 multiple: false,
             },
-        ))
+        )
     }
-}
-impl<'a, M: Clone + 'a> MultiselectEntry<'a, M> {
-    pub fn new<T: ToString + PartialEq + Clone + 'a>(
+    pub fn multiselect<T: ToString + PartialEq + Clone + 'a>(
         label: impl Into<String>,
         options: &'a [T],
         selected: &'a [T],
@@ -390,18 +286,16 @@ impl<'a, M: Clone + 'a> MultiselectEntry<'a, M> {
             .collect::<Vec<_>>()
             .join(", ");
         let items = super::dropdown::option_items(options, |o| selected.contains(o), on_toggle);
-        Self(EntryRow::new(
+        Self::new(
             label,
             EntryInput::Select {
                 value,
                 options: super::popover(items, 280.0),
                 multiple: true,
             },
-        ))
+        )
     }
-}
-impl<'a, M: Clone + 'a> ChipGroupEntry<'a, M> {
-    pub fn new<K: Clone + PartialEq + 'a>(
+    pub fn chips<K: Clone + PartialEq + 'a>(
         label: impl Into<String>,
         options: impl IntoIterator<Item = ChipOption<K>>,
         selected: &'a [K],
@@ -415,59 +309,30 @@ impl<'a, M: Clone + 'a> ChipGroupEntry<'a, M> {
             .collect::<Vec<_>>()
             .join(", ");
         let chips: Element<'a, M> = ChipGroup::new(options, selected, on_toggle).into();
-        Self(EntryRow::new(
+        Self::new(
             label,
             EntryInput::Select {
                 value,
                 options: super::popover([chips], 320.0),
                 multiple: true,
             },
-        ))
+        )
     }
-}
-impl<'a, M: Clone + 'a> MultilineEntry<'a, M> {
-    pub fn new(
+    /// A growing multi-line editor. Restrict it (single line) with
+    /// `EntryRow::new(label, EntryInput::Multiline(text_view(..)))`.
+    pub fn multiline(
         label: impl Into<String>,
         content: &'a iced::widget::text_editor::Content,
         on_action: impl Fn(iced::widget::text_editor::Action) -> M + 'a,
     ) -> Self {
-        Self::from_input(
+        Self::new(
             label,
-            crate::components::text_view(content)
-                .max_lines(12)
-                .on_action(on_action),
+            EntryInput::Multiline(
+                crate::components::text_view(content)
+                    .max_lines(12)
+                    .on_action(on_action),
+            ),
         )
-    }
-    pub fn from_input(label: impl Into<String>, input: TextView<'a, M>) -> Self {
-        Self(EntryRow::new(label, EntryInput::Multiline(input)))
-    }
-}
-/// Navigation destinations are separate from value actions.
-pub struct NavigationRow<'a, M>(super::ActionRow<'a, M>);
-impl<'a, M> NavigationRow<'a, M> {
-    pub fn new(title: impl Into<String>, destination: M) -> Self {
-        Self(
-            super::ActionRow::new(title)
-                .chevron(true)
-                .on_activate(destination),
-        )
-    }
-    pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
-        self.0 = self.0.subtitle(subtitle);
-        self
-    }
-    pub fn prefix(mut self, prefix: impl Into<Element<'a, M>>) -> Self {
-        self.0 = self.0.prefix(prefix);
-        self
-    }
-    pub fn metrics(mut self, metrics: Metrics) -> Self {
-        self.0 = self.0.metrics(metrics);
-        self
-    }
-}
-impl<'a, M: Clone + 'a> From<NavigationRow<'a, M>> for Element<'a, M> {
-    fn from(value: NavigationRow<'a, M>) -> Self {
-        value.0.into()
     }
 }
 
@@ -516,9 +381,15 @@ mod tests {
         .unwrap();
         for metrics in [Metrics::desktop(), Metrics::compact()] {
             for flat in [false, true] {
-                let mut row: Element<'_, ()> = TextEntry::new("Label", "Value", |_| ())
-                    .prefix(text("P"))
-                    .suffix(text("S"))
+                let mut row: Element<'_, ()> = EntryRow::new(
+                    "Label",
+                    EntryInput::Text(
+                        Entry::new("", "Value")
+                            .on_input(|_| ())
+                            .left_section(text("P"))
+                            .right_section(text("S")),
+                    ),
+                )
                     .flat(flat)
                     .metrics(metrics)
                     .into();
@@ -589,13 +460,19 @@ mod tests {
             for kind in 0..4 {
                 let text_content = iced::widget::text_editor::Content::with_text("Notes");
                 let mut element: Element<'_, ()> = match kind {
-                    0 => TextEntry::new("Name", "Ada", |_| ())
-                        .prefix(crate::Icon::Search.view(16.0))
-                        .suffix(text("@app"))
+                    0 => EntryRow::new(
+                        "Name",
+                        EntryInput::Text(
+                            Entry::new("", "Ada")
+                                .on_input(|_| ())
+                                .left_section(crate::Icon::Search.view(16.0))
+                                .right_section(text("@app")),
+                        ),
+                    )
                         .flat(true)
                         .into(),
-                    1 => NumberEntry::new("Amount", "12", |_| ()).flat(true).into(),
-                    2 => DateEntry::new(
+                    1 => EntryRow::number("Amount", "12", |_| ()).flat(true).into(),
+                    2 => EntryRow::date(
                         "Date",
                         "2026-11-08",
                         crate::primitives::date::Date::today(),
@@ -603,7 +480,7 @@ mod tests {
                     )
                     .flat(true)
                     .into(),
-                    _ => MultilineEntry::new("Notes", &text_content, |_| ())
+                    _ => EntryRow::multiline("Notes", &text_content, |_| ())
                         .flat(true)
                         .into(),
                 };
@@ -689,9 +566,9 @@ mod tests {
                     Point::new(width - 6.0, 25.0),
                 ] {
                     let mut element: Element<'_, &str> = match kind {
-                        0 => SelectEntry::new("Team", &OPTIONS, Some("Design"), |v| v).into(),
-                        1 => MultiselectEntry::new("Teams", &OPTIONS, &OPTIONS[..1], |v| v).into(),
-                        _ => ChipGroupEntry::new(
+                        0 => EntryRow::select("Team", &OPTIONS, Some("Design"), |v| v).into(),
+                        1 => EntryRow::multiselect("Teams", &OPTIONS, &OPTIONS[..1], |v| v).into(),
+                        _ => EntryRow::chips(
                             "Tags",
                             OPTIONS.iter().map(|v| ChipOption::new(*v, *v)),
                             &OPTIONS[..1],

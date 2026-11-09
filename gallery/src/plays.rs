@@ -834,13 +834,23 @@ pub fn build<'a>(
         Detail::Scale => {
             let v = p.number("value");
             let vertical = p.bool("vertical");
-            let axis = if vertical { iad::primitives::scrub::Axis::Vertical } else { iad::primitives::scrub::Axis::Horizontal };
-            let mut col = column![cmp::scale(0.0..=100.0, v, on_num(d, "value")).orientation(axis).height(180.0)].spacing(m.space_s);
+            let axis = if vertical {
+                iad::primitives::scrub::Axis::Vertical
+            } else {
+                iad::primitives::scrub::Axis::Horizontal
+            };
+            let mut col = column![
+                cmp::scale(0.0..=100.0, v, on_num(d, "value"))
+                    .orientation(axis)
+                    .height(180.0)
+            ]
+            .spacing(m.space_s);
             if p.bool("readout") {
                 col = col.push(ty::dim_label(format!("value {v:.0}")));
             }
             let code = Code::new("scale(0.0..=100.0, self.value, Msg::Value)")
-                .add(vertical, ".orientation(Axis::Vertical).height(180.0)").done();
+                .add(vertical, ".orientation(Axis::Vertical).height(180.0)")
+                .done();
             (col.into(), code)
         }
         Detail::Dropdown => {
@@ -2338,7 +2348,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "Tree::new(&self.docs, &self.tree)\n    .draggable(DragMode::Row)\n    .highlight(&self.search)\n    .label(|p| {\n        let n = p.node.children.len();\n        if n == 0 { return p.text; }\n        row![p.text, Badge::count(n as u32, 99)].spacing(8).into()   // a count per branch\n    })\n    .on_event(Msg::Tree)\n\n// search: self.tree.set_expanded(tree::matching_ancestors(&self.docs, &query))"
         }
         Detail::Form => {
-            "Form::new()\n    .step(Step::new(\"Profile\", move || {\n        TextEntry::new(\"Name\", &self.name, Msg::Name)\n            .validity(self.validity(&\"name\"))\n            .into()\n    }))\n    .on_submit(Msg::Submit)\n    .on_reset(Msg::Reset)\n\n// update: self.form.submit(&spec, &|k| self.validity(k))"
+            "Form::new()\n    .step(Step::new(\"Profile\", move || {\n        EntryRow::text(\"Name\", &self.name, Msg::Name)\n            .validity(self.validity(&\"name\"))\n            .into()\n    }))\n    .on_submit(Msg::Submit)\n    .on_reset(Msg::Reset)\n\n// update: self.form.submit(&spec, &|k| self.validity(k))"
         }
         Detail::Stepper => {
             "Stepper::new()\n    .active(state.active())\n    .orientation(StepperOrientation::Horizontal)\n    .on_step_click(Msg::Go)\n    .step(StepperStep::new(\"Account\").content(|| body(\"...\")))\n    .step(StepperStep::new(\"Profile\").description(\"Fruit and birthday\"))\n    .step(StepperStep::new(\"Review\").allow_click(true))\n    .completed(done)\n\n// state: StepperState::new(3), .forward() / .back() / .goto(i)"
@@ -2407,7 +2417,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "// the app keeps the viewport; the list builds only the rows in it\nVirtualList::new(10_000, 40.0, &self.viewport, |i| {\n    // the whole row is the target: rounded, with a hover you can see on a plain page\n    button(row_for(i)).width(Length::Fill).style(style::button::flat_row(8.0, 0.08, 0.14)).on_press(Msg::Play(i)).into()\n})\n    .on_scroll(Msg::Scroll)   // Msg::Scroll(vp) => self.viewport = vp\n    .overscan(4)               // rows built past each edge\n    .id(LIST)                  // for scroll_to / snap_to"
         }
         Detail::MultilineEntry => {
-            "MultilineEntry::new(\"Description\", &self.bio, Msg::Input)\n\n// update\nMsg::Input(action) => self.bio.perform(action)\n\n// restrict input to one line\nMultilineEntry::from_input(\"Nickname\", text_view(&self.nick)\n    .single_line(true).on_action(Msg::NickInput))"
+            "EntryRow::multiline(\"Description\", &self.bio, Msg::Input)\n\n// update\nMsg::Input(action) => self.bio.perform(action)\n\n// restrict input to one line\nEntryRow::new(\"Nickname\", EntryInput::Multiline(text_view(&self.nick)\n    .single_line(true).on_action(Msg::NickInput)))"
         }
         Detail::PageHeader => {
             "DetailHeader::new(\"Evening drive\")\n    .kind(\"Playlist\")\n    .cover(cover)\n    .description(body(\"Slow songs for a long road.\"))\n    .facts(caption(\"24 songs, 1 hr 32 min\"))\n    .primary(suggested_circular_button(Icon::Play.view(16.0)).on_press(Msg::Play))\n    .action(icon_button(Icon::Heart))\n    .end(flat_button(text(\"Share\")))\n    .tint(cover_color)            // the wash: style::container::wash(color)\n    .narrow(width < 576.0)        // the arrangement, from the app's width"
@@ -2437,7 +2447,7 @@ pub fn snippet(d: Detail) -> Option<&'static str> {
             "SwitchRow::new(\"Enabled\", self.on, Msg::Toggle)\nComboRow::new(\"Font\", &FONTS, self.font, Msg::Font).disabled_when(|o| *o == \"Inter\")\nSpinRow::new(\"Text scale\", self.scale, 1.0..=10.0, 1.0, Msg::Scale)\nSliderRow::new(\"Volume\", self.volume, 0.0..=100.0, Msg::Volume)"
         }
         Detail::PreferencesGroup => {
-            "preferences_group()\n    .title(\"Appearance\")\n    .description(\"How the app looks\")\n    .header_suffix(flat_button(label(\"Reset\")))\n    .push(SwitchEntry::new(\"Notifications\", self.notifications, Msg::Notifications))"
+            "preferences_group()\n    .title(\"Appearance\")\n    .description(\"How the app looks\")\n    .header_suffix(flat_button(label(\"Reset\")))\n    .push(EntryRow::switch(\"Notifications\", self.notifications, Msg::Notifications))"
         }
         Detail::ThemeColors => {
             "Theme::new(Scheme::Dark)\n    .accent(AccentColor::Teal)\n    .with_semantic(|s| s.card.bg = hex(0x3d2c5a))\n\n// desktop config: [appearance] color-scheme=dark, accent=teal, density=compact"

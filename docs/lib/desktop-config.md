@@ -32,7 +32,7 @@ Defaults are in parentheses. Every key is optional.
 | Key                                          | Values                                    | Drives                                               |
 | -------------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
 | `color-scheme`                               | system, light, dark (system)              | `Theme::from_config`. System follows the settings portal, then shared toolkit settings |
-| `accent`                                     | system, a name, `#rrggbb` (system)        | the accent. System reads GNOME's `accent-color`      |
+| `accent`                                     | system, a name, `#rrggbb` (system)        | the accent. System is the default (blue) for now   |
 | `flat-headerbars`                            | bool (true)                               | continuous, Nautilus-style header bars               |
 | `auto-contrast`                              | bool (true)                               | text on colored fills by contrast (`color-contrast()`) |
 | `density`                                    | comfort, compact                          | `Metrics`                                            |

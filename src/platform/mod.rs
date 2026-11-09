@@ -34,6 +34,9 @@ mod tests {
 
     #[test]
     fn current_matches_the_build() {
-        assert_eq!(Target::current() == Target::LinuxWayland, cfg!(target_os = "linux"));
+        assert_eq!(
+            Target::current() == Target::LinuxWayland,
+            cfg!(target_os = "linux")
+        );
     }
 }

@@ -520,16 +520,20 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
                     },
                     _ => panel.into(),
                 };
-                let panel = outlined(
-                    panel,
-                    d.border,
-                    flush,
-                    side,
-                    edge_radius,
-                    lifted_radius,
-                    radius,
-                    full,
-                );
+                let panel = if d.border {
+                    outlined(panel, flush, move |t: &Theme| {
+                        surface_radius(
+                            radius,
+                            side,
+                            t.metrics.radius_l,
+                            edge_radius,
+                            lifted_radius,
+                            full,
+                        )
+                    })
+                } else {
+                    panel
+                };
                 let mut o = Overlay::new(d.base, panel)
                     .docked(side, size.dim())
                     .along(length.dim(), d.align)
@@ -565,28 +569,21 @@ fn surface_radius(
     })
 }
 
-/// `surface` with the hairline border on the sides that are not flush, following the dock's corner
-/// radii (round all around when it stands off its edge). `on` false leaves it as it is.
+/// `surface` with the hairline border on the sides that are not flush, following `radius`
+/// (see [`surface_radius`]).
 fn outlined<'a, M: 'a>(
     surface: impl Into<Element<'a, M>>,
-    on: bool,
     flush: Flush,
-    side: Side,
-    edge_radius: f32,
-    lifted: bool,
-    radius: Option<iced::border::Radius>,
-    full: bool,
+    radius: impl Fn(&Theme) -> iced::border::Radius + 'static,
 ) -> Element<'a, M> {
     let surface = surface.into();
-    if !on || flush.all() {
+    if flush.all() {
         return surface;
     }
     iced::Element::new(Outlined {
         content: surface,
         flush,
-        radius: Box::new(move |t: &Theme| {
-            surface_radius(radius, side, t.metrics.radius_l, edge_radius, lifted, full)
-        }),
+        radius: Box::new(radius),
     })
 }
 
