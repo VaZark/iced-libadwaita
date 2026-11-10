@@ -39,6 +39,7 @@ pub struct Overlay<'a, M> {
     along: (Dim, Align),
     margin: f32,
     initial_focus: Option<iced::widget::Id>,
+    fade: bool,
 }
 
 impl<'a, M: Clone + 'a> Overlay<'a, M> {
@@ -54,7 +55,14 @@ impl<'a, M: Clone + 'a> Overlay<'a, M> {
             along: (Dim::Fill, Align::Start),
             margin: 0.0,
             initial_focus: None,
+            fade: false,
         }
+    }
+    /// Fades the layer in instead of sliding it (default off): it rises out of the window colour
+    /// where it stands, as a page does when it changes.
+    pub fn fade(mut self, on: bool) -> Self {
+        self.fade = on;
+        self
     }
     /// Fades the base below the layer (default on).
     pub fn scrim(mut self, on: bool) -> Self {
@@ -158,6 +166,9 @@ impl<'a, M: Clone + 'a> From<Overlay<'a, M>> for Element<'a, M> {
         let mut entrance = crate::layouts::entrance(stack(parts), offset);
         if o.edge.is_some() {
             entrance = entrance.trigger(crate::layouts::animation::Trigger::Sheet);
+        }
+        if o.fade {
+            entrance = entrance.fade();
         }
         if o.rules.scrim {
             entrance = entrance.scrim(o.window_radius);

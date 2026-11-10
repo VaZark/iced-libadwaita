@@ -15,6 +15,8 @@
 //!   `NavigationSplitView` and its drawer); `Overlay` floats it over the base on an
 //!   [`Overlay`](crate::layouts::Overlay): the base is faded and disabled, the surface slides in from its
 //!   edge, and a press outside sends [`on_outside`](Dock::on_outside).
+//!   [`fade(true)`](Dock::fade) makes it rise out of the window colour where it stands instead (a
+//!   full-screen page that appears rather than arrives).
 //! * **scope** ([`DockScope`]): `Content` docks to the base as given (a pane, the content area);
 //!   `Window` docks to the whole window, so the corners that touch the window's corners take its
 //!   radius ([`window_radius`](Dock::window_radius)).
@@ -129,6 +131,7 @@ pub struct Dock<'a, M> {
     margin: f32,
     border: bool,
     initial_focus: Option<iced::widget::Id>,
+    fade: bool,
 }
 
 impl<'a, M: Clone + 'a> Dock<'a, M> {
@@ -152,7 +155,14 @@ impl<'a, M: Clone + 'a> Dock<'a, M> {
             margin: 0.0,
             border: true,
             initial_focus: None,
+            fade: false,
         }
+    }
+    /// Fades an [`Overlay`](DockMode::Overlay) surface in instead of sliding it from its edge
+    /// (default off). Meant for a `FullScreen` one: a page that appears rather than arrives.
+    pub fn fade(mut self, on: bool) -> Self {
+        self.fade = on;
+        self
     }
     /// Whether the surface shows (default true).
     pub fn open(mut self, open: bool) -> Self {
@@ -539,7 +549,8 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
                     .along(length.dim(), d.align)
                     .scrim(d.scrim)
                     .margin(margin)
-                    .window_radius(window_edge);
+                    .window_radius(window_edge)
+                    .fade(d.fade);
                 if let Some(m) = d.on_outside {
                     o = o.on_outside(m);
                 }

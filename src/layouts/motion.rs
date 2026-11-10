@@ -545,6 +545,7 @@ pub struct Entrance<'a, M> {
     scrim_radius: Option<f32>,
     spec: Spec,
     trigger: Trigger,
+    fade: bool,
 }
 
 /// Stacks an optional overlay layer over `content`. The stack is **always** present, so
@@ -572,7 +573,14 @@ pub fn entrance<'a, M>(
         scrim_radius: None,
         spec: Spec::Spring(presets::sheet(false)),
         trigger: Trigger::Dialog,
+        fade: false,
     }
+}
+
+/// How opaque the window colour is over a layer that is fading in, at `progress` (0 to 1): it
+/// starts covering the layer and clears away as the layer settles.
+pub fn fade_cover(progress: f32) -> f32 {
+    (1.0 - progress).clamp(0.0, 1.0)
 }
 
 impl<'a, M> Entrance<'a, M> {
@@ -583,6 +591,14 @@ impl<'a, M> Entrance<'a, M> {
     }
     pub fn spec(mut self, spec: Spec) -> Self {
         self.spec = spec;
+        self
+    }
+    /// Fades the content in instead of sliding it: it stays where it is and rises out of the
+    /// window colour, as [`PageTransition`] does for a page. (iced has no layer opacity, so the
+    /// fade is the window colour clearing away over the content.)
+    pub fn fade(mut self) -> Self {
+        self.fade = true;
+        self.offset = Vector::ZERO;
         self
     }
     /// Which trigger this entrance is: [`Trigger::Dialog`] (default), `Sheet` or `Toast`.
@@ -737,6 +753,22 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
                 view,
             );
         });
+        if self.fade && p < 0.999 {
+            // A later layer, so the window colour covers the content's text as well as its quads.
+            let bg = theme.semantic.window.bg;
+            let radius = self.scrim_radius.unwrap_or(0.0);
+            renderer.with_layer(layout.bounds(), |r| {
+                r.fill_quad(
+                    Quad {
+                        bounds: layout.bounds(),
+                        border: Border::default().rounded(radius),
+                        shadow: Default::default(),
+                        snap: false,
+                    },
+                    Background::Color(Color { a: bg.a * fade_cover(p), ..bg }),
+                );
+            });
+        }
     }
 }
 
@@ -1533,6 +1565,21 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Highlight<'a, M> {
 impl<'a, M: 'a> From<Highlight<'a, M>> for Element<'a, M, Theme> {
     fn from(h: Highlight<'a, M>) -> Self {
         Element::new(h)
+    }
+}
+
+#[cfg(test)]
+mod fade_tests {
+    use super::*;
+
+    #[test]
+    fn a_fading_layer_starts_covered_and_ends_clear() {
+        assert_eq!(fade_cover(0.0), 1.0);
+        assert_eq!(fade_cover(1.0), 0.0);
+        assert!((fade_cover(0.25) - 0.75).abs() < 1e-6);
+        // A spring can overshoot; the cover never goes outside 0..=1.
+        assert_eq!(fade_cover(1.08), 0.0);
+        assert_eq!(fade_cover(-0.1), 1.0);
     }
 }
 
