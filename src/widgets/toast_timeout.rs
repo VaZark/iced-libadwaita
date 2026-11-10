@@ -1,9 +1,9 @@
 //! Widget-owned toast expiry: no application subscription is needed.
 use crate::Element;
 use crate::binds::wrap::{Behavior, Content, Wrap};
+use crate::primitives::countdown::{Countdown, Tick};
 use iced::Event;
 use iced::advanced::Shell;
-use crate::primitives::countdown::{Countdown, Tick};
 use std::time::Instant;
 
 pub(super) struct Timeout<M> {

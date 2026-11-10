@@ -253,8 +253,8 @@ impl Schema {
         self
     }
     fn push(self, section: &str, key: &str, default: Value, doc: &str) -> Self {
-        let ty = VariableType::untyped(default.kind())
-            .expect("typed variables use Schema::variable");
+        let ty =
+            VariableType::untyped(default.kind()).expect("typed variables use Schema::variable");
         self.variable(section, key, ty, Some(default), doc)
     }
     /// A color token; the fallback accepts any supported color format.

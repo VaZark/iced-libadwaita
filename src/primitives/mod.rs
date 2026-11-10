@@ -73,8 +73,8 @@ pub mod sorting;
 pub mod spoiler;
 pub mod stepper;
 pub mod synced;
-pub mod tag_groups;
 pub mod tabs;
+pub mod tag_groups;
 pub mod tree;
 pub mod validation;
 

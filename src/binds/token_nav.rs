@@ -69,7 +69,9 @@ mod tests {
     fn arrows_only_navigate_focused_unmodified_unselected_boundaries() {
         use iced::keyboard::{Modifiers, key::Named};
         let element: iced::Element<'_, (), crate::Theme> =
-            iced::widget::text_input("", "a\u{301}b").on_input(|_| ()).into();
+            iced::widget::text_input("", "a\u{301}b")
+                .on_input(|_| ())
+                .into();
         let mut input = Tree::new(&element);
         let input = &mut input;
         let left = key_event(Named::ArrowLeft, Modifiers::empty());

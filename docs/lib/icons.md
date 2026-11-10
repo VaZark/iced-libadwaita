@@ -70,6 +70,7 @@ Every existing enum variant is preserved. Names outside the standardized list ar
 | `Home` | `go-home` |
 | `Calendar` | `x-office-calendar` |
 | `Filter` | `view-filter` |
+| `Sort` | `view-sort-descending` |
 | `Folder` | `folder` |
 | `Document` | `text-x-generic` |
 | `DragHandle` | `list-drag-handle` |
@@ -83,6 +84,7 @@ Every existing enum variant is preserved. Names outside the standardized list ar
 | `Queue` | `view-list` |
 | `MusicNote` | `audio-x-generic` |
 | `Heart` | `emblem-favorite` |
+| `HeartFilled` | `emblem-favorite` |
 | `Moon` | `weather-clear-night` |
 | `Bolt` | `thunderbolt` |
 | `Globe` | `web-browser` |
@@ -169,7 +171,7 @@ Explicit SVGs, named system icons and per-header custom artwork stay explicit.
 Bundled common artwork is available through existing `Icon` variants: `ListAdd`
 (plus), `Delete` (trash), `DialogInformation` and `HelpAbout` (circled i), `Edit`
 (pencil), `ViewMore` (three dots), `Play`, `Pause`, `Stop`, `SkipForward`,
-`SkipBackward`, `Heart`, `Volume`, `VolumeMute`, `Fullscreen`, and `FullscreenExit`
+`SkipBackward`, `Heart`, `HeartFilled` (the same heart, filled), `Filter` (a funnel), `Settings` (a spoked gear), `Sort` (shrinking bars), `Volume`, `VolumeMute`, `Fullscreen`, and `FullscreenExit`
 (return to a window). `WindowRestore` retains its bundled overlapping-window SVG.
 These defaults use the same 16px viewbox and follow the parent's foreground.
 `icon::set_icon_override` replaces any of them globally; explicitly named system

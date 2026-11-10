@@ -216,11 +216,11 @@ impl Demo {
                     iad::components::password_entry("", &v.password).on_input(Edit::Password),
                 ),
             )
-                .validity(v.validity(&Key::Password))
-                .interaction(self.form.interaction(&self.spec, &Key::Password))
-                .required(true)
-                .metrics(m)
-                .into(),
+            .validity(v.validity(&Key::Password))
+            .interaction(self.form.interaction(&self.spec, &Key::Password))
+            .required(true)
+            .metrics(m)
+            .into(),
         ])
     }
 
@@ -241,11 +241,11 @@ impl Demo {
                         .on_nav(Edit::Calendar),
                 ),
             )
-                .validity(v.validity(&Key::Birthday))
-                .interaction(self.form.interaction(&self.spec, &Key::Birthday))
-                .required(true)
-                .metrics(m)
-                .into(),
+            .validity(v.validity(&Key::Birthday))
+            .interaction(self.form.interaction(&self.spec, &Key::Birthday))
+            .required(true)
+            .metrics(m)
+            .into(),
         ])
     }
 

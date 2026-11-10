@@ -55,6 +55,8 @@ pub enum Icon {
     Calendar,
     /// A funnel: filter a list (`funnel-symbolic` / `view-filter`).
     Filter,
+    /// Bars that shrink: sort order (`view-sort-descending-symbolic`).
+    Sort,
     /// A folder (`folder-symbolic`).
     Folder,
     /// A document (`text-x-generic-symbolic`).
@@ -82,6 +84,8 @@ pub enum Icon {
     /// A beamed note (`audio-x-generic-symbolic`).
     MusicNote,
     Heart,
+    /// The same heart, filled: something marked as a favourite (pair it with [`Icon::Heart`]).
+    HeartFilled,
     Moon,
     /// A lightning bolt.
     Bolt,
@@ -144,6 +148,7 @@ impl Icon {
         Icon::Home,
         Icon::Calendar,
         Icon::Filter,
+        Icon::Sort,
         Icon::Folder,
         Icon::Document,
         Icon::DragHandle,
@@ -158,6 +163,7 @@ impl Icon {
         Icon::Queue,
         Icon::MusicNote,
         Icon::Heart,
+        Icon::HeartFilled,
         Icon::Moon,
         Icon::Bolt,
         Icon::Globe,
@@ -211,6 +217,7 @@ impl Icon {
             Self::Home => "go-home",
             Self::Calendar => "x-office-calendar",
             Self::Filter => "view-filter",
+            Self::Sort => "view-sort-descending",
             Self::Folder => "folder",
             Self::Document => "text-x-generic",
             Self::DragHandle => "list-drag-handle",
@@ -225,6 +232,7 @@ impl Icon {
             Self::Queue => "view-list",
             Self::MusicNote => "audio-x-generic",
             Self::Heart => "emblem-favorite",
+            Self::HeartFilled => "emblem-favorite",
             Self::Moon => "weather-clear-night",
             Self::Bolt => "thunderbolt",
             Self::Globe => "web-browser",
@@ -276,6 +284,7 @@ impl Icon {
             Self::Home => "go-home-symbolic",
             Self::Calendar => "x-office-calendar-symbolic",
             Self::Filter => "view-filter-symbolic",
+            Self::Sort => "view-sort-descending-symbolic",
             Self::Folder => "folder-symbolic",
             Self::Document => "text-x-generic-symbolic",
             Self::DragHandle => "list-drag-handle-symbolic",
@@ -290,6 +299,7 @@ impl Icon {
             Self::Queue => "view-list-symbolic",
             Self::MusicNote => "audio-x-generic-symbolic",
             Self::Heart => "emblem-favorite-symbolic",
+            Self::HeartFilled => "emblem-favorite-symbolic",
             Self::Moon => "weather-clear-night-symbolic",
             Self::Bolt => "thunderbolt-symbolic",
             Self::Globe => "web-browser-symbolic",

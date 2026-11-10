@@ -32,7 +32,9 @@
 //! ```
 use super::{ChipGroup, ChipOption, EntryInput, EntryRow};
 use crate::binds::token_nav::between_groups;
-use crate::components::{Chip, ChipSize, TooltipPosition, section_button, tooltip, typography as ty};
+use crate::components::{
+    Chip, ChipSize, TooltipPosition, section_button, tooltip, typography as ty,
+};
 use crate::layouts::{token_flow, token_flow_with_caret};
 use crate::primitives::tag_groups::{GroupEvent, Step, TagGroups};
 use crate::{Element, Icon, Metrics};
@@ -214,7 +216,11 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
 
     /// The group being edited: always the first when single.
     fn active(&self) -> usize {
-        if self.multiple { self.groups.active() } else { 0 }
+        if self.multiple {
+            self.groups.active()
+        } else {
+            0
+        }
     }
     fn pill(&self, group: usize, key: &K) -> Element<'a, M> {
         let option = self
@@ -239,7 +245,11 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
     /// The pills of the entry in order, and where the field goes among them.
     fn pills(&mut self) -> (Vec<Element<'a, M>>, usize) {
         let active = self.active();
-        let shown = if self.multiple { self.groups.groups().len() } else { 1 };
+        let shown = if self.multiple {
+            self.groups.groups().len()
+        } else {
+            1
+        };
         let mut items: Vec<Element<'a, M>> = std::mem::take(&mut self.before);
         let mut caret = items.len();
         for (index, group) in self.groups.groups().iter().take(shown).enumerate() {
@@ -296,15 +306,12 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
         let mut f = f;
         let (mut items, caret) = f.pills();
         let on_query = f.on_query.clone();
-        let mut field = text_input(
-            if items.is_empty() { &f.placeholder } else { "" },
-            f.query,
-        )
-        .on_input(move |q| on_query(q))
-        .style(crate::styles::text_input::embedded)
-        .padding([4, 2])
-        .size(14)
-        .width(Length::Fill);
+        let mut field = text_input(if items.is_empty() { &f.placeholder } else { "" }, f.query)
+            .on_input(move |q| on_query(q))
+            .style(crate::styles::text_input::embedded)
+            .padding([4, 2])
+            .size(14)
+            .width(Length::Fill);
         if let Some(id) = f.field_id.clone() {
             field = field.id(id);
         }
@@ -356,14 +363,13 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
                     }
                     Cow::Owned(groups) => Cow::Owned(groups.groups()[active].clone()),
                 };
-                let mut chips = ChipGroup::new(
-                    std::mem::take(&mut f.options),
-                    selected,
-                    move |key| on_change(GroupEvent::Toggle(active, key)),
-                )
-                .query(f.query)
-                .empty_text(f.empty.clone())
-                .metrics(m);
+                let mut chips =
+                    ChipGroup::new(std::mem::take(&mut f.options), selected, move |key| {
+                        on_change(GroupEvent::Toggle(active, key))
+                    })
+                    .query(f.query)
+                    .empty_text(f.empty.clone())
+                    .metrics(m);
                 if let Some(lines) = f.max_lines {
                     chips = chips.max_lines(lines);
                 }
@@ -393,15 +399,10 @@ mod tests {
         let mut groups = TagGroups::new();
         for multiple in [false, true] {
             for _ in 0..2 {
-                let _: Element<'_, GroupEvent<&str>> = TagFilter::new(
-                    &groups,
-                    options(),
-                    "ro",
-                    |e| e,
-                    |_| GroupEvent::AddGroup,
-                )
-                .multiple(multiple)
-                .into();
+                let _: Element<'_, GroupEvent<&str>> =
+                    TagFilter::new(&groups, options(), "ro", |e| e, |_| GroupEvent::AddGroup)
+                        .multiple(multiple)
+                        .into();
                 groups.toggle("rock");
                 groups.add_group();
                 groups.toggle("calm");
@@ -418,8 +419,8 @@ mod tests {
         let mut single = TagFilter::new(&groups, options(), "", |e| e, |_| GroupEvent::AddGroup);
         let (pills, caret) = single.pills();
         assert_eq!((pills.len(), caret), (1, 1));
-        let mut multiple = TagFilter::new(&groups, options(), "", |e| e, |_| GroupEvent::AddGroup)
-            .multiple(true);
+        let mut multiple =
+            TagFilter::new(&groups, options(), "", |e| e, |_| GroupEvent::AddGroup).multiple(true);
         let (pills, caret) = multiple.pills();
         // group, comma, group; the field follows the active (last) group
         assert_eq!((pills.len(), caret), (3, 3));
@@ -432,8 +433,8 @@ mod tests {
         groups.add_group();
         groups.toggle("jazz");
         groups.select(0);
-        let mut f = TagFilter::new(&groups, options(), "", |e| e, |_| GroupEvent::AddGroup)
-            .multiple(true);
+        let mut f =
+            TagFilter::new(&groups, options(), "", |e| e, |_| GroupEvent::AddGroup).multiple(true);
         assert_eq!(f.pills().1, 1);
     }
 }

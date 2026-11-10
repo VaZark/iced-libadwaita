@@ -31,12 +31,9 @@ impl<M> Content<'_, '_, M> {
     }
     fn scan(&mut self, ids: bool) -> Probe {
         let mut probe = Probe::new(ids);
-        self.element.as_widget_mut().operate(
-            self.tree,
-            self.layout,
-            self.renderer,
-            &mut probe,
-        );
+        self.element
+            .as_widget_mut()
+            .operate(self.tree, self.layout, self.renderer, &mut probe);
         probe
     }
     /// Focuses the `index`-th focusable widget and unfocuses the others.

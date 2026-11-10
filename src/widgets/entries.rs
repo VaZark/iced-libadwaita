@@ -390,9 +390,9 @@ mod tests {
                             .right_section(text("S")),
                     ),
                 )
-                    .flat(flat)
-                    .metrics(metrics)
-                    .into();
+                .flat(flat)
+                .metrics(metrics)
+                .into();
                 let mut tree = Tree::new(&row);
                 let node = row.as_widget_mut().layout(
                     &mut tree,
@@ -469,8 +469,8 @@ mod tests {
                                 .right_section(text("@app")),
                         ),
                     )
-                        .flat(true)
-                        .into(),
+                    .flat(true)
+                    .into(),
                     1 => EntryRow::number("Amount", "12", |_| ()).flat(true).into(),
                     2 => EntryRow::date(
                         "Date",

@@ -2,8 +2,8 @@
 use iad::primitives::{
     calendar::CalendarView,
     date::Date,
-    numeric::Decimal,
     draft::Draft,
+    numeric::Decimal,
     tag_groups::{GroupEvent, TagGroups},
     validation::{Interaction, Validity},
 };
@@ -14,11 +14,31 @@ use iced_adaptive_design as iad;
 
 /// Tags with their own icon and color, as a tag vocabulary has.
 const GENRES: [(&str, iad::Icon, iced::Color); 5] = [
-    ("rock", iad::Icon::Bolt, iced::Color::from_rgb(0.75, 0.22, 0.17)),
-    ("jazz", iad::Icon::MusicNote, iced::Color::from_rgb(0.2, 0.52, 0.89)),
-    ("calm", iad::Icon::Moon, iced::Color::from_rgb(0.33, 0.45, 0.6)),
-    ("latin", iad::Icon::Heart, iced::Color::from_rgb(0.9, 0.38, 0.0)),
-    ("energetic", iad::Icon::Star, iced::Color::from_rgb(0.6, 0.45, 0.0)),
+    (
+        "rock",
+        iad::Icon::Bolt,
+        iced::Color::from_rgb(0.75, 0.22, 0.17),
+    ),
+    (
+        "jazz",
+        iad::Icon::MusicNote,
+        iced::Color::from_rgb(0.2, 0.52, 0.89),
+    ),
+    (
+        "calm",
+        iad::Icon::Moon,
+        iced::Color::from_rgb(0.33, 0.45, 0.6),
+    ),
+    (
+        "latin",
+        iad::Icon::Heart,
+        iced::Color::from_rgb(0.9, 0.38, 0.0),
+    ),
+    (
+        "energetic",
+        iad::Icon::Star,
+        iced::Color::from_rgb(0.6, 0.45, 0.0),
+    ),
 ];
 /// Sample tracks the tag filters are tried on.
 const TRACKS: [(&str, &[&str]); 4] = [
@@ -162,7 +182,9 @@ impl State {
         let filter = column![
             w::TagFilter::new(
                 groups,
-                GENRES.iter().map(|(g, icon, color)| w::ChipOption::new(*g, *g).icon(*icon).color(*color)),
+                GENRES
+                    .iter()
+                    .map(|(g, icon, color)| w::ChipOption::new(*g, *g).icon(*icon).color(*color)),
                 &self.tag_queries[i],
                 move |e| Msg::Tags(multiple, e),
                 move |q| Msg::TagQuery(multiple, q),
@@ -175,10 +197,11 @@ impl State {
             })
             .metrics(m),
             row![
-                text(format!("Matches: {matching}")).size(12).width(Length::Fill),
-                cmp::flat_button(text("Reset")).on_press_maybe(
-                    dirty.then_some(Msg::TagsReset(multiple))
-                ),
+                text(format!("Matches: {matching}"))
+                    .size(12)
+                    .width(Length::Fill),
+                cmp::flat_button(text("Reset"))
+                    .on_press_maybe(dirty.then_some(Msg::TagsReset(multiple))),
             ]
             .align_y(iced::Alignment::Center),
         ]
@@ -195,15 +218,17 @@ impl State {
                 } else {
                     "Date · dropdown"
                 },
-                w::EntryInput::Date(w::DateInput::new(&self.dates[i], self.calendars[i].date, move |v| {
-                    Msg::Date(modal, v)
-                })
-                .calendar(self.calendars[i])
-                .selected(Date::parse(&self.dates[i]))
-                .on_pick(move |d| Msg::Pick(modal, d))
-                .on_nav(move |v| Msg::Calendar(modal, v))
-                .dialog(modal)
-                .metrics(m)),
+                w::EntryInput::Date(
+                    w::DateInput::new(&self.dates[i], self.calendars[i].date, move |v| {
+                        Msg::Date(modal, v)
+                    })
+                    .calendar(self.calendars[i])
+                    .selected(Date::parse(&self.dates[i]))
+                    .on_pick(move |d| Msg::Pick(modal, d))
+                    .on_nav(move |v| Msg::Calendar(modal, v))
+                    .dialog(modal)
+                    .metrics(m),
+                ),
             )
             .metrics(m)
         };

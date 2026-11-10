@@ -87,7 +87,11 @@ impl<M> Widget<M, Theme, iced::Renderer> for TokenFlow<'_, M> {
         for index in order {
             let item = &mut self.items[index];
             let state = &mut tree.children[index];
-            let room = if caret == last { FIELD_WIDTH } else { self.compact };
+            let room = if caret == last {
+                FIELD_WIDTH
+            } else {
+                self.compact
+            };
             if index == last && x > 0.0 && width - x < room.min(width) {
                 x = 0.0;
                 y += line_height + 4.0;
@@ -310,12 +314,8 @@ mod tests {
             iced::widget::space().width(80).height(22).into(),
             iced::widget::text_input("", "").on_input(|_| ()).into(),
         ];
-        let mut element = token_flow_with_caret(
-            items,
-            1,
-            16.0,
-            between_groups("", None::<()>, None),
-        );
+        let mut element =
+            token_flow_with_caret(items, 1, 16.0, between_groups("", None::<()>, None));
         let mut tree = Tree::new(&element);
         let node = element.as_widget_mut().layout(
             &mut tree,

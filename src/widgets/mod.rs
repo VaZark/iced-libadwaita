@@ -12,7 +12,6 @@ pub(crate) mod banner;
 pub(crate) mod carousel;
 pub(crate) mod chart;
 pub(crate) mod chip_group;
-mod tag_filter;
 pub(crate) mod collapsible;
 pub(crate) mod color_picker;
 pub(crate) mod date_input;
@@ -52,6 +51,7 @@ pub(crate) mod status_page;
 pub(crate) mod stepper;
 pub(crate) mod synced_text;
 pub(crate) mod tabs;
+mod tag_filter;
 pub(crate) mod timeline;
 pub(crate) mod toast;
 pub(crate) mod toolbar;
@@ -68,7 +68,6 @@ pub use chart::{
 };
 pub use chart::{BubbleChart, BubblePoint, BubbleSeries, ComboChart, DonutChart};
 pub use chip_group::{ChipGroup, ChipOption};
-pub use tag_filter::TagFilter;
 pub use collapsible::Collapsible;
 pub use color_picker::{ColorInput, ColorPicker};
 pub use date_input::DateInput;
@@ -131,6 +130,7 @@ pub use status_page::{Card, Page, StatusPage, bin, card, clamp, page, status_pag
 pub use stepper::{Stepper, StepperIconPosition, StepperOrientation, StepperSize, StepperStep};
 pub use synced_text::{SyncedText, follow_synced_text};
 pub use tabs::{TabItem, Tabs, TabsVariant};
+pub use tag_filter::TagFilter;
 pub use timeline::{Timeline, TimelineAlign, TimelineItem};
 pub use toast::{
     Toast, ToastPosition, ToastTarget, toast_overlay, toast_stack, toast_stack_from, toast_target,
