@@ -67,6 +67,15 @@ pub(crate) fn slide_offsets(progress: f32, forward: bool, width: f32) -> (f32, f
     if forward { (leave, arrive) } else { (-leave, -arrive) }
 }
 
+/// How tall the stack of pages is, `progress` of the way through a slide from page `from` to page
+/// `to` (0 to 1): the height of the page that is showing, eased between the two heights while
+/// they slide, so the menu is always as tall as its contents and never as tall as the tallest page.
+pub(crate) fn blended_height(heights: &[f32], from: usize, to: usize, progress: f32) -> f32 {
+    let at = |i: usize| heights.get(i).copied().unwrap_or(0.0);
+    let p = progress.clamp(0.0, 1.0);
+    at(from) + (at(to) - at(from)) * p
+}
+
 // ---- a row that opens a page ---------------------------------------------------------------
 
 /// A menu row that opens page `target` when it is clicked. See the [module](self).
@@ -270,8 +279,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for MenuPages<'a, M> {
             .zip(&mut tree.children)
             .map(|(page, t)| page.as_widget_mut().layout(t, renderer, &limits))
             .collect();
-        // Every page has the height of the tallest, so the popover does not jump as pages slide.
-        let height = nodes.iter().map(|n| n.size().height).fold(0.0, f32::max);
+        // As tall as the page that is showing, easing between two heights while pages slide.
+        let heights: Vec<f32> = nodes.iter().map(|n| n.size().height).collect();
+        let state = tree.state.downcast_ref::<PagesState>();
+        let height = blended_height(&heights, state.from, state.current, state.progress.shown);
         layout::Node::with_children(Size::new(self.width, height), nodes)
     }
     fn update(
@@ -288,7 +299,8 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for MenuPages<'a, M> {
         let animated = Trigger::PageChange.animated();
         {
             let state = tree.state.downcast_mut::<PagesState>();
-            advance(&mut state.progress, event, 1.0, Trigger::PageChange.spec(Spec::STYLE), shell, false);
+            // The height changes with the slide, so each frame of it lays the menu out again.
+            advance(&mut state.progress, event, 1.0, Trigger::PageChange.spec(Spec::STYLE), shell, true);
         }
         let (current, settled) = {
             let s = tree.state.downcast_ref::<PagesState>();
@@ -320,6 +332,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for MenuPages<'a, M> {
                 state.forward = target > state.current;
                 state.current = target;
                 state.progress = Progress::new(if animated { 0.0 } else { 1.0 });
+                shell.invalidate_layout();
                 shell.request_redraw();
             }
         }
@@ -416,6 +429,24 @@ mod tests {
         assert_eq!(p[1], (Some(0), vec![2]));
         assert_eq!(p[2], (Some(1), vec![]));
         assert_eq!(p[3], (Some(0), vec![]));
+    }
+
+    #[test]
+    fn the_menu_is_as_tall_as_the_page_it_shows_not_the_tallest() {
+        let heights = [90.0, 170.0, 130.0];
+        // At rest each page has its own height.
+        assert_eq!(blended_height(&heights, 0, 0, 1.0), 90.0);
+        assert_eq!(blended_height(&heights, 0, 1, 1.0), 170.0);
+        assert_eq!(blended_height(&heights, 1, 2, 1.0), 130.0);
+        // Sliding from the short page to the tall one eases the height between them.
+        assert_eq!(blended_height(&heights, 0, 1, 0.0), 90.0);
+        assert_eq!(blended_height(&heights, 0, 1, 0.5), 130.0);
+        // And back again, from the tall page to the short one.
+        assert_eq!(blended_height(&heights, 1, 0, 0.5), 130.0);
+        // An overshooting spring never takes it outside the two heights.
+        assert_eq!(blended_height(&heights, 0, 1, 1.2), 170.0);
+        // A page that is not there is no height at all, not a panic.
+        assert_eq!(blended_height(&heights, 0, 9, 1.0), 0.0);
     }
 
     #[test]
