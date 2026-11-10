@@ -29,6 +29,7 @@ pub(crate) mod infinite;
 pub(crate) mod item_card;
 pub(crate) mod item_row;
 pub(crate) mod menu;
+pub(crate) mod menu_pages;
 pub(crate) mod multi_select;
 pub(crate) mod navigation;
 pub(crate) mod number_input;

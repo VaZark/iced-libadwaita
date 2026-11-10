@@ -10,7 +10,8 @@
 //! * GNOME HIG: the primary menu button uses `open-menu-symbolic`, sits at the
 //!   end of the header bar (above the list when there is a sidebar), is called
 //!   "Main Menu", and ends with Preferences, Keyboard Shortcuts, Help, About.
-//!   3–12 items, groups separated by hairlines, no nested submenus, no Quit.
+//!   3–12 items, groups separated by hairlines, no cascading submenus, no Quit. A submenu that
+//!   slides in place of its parent ([`MenuItem::submenu`]) is not a cascade and is supported.
 //! * Narrow screens: Material swaps menus for bottom sheets on compact screens;
 //!   libadwaita's `AdwDialog` switches to a sheet on narrow windows. We follow that with
 //!   [`MenuPresentation::for_width`] (mobile mode, below 576px → full page).
@@ -21,6 +22,7 @@ use crate::styles::{button as sb, container as sc, text as st};
 use crate::widgets::popover::{
     Align, Appearance, PAGE_BACK_WIDTH, PAGE_HEADER_HEIGHT, Popover, PopoverBounds, Presentation,
 };
+use crate::widgets::menu_pages::{MenuPages, NavRow, Request, plan};
 use crate::widgets::{boxed_list, clamp};
 use crate::{Icon, IconSource, Metrics, Theme, Typography};
 use iced::Length;
@@ -88,9 +90,11 @@ pub enum MenuCheckStyle {
 enum Kind<M> {
     Action { on_press: M },
     Check { checked: bool, on_press: M },
+    /// Opens another page of the menu in place of this one.
+    Submenu { menu: Box<Menu<M>> },
 }
 
-/// One menu entry: an action or a check item.
+/// One menu entry: an action, a check item or a submenu.
 pub struct MenuItem<M> {
     label: String,
     accel: Option<String>,
@@ -127,6 +131,23 @@ impl<M> MenuItem<M> {
             destructive: false,
             disabled: false,
             kind: Kind::Check { checked, on_press },
+        }
+    }
+    /// A row with a chevron that opens `menu` in place of this one: its items slide in from the
+    /// end and a back row at their top slides them away again. Not a cascade beside the parent
+    /// (the HIG forbids that); it is GTK's sliding submenu. The title of `menu` is the back
+    /// row's label. In the full-page presentation and in [`Menu::sheet`], where there is nothing
+    /// to slide, a submenu's items follow under its label instead.
+    pub fn submenu(label: impl Into<String>, menu: Menu<M>) -> Self {
+        Self {
+            label: label.into(),
+            accel: None,
+            icon: None,
+            icon_side: None,
+            labels: None,
+            destructive: false,
+            disabled: false,
+            kind: Kind::Submenu { menu: Box::new(menu) },
         }
     }
     /// Shown dimmed at the end, e.g. `"Ctrl+Q"`.
@@ -225,12 +246,36 @@ impl<M> Menu<M> {
     where
         M: Clone,
     {
+        self.all_items()
+            .into_iter()
+            .filter(|i| !i.disabled)
+            .filter_map(|i| Some((i.accel.clone()?, message(i)?)))
+            .collect()
+    }
+    /// Every item, those of submenus (at any depth) included.
+    fn all_items(&self) -> Vec<&MenuItem<M>> {
+        let mut out = Vec::new();
+        for item in self.sections.iter().flatten() {
+            out.push(item);
+            if let Kind::Submenu { menu } = &item.kind {
+                out.extend(menu.all_items());
+            }
+        }
+        out
+    }
+    /// The menus this one's submenu rows open, in order.
+    fn subs(&self) -> Vec<&Menu<M>> {
         self.sections
             .iter()
             .flatten()
-            .filter(|i| !i.disabled)
-            .filter_map(|i| i.accel.clone().map(|a| (a, message(i))))
+            .filter_map(|i| match &i.kind {
+                Kind::Submenu { menu } => Some(&**menu),
+                _ => None,
+            })
             .collect()
+    }
+    fn has_submenu(&self) -> bool {
+        !self.subs().is_empty()
     }
     /// Total number of items (the HIG recommends 3–12).
     pub fn len(&self) -> usize {
@@ -241,6 +286,9 @@ impl<M> Menu<M> {
     }
 }
 
+/// How wide a menu's popover is.
+const POPOVER_WIDTH: f32 = 260.0;
+
 /// `GtkMenuButton`: an icon button that opens a [`Menu`].
 pub struct MenuButton<M> {
     icon: IconSource,
@@ -249,6 +297,7 @@ pub struct MenuButton<M> {
     tooltip: Option<String>,
     window_radius: f32,
     open_initially: bool,
+    open_page: usize,
     bounds: Option<PopoverBounds>,
 }
 
@@ -261,6 +310,7 @@ pub fn menu_button<M>(icon: impl Into<IconSource>, menu: Menu<M>) -> MenuButton<
         tooltip: None,
         window_radius: 0.0,
         open_initially: false,
+        open_page: 0,
         bounds: None,
     }
 }
@@ -296,6 +346,13 @@ impl<M> MenuButton<M> {
         self.open_initially = open;
         self
     }
+    /// With [`open_initially`](Self::open_initially), start on a submenu's page rather than the
+    /// root, sliding in as if it had been chosen. Pages are numbered depth first: the root is 0,
+    /// its first submenu 1, that submenu's first submenu 2, then the root's second submenu.
+    pub fn open_on_page(mut self, page: usize) -> Self {
+        self.open_page = page;
+        self
+    }
 }
 
 /// Whether some item of the menu has a mark (a check or an icon) at each edge. Rows without one
@@ -322,6 +379,10 @@ fn slots<M>(menu: &Menu<M>) -> Slots {
         }
         if i.icon.is_some() {
             mark(i.icon_side.unwrap_or(menu.icon_side));
+        }
+        // A submenu row ends in a chevron, so the other rows keep a slot there to line up.
+        if matches!(i.kind, Kind::Submenu { .. }) {
+            s.trail = true;
         }
     }
     s
@@ -398,6 +459,9 @@ fn row_content<'a, M: 'a>(
             MenuIconSide::End => trail.push(el),
         }
     }
+    if matches!(item.kind, Kind::Submenu { .. }) {
+        trail.push(Icon::GoNext.view(m.icon_size).into());
+    }
     let blank = || -> Element<'a, M> { space().width(m.icon_size).into() };
     if lead.is_empty() && slots.lead {
         lead.push(blank());
@@ -415,9 +479,11 @@ fn row_content<'a, M: 'a>(
     r.into()
 }
 
-fn message<M: Clone>(item: &MenuItem<M>) -> M {
+/// What choosing the item sends. A submenu row sends nothing: it opens a page.
+fn message<M: Clone>(item: &MenuItem<M>) -> Option<M> {
     match &item.kind {
-        Kind::Action { on_press } | Kind::Check { on_press, .. } => on_press.clone(),
+        Kind::Action { on_press } | Kind::Check { on_press, .. } => Some(on_press.clone()),
+        Kind::Submenu { .. } => None,
     }
 }
 
@@ -426,57 +492,146 @@ pub(crate) fn popover_content<'a, M: Clone + 'a>(
     menu: &Menu<M>,
     max_height: f32,
 ) -> Element<'a, M> {
-    crate::widgets::popover(dropdown_items(menu), max_height)
+    crate::widgets::popover(dropdown_items(menu, None), max_height)
 }
 
-fn dropdown_items<'a, M: Clone + 'a>(menu: &Menu<M>) -> Vec<Element<'a, M>> {
+/// A hairline between groups of rows.
+fn separator<'a, M: 'a>() -> Element<'a, M> {
+    let m = Metrics::desktop();
+    container(
+        container(space().height(1))
+            .width(Length::Fill)
+            .style(sc::popover_separator),
+    )
+    .padding([m.space_xs, 0.0])
+    .into()
+}
+
+/// The rows of a dropdown. `pages` says where this menu's submenu rows lead: the page each one
+/// opens, in order, and the [`Request`] they tell. Without it a submenu row is inert.
+fn dropdown_items<'a, M: Clone + 'a>(
+    menu: &Menu<M>,
+    pages: Option<(&[usize], &Request)>,
+) -> Vec<Element<'a, M>> {
     let m = Metrics::desktop();
     let slots = slots(menu);
     let mut out: Vec<Element<'a, M>> = Vec::new();
+    let mut next_submenu = 0;
     for (si, section) in menu.sections.iter().enumerate() {
         if si > 0 {
-            out.push(
-                container(
-                    container(space().height(1))
-                        .width(Length::Fill)
-                        .style(sc::popover_separator),
-                )
-                .padding([m.space_xs, 0.0])
-                .into(),
-            );
+            out.push(separator());
         }
         for item in section {
+            let content = container(row_content(
+                item,
+                menu.icon_side,
+                menu.check_style,
+                slots,
+                false,
+            ))
+            .padding([0.0, m.space_m])
+            .center_y(Length::Fixed(32.0));
+            if let Kind::Submenu { .. } = &item.kind {
+                let target = pages.and_then(|(children, _)| children.get(next_submenu).copied());
+                next_submenu += 1;
+                out.push(match (target, pages, item.disabled) {
+                    (Some(t), Some((_, request)), false) => {
+                        NavRow::new(content.width(Length::Fill), t, request).into()
+                    }
+                    // Nowhere to go (or switched off): a row that does nothing.
+                    _ => button(content)
+                        .padding(0)
+                        .width(Length::Fill)
+                        .style(sb::menu_item(false))
+                        .into(),
+                });
+                continue;
+            }
             out.push(
-                button(
-                    container(row_content(
-                        item,
-                        menu.icon_side,
-                        menu.check_style,
-                        slots,
-                        false,
-                    ))
-                    .padding([0.0, m.space_m])
-                    .center_y(Length::Fixed(32.0)),
-                )
-                .padding(0)
-                .width(Length::Fill)
-                .style(sb::menu_item(false))
-                .on_press_maybe((!item.disabled).then(|| message(item)))
-                .into(),
+                button(content)
+                    .padding(0)
+                    .width(Length::Fill)
+                    .style(sb::menu_item(false))
+                    .on_press_maybe(if item.disabled { None } else { message(item) })
+                    .into(),
             );
         }
     }
     out
 }
 
+/// The back row at the top of a subpage: an arrow and the submenu's title, sliding back to
+/// `parent`.
+fn back_row<'a, M: Clone + 'a>(menu: &Menu<M>, parent: usize, request: &Request) -> Element<'a, M> {
+    let m = Metrics::desktop();
+    let t = Typography::default();
+    NavRow::new(
+        container(
+            row![
+                Icon::GoPrevious.view(m.icon_size),
+                t.heading(menu.title.clone()).wrapping(text::Wrapping::None)
+            ]
+            .spacing(m.space_m)
+            .align_y(Vertical::Center),
+        )
+        .padding([0.0, m.space_m])
+        .width(Length::Fill)
+        .center_y(Length::Fixed(32.0)),
+        parent,
+        request,
+    )
+    .into()
+}
+
+/// The content of a dropdown whose menu has submenus: one page per menu, sliding as rows ask.
+fn pages_content<'a, M: Clone + 'a>(menu: &Menu<M>, width: f32, initial: usize) -> Element<'a, M> {
+    fn collect<'m, M>(m: &'m Menu<M>, out: &mut Vec<&'m Menu<M>>) {
+        out.push(m);
+        for s in m.subs() {
+            collect(s, out);
+        }
+    }
+    let request = Request::default();
+    let numbering = plan(menu, &|m: &Menu<M>| m.subs());
+    let mut menus = Vec::new();
+    collect(menu, &mut menus);
+    let pages = menus
+        .iter()
+        .zip(&numbering)
+        .map(|(m, (parent, children))| {
+            let mut rows: Vec<Element<'a, M>> = Vec::new();
+            if let Some(p) = parent {
+                rows.push(back_row(m, *p, &request));
+                rows.push(separator());
+            }
+            rows.extend(dropdown_items(m, Some((children, &request))));
+            // Just the rows, scrolling if they are many: the surface is drawn once, around the
+            // pages, so they slide inside one card rather than as cards side by side.
+            crate::layouts::scrolled_window(column(rows).spacing(2).width(Length::Fill)).into()
+        })
+        .collect();
+    let m = Metrics::desktop();
+    let pad = iced::Padding::from(m.popover_padding);
+    let inner = width - pad.left - pad.right;
+    container(MenuPages::new(pages, &request, inner, initial))
+        .padding(m.popover_padding)
+        .max_height(360.0)
+        .style(sc::popover)
+        .into()
+}
+
 /// Large touch rows, one boxed list per section: the body of the full-page menu and of
 /// [`Menu::sheet`].
 fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M, Theme> {
     let m = Metrics::desktop();
+    let t = Typography::default();
     let slots = slots(menu);
     let mut lists = column![].spacing(m.space_l);
     for section in &menu.sections {
-        let rows = section.iter().map(|item| -> Element<'a, M> {
+        let rows: Vec<Element<'a, M>> = section
+            .iter()
+            .filter(|i| !matches!(i.kind, Kind::Submenu { .. }))
+            .map(|item| -> Element<'a, M> {
             button(
                 container(row_content(
                     item,
@@ -491,10 +646,22 @@ fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M,
             .padding(0)
             .width(Length::Fill)
             .style(sb::list_row)
-            .on_press_maybe((!item.disabled).then(|| message(item)))
+            .on_press_maybe(if item.disabled { None } else { message(item) })
             .into()
-        });
-        lists = lists.push(boxed_list(rows));
+        })
+        .collect();
+        if !rows.is_empty() {
+            lists = lists.push(boxed_list(rows));
+        }
+        // There is no page to slide to here, so a submenu's items follow under its label.
+        for item in section {
+            if let Kind::Submenu { menu: sub } = &item.kind {
+                lists = lists.push(
+                    column![t.caption(item.label.clone()).style(st::dim), touch_lists(sub)]
+                        .spacing(m.space_s),
+                );
+            }
+        }
     }
     lists
 }
@@ -548,8 +715,11 @@ impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
         let trigger =
             container(b.icon.view(m.icon_size)).center(Length::Fixed(m.button_min_height));
         let (content, presentation) = match b.presentation {
+            MenuPresentation::Dropdown if b.menu.has_submenu() => {
+                (pages_content(&b.menu, POPOVER_WIDTH, b.open_page), Presentation::Popover)
+            }
             MenuPresentation::Dropdown => (
-                crate::widgets::popover(dropdown_items(&b.menu), 360.0),
+                crate::widgets::popover(dropdown_items(&b.menu, None), 360.0),
                 Presentation::Popover,
             ),
             MenuPresentation::FullPage => (page(&b.menu, b.window_radius), Presentation::Page),
@@ -559,7 +729,7 @@ impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
             .padding(0)
             .presentation(presentation)
             .align(Align::End)
-            .popover_width(260.0)
+            .popover_width(POPOVER_WIDTH)
             .open_initially(b.open_initially);
         if let Some(bounds) = b.bounds {
             dd = dd.bounds(bounds);
@@ -642,6 +812,50 @@ mod tests {
         assert_eq!(text.check_style, MenuCheckStyle::Text);
         let none: Menu<()> = Menu::new("m").section([MenuItem::action("Plain", ())]);
         assert!(!slots(&none).lead && !slots(&none).trail);
+    }
+
+    #[test]
+    fn a_submenu_row_opens_a_page_and_sends_nothing() {
+        let sort: Menu<u8> = Menu::new("Sort").section([
+            MenuItem::check("Title", true, 1).accel("Ctrl+1"),
+            MenuItem::check("Newest", false, 2),
+        ]);
+        let root: Menu<u8> = Menu::new("Menu")
+            .section([MenuItem::action("Settings", 9)])
+            .section([MenuItem::submenu("Sort", sort)]);
+        assert!(root.has_submenu());
+        assert_eq!(root.subs().len(), 1);
+        assert_eq!(root.subs()[0].title, "Sort");
+        // The submenu row is one row of the parent; what is in it is not counted there.
+        assert_eq!(root.len(), 2);
+        let row = &root.sections[1][0];
+        assert_eq!(message(row), None);
+        assert_eq!(message(&root.sections[0][0]), Some(9));
+        // The shortcut of an item inside the submenu still works.
+        assert_eq!(root.accelerators(), vec![("Ctrl+1".to_string(), 1)]);
+        let plain: Menu<u8> = Menu::new("m").section([MenuItem::action("A", 1)]);
+        assert!(!plain.has_submenu());
+    }
+
+    #[test]
+    fn submenus_nest_to_any_depth() {
+        let deep: Menu<u8> = Menu::new("c").section([MenuItem::action("Leaf", 3).accel("Ctrl+L")]);
+        let mid: Menu<u8> = Menu::new("b").section([MenuItem::submenu("C", deep)]);
+        let root: Menu<u8> = Menu::new("a").section([MenuItem::submenu("B", mid)]);
+        assert_eq!(root.accelerators(), vec![("Ctrl+L".to_string(), 3)]);
+        assert_eq!(root.all_items().len(), 3);
+        let numbering = plan(&root, &|m: &Menu<u8>| m.subs());
+        assert_eq!(numbering, vec![(None, vec![1]), (Some(0), vec![2]), (Some(1), vec![])]);
+    }
+
+    #[test]
+    fn a_submenu_row_gives_the_other_rows_a_slot_for_its_chevron() {
+        let m: Menu<()> = Menu::new("m").section([
+            MenuItem::action("Plain", ()),
+            MenuItem::submenu("More", Menu::new("More")),
+        ]);
+        let s = slots(&m);
+        assert!(s.trail && !s.lead);
     }
 
     #[test]

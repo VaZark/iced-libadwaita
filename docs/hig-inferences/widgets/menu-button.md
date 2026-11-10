@@ -26,4 +26,4 @@ Button 34×34 flat; popover width 260; full-page header 47px; back hit area 64×
 
 ## Deviations / gaps
 
-No submenus (the HIG forbids nesting), no access keys, no keyboard navigation, no icons-only horizontal button sections.
+Submenus slide in place (`MenuItem::submenu`); cascaded flyouts are not offered (the HIG forbids them). No access keys, no keyboard navigation, no icons-only horizontal button sections.
