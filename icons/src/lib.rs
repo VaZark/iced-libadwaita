@@ -21,6 +21,7 @@ pub mod common {
     pub const HEART_FILLED: &str = include_str!("../svg/common/heart-filled.svg");
     pub const HEART: &str = include_str!("../svg/common/heart.svg");
     pub const INFORMATION: &str = include_str!("../svg/common/information.svg");
+    pub const OPEN_MENU: &str = include_str!("../svg/common/open-menu.svg");
     pub const PAUSE: &str = include_str!("../svg/common/pause.svg");
     pub const PLAY: &str = include_str!("../svg/common/play.svg");
     pub const SETTINGS: &str = include_str!("../svg/common/settings.svg");
@@ -88,6 +89,7 @@ pub mod app {
     pub const NOTE: &str = include_str!("../svg/app/note.svg");
     pub const PALETTE: &str = include_str!("../svg/app/palette.svg");
     pub const PIN: &str = include_str!("../svg/app/pin.svg");
+    pub const TAGS: &str = include_str!("../svg/app/tags.svg");
 }
 
 /// Every glyph as `("group/name", svg)`, in a stable order.
@@ -102,6 +104,7 @@ pub fn all() -> impl Iterator<Item = (&'static str, &'static str)> {
         ("common/heart-filled", common::HEART_FILLED),
         ("common/heart", common::HEART),
         ("common/information", common::INFORMATION),
+        ("common/open-menu", common::OPEN_MENU),
         ("common/pause", common::PAUSE),
         ("common/play", common::PLAY),
         ("common/settings", common::SETTINGS),
@@ -149,6 +152,7 @@ pub fn all() -> impl Iterator<Item = (&'static str, &'static str)> {
         ("app/note", app::NOTE),
         ("app/palette", app::PALETTE),
         ("app/pin", app::PIN),
+        ("app/tags", app::TAGS),
     ]
     .into_iter()
 }

@@ -195,6 +195,11 @@ impl State {
             } else {
                 "Tags (single group)"
             })
+            .description(if multiple {
+                "An item needs every tag of at least one group. Press + to start another group."
+            } else {
+                "An item needs every tag you pick."
+            })
             .metrics(m),
             row![
                 text(format!("Matches: {matching}"))

@@ -133,6 +133,8 @@ pub enum Icon {
     CompactRows,
     /// Cards of different heights in columns: a masonry grid.
     CardGrid,
+    /// A tag with a second one behind it: manage tags.
+    Tags,
 }
 
 impl Icon {
@@ -210,6 +212,7 @@ impl Icon {
         Icon::FlatList,
         Icon::CompactRows,
         Icon::CardGrid,
+        Icon::Tags,
     ];
 }
 
@@ -289,6 +292,7 @@ impl Icon {
             Self::FlatList => "view-list-flat",
             Self::CompactRows => "view-list-compact",
             Self::CardGrid => "view-grid",
+            Self::Tags => "tag-new",
         }
     }
     /// Symbolic system identifier, retained for compatibility.
@@ -366,6 +370,7 @@ impl Icon {
             Self::FlatList => "view-list-flat-symbolic",
             Self::CompactRows => "view-list-compact-symbolic",
             Self::CardGrid => "view-grid-symbolic",
+            Self::Tags => "tag-new-symbolic",
         })
     }
     /// Resolve this symbolic icon at the requested logical size and scale.

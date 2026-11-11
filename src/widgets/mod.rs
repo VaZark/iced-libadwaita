@@ -39,6 +39,7 @@ pub(crate) mod preferences;
 pub(crate) mod profile_header;
 pub(crate) mod range_slider;
 pub(crate) mod rich_text;
+pub(crate) mod tag_group_list;
 pub(crate) mod reorderable_list;
 pub(crate) mod resizable;
 pub(crate) mod responsive_table;
@@ -115,6 +116,7 @@ pub use preferences::{PreferencesGroup, PreferencesPage, preferences_group, pref
 pub use profile_header::ProfileHeader;
 pub use range_slider::{RangeSlider, range_slider};
 pub use rich_text::RichText;
+pub use tag_group_list::{TagGroupList, TagItem};
 pub use reorderable_list::ReorderableList;
 pub use resizable::Resizable;
 pub use responsive_table::{

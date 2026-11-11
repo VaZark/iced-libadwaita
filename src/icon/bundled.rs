@@ -6,6 +6,9 @@ impl Icon {
     pub fn bundled_source(self) -> Option<&'static str> {
         Some(match self {
             Self::ListAdd => iad_icons::common::ADD,
+            Self::OpenMenu => iad_icons::common::OPEN_MENU,
+            // The night-sky glyph the appearance switch already draws for "dark".
+            Self::Moon => iad_icons::appearance::DARK,
             Self::Delete => iad_icons::common::DELETE,
             Self::DialogInformation => iad_icons::common::INFORMATION,
             Self::HelpAbout => iad_icons::common::INFORMATION,
@@ -48,6 +51,7 @@ impl Icon {
             Self::FlatList => iad_icons::app::FLAT_LIST,
             Self::CompactRows => iad_icons::app::COMPACT_ROWS,
             Self::CardGrid => iad_icons::app::CARD_GRID,
+            Self::Tags => iad_icons::app::TAGS,
             _ => return None,
         })
     }

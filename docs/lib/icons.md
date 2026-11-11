@@ -111,6 +111,7 @@ Every existing enum variant is preserved. Names outside the standardized list ar
 | `FlatList` | `view-list-flat` |
 | `CompactRows` | `view-list-compact` |
 | `CardGrid` | `view-grid` |
+| `Tags` | `tag-new` |
 
 ## The `iad-icons` crate
 
@@ -123,8 +124,8 @@ dependency, so anything else can use the same set: `iad_icons::app::PIN`, or
 Add a glyph by dropping an SVG in `icons/svg/<group>/`, listing it in `icons/src/lib.rs`, and, if
 it should be a predefined `Icon`, adding the variant and its `bundled_source` arm. The `app` group
 is for glyphs that apps built on the toolkit need and no system theme can be counted on to have:
-`Pin`, `Archive`, `Palette`, `Eye`, `Note`, `CheckCircle`, `Kanban`, `FlatList`, `CompactRows`
-and `CardGrid`.
+`Pin`, `Archive`, `Palette`, `Eye`, `Note`, `CheckCircle`, `Kanban`, `FlatList`, `CompactRows`,
+`CardGrid` and `Tags`.
 
 ## Entry controls
 

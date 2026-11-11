@@ -136,6 +136,22 @@ pub fn sample(done: [bool; 2]) -> Vec<Block> {
     ]
 }
 
+/// `work` or `home urgent` or `travel`: groups are alternatives, the tags in one go together.
+fn tag_groups<'a>() -> Element<'a> {
+    let c = |r, g, b| iced::Color::from_rgb8(r, g, b);
+    let tag = |label: &str, color| w::TagItem::new(label).color(color);
+    w::TagGroupList::new(vec![
+        vec![tag("work", c(0xe6, 0x6a, 0x6a))],
+        vec![
+            tag("home", c(0x5c, 0xc2, 0xb8)),
+            tag("urgent", c(0xf0, 0xa3, 0x5e)),
+        ],
+        vec![tag("travel", c(0x6a, 0xa5, 0xe8))],
+    ])
+    .on_remove(|_, _| Message::Noop)
+    .into()
+}
+
 impl Gallery {
     pub(super) fn rich_text_page(&self) -> Element<'_> {
         let m = self.metrics();
@@ -153,6 +169,7 @@ impl Gallery {
             column![
                 self.group("Every element").push(w::card(full)),
                 self.group("Compact, first blocks only").push(w::card(compact)),
+                self.group("Tag groups, read only").push(w::card(tag_groups())),
                 playground::code_block(
                     m,
                     "let doc = vec![Block::Heading { level: 1, id: None, content: vec![Inline::Text(\"Title\".into())] }, /* … */];\n\nRichText::new(&theme, &doc)\n    .on_link(Msg::OpenUrl)               // a link was pressed\n    .on_task(|n, on| Msg::Task(n, on))   // task n (reading order) was toggled\n    .compact(true).max_blocks(4)         // for a card"

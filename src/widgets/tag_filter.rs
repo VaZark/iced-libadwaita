@@ -17,7 +17,7 @@
 //! options ([`picked`](TagFilter::picked)), a field id, and its own list of
 //! [`choices`](TagFilter::choices) under the entry.
 //!
-//! The application owns the [`TagGroups`] and the query ([controlled](crate::widgets)) and
+//! A [`description`](TagFilter::description) goes under the field, as on any row. The application owns the [`TagGroups`] and the query ([controlled](crate::widgets)) and
 //! hands the events to [`TagGroups::apply`]:
 //!
 //! ```ignore
@@ -52,6 +52,7 @@ pub struct TagFilter<'a, K: Clone, M> {
     on_query: Rc<dyn Fn(String) -> M + 'a>,
     multiple: bool,
     label: String,
+    description: Option<String>,
     placeholder: String,
     empty: String,
     max_lines: Option<usize>,
@@ -107,6 +108,7 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
             on_query: Rc::new(on_query),
             multiple: false,
             label: "Tags".into(),
+            description: None,
             placeholder: "Find a tag".into(),
             empty: "No matching tags".into(),
             max_lines: None,
@@ -131,6 +133,11 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
         self
     }
     /// The row's label (default "Tags").
+    /// Text under the field, as a row's description: what picking several tags or groups means.
+    pub fn description(mut self, text: impl Into<String>) -> Self {
+        self.description = Some(text.into());
+        self
+    }
     pub fn label(mut self, label: impl Into<String>) -> Self {
         self.label = label.into();
         self
@@ -349,9 +356,12 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
                 ),
             });
         }
-        let entry = EntryRow::new(f.label.clone(), EntryInput::Custom(line.into()))
+        let mut entry = EntryRow::new(f.label.clone(), EntryInput::Custom(line.into()))
             .flat(f.flat)
             .metrics(m);
+        if let Some(d) = f.description.take() {
+            entry = entry.description(d);
+        }
         let chips: Element<'a, M> = match f.choices.take() {
             Some(choices) => choices,
             None => {
