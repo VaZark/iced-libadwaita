@@ -104,6 +104,18 @@ enum Kind<'a, M> {
     },
 }
 
+/// Tab and Shift+Tab move between the entries of `content` in reading order and wrap from the last
+/// to the first; nothing takes focus when it appears. iced's entries do not move focus on Tab by
+/// themselves and a window has no focus order of its own, so a form or a table of entries that is
+/// not inside a dialog (those have a [`FocusScope`] already) is wrapped in this:
+///
+/// ```ignore
+/// tab_scope(column![header, rows, add_row])
+/// ```
+pub fn tab_scope<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
+    FocusScope::new(content).trap(true).auto_focus(false).into()
+}
+
 /// A focus scope around `content`. See the [module](self).
 pub struct FocusScope<'a, M> {
     content: Element<'a, M>,
