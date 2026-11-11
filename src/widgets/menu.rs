@@ -19,10 +19,10 @@
 use crate::Element;
 use crate::layouts::scrolled_window;
 use crate::styles::{button as sb, container as sc, text as st};
+use crate::widgets::menu_pages::{MenuPages, NavRow, Request, plan};
 use crate::widgets::popover::{
     Align, Appearance, PAGE_BACK_WIDTH, PAGE_HEADER_HEIGHT, Popover, PopoverBounds, Presentation,
 };
-use crate::widgets::menu_pages::{MenuPages, NavRow, Request, plan};
 use crate::widgets::{boxed_list, clamp};
 use crate::{Icon, IconSource, Metrics, Theme, Typography};
 use iced::Length;
@@ -88,10 +88,17 @@ pub enum MenuCheckStyle {
 }
 
 enum Kind<M> {
-    Action { on_press: M },
-    Check { checked: bool, on_press: M },
+    Action {
+        on_press: M,
+    },
+    Check {
+        checked: bool,
+        on_press: M,
+    },
     /// Opens another page of the menu in place of this one.
-    Submenu { menu: Box<Menu<M>> },
+    Submenu {
+        menu: Box<Menu<M>>,
+    },
 }
 
 /// One menu entry: an action, a check item or a submenu.
@@ -147,7 +154,9 @@ impl<M> MenuItem<M> {
             labels: None,
             destructive: false,
             disabled: false,
-            kind: Kind::Submenu { menu: Box::new(menu) },
+            kind: Kind::Submenu {
+                menu: Box::new(menu),
+            },
         }
     }
     /// Shown dimmed at the end, e.g. `"Ctrl+Q"`.
@@ -632,24 +641,24 @@ fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M,
             .iter()
             .filter(|i| !matches!(i.kind, Kind::Submenu { .. }))
             .map(|item| -> Element<'a, M> {
-            button(
-                container(row_content(
-                    item,
-                    menu.icon_side,
-                    menu.check_style,
-                    slots,
-                    true,
-                ))
-                .padding(m.row_padding)
-                .center_y(Length::Fixed(m.row_min_height)),
-            )
-            .padding(0)
-            .width(Length::Fill)
-            .style(sb::list_row)
-            .on_press_maybe(if item.disabled { None } else { message(item) })
-            .into()
-        })
-        .collect();
+                button(
+                    container(row_content(
+                        item,
+                        menu.icon_side,
+                        menu.check_style,
+                        slots,
+                        true,
+                    ))
+                    .padding(m.row_padding)
+                    .center_y(Length::Fixed(m.row_min_height)),
+                )
+                .padding(0)
+                .width(Length::Fill)
+                .style(sb::list_row)
+                .on_press_maybe(if item.disabled { None } else { message(item) })
+                .into()
+            })
+            .collect();
         if !rows.is_empty() {
             lists = lists.push(boxed_list(rows));
         }
@@ -657,8 +666,11 @@ fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M,
         for item in section {
             if let Kind::Submenu { menu: sub } = &item.kind {
                 lists = lists.push(
-                    column![t.caption(item.label.clone()).style(st::dim), touch_lists(sub)]
-                        .spacing(m.space_s),
+                    column![
+                        t.caption(item.label.clone()).style(st::dim),
+                        touch_lists(sub)
+                    ]
+                    .spacing(m.space_s),
                 );
             }
         }
@@ -715,9 +727,10 @@ impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
         let trigger =
             container(b.icon.view(m.icon_size)).center(Length::Fixed(m.button_min_height));
         let (content, presentation) = match b.presentation {
-            MenuPresentation::Dropdown if b.menu.has_submenu() => {
-                (pages_content(&b.menu, POPOVER_WIDTH, b.open_page), Presentation::Popover)
-            }
+            MenuPresentation::Dropdown if b.menu.has_submenu() => (
+                pages_content(&b.menu, POPOVER_WIDTH, b.open_page),
+                Presentation::Popover,
+            ),
             MenuPresentation::Dropdown => (
                 crate::widgets::popover(dropdown_items(&b.menu, None), 360.0),
                 Presentation::Popover,
@@ -845,7 +858,10 @@ mod tests {
         assert_eq!(root.accelerators(), vec![("Ctrl+L".to_string(), 3)]);
         assert_eq!(root.all_items().len(), 3);
         let numbering = plan(&root, &|m: &Menu<u8>| m.subs());
-        assert_eq!(numbering, vec![(None, vec![1]), (Some(0), vec![2]), (Some(1), vec![])]);
+        assert_eq!(
+            numbering,
+            vec![(None, vec![1]), (Some(0), vec![2]), (Some(1), vec![])]
+        );
     }
 
     #[test]

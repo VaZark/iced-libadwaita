@@ -9,9 +9,9 @@ pub enum AppearanceIcon {
 impl AppearanceIcon {
     pub fn source(self) -> &'static str {
         match self {
-            Self::Light => include_str!("appearance/light.svg"),
-            Self::Dark => include_str!("appearance/dark.svg"),
-            Self::System => include_str!("appearance/system.svg"),
+            Self::Light => iad_icons::appearance::LIGHT,
+            Self::Dark => iad_icons::appearance::DARK,
+            Self::System => iad_icons::appearance::SYSTEM,
         }
     }
     pub fn view<'a>(self, size: f32) -> IconView<'a> {

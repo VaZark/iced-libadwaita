@@ -31,6 +31,7 @@ mod nav;
 mod playground;
 mod plays;
 mod range_demo;
+mod rich_text_demo;
 mod reorder_demo;
 mod resizable_demo;
 mod sections_demo;
@@ -245,6 +246,10 @@ struct Gallery {
     /// Rows of the Icons page drawn so far. They are revealed one a frame, so no single frame
     /// rasterizes them all.
     icons_revealed: usize,
+    /// The two task checkboxes of the Rich text page.
+    rich_tasks: [bool; 2],
+    /// The Rich text page's document, rebuilt when a task is toggled.
+    rich_doc: Vec<iad::primitives::rich_text::Block>,
 
     shots: Option<Shots>,
     shot_tag: Option<&'static str>,
@@ -368,6 +373,8 @@ enum Message {
     DemoMotion(DemoMotion),
     DemoPlay,
     Noop,
+    /// A task checkbox of the Rich text page: its number and new state.
+    RichTask(usize, bool),
     Drag,
     /// Chrome of a secondary window (preferences, AppShell): performed on that window.
     /// Closes the preferences window.
@@ -630,6 +637,8 @@ impl Gallery {
             banner: true,
             angle: 0.0,
             icons_revealed: 0,
+            rich_tasks: [true, false],
+            rich_doc: rich_text_demo::sample([true, false]),
             shots,
             shot_tag: None,
         };
@@ -1006,6 +1015,12 @@ impl Gallery {
                 self.demo_tween.set_target(to, now, self.demo.spec());
             }
             Message::Noop => {}
+            Message::RichTask(n, on) => {
+                if let Some(c) = self.rich_tasks.get_mut(n) {
+                    *c = on;
+                }
+                self.rich_doc = rich_text_demo::sample(self.rich_tasks);
+            }
             Message::Drag => return window::drag(self.main),
             Message::WindowClosed(id) => {
                 if id == self.main {
@@ -1450,7 +1465,7 @@ impl Gallery {
         );
         content_bar = content_bar.pack_end(cmp::tooltip(
             iced::widget::button(
-                container(Icon::Search.view(m.icon_size + 2.0).weight(0.3))
+                container(Icon::Search.view(m.icon_size))
                     .center(Length::Fixed(m.button_min_height)),
             )
             .padding(0)

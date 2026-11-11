@@ -40,21 +40,21 @@ impl EntryIcon {
     ];
     pub fn source(self) -> &'static str {
         match self {
-            Self::Text => include_str!("entry/text.svg"),
-            Self::Number => include_str!("entry/number.svg"),
-            Self::Calendar => include_str!("entry/calendar.svg"),
-            Self::Switch => include_str!("entry/switch.svg"),
-            Self::Action => include_str!("entry/action.svg"),
-            Self::Select => include_str!("entry/select.svg"),
-            Self::Multiselect => include_str!("entry/multiselect.svg"),
-            Self::Chips => include_str!("entry/chips.svg"),
-            Self::Multiline => include_str!("entry/multiline.svg"),
-            Self::Search => include_str!("entry/search.svg"),
+            Self::Text => iad_icons::entry::TEXT,
+            Self::Number => iad_icons::entry::NUMBER,
+            Self::Calendar => iad_icons::entry::CALENDAR,
+            Self::Switch => iad_icons::entry::SWITCH,
+            Self::Action => iad_icons::entry::ACTION,
+            Self::Select => iad_icons::entry::SELECT,
+            Self::Multiselect => iad_icons::entry::MULTISELECT,
+            Self::Chips => iad_icons::entry::CHIPS,
+            Self::Multiline => iad_icons::entry::MULTILINE,
+            Self::Search => iad_icons::entry::SEARCH,
             Self::Clear => super::WindowIcon::Close.source(),
-            Self::Increment => include_str!("entry/increment.svg"),
-            Self::Decrement => include_str!("entry/decrement.svg"),
+            Self::Increment => iad_icons::entry::INCREMENT,
+            Self::Decrement => iad_icons::entry::DECREMENT,
             Self::Navigation => super::ChevronIcon::Right.source(),
-            Self::DragHandle => include_str!("entry/draghandle.svg"),
+            Self::DragHandle => iad_icons::entry::DRAGHANDLE,
         }
     }
     pub fn view<'a>(self, size: f32) -> IconView<'a> {

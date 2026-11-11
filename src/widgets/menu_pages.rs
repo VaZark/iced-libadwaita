@@ -44,7 +44,12 @@ pub(crate) type Plan = Vec<(Option<usize>, Vec<usize>)>;
 /// Numbers the pages of a tree of menus, given by how many submenus each has: `shape(menu)` lists
 /// the menu's submenus in order.
 pub(crate) fn plan<T>(root: &T, subs: &dyn Fn(&T) -> Vec<&T>) -> Plan {
-    fn walk<T>(m: &T, parent: Option<usize>, subs: &dyn Fn(&T) -> Vec<&T>, out: &mut Plan) -> usize {
+    fn walk<T>(
+        m: &T,
+        parent: Option<usize>,
+        subs: &dyn Fn(&T) -> Vec<&T>,
+        out: &mut Plan,
+    ) -> usize {
         let at = out.len();
         out.push((parent, Vec::new()));
         for child in subs(m) {
@@ -64,7 +69,11 @@ pub(crate) fn plan<T>(root: &T, subs: &dyn Fn(&T) -> Vec<&T>) -> Plan {
 pub(crate) fn slide_offsets(progress: f32, forward: bool, width: f32) -> (f32, f32) {
     let p = progress.clamp(0.0, 1.0);
     let (leave, arrive) = (-width * p, width * (1.0 - p));
-    if forward { (leave, arrive) } else { (-leave, -arrive) }
+    if forward {
+        (leave, arrive)
+    } else {
+        (-leave, -arrive)
+    }
 }
 
 /// How tall the stack of pages is, `progress` of the way through a slide from page `from` to page
@@ -91,7 +100,11 @@ impl<'a, M> NavRow<'a, M> {
         target: usize,
         request: &Request,
     ) -> Self {
-        Self { content: content.into(), target, request: request.clone() }
+        Self {
+            content: content.into(),
+            target,
+            request: request.clone(),
+        }
     }
 }
 
@@ -123,7 +136,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for NavRow<'a, M> {
         limits: &layout::Limits,
     ) -> layout::Node {
         // A transparent wrapper: the row is its content's layout.
-        self.content.as_widget_mut().layout(&mut tree.children[0], renderer, limits)
+        self.content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits)
     }
     fn update(
         &mut self,
@@ -189,7 +204,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for NavRow<'a, M> {
         let look = sb::menu_item(false)(theme, status);
         if let Some(background) = look.background {
             renderer.fill_quad(
-                renderer::Quad { bounds, border: look.border, shadow: Default::default(), snap: false },
+                renderer::Quad {
+                    bounds,
+                    border: look.border,
+                    shadow: Default::default(),
+                    snap: false,
+                },
                 background,
             );
         }
@@ -197,7 +217,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for NavRow<'a, M> {
             &tree.children[0],
             renderer,
             theme,
-            &renderer::Style { text_color: look.text_color },
+            &renderer::Style {
+                text_color: look.text_color,
+            },
             layout,
             cursor,
             viewport,
@@ -230,7 +252,12 @@ impl<'a, M> MenuPages<'a, M> {
         width: f32,
         initial: usize,
     ) -> Self {
-        Self { initial: initial.min(pages.len().saturating_sub(1)), pages, request: request.clone(), width }
+        Self {
+            initial: initial.min(pages.len().saturating_sub(1)),
+            pages,
+            request: request.clone(),
+            width,
+        }
     }
 }
 
@@ -300,7 +327,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for MenuPages<'a, M> {
         {
             let state = tree.state.downcast_mut::<PagesState>();
             // The height changes with the slide, so each frame of it lays the menu out again.
-            advance(&mut state.progress, event, 1.0, Trigger::PageChange.spec(Spec::STYLE), shell, true);
+            advance(
+                &mut state.progress,
+                event,
+                1.0,
+                Trigger::PageChange.spec(Spec::STYLE),
+                shell,
+                true,
+            );
         }
         let (current, settled) = {
             let s = tree.state.downcast_ref::<PagesState>();
@@ -319,7 +353,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for MenuPages<'a, M> {
                     viewport,
                 );
             }
-        } else if matches!(event, Event::Mouse(_) | Event::Touch(_)) && cursor.is_over(layout.bounds()) {
+        } else if matches!(event, Event::Mouse(_) | Event::Touch(_))
+            && cursor.is_over(layout.bounds())
+        {
             shell.capture_event(); // no clicks while a page slides
         }
         // A row asked for another page: slide to it.
@@ -366,7 +402,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for MenuPages<'a, M> {
     ) {
         let current = tree.state.downcast_ref::<PagesState>().current;
         if let Some(l) = layout.children().nth(current) {
-            self.pages[current].as_widget_mut().operate(&mut tree.children[current], l, renderer, operation);
+            self.pages[current].as_widget_mut().operate(
+                &mut tree.children[current],
+                l,
+                renderer,
+                operation,
+            );
         }
     }
     fn draw(
@@ -384,7 +425,15 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for MenuPages<'a, M> {
         let draw_page = |r: &mut iced::Renderer, page: usize, dx: f32| {
             if let Some(l) = layout.children().nth(page) {
                 draw_translated(r, bounds, viewport, Vector::new(dx, 0.0), |r, view| {
-                    self.pages[page].as_widget().draw(&tree.children[page], r, theme, style, l, cursor, view);
+                    self.pages[page].as_widget().draw(
+                        &tree.children[page],
+                        r,
+                        theme,
+                        style,
+                        l,
+                        cursor,
+                        view,
+                    );
                 });
             }
         };

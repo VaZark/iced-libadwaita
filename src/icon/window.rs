@@ -13,10 +13,10 @@ impl WindowIcon {
     pub const ALL: &[Self] = &[Self::Close, Self::Minimize, Self::Maximize, Self::Restore];
     pub fn source(self) -> &'static str {
         match self {
-            Self::Close => include_str!("window/close.svg"),
-            Self::Minimize => include_str!("window/minimize.svg"),
-            Self::Maximize => include_str!("window/maximize.svg"),
-            Self::Restore => include_str!("window/restore.svg"),
+            Self::Close => iad_icons::window::CLOSE,
+            Self::Minimize => iad_icons::window::MINIMIZE,
+            Self::Maximize => iad_icons::window::MAXIMIZE,
+            Self::Restore => iad_icons::window::RESTORE,
         }
     }
     pub fn view<'a>(self, size: f32) -> IconView<'a> {

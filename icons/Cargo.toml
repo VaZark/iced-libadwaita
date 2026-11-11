@@ -1,0 +1,8 @@
+[package]
+name = "iad-icons"
+version = "0.1.0"
+edition = "2024"
+categories = ["gui"]
+keywords = ["icons", "svg", "gnome", "adwaita", "iced"]
+description = "The bundled 16x16 SVG artwork of iced-adaptive-design, as plain data with no GUI dependency"
+include = ["/src/**", "/svg/**", "/Cargo.toml"]

@@ -1390,6 +1390,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
+name = "iad-icons"
+version = "0.1.0"
+
+[[package]]
 name = "iced"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1410,6 +1414,7 @@ dependencies = [
 name = "iced-adaptive-design"
 version = "0.1.0"
 dependencies = [
+ "iad-icons",
  "iced",
  "image",
  "regex",

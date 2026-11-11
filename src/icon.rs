@@ -113,6 +113,26 @@ pub enum Icon {
     FullscreenExit,
     /// A window with its bottom strip marked: the compact, one-line view.
     Compact,
+    /// A push-pin: keep something at the top.
+    Pin,
+    /// A box with a lid: put away, out of the way.
+    Archive,
+    /// A painter's palette: choose a colour.
+    Palette,
+    /// An eye: look at it as it reads (a preview) rather than edit it.
+    Eye,
+    /// A note with a folded corner.
+    Note,
+    /// A circled check: finished things.
+    CheckCircle,
+    /// Three columns of different heights: a kanban board.
+    Kanban,
+    /// Bulleted lines, nothing nested: one flat list.
+    FlatList,
+    /// One line per item: compact rows rather than cards.
+    CompactRows,
+    /// Cards of different heights in columns: a masonry grid.
+    CardGrid,
 }
 
 impl Icon {
@@ -180,6 +200,16 @@ impl Icon {
         Icon::Fullscreen,
         Icon::FullscreenExit,
         Icon::Compact,
+        Icon::Pin,
+        Icon::Archive,
+        Icon::Palette,
+        Icon::Eye,
+        Icon::Note,
+        Icon::CheckCircle,
+        Icon::Kanban,
+        Icon::FlatList,
+        Icon::CompactRows,
+        Icon::CardGrid,
     ];
 }
 
@@ -249,6 +279,16 @@ impl Icon {
             Self::Fullscreen => "view-fullscreen",
             Self::FullscreenExit => "view-restore",
             Self::Compact => "view-compact",
+            Self::Pin => "view-pin",
+            Self::Archive => "archive",
+            Self::Palette => "applications-graphics",
+            Self::Eye => "view-reveal",
+            Self::Note => "note",
+            Self::CheckCircle => "emblem-ok",
+            Self::Kanban => "view-kanban",
+            Self::FlatList => "view-list-flat",
+            Self::CompactRows => "view-list-compact",
+            Self::CardGrid => "view-grid",
         }
     }
     /// Symbolic system identifier, retained for compatibility.
@@ -316,6 +356,16 @@ impl Icon {
             Self::Fullscreen => "view-fullscreen-symbolic",
             Self::FullscreenExit => "view-restore-symbolic",
             Self::Compact => "view-compact-symbolic",
+            Self::Pin => "view-pin-symbolic",
+            Self::Archive => "archive-symbolic",
+            Self::Palette => "applications-graphics-symbolic",
+            Self::Eye => "view-reveal-symbolic",
+            Self::Note => "note-symbolic",
+            Self::CheckCircle => "emblem-ok-symbolic",
+            Self::Kanban => "view-kanban-symbolic",
+            Self::FlatList => "view-list-flat-symbolic",
+            Self::CompactRows => "view-list-compact-symbolic",
+            Self::CardGrid => "view-grid-symbolic",
         })
     }
     /// Resolve this symbolic icon at the requested logical size and scale.

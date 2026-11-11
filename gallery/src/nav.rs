@@ -17,11 +17,12 @@ pub enum Page {
     Feedback,
     Dialogs,
     Typography,
+    RichText,
     Theming,
 }
 
 impl Page {
-    pub const ALL: [Page; 10] = [
+    pub const ALL: [Page; 11] = [
         Page::Buttons,
         Page::Inputs,
         Page::Lists,
@@ -31,6 +32,7 @@ impl Page {
         Page::Feedback,
         Page::Dialogs,
         Page::Typography,
+        Page::RichText,
         Page::Theming,
     ];
 
@@ -45,6 +47,7 @@ impl Page {
             Page::Feedback => "Feedback",
             Page::Dialogs => "Dialogs & Sheets",
             Page::Typography => "Typography",
+            Page::RichText => "Rich text",
             Page::Theming => "Theming",
         }
     }
@@ -61,6 +64,7 @@ impl Page {
             Page::Feedback => "Banners, toasts, progress, avatars and tags",
             Page::Dialogs => "Alerts, about, shortcuts and sheets",
             Page::Typography => "Text styles and colors",
+            Page::RichText => "Headings, lists, tasks, code, tables and footnotes",
             Page::Theming => "Colors, radii, shadows and motion",
         }
     }
@@ -76,6 +80,7 @@ impl Page {
             Page::Feedback => Icon::HelpAbout,
             Page::Dialogs => Icon::Sidebar,
             Page::Typography => Icon::Search,
+            Page::RichText => Icon::Note,
             Page::Theming => Icon::Settings,
         }
     }
@@ -254,7 +259,7 @@ impl Page {
                 ("Behavior", vec![n(ThemeMotion), n(ThemeWindow)]),
                 ("Reference", vec![n(Surfaces)]),
             ],
-            Page::Typography => vec![],
+            Page::Typography | Page::RichText => vec![],
         }
     }
 }

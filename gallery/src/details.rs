@@ -29,6 +29,7 @@ impl Gallery {
     pub(super) fn content_page(&self) -> Element<'_> {
         match (self.page, self.detail) {
             (Page::Typography, _) => self.typography_page(),
+            (Page::RichText, _) => self.rich_text_page(),
             (page, None) => self.group_page(page),
             (_, Some(d)) => self.detail_page(d),
         }
@@ -77,7 +78,7 @@ impl Gallery {
         self.page_frame(group)
     }
 
-    fn group<'a>(&self, title: &'static str) -> w::PreferencesGroup<'a, Message> {
+    pub(super) fn group<'a>(&self, title: &'static str) -> w::PreferencesGroup<'a, Message> {
         w::PreferencesGroup::<Message>::new()
             .title(title)
             .metrics(self.metrics())

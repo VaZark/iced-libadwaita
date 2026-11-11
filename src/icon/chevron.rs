@@ -24,13 +24,13 @@ impl ChevronIcon {
     ];
     pub fn source(self) -> &'static str {
         match self {
-            Self::Right => include_str!("chevron/right.svg"),
-            Self::Left => include_str!("chevron/left.svg"),
-            Self::Down => include_str!("chevron/down.svg"),
-            Self::Up => include_str!("chevron/up.svg"),
-            Self::UpDown => include_str!("chevron/up-down.svg"),
-            Self::First => include_str!("chevron/first.svg"),
-            Self::Last => include_str!("chevron/last.svg"),
+            Self::Right => iad_icons::chevron::RIGHT,
+            Self::Left => iad_icons::chevron::LEFT,
+            Self::Down => iad_icons::chevron::DOWN,
+            Self::Up => iad_icons::chevron::UP,
+            Self::UpDown => iad_icons::chevron::UP_DOWN,
+            Self::First => iad_icons::chevron::FIRST,
+            Self::Last => iad_icons::chevron::LAST,
         }
     }
     pub fn view<'a>(self, size: f32) -> IconView<'a> {

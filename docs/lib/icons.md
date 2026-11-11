@@ -101,6 +101,30 @@ Every existing enum variant is preserved. Names outside the standardized list ar
 | `Fullscreen` | `view-fullscreen` |
 | `FullscreenExit` | `view-restore` |
 | `Compact` | `view-compact` |
+| `Pin` | `view-pin` |
+| `Archive` | `archive` |
+| `Palette` | `applications-graphics` |
+| `Eye` | `view-reveal` |
+| `Note` | `note` |
+| `CheckCircle` | `emblem-ok` |
+| `Kanban` | `view-kanban` |
+| `FlatList` | `view-list-flat` |
+| `CompactRows` | `view-list-compact` |
+| `CardGrid` | `view-grid` |
+
+## The `iad-icons` crate
+
+All bundled artwork lives in the `iad-icons` package (`icons/`), not in this crate. It holds the
+16×16 SVG glyphs (a 1.5px round stroke in `#000`, which the toolkit recolours) as plain `&str`
+constants, grouped as `common`, `chevron`, `window`, `entry`, `appearance` and `app`, with no GUI
+dependency, so anything else can use the same set: `iad_icons::app::PIN`, or
+`iad_icons::all()` for every `("group/name", svg)` pair.
+
+Add a glyph by dropping an SVG in `icons/svg/<group>/`, listing it in `icons/src/lib.rs`, and, if
+it should be a predefined `Icon`, adding the variant and its `bundled_source` arm. The `app` group
+is for glyphs that apps built on the toolkit need and no system theme can be counted on to have:
+`Pin`, `Archive`, `Palette`, `Eye`, `Note`, `CheckCircle`, `Kanban`, `FlatList`, `CompactRows`
+and `CardGrid`.
 
 ## Entry controls
 

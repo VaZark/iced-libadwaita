@@ -17,10 +17,12 @@ include = ["/src/**", "/docs/man/**", "/docs/lib/**", "/README.md", "/LICENSE*",
 opt-level = 2
 
 [workspace]
-members = ["gallery", "xtask"]
+members = ["gallery", "xtask", "icons"]
 default-members = ["."]
 
 [dependencies]
+# The bundled artwork, as plain data. Published first; the path is for this workspace.
+iad-icons = { path = "icons", version = "0.1.0" }
 # Wayland only on Linux: no `x11` feature. An app that depends on this crate should also set
 # `default-features = false` on its own `iced`, or Cargo turns the X11 backend back on.
 iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "crisp", "web-colors", "thread-pool", "linux-theme-detection", "wayland", "advanced", "svg", "image", "tokio", "canvas"] }

@@ -36,6 +36,7 @@
 //! * [`validation`]: when a field shows valid / invalid, and chaining validators;
 //! * [`meta`]: which variant of a meta component shows, and its [`Trigger`] (breakpoint or select);
 //! * [`meta_parent`]: the children of a meta parent: what each announced when it registered, and who a notification reaches;
+//! * [`rich_text`]: formatted prose as data: blocks (headings, quotes, lists, task lists, code, tables, footnotes, definitions) and inlines (emphasis, highlight, links, sub/superscript), with list markers, footnote numbering and table shape (no parsing: apps build it);
 //! * [`resize`]: dragging a handle into a size (grips, min / max, grid and breakpoint snapping);
 //! * [`responsive`]: which presentation a width gets ([`When`](responsive::When)).
 //!
@@ -66,6 +67,7 @@ pub mod relative;
 pub mod reorder;
 pub mod resize;
 pub mod responsive;
+pub mod rich_text;
 pub mod scrub;
 pub mod sections;
 pub mod selection;

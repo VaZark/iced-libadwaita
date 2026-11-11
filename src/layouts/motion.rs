@@ -765,7 +765,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
                         shadow: Default::default(),
                         snap: false,
                     },
-                    Background::Color(Color { a: bg.a * fade_cover(p), ..bg }),
+                    Background::Color(Color {
+                        a: bg.a * fade_cover(p),
+                        ..bg
+                    }),
                 );
             });
         }
