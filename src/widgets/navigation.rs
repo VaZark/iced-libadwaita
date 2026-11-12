@@ -4,7 +4,7 @@
 use crate::Element;
 use crate::styles::{button as sb, container as sc};
 use crate::widgets::{header_bar, toolbar_view};
-use crate::{Icon, Metrics};
+use crate::{Icon, IconSource, Metrics, Theme};
 use iced::alignment::Vertical;
 use iced::widget::{button, column, container, mouse_area, opaque, row, space, stack};
 use iced::{Length, Size};
@@ -116,9 +116,22 @@ pub fn sidebar_row_padded<'a, M: Clone + 'a>(
     padding: SidebarPadding,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
+    sidebar_row_with(icon.map(|i| i.view(m.icon_size)), label, selected, on_press, padding)
+}
+
+/// A sidebar entry with its icon already built: any [`IconSource`] (an app's own SVG), tinted
+/// or not.
+pub fn sidebar_row_with<'a, M: Clone + 'a>(
+    icon: Option<crate::IconView<'a>>,
+    label: impl Into<String>,
+    selected: bool,
+    on_press: M,
+    padding: SidebarPadding,
+) -> Element<'a, M> {
+    let m = Metrics::desktop();
     let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
     if let Some(i) = icon {
-        r = r.push(i.view(m.icon_size));
+        r = r.push(i);
     }
     // libadwaita ellipsizes; we clip at the row edge so text never paints
     // outside the selection highlight.
@@ -211,7 +224,9 @@ pub fn navigation_sidebar<'a, M: 'a>(
 /// ([`SidebarStyle::List`]) and a card row ([`SidebarStyle::Cards`]).
 #[derive(Clone)]
 pub struct SidebarItem<M> {
-    icon: Option<Icon>,
+    icon: Option<IconSource>,
+    /// Recolors the icon (a colored folder), instead of the text color.
+    tint: Option<iced::Color>,
     title: String,
     subtitle: Option<String>,
     selected: bool,
@@ -224,6 +239,7 @@ impl<M> SidebarItem<M> {
     pub fn new(title: impl Into<String>, on_press: M) -> Self {
         Self {
             icon: None,
+            tint: None,
             title: title.into(),
             subtitle: None,
             selected: false,
@@ -242,9 +258,24 @@ impl<M> SidebarItem<M> {
         self.padding = Some(padding);
         self
     }
-    pub fn icon(mut self, icon: Icon) -> Self {
-        self.icon = Some(icon);
+    pub fn icon(mut self, icon: impl Into<IconSource>) -> Self {
+        self.icon = Some(icon.into());
         self
+    }
+    /// Draws the icon in `color` rather than the text color: a single-color icon, such as a
+    /// folder that wears its epic's color.
+    pub fn icon_color(mut self, color: iced::Color) -> Self {
+        self.tint = Some(color);
+        self
+    }
+    fn icon_view<'a>(&self, size: f32) -> Option<crate::IconView<'a>> {
+        let view = self.icon.as_ref()?.view(size);
+        Some(match self.tint {
+            Some(color) => view.style(move |_: &Theme, _| iced::widget::svg::Style {
+                color: Some(color),
+            }),
+            None => view,
+        })
     }
     /// A short description. Shown only in [`SidebarStyle::Cards`].
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {
@@ -353,8 +384,8 @@ fn list_view<'a, M: Clone + 'a>(
                         .spacing((level.inset(&m) - level.gap(&m)).max(0.0)),
                 )
             });
-            let row = sidebar_row_padded(
-                i.icon,
+            let row = sidebar_row_with(
+                i.icon_view(m.icon_size),
                 i.title,
                 i.selected,
                 i.on_press,
@@ -370,12 +401,13 @@ fn list_view<'a, M: Clone + 'a>(
 fn cards_view<'a, M: Clone + 'a>(items: Vec<SidebarItem<M>>) -> Element<'a, M> {
     let m = Metrics::desktop();
     let rows = items.into_iter().map(|i| {
+        let icon = i.icon_view(m.icon_size);
         let mut r = crate::widgets::ActionRow::new(i.title)
             .chevron(true)
             .on_activate(i.on_press)
             .metrics(m);
-        if let Some(icon) = i.icon {
-            r = r.prefix(icon.view(m.icon_size));
+        if let Some(icon) = icon {
+            r = r.prefix(icon);
         }
         if let Some(s) = i.subtitle {
             r = r.subtitle(s);

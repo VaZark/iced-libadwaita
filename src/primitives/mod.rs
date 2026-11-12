@@ -9,6 +9,7 @@
 //! * [`chart`]: charts, headless: scales and ticks, line and area shapes, stacks, pie, funnel, sankey and sunburst layouts (d3, Chart.js, TanStack Charts);
 //! * [`color_picker`]: a color as hue / saturation / value / alpha, its conversions and text forms (hex, rgb, hsl, hsv), parsing (Mantine's ColorPicker);
 //! * [`date`]: calendar dates and month math;
+//! * [`drag`]: what a drop target says while a drag is over it, and which of nested targets takes the drop;
 //! * [`draft`]: a value being edited and the one it started from: reset goes back to it, commit makes the edit the new start;
 //! * [`focus`]: keyboard focus rules: a Tab trap that wraps and its initial focus, returning focus when a scope closes, whether focus is within a scope (Mantine's use-focus-trap, use-focus-return, use-focus-within);
 //! * [`form`]: submit / reset / next / back gating and when a form's fields reveal errors (steps);
@@ -64,6 +65,7 @@ pub mod numeric;
 pub mod pagination;
 pub mod range;
 pub mod relative;
+pub mod drag;
 pub mod reorder;
 pub mod resize;
 pub mod responsive;
@@ -86,6 +88,7 @@ pub use lookup::{Highlight, Lookup, Query, Request, RequestId, Status as LookupS
 pub use meta::Trigger;
 pub use pagination::{PageItem, Pagination};
 pub use relative::Relative;
+pub use drag::DropHint;
 pub use reorder::{Event as ReorderEvent, Mode as ReorderMode, ReorderState};
 pub use responsive::When;
 pub use selection::Selection;

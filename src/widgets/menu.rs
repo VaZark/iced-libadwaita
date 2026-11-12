@@ -418,7 +418,7 @@ fn slots<M>(menu: &Menu<M>) -> Slots {
 
 /// Builds one row's content: `label … [accel] [mark]` (or `[mark] label … [accel]` for the
 /// start side). The mark is the check and the icon, sharing one slot per edge.
-fn row_content<'a, M: 'a>(
+fn row_content<'a, M: Clone + 'a>(
     item: &MenuItem<M>,
     side: MenuIconSide,
     style: MenuCheckStyle,
@@ -479,23 +479,20 @@ fn row_content<'a, M: 'a>(
         _ => None,
     };
 
-    // A switch is only drawn: the row's button takes the press (it has no handler of its own, so
-    // it would look disabled, hence the style).
-    let switch = match item.kind {
-        Kind::Switch { checked, .. } => Some(
-            iced::widget::toggler(checked)
-                .size(m.icon_size + 4.0)
-                .style(move |t: &Theme, s| {
-                    use iced::widget::toggler::Status;
-                    let s = match s {
-                        Status::Disabled { is_toggled } if !disabled => {
-                            Status::Active { is_toggled }
-                        }
-                        s => s,
-                    };
-                    crate::styles::toggler::default(t, s)
-                }),
-        ),
+    // The same animated switch as everywhere (see `components::switch`). It takes presses on
+    // itself; pressing the label goes through the row's button. Either way the menu stays open.
+    let switch: Option<Element<'a, M>> = match &item.kind {
+        Kind::Switch { checked, on_press } => {
+            let mut sw = crate::components::switch(*checked);
+            if !disabled {
+                let m = on_press.clone();
+                sw = sw.on_toggle(move |_| {
+                    crate::widgets::popover::stay_open();
+                    m.clone()
+                });
+            }
+            Some(sw.into())
+        }
         _ => None,
     };
 
