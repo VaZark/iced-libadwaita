@@ -173,7 +173,7 @@ impl ChipSize {
     }
 }
 
-/// An actionable pill: optional icon, a label, and optionally a remove button.
+/// An actionable pill: a label, an icon, or both (never neither), and optionally a remove button.
 pub struct Chip<'a, M> {
     label: String,
     icon: Option<IconSource>,
@@ -192,10 +192,33 @@ pub struct Chip<'a, M> {
 }
 
 impl<'a, M> Chip<'a, M> {
+    /// A chip with a label, which must not be empty: for an icon alone, use
+    /// [`from_icon`](Self::from_icon). Add an icon beside the label with [`icon`](Self::icon).
     pub fn new(label: impl Into<String>) -> Self {
+        let label = label.into();
+        debug_assert!(
+            !label.is_empty(),
+            "a Chip needs a label, an icon or both: use Chip::from_icon for an icon alone"
+        );
+        Self::build(label, None)
+    }
+
+    /// A chip that is only an icon (a system [`Icon`] or your own SVG), evenly padded. Give it
+    /// a label as well with [`labeled`](Self::labeled).
+    pub fn from_icon(icon: impl Into<IconSource>) -> Self {
+        Self::build(String::new(), Some(icon.into()))
+    }
+
+    /// Adds a label beside the icon of a chip made with [`from_icon`](Self::from_icon).
+    pub fn labeled(mut self, label: impl Into<String>) -> Self {
+        self.label = label.into();
+        self
+    }
+
+    fn build(label: String, icon: Option<IconSource>) -> Self {
         Self {
-            label: label.into(),
-            icon: None,
+            label,
+            icon,
             color: None,
             on_color: None,
             text_color: None,
@@ -362,7 +385,10 @@ impl<'a, M: Clone + 'a> From<Chip<'a, M>> for Element<'a, M> {
                         }),
                 );
         }
-        body = body.push(text(c.label).size(text_size).wrapping(text::Wrapping::None));
+        // A chip with an icon and no label is just the icon, evenly padded.
+        if !(c.label.is_empty() && c.icon.is_some()) {
+            body = body.push(text(c.label).size(text_size).wrapping(text::Wrapping::None));
+        }
         let main = button(body)
             .padding(Padding::from([pad_y, pad_x]))
             .style(inner)
