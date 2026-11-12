@@ -23,7 +23,7 @@ use iced::{
 };
 
 use crate::Theme;
-use crate::primitives::drag::{self, DropHint};
+use crate::primitives::drag::{self, DropHint, Place, Targets};
 
 /// How far the pointer moves, in pixels, before a press is a drag.
 const THRESHOLD: f32 = 6.0;
@@ -43,6 +43,14 @@ pub struct DragSource<'a, M> {
 }
 
 impl<M> DragSource<'_, M> {
+    /// Tells the drop zones where the copy is: the source's bounds, with its ghost padding,
+    /// moved as far as the pointer has moved since it was picked up.
+    fn publish_ghost(&self, layout: Layout<'_>, press: Option<Point>, at: Point) {
+        let Some(press) = press else { return };
+        let b = layout.bounds().expand(self.ghost_padding);
+        drag::set_ghost(Some((b.y + at.y - press.y, b.height)));
+    }
+
     /// Room the picked-up copy keeps around the content, inside its frame: a number for all sides
     /// or `[vertical, horizontal]`. Zero by default: a row that already has its own padding needs
     /// none, a bare label does.
@@ -112,6 +120,7 @@ impl<'a, M: Clone + 'a> Widget<M, Theme, iced::Renderer> for DragSource<'a, M> {
                     && from.distance(*position) > THRESHOLD
                 {
                     state.dragging = true;
+                    self.publish_ghost(layout, state.press, *position);
                     shell.publish(self.on_start.clone());
                     // The content's button must not take the release for a click.
                     self.content.as_widget_mut().update(
@@ -142,7 +151,9 @@ impl<'a, M: Clone + 'a> Widget<M, Theme, iced::Renderer> for DragSource<'a, M> {
         }
         if state.dragging {
             // The floating copy follows the pointer.
-            if matches!(event, Event::Mouse(mouse::Event::CursorMoved { .. })) {
+            if let Event::Mouse(mouse::Event::CursorMoved { position }) = event {
+                let press = tree.state.downcast_ref::<SourceState>().press;
+                self.publish_ghost(layout, press, *position);
                 shell.request_redraw();
             }
             return;
@@ -404,11 +415,38 @@ impl<'a, M: Clone + 'a> From<DragSource<'a, M>> for Element<'a, M, Theme, iced::
 pub struct DropZone<'a, M> {
     content: Element<'a, M, Theme, iced::Renderer>,
     active: bool,
-    on_drop: M,
+    on_drop: Box<dyn Fn(Place) -> M + 'a>,
     hint: Option<DropHint>,
+    edge_hint: Option<DropHint>,
+    targets: Targets,
+    reach: f32,
 }
 
 impl<M> DropZone<'_, M> {
+    /// Pixels above and below the content that still count as the zone: for rows with a gap
+    /// between them, so the pointer is never over nothing between two (and the edge between them
+    /// is as easy to hit as the rows). Neighbours that overlap there: the first one wins.
+    pub fn reach(mut self, px: f32) -> Self {
+        self.reach = px.max(0.0);
+        self
+    }
+
+    /// How the zone is divided: the whole of it ([`Targets::Whole`], the default), before / after
+    /// only ([`Targets::Between`], to reorder) or edges with a middle ([`Targets::Edges`]). Over
+    /// an edge the zone draws an insertion line instead of an outline, and `on_drop` of
+    /// [`drop_zone_at`] is told which.
+    pub fn targets(mut self, targets: Targets) -> Self {
+        self.targets = targets;
+        self
+    }
+
+    /// What the floating copy says over an edge (before / after), where the copy keeps its size.
+    /// Without it the copy says nothing there.
+    pub fn edge_hint(mut self, hint: DropHint) -> Self {
+        self.edge_hint = Some(hint);
+        self
+    }
+
     /// What the floating copy says and how it looks while it is over this zone.
     pub fn hint(mut self, hint: DropHint) -> Self {
         self.hint = Some(hint);
@@ -421,15 +459,54 @@ pub fn drop_zone<'a, M: Clone + 'a>(
     active: bool,
     on_drop: M,
 ) -> DropZone<'a, M> {
+    drop_zone_at(content, active, move |_| on_drop.clone())
+}
+
+/// A [`drop_zone`] that says where it was dropped: `on_drop` gets the [`Place`] under the pointer
+/// (see [`DropZone::targets`]; without it, always [`Place::Inside`]).
+pub fn drop_zone_at<'a, M: 'a>(
+    content: impl Into<Element<'a, M, Theme, iced::Renderer>>,
+    active: bool,
+    on_drop: impl Fn(Place) -> M + 'a,
+) -> DropZone<'a, M> {
     DropZone {
         content: content.into(),
         active,
-        on_drop,
+        on_drop: Box::new(on_drop),
         hint: None,
+        edge_hint: None,
+        targets: Targets::Whole,
+        reach: 0.0,
     }
 }
 
-impl<'a, M: Clone + 'a> Widget<M, Theme, iced::Renderer> for DropZone<'a, M> {
+impl<M> DropZone<'_, M> {
+    /// The place under the cursor, when it is over the zone.
+    fn place(&self, layout: Layout<'_>, cursor: mouse::Cursor) -> Option<Place> {
+        let b = self.reached(layout);
+        // A zone with edges follows the carried copy, not the pointer: a row is chosen by where
+        // the copy sits over it, so what is carried can be lined up with the gap it goes in.
+        if self.targets != Targets::Whole
+            && let Some(ghost) = drag::ghost()
+        {
+            return self.targets.place_of_ghost((b.y, b.height), ghost);
+        }
+        let at = cursor.position_over(b)?;
+        Some(self.targets.place_at(at.y - b.y, b.height))
+    }
+
+    /// The zone's bounds with its [`reach`](Self::reach).
+    fn reached(&self, layout: Layout<'_>) -> Rectangle {
+        let b = layout.bounds();
+        Rectangle {
+            y: b.y - self.reach,
+            height: b.height + 2.0 * self.reach,
+            ..b
+        }
+    }
+}
+
+impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for DropZone<'a, M> {
     fn tag(&self) -> tree::Tag {
         self.content.as_widget().tag()
     }
@@ -472,9 +549,10 @@ impl<'a, M: Clone + 'a> Widget<M, Theme, iced::Renderer> for DropZone<'a, M> {
             match event {
                 Event::Mouse(mouse::Event::CursorMoved { .. }) => shell.request_redraw(),
                 Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-                    if cursor.is_over(layout.bounds()) && drag::take_drop() =>
+                    if self.place(layout, cursor).is_some() && drag::take_drop() =>
                 {
-                    shell.publish(self.on_drop.clone());
+                    let place = self.place(layout, cursor).unwrap_or(Place::Inside);
+                    shell.publish((self.on_drop)(place));
                 }
                 _ => {}
             }
@@ -530,19 +608,53 @@ impl<'a, M: Clone + 'a> Widget<M, Theme, iced::Renderer> for DropZone<'a, M> {
         self.content
             .as_widget()
             .draw(tree, renderer, theme, style, layout, cursor, viewport);
-        if self.active && cursor.is_over(layout.bounds()) && drag::take_hover(self.hint.as_ref()) {
-            renderer.fill_quad(
+        let Some(place) = self.place(layout, cursor).filter(|_| self.active) else {
+            return;
+        };
+        let hint = match place {
+            Place::Inside => self.hint.as_ref(),
+            _ => self.edge_hint.as_ref(),
+        };
+        if !drag::take_hover(hint) {
+            return;
+        }
+        let b = layout.bounds();
+        let accent = theme.semantic.accent.color;
+        match place {
+            Place::Inside => renderer.fill_quad(
                 Quad {
-                    bounds: layout.bounds(),
+                    bounds: b,
                     border: Border {
-                        color: theme.semantic.accent.color,
+                        color: accent,
                         width: 2.0,
                         radius: theme.metrics.radius_m.into(),
                     },
                     ..Quad::default()
                 },
                 Color::TRANSPARENT,
-            );
+            ),
+            // An insertion line on the edge, with a dot at its start, as GTK draws it.
+            Place::Before | Place::After => {
+                const LINE: f32 = 3.0;
+                // Centred in the gap, when there is one, between this row and its neighbour.
+                let y = if place == Place::Before {
+                    b.y - self.reach / 2.0
+                } else {
+                    b.y + b.height + self.reach / 2.0
+                };
+                let inset = 6.0_f32.min(b.width / 4.0);
+                renderer.fill_quad(
+                    Quad {
+                        bounds: Rectangle::new(
+                            Point::new(b.x + inset, y - LINE / 2.0),
+                            Size::new(b.width - 2.0 * inset, LINE),
+                        ),
+                        border: Border::default().rounded(LINE / 2.0),
+                        ..Quad::default()
+                    },
+                    Background::Color(accent),
+                );
+            }
         }
     }
 }

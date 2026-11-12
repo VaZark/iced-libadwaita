@@ -3,7 +3,8 @@
 
 use crate::Element;
 use crate::styles::{button as sb, container as sc};
-use crate::widgets::{header_bar, toolbar_view};
+use crate::primitives::drag::{DropHint, Place, Targets};
+use crate::widgets::{drag_source, drop_zone_at, header_bar, toolbar_view};
 use crate::{Icon, IconSource, Metrics, Theme};
 use iced::alignment::Vertical;
 use iced::widget::{button, column, container, mouse_area, opaque, row, space, stack};
@@ -233,6 +234,15 @@ pub struct SidebarItem<M> {
     on_press: M,
     padding: Option<SidebarPadding>,
     divider_above: bool,
+    reorder: Option<Reorder<M>>,
+}
+
+/// What makes a row of a [`SidebarList`] movable among the others.
+#[derive(Clone)]
+struct Reorder<M> {
+    on_start: M,
+    label: String,
+    on_drop: std::rc::Rc<dyn Fn(Place) -> M>,
 }
 
 impl<M> SidebarItem<M> {
@@ -246,7 +256,26 @@ impl<M> SidebarItem<M> {
             on_press,
             padding: None,
             divider_above: false,
+            reorder: None,
         }
+    }
+    /// Lets the row be moved among the others: press and hold it to pick it up (`on_start` is
+    /// sent), and while a drag is going on ([`SidebarList::dragging`]) the other rows take it
+    /// before or after themselves, drawing an insertion line on the edge, as in GTK. `label` is
+    /// said beside the copy over an edge ("Move here"); `on_drop` gets the row it was dropped on
+    /// the [`Place`] to put it.
+    pub fn reorder(
+        mut self,
+        on_start: M,
+        label: impl Into<String>,
+        on_drop: impl Fn(Place) -> M + 'static,
+    ) -> Self {
+        self.reorder = Some(Reorder {
+            on_start,
+            label: label.into(),
+            on_drop: std::rc::Rc::new(on_drop),
+        });
+        self
     }
     /// Draws a [`divider`](crate::components::divider) above this row, to start a new section.
     pub fn divider_above(mut self) -> Self {
@@ -310,6 +339,7 @@ pub struct SidebarList<'a, M> {
     padding: SidebarPadding,
     cards_below: Option<crate::breakpoints::WidthClass>,
     fixed_top: usize,
+    dragging: bool,
     _p: std::marker::PhantomData<&'a ()>,
 }
 
@@ -322,6 +352,7 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
             padding: SidebarPadding::Md,
             cards_below: None,
             fixed_top: 0,
+            dragging: false,
             _p: Default::default(),
         }
     }
@@ -348,6 +379,12 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
     /// ([`SidebarStyle::List`] only; the dividers count as part of the item below them).
     pub fn fixed_top(mut self, n: usize) -> Self {
         self.fixed_top = n;
+        self
+    }
+    /// Whether a drag of one of the [`reorder`](SidebarItem::reorder)able rows is going on: they
+    /// are only drop targets then.
+    pub fn dragging(mut self, dragging: bool) -> Self {
+        self.dragging = dragging;
         self
     }
     /// Window radius for the [`SidebarStyle::List`] bottom corners.
@@ -384,6 +421,7 @@ fn list_view<'a, M: Clone + 'a>(
     level: SidebarPadding,
     radius: f32,
     fixed_top: usize,
+    dragging: bool,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
     // Each item as its row, with its divider above if it has one.
@@ -403,6 +441,17 @@ fn list_view<'a, M: Clone + 'a>(
                 i.on_press,
                 i.padding.unwrap_or(level),
             );
+            let row: Element<'a, M> = match i.reorder {
+                Some(re) => {
+                    let on_drop = re.on_drop;
+                    drop_zone_at(drag_source(row, re.on_start), dragging, move |p| on_drop(p))
+                        .targets(Targets::Between)
+                        .reach(level.gap(&m) / 2.0)
+                        .edge_hint(DropHint::new(re.label))
+                        .into()
+                }
+                None => row,
+            };
             line.into_iter().chain(std::iter::once(row)).collect()
         })
         .collect();
@@ -455,12 +504,13 @@ impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
         use crate::metas::meta_component::MetaComponent;
         use crate::primitives::When;
         if let Some(class) = l.cards_below {
-            let (items, level, radius, fixed) = (l.items, l.padding, l.window_radius, l.fixed_top);
+            let (items, level, radius, fixed, dragging) =
+                (l.items, l.padding, l.window_radius, l.fixed_top, l.dragging);
             let cards = items.clone();
             return MetaComponent::new()
                 .width(Length::Fill)
                 .variant(SidebarStyle::List, When::from_class(class), move |_| {
-                    list_view(items.clone(), level, radius, fixed)
+                    list_view(items.clone(), level, radius, fixed, dragging)
                 })
                 .variant(SidebarStyle::Cards, When::always(), move |_| {
                     cards_view(cards.clone())
@@ -468,7 +518,7 @@ impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
                 .into();
         }
         match l.style {
-            SidebarStyle::List => list_view(l.items, l.padding, l.window_radius, l.fixed_top),
+            SidebarStyle::List => list_view(l.items, l.padding, l.window_radius, l.fixed_top, l.dragging),
             SidebarStyle::Cards => cards_view(l.items),
         }
     }
