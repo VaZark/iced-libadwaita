@@ -41,6 +41,8 @@ impl Icon {
             Self::WindowRestore => WindowIcon::Restore.source(),
             Self::Search => EntryIcon::Search.source(),
             Self::DragHandle => EntryIcon::DragHandle.source(),
+            Self::Folder => iad_icons::app::FOLDER,
+            Self::Calendar => iad_icons::app::CALENDAR,
             Self::Pin => iad_icons::app::PIN,
             Self::Archive => iad_icons::app::ARCHIVE,
             Self::Palette => iad_icons::app::PALETTE,

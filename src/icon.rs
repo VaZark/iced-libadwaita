@@ -400,6 +400,52 @@ impl Icon {
     }
 }
 
+/// One of the icons an app lets a person pick for a folder, an epic or a list: stored by its
+/// `name` (never the artwork, so this can change without touching the data), shown with its
+/// `label`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IconChoice {
+    pub name: &'static str,
+    pub label: &'static str,
+    pub icon: Icon,
+}
+
+/// The icons to pick from: the folder (the default) first, then glyphs iad bundles, so they look
+/// the same on every machine and take any colour. Icons that come from the system's icon theme
+/// are left out: they differ between themes and some cannot be tinted.
+pub const ICON_CHOICES: &[IconChoice] = &[
+    IconChoice { name: "folder", label: "Folder", icon: Icon::Folder },
+    IconChoice { name: "note", label: "Note", icon: Icon::Note },
+    IconChoice { name: "heart", label: "Heart", icon: Icon::Heart },
+    IconChoice { name: "moon", label: "Moon", icon: Icon::Moon },
+    IconChoice { name: "tags", label: "Tags", icon: Icon::Tags },
+    IconChoice { name: "pin", label: "Pin", icon: Icon::Pin },
+    IconChoice { name: "archive", label: "Archive", icon: Icon::Archive },
+    IconChoice { name: "eye", label: "Eye", icon: Icon::Eye },
+    IconChoice { name: "check", label: "Done", icon: Icon::CheckCircle },
+    IconChoice { name: "kanban", label: "Board", icon: Icon::Kanban },
+    IconChoice { name: "grid", label: "Grid", icon: Icon::CardGrid },
+    IconChoice { name: "list", label: "List", icon: Icon::FlatList },
+    IconChoice { name: "rows", label: "Rows", icon: Icon::CompactRows },
+    IconChoice { name: "palette", label: "Palette", icon: Icon::Palette },
+    IconChoice { name: "calendar", label: "Calendar", icon: Icon::Calendar },
+    IconChoice { name: "play", label: "Play", icon: Icon::Play },
+    IconChoice { name: "volume", label: "Sound", icon: Icon::Volume },
+    IconChoice { name: "settings", label: "Settings", icon: Icon::Settings },
+    IconChoice { name: "filter", label: "Filter", icon: Icon::Filter },
+    IconChoice { name: "sort", label: "Sort", icon: Icon::Sort },
+    IconChoice { name: "info", label: "Info", icon: Icon::DialogInformation },
+];
+
+impl Icon {
+    /// The icon for a stored name ([`ICON_CHOICES`]); the folder for none, and for a name this
+    /// version does not know (one a newer version stored).
+    pub fn from_choice(name: Option<&str>) -> Icon {
+        name.and_then(|n| ICON_CHOICES.iter().find(|c| c.name == n))
+            .map_or(Icon::Folder, |c| c.icon)
+    }
+}
+
 /// A predefined system icon, a named system icon, or an application-supplied SVG.
 #[derive(Debug, Clone)]
 pub enum IconSource {
@@ -473,6 +519,20 @@ impl IconSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_choices_are_unique_bundled_and_start_with_the_folder() {
+        let mut names: Vec<&str> = ICON_CHOICES.iter().map(|c| c.name).collect();
+        assert_eq!(names[0], "folder");
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), ICON_CHOICES.len(), "names are unique");
+        assert!(ICON_CHOICES.iter().all(|c| c.icon.bundled_source().is_some()));
+        // None, and a name from a newer version, are the folder.
+        assert_eq!(Icon::from_choice(None), Icon::Folder);
+        assert_eq!(Icon::from_choice(Some("not-yet")), Icon::Folder);
+        assert_eq!(Icon::from_choice(Some("heart")), Icon::Heart);
+    }
     #[test]
     fn global_override_can_be_replaced_and_reset() {
         let icon = Icon::Compact;

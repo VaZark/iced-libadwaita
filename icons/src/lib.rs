@@ -79,6 +79,10 @@ pub mod appearance {
 
 /// Glyphs for apps built on the toolkit: pins, archives, palettes, boards, lists.
 pub mod app {
+    /// A solid folder (the one filled glyph: it takes a colour of its own well).
+    pub const FOLDER: &str = include_str!("../svg/app/folder.svg");
+    /// A calendar page with today marked (filled).
+    pub const CALENDAR: &str = include_str!("../svg/app/calendar.svg");
     pub const ARCHIVE: &str = include_str!("../svg/app/archive.svg");
     pub const CARD_GRID: &str = include_str!("../svg/app/card-grid.svg");
     pub const CHECK_CIRCLE: &str = include_str!("../svg/app/check-circle.svg");
@@ -143,6 +147,8 @@ pub fn all() -> impl Iterator<Item = (&'static str, &'static str)> {
         ("appearance/light", appearance::LIGHT),
         ("appearance/system", appearance::SYSTEM),
         ("app/archive", app::ARCHIVE),
+        ("app/calendar", app::CALENDAR),
+        ("app/folder", app::FOLDER),
         ("app/card-grid", app::CARD_GRID),
         ("app/check-circle", app::CHECK_CIRCLE),
         ("app/compact-rows", app::COMPACT_ROWS),
