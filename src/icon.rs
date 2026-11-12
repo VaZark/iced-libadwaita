@@ -135,6 +135,16 @@ pub enum Icon {
     CardGrid,
     /// A tag with a second one behind it: manage tags.
     Tags,
+    /// An open folder: the directory something is kept in.
+    FolderOpen,
+    /// Two arrows in a circle: bring two places up to date.
+    Sync,
+    /// A page with a plus: bring a file in.
+    FileAdd,
+    /// A page with a magnifier: show where a file is.
+    FileShow,
+    /// A chain: a link to something elsewhere.
+    Link,
 }
 
 impl Icon {
@@ -213,6 +223,11 @@ impl Icon {
         Icon::CompactRows,
         Icon::CardGrid,
         Icon::Tags,
+        Icon::FolderOpen,
+        Icon::Sync,
+        Icon::FileAdd,
+        Icon::FileShow,
+        Icon::Link,
     ];
 }
 
@@ -293,6 +308,11 @@ impl Icon {
             Self::CompactRows => "view-list-compact",
             Self::CardGrid => "view-grid",
             Self::Tags => "tag-new",
+            Self::FolderOpen => "folder-open",
+            Self::Sync => "emblem-synchronizing",
+            Self::FileAdd => "document-new",
+            Self::FileShow => "system-file-manager",
+            Self::Link => "insert-link",
         }
     }
     /// Symbolic system identifier, retained for compatibility.
@@ -371,6 +391,11 @@ impl Icon {
             Self::CompactRows => "view-list-compact-symbolic",
             Self::CardGrid => "view-grid-symbolic",
             Self::Tags => "tag-new-symbolic",
+            Self::FolderOpen => "folder-open-symbolic",
+            Self::Sync => "emblem-synchronizing-symbolic",
+            Self::FileAdd => "document-new-symbolic",
+            Self::FileShow => "system-file-manager-symbolic",
+            Self::Link => "insert-link-symbolic",
         })
     }
     /// Resolve this symbolic icon at the requested logical size and scale.

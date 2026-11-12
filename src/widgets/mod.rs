@@ -32,6 +32,7 @@ pub(crate) mod item_card;
 pub(crate) mod item_row;
 pub(crate) mod menu;
 pub(crate) mod menu_pages;
+mod slide_pages;
 pub(crate) mod multi_select;
 pub(crate) mod navigation;
 pub(crate) mod number_input;
@@ -81,6 +82,7 @@ pub use dialog::{
     AboutDialog, AlertDialog, ResponseAppearance, dialog, dialog_in_window, preferences_dialog,
     present_dialog, shortcuts_dialog,
 };
+pub use slide_pages::SlidePages;
 pub use drag::{DragSource, DropZone, drag_source, drop_zone, drop_zone_at};
 pub use icon_picker::icon_color_picker;
 pub use dropdown::{DROPDOWN_MAX_WIDTH, DROPDOWN_MIN_WIDTH, DropdownOptions, dropdown, dropdown_disabled, dropdown_lead, dropdown_with, menu_item, menu_item_disabled, menu_item_lead};

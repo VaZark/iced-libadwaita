@@ -129,6 +129,19 @@ pub fn sidebar_row_with<'a, M: Clone + 'a>(
     on_press: M,
     padding: SidebarPadding,
 ) -> Element<'a, M> {
+    sidebar_row_opening(icon, label, selected, on_press, padding, false)
+}
+
+/// As [`sidebar_row_with`], and with a chevron at the end when `opens`: the row leads to another
+/// page of the sidebar, as a submenu row does.
+pub fn sidebar_row_opening<'a, M: Clone + 'a>(
+    icon: Option<crate::IconView<'a>>,
+    label: impl Into<String>,
+    selected: bool,
+    on_press: M,
+    padding: SidebarPadding,
+    opens: bool,
+) -> Element<'a, M> {
     let m = Metrics::desktop();
     let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
     if let Some(i) = icon {
@@ -141,6 +154,9 @@ pub fn sidebar_row_with<'a, M: Clone + 'a>(
             .width(Length::Fill)
             .clip(true),
     );
+    if opens {
+        r = r.push(Icon::GoNext.view(m.icon_size));
+    }
     // Settings sizes its grid from the font, not a fixed ~20px line. Keep the
     // inherited font/size and allow larger interface fonts to grow the row.
     let content = if padding == SidebarPadding::Lg {
@@ -235,7 +251,19 @@ pub struct SidebarItem<M> {
     padding: Option<SidebarPadding>,
     divider_above: bool,
     reorder: Option<Reorder<M>>,
+    /// Nesting depth: how far the row is indented, in steps of [`INDENT`].
+    indent: u8,
+    /// Ends in a chevron: the row opens another page.
+    opens: bool,
+    /// A chevron at the row's end that folds what is under it: whether it is open, and what
+    /// pressing it sends.
+    expander: Option<(bool, M)>,
+    /// A row that takes drops but cannot be picked up: what the copy says, and what is sent.
+    drop_only: Option<(String, std::rc::Rc<dyn Fn(Place) -> M>)>,
 }
+
+/// How far a nested [`SidebarItem`] is indented per level.
+pub const INDENT: f32 = 14.0;
 
 /// What makes a row of a [`SidebarList`] movable among the others.
 #[derive(Clone)]
@@ -243,6 +271,9 @@ struct Reorder<M> {
     on_start: M,
     label: String,
     on_drop: std::rc::Rc<dyn Fn(Place) -> M>,
+    /// What the copy says over the middle of the row, which then takes the drop *inside* it
+    /// ([`SidebarItem::nest`]); without it the row only has edges, before and after.
+    inside: Option<String>,
 }
 
 impl<M> SidebarItem<M> {
@@ -257,7 +288,43 @@ impl<M> SidebarItem<M> {
             padding: None,
             divider_above: false,
             reorder: None,
+            indent: 0,
+            opens: false,
+            expander: None,
+            drop_only: None,
         }
+    }
+    /// A chevron at the end of the row: it leads to another page of a paged list
+    /// ([`SidebarList::pages`]), as a submenu row does.
+    pub fn opens(mut self, opens: bool) -> Self {
+        self.opens = opens;
+        self
+    }
+    /// Indents the row `level` steps (a folder inside a folder), so a tree reads as one.
+    pub fn indent(mut self, level: u8) -> Self {
+        self.indent = level;
+        self
+    }
+    /// A chevron at the end of the row, pointing down when `open` and right when not: pressing
+    /// it sends `on_toggle`, and the row itself still selects.
+    pub fn expander(mut self, open: bool, on_toggle: M) -> Self {
+        self.expander = Some((open, on_toggle));
+        self
+    }
+    /// Makes the middle of a [`reorder`](Self::reorder)able row a place to drop *into* it: the
+    /// edges still put the dragged row before or after, the middle gets [`Place::Inside`], and
+    /// `label` is what the copy says there ("Move into Work").
+    pub fn nest(mut self, label: impl Into<String>) -> Self {
+        if let Some(r) = &mut self.reorder {
+            r.inside = Some(label.into());
+        }
+        self
+    }
+    /// A row that cannot be moved but takes what is dropped on it (always [`Place::Inside`]):
+    /// `label` is what the copy says over it.
+    pub fn drop_target(mut self, label: impl Into<String>, on_drop: impl Fn(Place) -> M + 'static) -> Self {
+        self.drop_only = Some((label.into(), std::rc::Rc::new(on_drop)));
+        self
     }
     /// Lets the row be moved among the others: press and hold it to pick it up (`on_start` is
     /// sent), and while a drag is going on ([`SidebarList::dragging`]) the other rows take it
@@ -274,6 +341,7 @@ impl<M> SidebarItem<M> {
             on_start,
             label: label.into(),
             on_drop: std::rc::Rc::new(on_drop),
+            inside: None,
         });
         self
     }
@@ -330,6 +398,13 @@ pub enum SidebarStyle {
     Cards,
 }
 
+/// The pages of a paged [`SidebarList`].
+struct Pages<M> {
+    pages: Vec<Vec<SidebarItem<M>>>,
+    current: usize,
+    depths: Vec<u32>,
+}
+
 /// The navigation entries of a sidebar, in either [`SidebarStyle`]. One component, so an
 /// app describes its destinations once and the presentation follows the layout.
 pub struct SidebarList<'a, M> {
@@ -340,6 +415,7 @@ pub struct SidebarList<'a, M> {
     cards_below: Option<crate::breakpoints::WidthClass>,
     fixed_top: usize,
     dragging: bool,
+    pages: Option<Pages<M>>,
     _p: std::marker::PhantomData<&'a ()>,
 }
 
@@ -353,6 +429,7 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
             cards_below: None,
             fixed_top: 0,
             dragging: false,
+            pages: None,
             _p: Default::default(),
         }
     }
@@ -379,6 +456,17 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
     /// ([`SidebarStyle::List`] only; the dividers count as part of the item below them).
     pub fn fixed_top(mut self, n: usize) -> Self {
         self.fixed_top = n;
+        self
+    }
+    /// Replaces what scrolls (everything after [`fixed_top`](Self::fixed_top)) with pages, one
+    /// showing, the way a menu's submenu takes the place of its parent: `pages` are lists of
+    /// items, `current` is the one to show, and `depths` says how deep each is (so a change to a
+    /// deeper page slides forward and to a shallower one back). The page shown is the app's to
+    /// name, so it follows whatever the app does: a row that opens a page, a back button, a link
+    /// elsewhere. The items given to [`new`](Self::new) after `fixed_top` are then not used.
+    /// [`SidebarStyle::List`] only.
+    pub fn pages(mut self, pages: Vec<Vec<SidebarItem<M>>>, current: usize, depths: Vec<u32>) -> Self {
+        self.pages = Some(Pages { pages, current, depths });
         self
     }
     /// Whether a drag of one of the [`reorder`](SidebarItem::reorder)able rows is going on: they
@@ -416,56 +504,115 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
     }
 }
 
+/// One item as its row (with its divider above, if it has one).
+fn item_rows<'a, M: Clone + 'a>(i: SidebarItem<M>, level: SidebarPadding, dragging: bool) -> Vec<Element<'a, M>> {
+    let m = Metrics::desktop();
+    let line = i.divider_above.then(|| {
+        Element::from(
+            crate::components::divider().spacing((level.inset(&m) - level.gap(&m)).max(0.0)),
+        )
+    });
+    let row = sidebar_row_opening(
+        i.icon_view(m.icon_size),
+        i.title,
+        i.selected,
+        i.on_press,
+        i.padding.unwrap_or(level),
+        i.opens,
+    );
+    // A chevron to fold what is under the row, and the indent of a nested one.
+    let row: Element<'a, M> = match i.expander {
+        Some((open, on_toggle)) => iced::widget::row![
+            container(row).width(Length::Fill),
+            crate::components::button::icon_button(if open { Icon::GoDown } else { Icon::GoNext })
+                .on_press(on_toggle)
+        ]
+        .align_y(Vertical::Center)
+        .into(),
+        None => row,
+    };
+    let row: Element<'a, M> = if i.indent > 0 {
+        container(row)
+            .padding(iced::Padding {
+                left: INDENT * f32::from(i.indent),
+                ..iced::Padding::ZERO
+            })
+            .into()
+    } else {
+        row
+    };
+    let row: Element<'a, M> = match (i.reorder, i.drop_only) {
+        (Some(re), _) => {
+            let on_drop = re.on_drop;
+            let nest = re.inside.is_some();
+            let mut zone = drop_zone_at(drag_source(row, re.on_start), dragging, move |p| on_drop(p))
+                .targets(if nest { Targets::Edges } else { Targets::Between })
+                .reach(level.gap(&m) / 2.0)
+                .edge_hint(DropHint::new(re.label));
+            if let Some(inside) = re.inside {
+                zone = zone.hint(DropHint::new(inside).shrink());
+            }
+            zone.into()
+        }
+        (None, Some((label, on_drop))) => {
+            drop_zone_at(row, dragging, move |p| on_drop(p))
+                .hint(DropHint::new(label))
+                .into()
+        }
+        (None, None) => row,
+    };
+    line.into_iter().chain(std::iter::once(row)).collect()
+}
+
 fn list_view<'a, M: Clone + 'a>(
     items: Vec<SidebarItem<M>>,
     level: SidebarPadding,
     radius: f32,
     fixed_top: usize,
     dragging: bool,
+    pages: Option<Pages<M>>,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
+    let inset = level.inset(&m);
+    let rows_of = |items: Vec<SidebarItem<M>>| -> Vec<Vec<Element<'a, M>>> {
+        items.into_iter().map(|i| item_rows(i, level, dragging)).collect()
+    };
+    let stack = |rows: Vec<Vec<Element<'a, M>>>, padding: iced::Padding| {
+        column(rows.into_iter().flatten()).spacing(level.gap(&m)).padding(padding)
+    };
+    // Pages: the items stay, and the pages slide beneath them.
+    if let Some(Pages { pages, current, depths }) = pages {
+        let top_rows = rows_of(items);
+        let top = stack(top_rows, iced::Padding { top: inset, right: inset, bottom: 0.0, left: inset });
+        let slides: Vec<Element<'a, M>> = pages
+            .into_iter()
+            .map(|page| {
+                crate::layouts::scrolled_window(stack(
+                    rows_of(page),
+                    iced::Padding { top: level.gap(&m), right: inset, bottom: inset, left: inset },
+                ))
+                .height(Length::Fill)
+                .into()
+            })
+            .collect();
+        let slid = crate::widgets::SlidePages::new(slides, current).depths(depths);
+        return container(column![top, container(slid).height(Length::Fill)])
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(move |_: &crate::Theme| iced::widget::container::Style {
+                border: iced::Border::default().rounded(iced::border::bottom(radius)),
+                ..Default::default()
+            })
+            .into();
+    }
     // Each item as its row, with its divider above if it has one.
-    let rows: Vec<Vec<Element<'a, M>>> = items
-        .into_iter()
-        .map(|i| {
-            let line = i.divider_above.then(|| {
-                Element::from(
-                    crate::components::divider()
-                        .spacing((level.inset(&m) - level.gap(&m)).max(0.0)),
-                )
-            });
-            let row = sidebar_row_with(
-                i.icon_view(m.icon_size),
-                i.title,
-                i.selected,
-                i.on_press,
-                i.padding.unwrap_or(level),
-            );
-            let row: Element<'a, M> = match i.reorder {
-                Some(re) => {
-                    let on_drop = re.on_drop;
-                    drop_zone_at(drag_source(row, re.on_start), dragging, move |p| on_drop(p))
-                        .targets(Targets::Between)
-                        .reach(level.gap(&m) / 2.0)
-                        .edge_hint(DropHint::new(re.label))
-                        .into()
-                }
-                None => row,
-            };
-            line.into_iter().chain(std::iter::once(row)).collect()
-        })
-        .collect();
+    let rows = rows_of(items);
     if fixed_top == 0 || fixed_top >= rows.len() {
         return navigation_sidebar_rounded_padded(rows.into_iter().flatten(), radius, level);
     }
     // The first items stay; the rest scroll beneath them.
-    let (top, rest): (Vec<_>, Vec<_>) = rows.into_iter().enumerate().partition(|(i, _)| *i < fixed_top);
-    let inset = level.inset(&m);
-    let stack = |rows: Vec<(usize, Vec<Element<'a, M>>)>, padding: iced::Padding| {
-        column(rows.into_iter().flat_map(|(_, r)| r))
-            .spacing(level.gap(&m))
-            .padding(padding)
-    };
+    let mut rest = rows;
+    let top: Vec<_> = rest.drain(..fixed_top).collect();
     let top = stack(top, iced::Padding { top: inset, right: inset, bottom: 0.0, left: inset });
     let rest = stack(rest, iced::Padding { top: level.gap(&m), right: inset, bottom: inset, left: inset });
     container(column![top, crate::layouts::scrolled_window(rest).height(Length::Fill)])
@@ -510,7 +657,7 @@ impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
             return MetaComponent::new()
                 .width(Length::Fill)
                 .variant(SidebarStyle::List, When::from_class(class), move |_| {
-                    list_view(items.clone(), level, radius, fixed, dragging)
+                    list_view(items.clone(), level, radius, fixed, dragging, None)
                 })
                 .variant(SidebarStyle::Cards, When::always(), move |_| {
                     cards_view(cards.clone())
@@ -518,7 +665,7 @@ impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
                 .into();
         }
         match l.style {
-            SidebarStyle::List => list_view(l.items, l.padding, l.window_radius, l.fixed_top, l.dragging),
+            SidebarStyle::List => list_view(l.items, l.padding, l.window_radius, l.fixed_top, l.dragging, l.pages),
             SidebarStyle::Cards => cards_view(l.items),
         }
     }
@@ -894,6 +1041,57 @@ pub fn navigation_view<'a, M: Clone + 'a>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_paged_sidebar_builds_with_rows_that_open_pages() {
+        #[derive(Clone)]
+        enum M {
+            Pick(u8),
+        }
+        let places = [SidebarItem::new("All", M::Pick(0)), SidebarItem::new("Trash", M::Pick(1))];
+        let root = vec![
+            SidebarItem::new("Work", M::Pick(2)).opens(true),
+            SidebarItem::new("Home", M::Pick(3)),
+        ];
+        let work = vec![
+            SidebarItem::new("Work", M::Pick(2)).icon(Icon::GoPrevious),
+            SidebarItem::new("Design", M::Pick(4)),
+        ];
+        assert!(root[0].opens && !root[1].opens);
+        let _: Element<'_, M> = SidebarList::new(places)
+            .fixed_top(2)
+            .pages(vec![root, work], 1, vec![0, 1])
+            .into();
+    }
+
+    #[test]
+    fn a_sidebar_tree_of_nested_foldable_movable_rows_builds() {
+        #[derive(Clone)]
+        enum M {
+            Pick(u8),
+            Fold(u8),
+            Move(u8),
+            Drop(u8, crate::primitives::drag::Place),
+        }
+        let items = [
+            SidebarItem::new("Back", M::Pick(0)).icon(Icon::GoPrevious),
+            SidebarItem::new("Work", M::Pick(1))
+                .expander(true, M::Fold(1))
+                .reorder(M::Move(1), "Move here", |p| M::Drop(1, p))
+                .nest("Move into Work"),
+            SidebarItem::new("Design", M::Pick(2))
+                .indent(1)
+                .expander(false, M::Fold(2))
+                .reorder(M::Move(2), "Move here", |p| M::Drop(2, p))
+                .nest("Move into Design"),
+            SidebarItem::new("Unassigned", M::Pick(3)).drop_target("Move here", |p| M::Drop(3, p)),
+        ];
+        assert_eq!(items[1].indent, 0);
+        assert_eq!(items[2].indent, 1);
+        assert!(items[1].reorder.as_ref().is_some_and(|r| r.inside.is_some()));
+        assert!(items[3].drop_only.is_some());
+        let _: Element<'_, M> = SidebarList::new(items).fixed_top(1).dragging(true).into();
+    }
+
     #[test]
     fn a_sidebar_list_can_pick_its_style_by_its_own_width() {
         let l = SidebarList::<()>::new([SidebarItem::new("One", ())])

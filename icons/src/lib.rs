@@ -24,6 +24,8 @@ pub mod common {
     pub const OPEN_MENU: &str = include_str!("../svg/common/open-menu.svg");
     pub const PAUSE: &str = include_str!("../svg/common/pause.svg");
     pub const PLAY: &str = include_str!("../svg/common/play.svg");
+    /// A house: the home place.
+    pub const HOME: &str = include_str!("../svg/common/home.svg");
     pub const SETTINGS: &str = include_str!("../svg/common/settings.svg");
     /// A window with its sidebar marked: show or hide the sidebar or drawer.
     pub const SIDEBAR: &str = include_str!("../svg/common/sidebar.svg");
@@ -86,6 +88,16 @@ pub mod app {
     /// A calendar page with today marked (filled).
     pub const CALENDAR: &str = include_str!("../svg/app/calendar.svg");
     pub const ARCHIVE: &str = include_str!("../svg/app/archive.svg");
+    /// An open folder: the directory something is kept in.
+    pub const FOLDER_OPEN: &str = include_str!("../svg/app/folder-open.svg");
+    /// Two arrows in a circle: bring two places up to date.
+    pub const SYNC: &str = include_str!("../svg/app/sync.svg");
+    /// A page with a plus: bring a file in.
+    pub const FILE_ADD: &str = include_str!("../svg/app/file-add.svg");
+    /// A page with a magnifier: show where a file is.
+    pub const FILE_SHOW: &str = include_str!("../svg/app/file-show.svg");
+    /// A chain: a link to something elsewhere.
+    pub const LINK: &str = include_str!("../svg/app/link.svg");
     pub const CARD_GRID: &str = include_str!("../svg/app/card-grid.svg");
     pub const CHECK_CIRCLE: &str = include_str!("../svg/app/check-circle.svg");
     pub const COMPACT_ROWS: &str = include_str!("../svg/app/compact-rows.svg");
@@ -113,6 +125,7 @@ pub fn all() -> impl Iterator<Item = (&'static str, &'static str)> {
         ("common/open-menu", common::OPEN_MENU),
         ("common/pause", common::PAUSE),
         ("common/play", common::PLAY),
+        ("common/home", common::HOME),
         ("common/settings", common::SETTINGS),
         ("common/sidebar", common::SIDEBAR),
         ("common/skip-backward", common::SKIP_BACKWARD),
@@ -152,6 +165,11 @@ pub fn all() -> impl Iterator<Item = (&'static str, &'static str)> {
         ("app/archive", app::ARCHIVE),
         ("app/calendar", app::CALENDAR),
         ("app/folder", app::FOLDER),
+        ("app/folder-open", app::FOLDER_OPEN),
+        ("app/sync", app::SYNC),
+        ("app/file-add", app::FILE_ADD),
+        ("app/file-show", app::FILE_SHOW),
+        ("app/link", app::LINK),
         ("app/card-grid", app::CARD_GRID),
         ("app/check-circle", app::CHECK_CIRCLE),
         ("app/compact-rows", app::COMPACT_ROWS),

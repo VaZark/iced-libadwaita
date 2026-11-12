@@ -55,6 +55,12 @@ impl Icon {
             Self::CompactRows => iad_icons::app::COMPACT_ROWS,
             Self::CardGrid => iad_icons::app::CARD_GRID,
             Self::Tags => iad_icons::app::TAGS,
+            Self::FolderOpen => iad_icons::app::FOLDER_OPEN,
+            Self::Sync => iad_icons::app::SYNC,
+            Self::FileAdd => iad_icons::app::FILE_ADD,
+            Self::FileShow => iad_icons::app::FILE_SHOW,
+            Self::Link => iad_icons::app::LINK,
+            Self::Home => iad_icons::common::HOME,
             _ => return None,
         })
     }
