@@ -23,6 +23,7 @@ impl Icon {
             Self::HeartFilled => iad_icons::common::HEART_FILLED,
             Self::Filter => iad_icons::common::FILTER,
             Self::Settings => iad_icons::common::SETTINGS,
+            Self::Sidebar => iad_icons::common::SIDEBAR,
             Self::Sort => iad_icons::common::SORT,
             Self::Volume => iad_icons::common::VOLUME,
             Self::VolumeMute => iad_icons::common::VOLUME_MUTE,

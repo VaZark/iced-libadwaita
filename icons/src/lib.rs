@@ -25,6 +25,8 @@ pub mod common {
     pub const PAUSE: &str = include_str!("../svg/common/pause.svg");
     pub const PLAY: &str = include_str!("../svg/common/play.svg");
     pub const SETTINGS: &str = include_str!("../svg/common/settings.svg");
+    /// A window with its sidebar marked: show or hide the sidebar or drawer.
+    pub const SIDEBAR: &str = include_str!("../svg/common/sidebar.svg");
     pub const SKIP_BACKWARD: &str = include_str!("../svg/common/skip-backward.svg");
     pub const SKIP_FORWARD: &str = include_str!("../svg/common/skip-forward.svg");
     pub const SORT: &str = include_str!("../svg/common/sort.svg");
@@ -112,6 +114,7 @@ pub fn all() -> impl Iterator<Item = (&'static str, &'static str)> {
         ("common/pause", common::PAUSE),
         ("common/play", common::PLAY),
         ("common/settings", common::SETTINGS),
+        ("common/sidebar", common::SIDEBAR),
         ("common/skip-backward", common::SKIP_BACKWARD),
         ("common/skip-forward", common::SKIP_FORWARD),
         ("common/sort", common::SORT),
