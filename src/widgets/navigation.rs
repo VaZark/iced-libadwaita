@@ -309,6 +309,7 @@ pub struct SidebarList<'a, M> {
     window_radius: f32,
     padding: SidebarPadding,
     cards_below: Option<crate::breakpoints::WidthClass>,
+    fixed_top: usize,
     _p: std::marker::PhantomData<&'a ()>,
 }
 
@@ -320,6 +321,7 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
             window_radius: 0.0,
             padding: SidebarPadding::Md,
             cards_below: None,
+            fixed_top: 0,
             _p: Default::default(),
         }
     }
@@ -339,6 +341,13 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
     /// [`style`](Self::style) and [`follow`](Self::follow). The list then fills its container.
     pub fn cards_below(mut self, class: crate::breakpoints::WidthClass) -> Self {
         self.cards_below = Some(class);
+        self
+    }
+    /// Keeps the first `n` items where they are and scrolls the rest beneath them, so a long list
+    /// of items (folders, say) scrolls while the entries that matter most stay in view
+    /// ([`SidebarStyle::List`] only; the dividers count as part of the item below them).
+    pub fn fixed_top(mut self, n: usize) -> Self {
+        self.fixed_top = n;
         self
     }
     /// Window radius for the [`SidebarStyle::List`] bottom corners.
@@ -374,10 +383,13 @@ fn list_view<'a, M: Clone + 'a>(
     items: Vec<SidebarItem<M>>,
     level: SidebarPadding,
     radius: f32,
+    fixed_top: usize,
 ) -> Element<'a, M> {
-    navigation_sidebar_rounded_padded(
-        items.into_iter().flat_map(|i| {
-            let m = Metrics::desktop();
+    let m = Metrics::desktop();
+    // Each item as its row, with its divider above if it has one.
+    let rows: Vec<Vec<Element<'a, M>>> = items
+        .into_iter()
+        .map(|i| {
             let line = i.divider_above.then(|| {
                 Element::from(
                     crate::components::divider()
@@ -391,11 +403,30 @@ fn list_view<'a, M: Clone + 'a>(
                 i.on_press,
                 i.padding.unwrap_or(level),
             );
-            line.into_iter().chain(std::iter::once(row))
-        }),
-        radius,
-        level,
-    )
+            line.into_iter().chain(std::iter::once(row)).collect()
+        })
+        .collect();
+    if fixed_top == 0 || fixed_top >= rows.len() {
+        return navigation_sidebar_rounded_padded(rows.into_iter().flatten(), radius, level);
+    }
+    // The first items stay; the rest scroll beneath them.
+    let (top, rest): (Vec<_>, Vec<_>) = rows.into_iter().enumerate().partition(|(i, _)| *i < fixed_top);
+    let inset = level.inset(&m);
+    let stack = |rows: Vec<(usize, Vec<Element<'a, M>>)>, padding: iced::Padding| {
+        column(rows.into_iter().flat_map(|(_, r)| r))
+            .spacing(level.gap(&m))
+            .padding(padding)
+    };
+    let top = stack(top, iced::Padding { top: inset, right: inset, bottom: 0.0, left: inset });
+    let rest = stack(rest, iced::Padding { top: level.gap(&m), right: inset, bottom: inset, left: inset });
+    container(column![top, crate::layouts::scrolled_window(rest).height(Length::Fill)])
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(move |_: &crate::Theme| iced::widget::container::Style {
+            border: iced::Border::default().rounded(iced::border::bottom(radius)),
+            ..Default::default()
+        })
+        .into()
 }
 
 fn cards_view<'a, M: Clone + 'a>(items: Vec<SidebarItem<M>>) -> Element<'a, M> {
@@ -424,12 +455,12 @@ impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
         use crate::metas::meta_component::MetaComponent;
         use crate::primitives::When;
         if let Some(class) = l.cards_below {
-            let (items, level, radius) = (l.items, l.padding, l.window_radius);
+            let (items, level, radius, fixed) = (l.items, l.padding, l.window_radius, l.fixed_top);
             let cards = items.clone();
             return MetaComponent::new()
                 .width(Length::Fill)
                 .variant(SidebarStyle::List, When::from_class(class), move |_| {
-                    list_view(items.clone(), level, radius)
+                    list_view(items.clone(), level, radius, fixed)
                 })
                 .variant(SidebarStyle::Cards, When::always(), move |_| {
                     cards_view(cards.clone())
@@ -437,7 +468,7 @@ impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
                 .into();
         }
         match l.style {
-            SidebarStyle::List => list_view(l.items, l.padding, l.window_radius),
+            SidebarStyle::List => list_view(l.items, l.padding, l.window_radius, l.fixed_top),
             SidebarStyle::Cards => cards_view(l.items),
         }
     }
