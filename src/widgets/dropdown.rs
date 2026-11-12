@@ -142,6 +142,10 @@ pub const DROPDOWN_MAX_WIDTH: f32 = 320.0;
 /// What a character of a label takes, on average: how many fit in a width.
 const CHAR_PX: f32 = 7.5;
 
+/// How wide a dropdown is at least, in pixels (about 10 characters of label), so one with a short
+/// value ("Open") is still something to aim at.
+pub const DROPDOWN_MIN_WIDTH: f32 = 10.0 * CHAR_PX;
+
 /// `label` cut to fit `px` wide, with an ellipsis (the text widget cannot draw one itself).
 fn clip(label: &str, px: f32) -> String {
     let fits = (px / CHAR_PX).max(1.0) as usize;
@@ -159,6 +163,7 @@ fn clip(label: &str, px: f32) -> String {
 /// How a [`dropdown_with`] looks.
 pub struct DropdownOptions<'a, T, M> {
     max_width: f32,
+    min_width: f32,
     wrap: bool,
     lead_width: f32,
     lead: Option<Box<dyn Fn(&T) -> Option<Element<'a, M>> + 'a>>,
@@ -168,6 +173,7 @@ impl<T, M> Default for DropdownOptions<'_, T, M> {
     fn default() -> Self {
         Self {
             max_width: DROPDOWN_MAX_WIDTH,
+            min_width: DROPDOWN_MIN_WIDTH,
             wrap: false,
             lead_width: 0.0,
             lead: None,
@@ -176,10 +182,17 @@ impl<T, M> Default for DropdownOptions<'_, T, M> {
 }
 
 impl<'a, T, M> DropdownOptions<'a, T, M> {
-    /// The widest the dropdown gets ([`DROPDOWN_MAX_WIDTH`] by default). Longer labels are cut
-    /// with an ellipsis, or wrapped with [`wrap`](Self::wrap).
+    /// The widest the dropdown gets, button and list alike ([`DROPDOWN_MAX_WIDTH`] by default).
+    /// Longer labels are cut with an ellipsis, or wrapped with [`wrap`](Self::wrap).
     pub fn max_width(mut self, px: f32) -> Self {
         self.max_width = px;
+        self
+    }
+    /// The narrowest the label area gets, however short the options ([`DROPDOWN_MIN_WIDTH`], about
+    /// ten characters, by default). The button and the list are never narrower than this plus
+    /// their arrow, padding and lead.
+    pub fn min_width(mut self, px: f32) -> Self {
+        self.min_width = px;
         self
     }
     /// Wrap a label that is wider than [`max_width`](Self::max_width) onto more lines, breaking
@@ -201,9 +214,9 @@ impl<'a, T, M> DropdownOptions<'a, T, M> {
     }
 }
 
-/// `GtkDropDown` over a slice of options. It is as wide as its widest option, so it does not
-/// change size with the value (and never cuts the value it shows), up to
-/// [`DROPDOWN_MAX_WIDTH`].
+/// `GtkDropDown` over a slice of options. The button and its list are as wide as the widest
+/// option, so they do not change size with the value and never cut the one they show: at least
+/// [`DROPDOWN_MIN_WIDTH`], at most [`DROPDOWN_MAX_WIDTH`] (see [`DropdownOptions`]).
 pub fn dropdown<'a, T, M>(
     options: &'a [T],
     selected: Option<T>,
@@ -249,8 +262,14 @@ where
     M: Clone + 'a,
 {
     let m = Metrics::desktop();
-    // What a label has room for: the width, less the arrow and the lead.
-    let room = opts.max_width - m.icon_size - 2.0 * m.space_s - opts.lead_width;
+    // What the button and the list each add around a label: the arrow, and the list's padding,
+    // lead, gap and check. The list is as wide as the button, so the button is sized for the
+    // larger, and a label that fits one fits the other.
+    let button_extra = m.icon_size + 2.0 * m.space_s;
+    let list_extra = 3.0 * m.space_m + m.icon_size + iced::Padding::from(m.popover_padding).x();
+    let extra = button_extra.max(list_extra);
+    // What a label has room for: the width, less all that.
+    let room = opts.max_width - extra - opts.lead_width;
     let label = |t: &T| {
         if opts.wrap {
             t.to_string()
@@ -279,23 +298,32 @@ where
     .spacing(m.space_s)
     .align_y(Vertical::Center);
 
-    // The widest option, laid out and never seen: invisible text in a box with no height. The
-    // button takes the width of the widest of its content, and the visible row fills it.
-    let invisible = |_: &Theme| iced::widget::text::Style {
-        color: Some(iced::Color::TRANSPARENT),
-    };
-    let widest = iced::widget::column(options.iter().map(|o| {
-        let r = row![
-            space().width(opts.lead_width),
-            text(label(o)).wrapping(wrapping).style(invisible),
-            space().width(m.space_s + m.icon_size),
-        ]
-        .spacing(if opts.lead_width > 0.0 { m.space_s } else { 0.0 });
-        Element::from(r)
-    }));
-    let sizer = container(widest).height(Length::Fixed(0.0)).clip(true);
+    // The widest option, laid out and never drawn (see `SizeProbe`). The button takes the width
+    // of the widest of its content, and the visible row fills it. The minimum is one more row of
+    // that width.
+    let gap = if opts.lead_width > 0.0 { m.space_s } else { 0.0 };
+    let mut rows: Vec<Element<'a, M>> = options
+        .iter()
+        .map(|o| {
+            row![
+                space().width(opts.lead_width),
+                text(label(o)).wrapping(wrapping)            ,
+                space().width(extra),
+            ]
+            .spacing(gap)
+            .into()
+        })
+        .collect();
+    rows.push(
+        space()
+            .width(opts.lead_width + gap + opts.min_width + extra)
+            .into(),
+    );
+    let sizer = SizeProbe::new(iced::widget::column(rows));
 
-    let content = iced::widget::column![visible, sizer];
+    // The probe is the base layer, so the button is the size of the widest option; the visible
+    // row fills it.
+    let content = iced::widget::stack![sizer, visible.width(Length::Fill).height(Length::Fill)];
     let trigger = if opts.wrap {
         container(content).max_width(opts.max_width)
     } else {
@@ -331,5 +359,73 @@ mod tests {
         assert!(cut.chars().count() <= (90.0 / CHAR_PX) as usize);
         // Room for nothing still shows something.
         assert_eq!(clip("abc", 0.0), "…");
+    }
+}
+
+/// Content that is laid out to take its size (as wide as the widest row, as tall as the tallest)
+/// and draws nothing: how a dropdown learns the size of its widest option without showing it.
+struct SizeProbe<'a, M> {
+    content: Element<'a, M>,
+}
+
+impl<'a, M> SizeProbe<'a, M> {
+    fn new(content: impl Into<Element<'a, M>>) -> Self {
+        Self {
+            content: content.into(),
+        }
+    }
+}
+
+impl<M> iced::advanced::Widget<M, Theme, iced::Renderer> for SizeProbe<'_, M> {
+    fn tag(&self) -> iced::advanced::widget::tree::Tag {
+        self.content.as_widget().tag()
+    }
+    fn state(&self) -> iced::advanced::widget::tree::State {
+        self.content.as_widget().state()
+    }
+    fn children(&self) -> Vec<iced::advanced::widget::Tree> {
+        self.content.as_widget().children()
+    }
+    fn diff(&self, tree: &mut iced::advanced::widget::Tree) {
+        self.content.as_widget().diff(tree);
+    }
+    fn size(&self) -> iced::Size<Length> {
+        iced::Size::new(Length::Shrink, Length::Shrink)
+    }
+    fn layout(
+        &mut self,
+        tree: &mut iced::advanced::widget::Tree,
+        renderer: &iced::Renderer,
+        limits: &iced::advanced::layout::Limits,
+    ) -> iced::advanced::layout::Node {
+        // The widest and tallest of the rows: one row's height when they are alike, the tallest
+        // when some wrap.
+        let node = self.content.as_widget_mut().layout(tree, renderer, limits);
+        let tallest = node
+            .children()
+            .iter()
+            .map(|c| c.size().height)
+            .fold(0.0_f32, f32::max);
+        iced::advanced::layout::Node::with_children(
+            iced::Size::new(node.size().width, tallest),
+            vec![node],
+        )
+    }
+    fn draw(
+        &self,
+        _: &iced::advanced::widget::Tree,
+        _: &mut iced::Renderer,
+        _: &Theme,
+        _: &iced::advanced::renderer::Style,
+        _: iced::advanced::Layout<'_>,
+        _: iced::advanced::mouse::Cursor,
+        _: &iced::Rectangle,
+    ) {
+    }
+}
+
+impl<'a, M: 'a> From<SizeProbe<'a, M>> for Element<'a, M> {
+    fn from(p: SizeProbe<'a, M>) -> Self {
+        Element::new(p)
     }
 }

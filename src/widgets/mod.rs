@@ -81,7 +81,7 @@ pub use dialog::{
     present_dialog, shortcuts_dialog,
 };
 pub use drag::{DragSource, DropZone, drag_source, drop_zone};
-pub use dropdown::{DROPDOWN_MAX_WIDTH, DropdownOptions, dropdown, dropdown_disabled, dropdown_lead, dropdown_with, menu_item, menu_item_disabled, menu_item_lead};
+pub use dropdown::{DROPDOWN_MAX_WIDTH, DROPDOWN_MIN_WIDTH, DropdownOptions, dropdown, dropdown_disabled, dropdown_lead, dropdown_with, menu_item, menu_item_disabled, menu_item_lead};
 pub use extra::{
     breakpoint_bin, carousel_indicator_dots, carousel_indicator_lines, inline_view_switcher,
     path_bar, shortcut_label, sidebar, tab_button, view_switcher, view_switcher_bar, wrap_box,
