@@ -18,7 +18,7 @@ use iced::advanced::Renderer as _;
 use iced::advanced::widget::{Operation, Tree, Widget, tree};
 use iced::advanced::{Clipboard, Shell, overlay};
 use iced::{
-    Background, Border, Color, Element, Event, Length, Point, Rectangle, Shadow, Size, Transformation,
+    Background, Border, Color, Element, Event, Length, Padding, Point, Rectangle, Shadow, Size, Transformation,
     Vector, mouse,
 };
 
@@ -39,6 +39,17 @@ struct SourceState {
 pub struct DragSource<'a, M> {
     content: Element<'a, M, Theme, iced::Renderer>,
     on_start: M,
+    ghost_padding: Padding,
+}
+
+impl<M> DragSource<'_, M> {
+    /// Room the picked-up copy keeps around the content, inside its frame: a number for all sides
+    /// or `[vertical, horizontal]`. Zero by default: a row that already has its own padding needs
+    /// none, a bare label does.
+    pub fn ghost_padding(mut self, padding: impl Into<Padding>) -> Self {
+        self.ghost_padding = padding.into();
+        self
+    }
 }
 
 pub fn drag_source<'a, M: Clone + 'a>(
@@ -48,6 +59,7 @@ pub fn drag_source<'a, M: Clone + 'a>(
     DragSource {
         content: content.into(),
         on_start,
+        ghost_padding: Padding::ZERO,
     }
 }
 
@@ -233,6 +245,7 @@ impl<'a, M: Clone + 'a> Widget<M, Theme, iced::Renderer> for DragSource<'a, M> {
                     tree: child,
                     source: layout,
                     grab,
+                    pad: self.ghost_padding,
                 })));
             }
         }
@@ -248,6 +261,7 @@ struct Ghost<'a, 'b, M> {
     tree: &'b Tree,
     source: Layout<'b>,
     grab: Point,
+    pad: Padding,
 }
 
 impl<M> overlay::Overlay<M, Theme, iced::Renderer> for Ghost<'_, '_, M> {
@@ -268,7 +282,7 @@ impl<M> overlay::Overlay<M, Theme, iced::Renderer> for Ghost<'_, '_, M> {
         let hint = drag::hovered().flatten();
         let scale = hint.as_ref().map_or(1.0, |h| h.scale);
         let shift = Vector::new(at.x - self.grab.x, at.y - self.grab.y);
-        let b = self.source.bounds();
+        let b = self.source.bounds().expand(self.pad);
         let lift = theme.shadows.popover();
         let radius = theme.metrics.radius_s;
         // The copy is scaled about the point it is held by, so it stays under the pointer.
