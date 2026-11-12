@@ -26,6 +26,18 @@ use iced::advanced::{Clipboard, Renderer as _, Shell};
 use iced::keyboard::{self, key::Named};
 use iced::widget::{button, column, container};
 use iced::{Event, Length, Padding, Point, Rectangle, Shadow, Size, mouse};
+use std::cell::Cell;
+
+thread_local! {
+    /// Set by an item's press handler while the click is being handled: the popover then stays
+    /// open for that click only (a switch in a menu).
+    static STAY_OPEN: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Called from the handler of a press inside a popover: this click does not close it.
+pub(crate) fn stay_open() {
+    STAY_OPEN.with(|c| c.set(true));
+}
 
 /// What a popover is kept inside.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -731,11 +743,15 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
             shell,
             &Rectangle::with_size(Size::INFINITE),
         );
+        // An item that asked to stay (see `stay_open`) keeps the menu up for this click.
+        let stay = STAY_OPEN.with(|c| c.replace(false));
         // A completed click on an item (it captured the release) closes the menu.
-        if matches!(
+        if !stay
+            && matches!(
             event,
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-        ) && cursor.is_over(bounds)
+            )
+            && cursor.is_over(bounds)
             && shell.is_event_captured()
             && !self.keep_open
         {

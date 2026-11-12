@@ -95,6 +95,11 @@ enum Kind<M> {
         checked: bool,
         on_press: M,
     },
+    /// A boolean setting shown as a switch after the label; toggling it leaves the menu open.
+    Switch {
+        checked: bool,
+        on_press: M,
+    },
     /// Opens another page of the menu in place of this one.
     Submenu {
         menu: Box<Menu<M>>,
@@ -138,6 +143,20 @@ impl<M> MenuItem<M> {
             destructive: false,
             disabled: false,
             kind: Kind::Check { checked, on_press },
+        }
+    }
+    /// A boolean setting as `label … [switch]`. Unlike [`check`](Self::check) it leaves the menu
+    /// open when toggled, so several can be changed in one visit.
+    pub fn switch(label: impl Into<String>, checked: bool, on_press: M) -> Self {
+        Self {
+            label: label.into(),
+            accel: None,
+            icon: None,
+            icon_side: None,
+            labels: None,
+            destructive: false,
+            disabled: false,
+            kind: Kind::Switch { checked, on_press },
         }
     }
     /// A row with a chevron that opens `menu` in place of this one: its items slide in from the
@@ -460,6 +479,26 @@ fn row_content<'a, M: 'a>(
         _ => None,
     };
 
+    // A switch is only drawn: the row's button takes the press (it has no handler of its own, so
+    // it would look disabled, hence the style).
+    let switch = match item.kind {
+        Kind::Switch { checked, .. } => Some(
+            iced::widget::toggler(checked)
+                .size(m.icon_size + 4.0)
+                .style(move |t: &Theme, s| {
+                    use iced::widget::toggler::Status;
+                    let s = match s {
+                        Status::Disabled { is_toggled } if !disabled => {
+                            Status::Active { is_toggled }
+                        }
+                        s => s,
+                    };
+                    crate::styles::toggler::default(t, s)
+                }),
+        ),
+        _ => None,
+    };
+
     let (mut lead, mut trail): (Vec<Element<'a, M>>, Vec<Element<'a, M>>) =
         (Vec::new(), Vec::new());
     for (to, el) in check.into_iter().chain(icon) {
@@ -483,7 +522,8 @@ fn row_content<'a, M: 'a>(
         .extend(lead)
         .push(lbl)
         .extend(accel.map(Element::from))
-        .extend(state.map(Element::from));
+        .extend(state.map(Element::from))
+        .extend(switch.map(Element::from));
     r = r.extend(trail);
     r.into()
 }
@@ -491,8 +531,27 @@ fn row_content<'a, M: 'a>(
 /// What choosing the item sends. A submenu row sends nothing: it opens a page.
 fn message<M: Clone>(item: &MenuItem<M>) -> Option<M> {
     match &item.kind {
-        Kind::Action { on_press } | Kind::Check { on_press, .. } => Some(on_press.clone()),
+        Kind::Action { on_press }
+        | Kind::Check { on_press, .. }
+        | Kind::Switch { on_press, .. } => Some(on_press.clone()),
         Kind::Submenu { .. } => None,
+    }
+}
+
+/// `b` sending what choosing `item` sends. A switch keeps the popover open while it does.
+fn pressed<'a, M: Clone + 'a>(
+    b: iced::widget::Button<'a, M, Theme>,
+    item: &MenuItem<M>,
+) -> iced::widget::Button<'a, M, Theme> {
+    match (item.disabled, message(item)) {
+        (false, Some(m)) if matches!(item.kind, Kind::Switch { .. }) => {
+            b.on_press_with(move || {
+                crate::widgets::popover::stay_open();
+                m.clone()
+            })
+        }
+        (false, Some(m)) => b.on_press(m),
+        _ => b,
     }
 }
 
@@ -557,12 +616,14 @@ fn dropdown_items<'a, M: Clone + 'a>(
                 continue;
             }
             out.push(
-                button(content)
-                    .padding(0)
-                    .width(Length::Fill)
-                    .style(sb::menu_item(false))
-                    .on_press_maybe(if item.disabled { None } else { message(item) })
-                    .into(),
+                pressed(
+                    button(content)
+                        .padding(0)
+                        .width(Length::Fill)
+                        .style(sb::menu_item(false)),
+                    item,
+                )
+                .into(),
             );
         }
     }
@@ -641,7 +702,7 @@ fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M,
             .iter()
             .filter(|i| !matches!(i.kind, Kind::Submenu { .. }))
             .map(|item| -> Element<'a, M> {
-                button(
+                let row_button = button(
                     container(row_content(
                         item,
                         menu.icon_side,
@@ -654,9 +715,8 @@ fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M,
                 )
                 .padding(0)
                 .width(Length::Fill)
-                .style(sb::list_row)
-                .on_press_maybe(if item.disabled { None } else { message(item) })
-                .into()
+                .style(sb::list_row);
+                pressed(row_button, item).into()
             })
             .collect();
         if !rows.is_empty() {
