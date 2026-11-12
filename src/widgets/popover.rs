@@ -145,6 +145,9 @@ pub struct Popover<'a, M> {
 
 struct State {
     open: bool,
+    /// The content was on screen since it was last reset: closing it puts it back as new, so a
+    /// menu that was left on a submenu opens on its first page again.
+    shown: bool,
     /// 0 → 1 while the popover opens; restarted each time it opens.
     appear: crate::layouts::animation::Progress,
 }
@@ -158,6 +161,7 @@ impl State {
         };
         Self {
             open,
+            shown: open,
             appear: crate::layouts::animation::Progress::new(start),
         }
     }
@@ -455,8 +459,15 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
         } = tree;
         let state = state.downcast_mut::<State>();
         if !state.open {
+            // Closed: forget where the content was left (the page of a submenu, a scroll), so
+            // it opens as new.
+            if state.shown {
+                state.shown = false;
+                children[1] = Tree::new(self.popover.as_widget());
+            }
             return None;
         }
+        state.shown = true;
         let b = layout.bounds();
         let anchor = Rectangle {
             x: b.x + translation.x,

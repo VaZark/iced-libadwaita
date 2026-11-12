@@ -95,7 +95,12 @@ enum Kind<M> {
         checked: bool,
         on_press: M,
     },
-    /// A boolean setting shown as a switch after the label; toggling it leaves the menu open.
+    /// One of several choices: a check mark while it is the chosen one. See [`MenuItem::select`].
+    Select {
+        selected: bool,
+        on_press: M,
+    },
+    /// A boolean setting shown as a switch after the label, at the end of the row.
     Switch {
         checked: bool,
         on_press: M,
@@ -115,12 +120,14 @@ pub struct MenuItem<M> {
     labels: Option<(String, String)>,
     destructive: bool,
     disabled: bool,
+    /// Whether choosing the item leaves the menu open: `None` is the kind's own default (a
+    /// choice or a switch stays, an action closes it).
+    keep_open: Option<bool>,
     kind: Kind<M>,
 }
 
 impl<M> MenuItem<M> {
-    /// A command (verb label, header capitalization).
-    pub fn action(label: impl Into<String>, on_press: M) -> Self {
+    fn of(label: impl Into<String>, kind: Kind<M>) -> Self {
         Self {
             label: label.into(),
             accel: None,
@@ -129,35 +136,39 @@ impl<M> MenuItem<M> {
             labels: None,
             destructive: false,
             disabled: false,
-            kind: Kind::Action { on_press },
+            keep_open: None,
+            kind,
         }
+    }
+
+    /// Whether choosing this item leaves the menu open. A command closes the menu (it has done
+    /// what it was asked, and often opens something); a choice, a check or a switch leaves it
+    /// open, so several can be changed in one visit. [`keep_open`](Self::keep_open) overrides
+    /// either.
+    fn stays_open(&self) -> bool {
+        self.keep_open.unwrap_or(matches!(
+            self.kind,
+            Kind::Check { .. } | Kind::Select { .. } | Kind::Switch { .. }
+        ))
+    }
+
+    /// A command (verb label, header capitalization).
+    pub fn action(label: impl Into<String>, on_press: M) -> Self {
+        Self::of(label, Kind::Action { on_press })
     }
     /// A setting with a check mark (adjective label).
     pub fn check(label: impl Into<String>, checked: bool, on_press: M) -> Self {
-        Self {
-            label: label.into(),
-            accel: None,
-            icon: None,
-            icon_side: None,
-            labels: None,
-            destructive: false,
-            disabled: false,
-            kind: Kind::Check { checked, on_press },
-        }
+        Self::of(label, Kind::Check { checked, on_press })
     }
-    /// A boolean setting as `label … [switch]`. Unlike [`check`](Self::check) it leaves the menu
-    /// open when toggled, so several can be changed in one visit.
+    /// One of several choices (a view, a sort order): a check mark while it is the chosen one,
+    /// whatever the menu's [`check_style`](Menu::check_style). It leaves the menu open.
+    pub fn select(label: impl Into<String>, selected: bool, on_press: M) -> Self {
+        Self::of(label, Kind::Select { selected, on_press })
+    }
+    /// A boolean setting as `label … [switch]`, the switch flush with the end of the row. It
+    /// leaves the menu open when toggled.
     pub fn switch(label: impl Into<String>, checked: bool, on_press: M) -> Self {
-        Self {
-            label: label.into(),
-            accel: None,
-            icon: None,
-            icon_side: None,
-            labels: None,
-            destructive: false,
-            disabled: false,
-            kind: Kind::Switch { checked, on_press },
-        }
+        Self::of(label, Kind::Switch { checked, on_press })
     }
     /// A row with a chevron that opens `menu` in place of this one: its items slide in from the
     /// end and a back row at their top slides them away again. Not a cascade beside the parent
@@ -165,18 +176,12 @@ impl<M> MenuItem<M> {
     /// row's label. In the full-page presentation and in [`Menu::sheet`], where there is nothing
     /// to slide, a submenu's items follow under its label instead.
     pub fn submenu(label: impl Into<String>, menu: Menu<M>) -> Self {
-        Self {
-            label: label.into(),
-            accel: None,
-            icon: None,
-            icon_side: None,
-            labels: None,
-            destructive: false,
-            disabled: false,
-            kind: Kind::Submenu {
+        Self::of(
+            label,
+            Kind::Submenu {
                 menu: Box::new(menu),
             },
-        }
+        )
     }
     /// Shown dimmed at the end, e.g. `"Ctrl+Q"`.
     pub fn accel(mut self, accel: impl Into<String>) -> Self {
@@ -198,6 +203,12 @@ impl<M> MenuItem<M> {
     /// Puts this item's icon on `side`, whatever the menu says.
     pub fn icon_side(mut self, side: MenuIconSide) -> Self {
         self.icon_side = Some(side);
+        self
+    }
+    /// Whether choosing the item leaves the menu open (`true`) or closes it (`false`), instead of
+    /// the default of its kind: a command closes the menu, a choice, a check or a switch does not.
+    pub fn keep_open(mut self, keep: bool) -> Self {
+        self.keep_open = Some(keep);
         self
     }
     /// Not available right now: dimmed text, no hover or press effect, cannot be activated.
@@ -402,7 +413,12 @@ fn slots<M>(menu: &Menu<M>) -> Slots {
             MenuIconSide::Start => s.lead = true,
             MenuIconSide::End => s.trail = true,
         };
-        if matches!(i.kind, Kind::Check { .. }) && menu.check_style == MenuCheckStyle::Mark {
+        let checked_kind = match i.kind {
+            Kind::Check { .. } => menu.check_style == MenuCheckStyle::Mark,
+            Kind::Select { .. } => true,
+            _ => false,
+        };
+        if checked_kind {
             mark(menu.icon_side);
         }
         if i.icon.is_some() {
@@ -434,8 +450,16 @@ fn row_content<'a, M: Clone + 'a>(
     // Check marks follow the menu's side; an icon may be moved by its item. A check item shows
     // its mark only while checked, but its slot is always there.
     let check: Option<(MenuIconSide, Element<'a, M>)> =
-        (style == MenuCheckStyle::Mark && matches!(item.kind, Kind::Check { .. })).then(|| {
-            let on = matches!(item.kind, Kind::Check { checked: true, .. });
+        (match item.kind {
+            Kind::Check { .. } => style == MenuCheckStyle::Mark,
+            Kind::Select { .. } => true,
+            _ => false,
+        })
+        .then(|| {
+            let on = matches!(
+                item.kind,
+                Kind::Check { checked: true, .. } | Kind::Select { selected: true, .. }
+            );
             let el: Element<'a, M> = if on {
                 Icon::Check
                     .view(m.icon_size)
@@ -511,7 +535,8 @@ fn row_content<'a, M: Clone + 'a>(
     if lead.is_empty() && slots.lead {
         lead.push(blank());
     }
-    if trail.is_empty() && slots.trail {
+    // A switch takes the end of the row itself, flush with its edge, so it needs no blank slot.
+    if trail.is_empty() && slots.trail && switch.is_none() {
         trail.push(blank());
     }
     let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
@@ -530,18 +555,19 @@ fn message<M: Clone>(item: &MenuItem<M>) -> Option<M> {
     match &item.kind {
         Kind::Action { on_press }
         | Kind::Check { on_press, .. }
+        | Kind::Select { on_press, .. }
         | Kind::Switch { on_press, .. } => Some(on_press.clone()),
         Kind::Submenu { .. } => None,
     }
 }
 
-/// `b` sending what choosing `item` sends. A switch keeps the popover open while it does.
+/// `b` sending what choosing `item` sends, keeping the popover open if the item stays open.
 fn pressed<'a, M: Clone + 'a>(
     b: iced::widget::Button<'a, M, Theme>,
     item: &MenuItem<M>,
 ) -> iced::widget::Button<'a, M, Theme> {
     match (item.disabled, message(item)) {
-        (false, Some(m)) if matches!(item.kind, Kind::Switch { .. }) => {
+        (false, Some(m)) if item.stays_open() => {
             b.on_press_with(move || {
                 crate::widgets::popover::stay_open();
                 m.clone()
@@ -825,6 +851,27 @@ impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_command_closes_the_menu_unless_the_item_says_otherwise() {
+        assert!(!MenuItem::action("Quit", ()).stays_open());
+        assert!(MenuItem::check("Show", true, ()).stays_open());
+        assert!(MenuItem::select("Notes", true, ()).stays_open());
+        assert!(MenuItem::switch("Closed", false, ()).stays_open());
+        // Either default can be overridden.
+        assert!(MenuItem::action("Refresh", ()).keep_open(true).stays_open());
+        assert!(!MenuItem::select("Pick", false, ()).keep_open(false).stays_open());
+    }
+
+    #[test]
+    fn a_select_item_takes_a_mark_slot_whatever_the_check_style() {
+        let text = Menu::new("View")
+            .check_style(MenuCheckStyle::Text)
+            .section([MenuItem::select("A", true, ())]);
+        assert!(slots(&text).trail);
+        let none = Menu::new("View").section([MenuItem::check("A", true, ())]);
+        assert!(!slots(&none).trail && !slots(&none).lead);
+    }
 
     #[test]
     fn presentation_follows_width() {
