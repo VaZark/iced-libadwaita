@@ -40,6 +40,9 @@ pub struct EntryRow<'a, M> {
     interaction: Interaction,
     required: bool,
     flat: bool,
+    spacing: Option<f32>,
+    padding: Option<iced::Padding>,
+    value_spacing: Option<f32>,
     metrics: Metrics,
 }
 impl<'a, M: 'a> EntryRow<'a, M> {
@@ -52,6 +55,9 @@ impl<'a, M: 'a> EntryRow<'a, M> {
             interaction: Interaction::default(),
             required: false,
             flat: false,
+            spacing: None,
+            padding: None,
+            value_spacing: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -76,6 +82,21 @@ impl<'a, M: 'a> EntryRow<'a, M> {
         self.required = value;
         self
     }
+    /// The gap between the label and the input (default: the theme's `space_xxs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding around the row's content (default: the theme's `row_padding`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// For a select row: the gap between the value and the arrow (default: the theme's `space_s`).
+    pub fn value_spacing(mut self, px: f32) -> Self {
+        self.value_spacing = Some(px.max(0.0));
+        self
+    }
     pub fn metrics(mut self, value: Metrics) -> Self {
         self.metrics = value;
         self
@@ -91,24 +112,30 @@ macro_rules! embedded {
             .width(Length::Fill)
     };
 }
-fn surface<'a, M: 'a>(content: impl Into<Element<'a, M>>, m: Metrics) -> Element<'a, M> {
+fn surface<'a, M: 'a>(
+    content: impl Into<Element<'a, M>>,
+    m: Metrics,
+    padding: iced::Padding,
+) -> Element<'a, M> {
     container(super::rows::row_frame(content, &m))
-        .padding(m.row_padding)
+        .padding(padding)
         .width(Length::Fill)
         .into()
 }
 impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
     fn from(e: EntryRow<'a, M>) -> Self {
         let m = e.metrics;
+        let pad = e.padding.unwrap_or(m.row_padding);
+        let gap = e.spacing.unwrap_or(m.space_xxs);
         let label_text = format!("{}{}", e.label, if e.required { " *" } else { "" });
         let label = || {
-            crate::Typography::default()
+            crate::Typography::desktop()
                 .caption(label_text.clone())
                 .style(crate::styles::text::dim)
         };
         let line = |input: Element<'a, M>| -> Element<'a, M> {
             column![label(), input]
-                .spacing(2)
+                .spacing(gap)
                 .width(Length::Fill)
                 .into()
         };
@@ -118,26 +145,28 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                 let input = embedded!(input, e.flat, m);
                 surface(
                     column![container(label()).padding(insets), input]
-                        .spacing(2)
+                        .spacing(gap)
                         .width(Length::Fill),
                     m,
+                    pad,
                 )
             }
-            EntryInput::Number(input) => surface(line(embedded!(input, e.flat, m).into()), m),
-            EntryInput::Date(input) => surface(line(embedded!(input, e.flat, m).into()), m),
-            EntryInput::Multiline(input) => surface(line(input.flat(e.flat).embedded(m).into()), m),
-            EntryInput::Custom(input) => surface(line(input), m),
+            EntryInput::Number(input) => surface(line(embedded!(input, e.flat, m).into()), m, pad),
+            EntryInput::Date(input) => surface(line(embedded!(input, e.flat, m).into()), m, pad),
+            EntryInput::Multiline(input) => surface(line(input.flat(e.flat).embedded(m).into()), m, pad),
+            EntryInput::Custom(input) => surface(line(input), m, pad),
             EntryInput::Switch { active, on_toggle } => {
                 let toggle = on_toggle(!active);
                 let sw = crate::components::switch(active).on_toggle(on_toggle);
                 button(surface(
                     row![
-                        container(crate::Typography::default().body(label_text.clone()))
+                        container(crate::Typography::desktop().body(label_text.clone()))
                             .width(Length::Fill),
                         sw
                     ]
                     .align_y(iced::Alignment::Center),
                     m,
+                    pad,
                 ))
                 .padding(0)
                 .width(Length::Fill)
@@ -161,8 +190,8 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                     EntryIcon::Select.view(m.icon_size)
                 ]
                 .align_y(iced::Alignment::Center)
-                .spacing(m.space_s);
-                super::Popover::new(surface(trigger, m), options)
+                .spacing(e.value_spacing.unwrap_or(m.space_s));
+                super::Popover::new(surface(trigger, m, pad), options)
                     .width(Length::Fill)
                     .padding(0)
                     .appearance(if e.flat {
@@ -339,6 +368,17 @@ impl<'a, M: Clone + 'a> EntryRow<'a, M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_entry_row_takes_its_gaps_and_padding() {
+        let r = EntryRow::<u8>::text("L", "v", |_| 0)
+            .spacing(1.0)
+            .padding([2.0, 3.0])
+            .value_spacing(4.0);
+        assert_eq!((r.spacing, r.value_spacing), (Some(1.0), Some(4.0)));
+        assert_eq!(r.padding, Some(iced::Padding::from([2.0, 3.0])));
+        let _: Element<'_, u8> = r.into();
+    }
     use iced::advanced::{Shell, clipboard, layout, renderer::Headless, widget::Tree};
     use iced::{Event, Point, Rectangle, Size, Vector, mouse};
 

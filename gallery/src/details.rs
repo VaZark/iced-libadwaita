@@ -120,30 +120,6 @@ impl Gallery {
         self.page_frame(col)
     }
 
-    /// A radius setting: its token, the live value and a number input for it (whole pixels up
-    /// to the token's maximum).
-    fn radius_row(
-        &self,
-        i: usize,
-        label: &'static str,
-        token: &'static str,
-        max: f32,
-        m: Metrics,
-    ) -> Element<'_> {
-        let value = [self.radius_m, self.radius_l, self.radius_toast][i];
-        w::ActionRow::new(label)
-            .subtitle(format!("{token} = {value:.0}px"))
-            .suffix(
-                w::NumberInput::new(&self.radius_text[i], move |t| Message::RadiusText(i, t))
-                    .min(0)
-                    .max(max as i32)
-                    .width(100.0)
-                    .metrics(m),
-            )
-            .metrics(m)
-            .into()
-    }
-
     /// What the Open button of a dialog, sheet or shell page sends.
     fn open_message(d: Detail) -> Option<Message> {
         Some(match d {
@@ -164,10 +140,10 @@ impl Gallery {
         let sp = m.space_m;
         let g = |t| self.group(t);
 
-        // A page with a playground shows it: one live component, its controls and its code.
+        // A page with a playground shows it: one live component and its controls.
         let played = self.plays.get(&d).and_then(|p| {
             plays::build(self, d, p, m)
-                .map(|(el, code)| p.view(m, el, code, move |x| Message::Play(d, x)))
+                .map(|el| p.view(m, el, move |x| Message::Play(d, x)))
         });
         let body: Element<'_> = if let Some(b) = played {
             b
@@ -400,7 +376,6 @@ impl Gallery {
             Detail::VirtualList => self.upstream.virtual_view(m).map(Message::Upstream),
             Detail::MultilineEntry => self.upstream.editable_view(m).map(Message::Upstream),
             Detail::PageHeader => self.upstream.header_view(m).map(Message::Upstream),
-            Detail::ThemeConfig => self.theme_cfg.view(m).map(Message::ThemeCfg),
             Detail::Surface => self.upstream.surface_view(m).map(Message::Upstream),
             Detail::FlowGrid => self.upstream.grid_view(m).map(Message::Upstream),
             Detail::TableGrid => self.upstream.table_grid_view(m).map(Message::Upstream),
@@ -453,7 +428,6 @@ impl Gallery {
             Detail::ShortcutLabel => self.inline(Inline::ShortcutLabel),
             Detail::MultiSelect => self.inline(Inline::MultiSelect),
             Detail::AnchoredPopover => self.inline(Inline::AnchoredPopover),
-            Detail::Surfaces => self.inline(Inline::Surfaces),
             Detail::AlertDialog
             | Detail::AboutDialog
             | Detail::ShortcutsDialog
@@ -469,7 +443,6 @@ impl Gallery {
             // Shown by its playground (see `plays.rs`).
             Detail::Tabs
             | Detail::Container
-            | Detail::ColorHelpers
             | Detail::IconToggle
             | Detail::ClipWindow
             | Detail::LineChart
@@ -607,24 +580,12 @@ impl Gallery {
                     g("Auto-dismiss")
                         .description("Each toast closes after the configured timeout (3000 ms by default), without a timer subscription. Off, they stay until dismissed.")
                         .push(w::SwitchRow::new("Auto-dismiss (configured timeout)", self.toast_auto, Message::ToastAuto).metrics(m)),
-                    g("Radius")
-                        .description("A toast's corner radius is its own theme token (default: a full pill).")
-                        .push(
-                            self.radius_row(2, "Toast radius", "radius_toast", Metrics::MAX_RADIUS_TOAST, m),
-                        ),
                     g("Placement")
                         .description("Where toasts appear, and the container they are placed in. Both are desktop config settings (`[toasts]`).")
                         .push(w::ComboRow::new("Position", &TOAST_POSITIONS, Some(self.toast_position), Message::ToastPosition))
                         .push(
-                            w::ToggleGroupRow::new(
-                                "Container",
-                                vec![
-                                    cmp::ToggleItem::new(w::ToastTarget::Window, "Window").icon(Icon::Window),
-                                    cmp::ToggleItem::new(w::ToastTarget::Content, "Content").icon(Icon::Sidebar),
-                                ],
-                                Some(self.toast_target),
-                                Message::ToastTarget,
-                            )
+                            w::ChoiceRow::new("Container", &[w::ToastTarget::Window, w::ToastTarget::Content], Some(self.toast_target), Message::ToastTarget)
+                                .icons(|t| Some(match t { w::ToastTarget::Window => Icon::Window, w::ToastTarget::Content => Icon::Sidebar }))
                             .subtitle("The whole window, or only the content area beside the sidebar")
                             .metrics(m),
                         ),
@@ -633,118 +594,7 @@ impl Gallery {
                 .into()
             }
             // ------------------------------------------------------------ theming
-            Detail::ThemeColors => {
-                let scheme = g("Accent").push(
-                    w::ActionRow::new("Accent color")
-                        .suffix(
-                            w::accent_picker(self.accent, Message::Accent)
-                                .custom(&self.accent_text, Message::AccentText),
-                        )
-                        .metrics(m),
-                );
-                let mut overrides = g("Overrides")
-                    .description("Edits to the theme's tokens.")
-                    .push(
-                        w::ActionRow::new("Transparency")
-                            .subtitle("Percent of the surfaces that is see-through")
-                            .suffix(
-                                w::NumberInput::new(&self.transparency_text, Message::Transparency)
-                                    .min(0)
-                                    .max(90)
-                                    .step(5)
-                                    .width(100.0)
-                                    .metrics(m),
-                            )
-                            .metrics(m),
-                    )
-                    .push(
-                        w::SwitchRow::new("Tint", self.tint_on, Message::TintOn)
-                            .subtitle("Opt-in: a color of its own mixed into the surfaces, its alpha the strength; their transparency is kept")
-                            .metrics(m),
-                    )
-                    ;
-                // Opt-in: the color appears once the tint is on.
-                if self.tint_on {
-                    overrides = overrides.push(
-                        w::ActionRow::new("Tint color")
-                            .suffix(
-                                w::ColorInput::new(
-                                    iad::primitives::color_picker::Hsva::from_rgba(self.tint.r, self.tint.g, self.tint.b, self.tint.a),
-                                    &self.tint_text,
-                                    Message::TintText,
-                                    Message::Tint,
-                                )
-                                .alpha(true)
-                                .metrics(m),
-                            )
-                            .metrics(m),
-                    );
-                }
-                overrides = overrides
-                    .push(w::SwitchRow::new("Compact metrics", self.compact, Message::Compact).metrics(m))
-                    .push(w::SwitchRow::new("Override card color", self.card_override, Message::CardOverride).metrics(m));
-                column![scheme, overrides].spacing(m.group_spacing).into()
-            }
-
-            Detail::ThemeShape => {
-                // Everything here reads the theme's radii at draw time, so the sliders visibly
-                // change it: control radius rounds buttons, entries and toggles; card radius
-                // rounds the card and boxed list; toast radius rounds toasts.
-                let preview = column![
-                    row![
-                        cmp::raised_button(lbl("Default")).on_press(Message::Noop),
-                        cmp::suggested_button(lbl("Suggested")).on_press(Message::Noop),
-                        cmp::destructive_button(lbl("Destructive")).on_press(Message::Noop),
-                    ]
-                    .spacing(m.space_s)
-                    .wrap(),
-                    cmp::entry("Entry", &self.name).on_input(Message::Name).metrics(m),
-                    Element::from(cmp::toggle_group(
-                        vec![
-                            cmp::ToggleItem::new(Tab::One, "One"),
-                            cmp::ToggleItem::new(Tab::Two, "Two"),
-                            cmp::ToggleItem::new(Tab::Three, "Three"),
-                        ],
-                        Some(self.tab),
-                        Message::Tab,
-                    )),
-                    w::boxed_list([
-                        Element::from(w::ActionRow::new("Row in a boxed list").subtitle("Rounded by the card radius").metrics(m)),
-                        Element::from(w::ActionRow::new("Second row").metrics(m)),
-                    ]),
-                ]
-                .spacing(m.space_m);
-                column![
-                    g("Live preview").push(w::card(preview)),
-                    g("Radii")
-                        .push(
-                            self.radius_row(0, "Control radius", "radius_m", Metrics::MAX_RADIUS_M, m),
-                        )
-                        .push(
-                            self.radius_row(1, "Card radius", "radius_l", Metrics::MAX_RADIUS_L, m),
-                        )
-                        .push(
-                            self.radius_row(2, "Toast radius", "radius_toast", Metrics::MAX_RADIUS_TOAST, m),
-                        ),
-                    g("Shadows")
-                        .push(w::SwitchRow::new("Shadows", self.shadows_on, Message::Shadows).subtitle("Adwaita elevation: cards, popovers, dialogs").metrics(m))
-                        .push(
-                            w::SliderRow::new("Shadow intensity", self.shadow_intensity, 0.0..=2.0, Message::ShadowIntensity)
-                                .subtitle(format!("{:.1}x", self.shadow_intensity))
-                                .step(0.1)
-                                .metrics(m),
-                        )
-                        .push(
-                            w::SliderRow::new("Shadow size", self.shadow_scale, 0.0..=2.0, Message::ShadowScale)
-                                .subtitle(format!("{:.1}x", self.shadow_scale))
-                                .step(0.1)
-                                .metrics(m),
-                        ),
-                ]
-                .spacing(m.group_spacing)
-                .into()
-            }
-            Detail::ThemeMotion => column![
+            Detail::Motion => column![
                 g("Animations")
                     .description("libadwaita's easings and springs; honors the system enable-animations setting.")
                     .push(w::SwitchRow::new("Animations", self.anim_enabled, Message::Animations).subtitle("Off: every transition jumps to its end value").metrics(m))
@@ -767,19 +617,11 @@ impl Gallery {
                     ),
             ]
             .into(),
-            Detail::ThemeWindow => column![
+            Detail::WindowShell => column![
                 g("Menu")
                     .push(
-                        w::ToggleGroupRow::new(
-                            "Menu presentation",
-                            vec![
-                                cmp::ToggleItem::new(MenuMode::Auto, "Auto").icon(Icon::Settings),
-                                cmp::ToggleItem::new(MenuMode::Dropdown, "Dropdown").icon(Icon::GoDown),
-                                cmp::ToggleItem::new(MenuMode::FullPage, "Full page").icon(Icon::Window),
-                            ],
-                            Some(self.menu_mode),
-                            Message::MenuMode,
-                        )
+                        w::ChoiceRow::new("Menu presentation", &MenuMode::ALL, Some(self.menu_mode), Message::MenuMode)
+                            .icons(|m| Some(m.icon()))
                         .subtitle("Auto follows the desktop config (full page at the mobile breakpoint)")
                         .metrics(m),
                     ),
@@ -789,16 +631,7 @@ impl Gallery {
                             .subtitle("Drawer over the content, or the parent page of a stack"),
                     )
                     .push(
-                        w::ToggleGroupRow::new(
-                            "Row padding",
-                            vec![
-                                cmp::ToggleItem::new(w::SidebarPadding::Sm, "Small"),
-                                cmp::ToggleItem::new(w::SidebarPadding::Md, "Medium"),
-                                cmp::ToggleItem::new(w::SidebarPadding::Lg, "Large"),
-                            ],
-                            Some(self.sidebar_padding),
-                            Message::SidebarPadding,
-                        )
+                        w::ChoiceRow::new("Row padding", &w::SidebarPadding::ALL, Some(self.sidebar_padding), Message::SidebarPadding)
                         .subtitle("Small like Mantine, medium like Nautilus, large like GNOME Settings")
                         .metrics(m),
                     ),
@@ -831,14 +664,6 @@ impl Gallery {
                 .into()
             }
         }
-        };
-        // A page without controls still has the Preview / Code switch: its demo is the preview,
-        // the snippet of the calls it makes is the code.
-        let body: Element<'_> = match (plays::snippet(d), self.plays.get(&d)) {
-            (Some(code), Some(p)) => {
-                p.view(m, body, code.to_string(), move |x| Message::Play(d, x))
-            }
-            _ => body,
         };
         self.page_frame_sized(body, d.container_size())
     }
@@ -1054,16 +879,8 @@ impl Gallery {
                         w::card(cmp::suggested_button(ty::label("Open sheet")).on_press(Message::Sheet(true))),
                     ),
                     g("Presentation").push(
-                        w::ToggleGroupRow::new(
-                            "Menu presentation",
-                            vec![
-                                cmp::ToggleItem::new(MenuMode::Auto, "Auto").icon(Icon::Settings),
-                                cmp::ToggleItem::new(MenuMode::Dropdown, "Dropdown").icon(Icon::GoDown),
-                                cmp::ToggleItem::new(MenuMode::FullPage, "Full page").icon(Icon::Window),
-                            ],
-                            Some(self.menu_mode),
-                            Message::MenuMode,
-                        )
+                        w::ChoiceRow::new("Menu presentation", &MenuMode::ALL, Some(self.menu_mode), Message::MenuMode)
+                            .icons(|m| Some(m.icon()))
                         .subtitle("Auto follows the desktop config")
                         .metrics(m),
                     ),
@@ -1117,18 +934,6 @@ impl Gallery {
                 .spacing(sp)
                 .align_y(iced::Alignment::Center);
                 column![g("Avatar").push(w::card(avatars))].into()
-            }
-            Inline::Surfaces => {
-                let sem = self.build_theme().semantic;
-                let surfaces = column![
-                    row![cmp::color_swatch("window", sem.window), cmp::color_swatch("view", sem.view), cmp::color_swatch("headerbar", sem.headerbar)].spacing(m.space_s),
-                    row![cmp::color_swatch("card", sem.card), cmp::color_swatch("dialog", sem.dialog), cmp::color_swatch("popover", sem.popover)].spacing(m.space_s),
-                    row![cmp::color_swatch("sidebar", sem.sidebar), cmp::color_swatch("thumbnail", sem.thumbnail), cmp::color_swatch("osd", sem.osd)].spacing(m.space_s),
-                    row![cmp::status_swatch("accent", sem.accent), cmp::status_swatch("destructive", sem.destructive), cmp::status_swatch("success", sem.success)].spacing(m.space_s),
-                    row![cmp::status_swatch("warning", sem.warning), cmp::status_swatch("error", sem.error)].spacing(m.space_s),
-                ]
-                .spacing(m.space_s);
-                column![g("Semantic surfaces").push(w::card(surfaces))].into()
             }
             Inline::Tag => {
                 let tags = row![
@@ -1365,10 +1170,6 @@ impl Gallery {
             column![
                 self.group("Text styles").push(w::card(typo)),
                 self.group("Text colors").push(w::card(colors)),
-                playground::code_block(
-                    m,
-                    "title_1(\"Title 1\")   // title_2, title_3, title_4, heading\nbody(\"Body text\")\ncaption(\"Caption\")   // caption_heading, monospace, dim_label\n\nbody(\"Accent\").style(style::text::accent) // success, warning, error, destructive".to_string(),
-                ),
             ]
             .spacing(m.group_spacing),
         )

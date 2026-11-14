@@ -13,6 +13,10 @@ pub struct Banner<M> {
     on_button: Option<M>,
     revealed: bool,
     text_color: Option<iced::Color>,
+    spacing: Option<f32>,
+    padding: Option<iced::Padding>,
+    button_padding: Option<iced::Padding>,
+    title_align: Horizontal,
     metrics: Metrics,
 }
 
@@ -28,6 +32,10 @@ impl<M> Banner<M> {
             on_button: None,
             revealed: true,
             text_color: None,
+            spacing: None,
+            padding: None,
+            button_padding: None,
+            title_align: Horizontal::Center,
             metrics: Metrics::desktop(),
         }
     }
@@ -40,6 +48,27 @@ impl<M> Banner<M> {
     /// the banner fill (CSS `color-contrast()`).
     pub fn text_color(mut self, c: iced::Color) -> Self {
         self.text_color = Some(c);
+        self
+    }
+    /// The gap between the title and the button (default: the theme's `space_m`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding around the banner's content (default: the theme's `space_s` above and below,
+    /// `space_m` at the sides).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// The padding of the button (default: the theme's `button_padding`).
+    pub fn button_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.button_padding = Some(p.into());
+        self
+    }
+    /// Where the title sits in the space the button leaves (default `Horizontal::Center`).
+    pub fn title_align(mut self, a: Horizontal) -> Self {
+        self.title_align = a;
         self
     }
     pub fn revealed(mut self, r: bool) -> Self {
@@ -55,14 +84,14 @@ impl<'a, M: Clone + 'a> From<Banner<M>> for Element<'a, M> {
         let mut r = row![
             container(text(b.title))
                 .width(Length::Fill)
-                .align_x(Horizontal::Center)
+                .align_x(b.title_align)
         ]
         .align_y(Vertical::Center)
-        .spacing(m.space_m);
+        .spacing(b.spacing.unwrap_or(m.space_m));
         if let (Some(l), Some(msg)) = (b.button_label, b.on_button) {
             r = r.push(
                 button(text(l))
-                    .padding(m.button_padding)
+                    .padding(b.button_padding.unwrap_or(m.button_padding))
                     .style(move |t, s| {
                         let mut st = sb::flat(t, s);
                         let fg = override_fg.unwrap_or(t.semantic.accent.fg);
@@ -82,7 +111,7 @@ impl<'a, M: Clone + 'a> From<Banner<M>> for Element<'a, M> {
             );
         }
         let banner = container(r)
-            .padding([m.space_s, m.space_m])
+            .padding(b.padding.unwrap_or([m.space_s, m.space_m].into()))
             .width(Length::Fill)
             .style(move |t: &crate::Theme| {
                 let mut st = sc::banner(t);
@@ -93,5 +122,24 @@ impl<'a, M: Clone + 'a> From<Banner<M>> for Element<'a, M> {
             });
         // Hidden by default; `revealed` slides it in/out (250ms, ADW_EASE).
         crate::layouts::reveal(banner, b.revealed).into()
+    }
+}
+
+#[cfg(test)]
+mod spacing_params_tests {
+    use super::*;
+
+    #[test]
+    fn a_banner_takes_spacing_padding_and_title_alignment() {
+        let b = Banner::<u8>::new("Hi")
+            .button("Go", 1)
+            .spacing(3.0)
+            .padding([1.0, 2.0])
+            .button_padding(4.0)
+            .title_align(Horizontal::Left);
+        assert_eq!(b.spacing, Some(3.0));
+        assert_eq!(b.padding, Some(iced::Padding::from([1.0, 2.0])));
+        assert_eq!(b.title_align, Horizontal::Left);
+        let _: Element<'_, u8> = b.into();
     }
 }

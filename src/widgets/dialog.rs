@@ -66,6 +66,8 @@ pub struct AlertDialog<'a, M> {
     body: Option<String>,
     child: Option<Element<'a, M>>,
     responses: Vec<(String, ResponseAppearance, M)>,
+    spacing: Option<f32>,
+    padding: Option<iced::Padding>,
     metrics: Metrics,
 }
 
@@ -76,6 +78,8 @@ impl<'a, M> AlertDialog<'a, M> {
             body: None,
             child: None,
             responses: Vec::new(),
+            spacing: None,
+            padding: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -96,6 +100,16 @@ impl<'a, M> AlertDialog<'a, M> {
         on_press: M,
     ) -> Self {
         self.responses.push((label.into(), appearance, on_press));
+        self
+    }
+    /// The gap between the heading, the body and the extra child (default: the theme's `space_m`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding around the heading and body (default: the theme's `dialog_padding`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -121,9 +135,9 @@ fn separator_h<'a, M: 'a>() -> Element<'a, M> {
 impl<'a, M: Clone + 'a> From<AlertDialog<'a, M>> for Element<'a, M> {
     fn from(a: AlertDialog<'a, M>) -> Self {
         let m = a.metrics;
-        let t = Typography::default();
+        let t = Typography::desktop();
         let mut body = column![t.title_2(a.heading).align_x(Horizontal::Center)]
-            .spacing(m.space_m)
+            .spacing(a.spacing.unwrap_or(m.space_m))
             .align_x(Horizontal::Center)
             .width(Length::Fill);
         if let Some(b) = a.body {
@@ -142,7 +156,7 @@ impl<'a, M: Clone + 'a> From<AlertDialog<'a, M>> for Element<'a, M> {
             let bold = appearance != ResponseAppearance::Default;
             let role = match appearance {
                 ResponseAppearance::Default => Role::Neutral,
-                ResponseAppearance::Suggested => Role::Accent,
+                ResponseAppearance::Suggested => Role::Primary,
                 ResponseAppearance::Destructive => Role::Destructive,
             };
             let lbl = text(label)
@@ -181,7 +195,7 @@ impl<'a, M: Clone + 'a> From<AlertDialog<'a, M>> for Element<'a, M> {
         }
 
         container(column![
-            container(body).padding(m.dialog_padding),
+            container(body).padding(a.padding.unwrap_or(m.dialog_padding)),
             separator_h(),
             buttons
         ])
@@ -203,6 +217,9 @@ pub struct AboutDialog<'a, M> {
     license: Option<String>,
     icon: Option<Element<'a, M>>,
     on_close: Option<M>,
+    spacing: Option<f32>,
+    padding: Option<iced::Padding>,
+    align: Horizontal,
 }
 
 impl<'a, M> AboutDialog<'a, M> {
@@ -216,6 +233,9 @@ impl<'a, M> AboutDialog<'a, M> {
             license: None,
             icon: None,
             on_close: None,
+            spacing: None,
+            padding: None,
+            align: Horizontal::Center,
         }
     }
     pub fn developer_name(mut self, v: impl Into<String>) -> Self {
@@ -246,15 +266,31 @@ impl<'a, M> AboutDialog<'a, M> {
         self.on_close = Some(m);
         self
     }
+    /// The gap between the icon, the name, the version and the other lines (default: the
+    /// theme's `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding around the content (default: the theme's `dialog_padding`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// How the lines sit across the dialog (default `Horizontal::Center`).
+    pub fn align(mut self, a: Horizontal) -> Self {
+        self.align = a;
+        self
+    }
 }
 
 impl<'a, M: Clone + 'a> From<AboutDialog<'a, M>> for Element<'a, M> {
     fn from(a: AboutDialog<'a, M>) -> Self {
         let m = Metrics::desktop();
-        let t = Typography::default();
+        let t = Typography::desktop();
         let mut col = column![]
-            .spacing(m.space_s)
-            .align_x(Horizontal::Center)
+            .spacing(a.spacing.unwrap_or(m.space_s))
+            .align_x(a.align)
             .width(Length::Fill);
         if let Some(i) = a.icon {
             col = col.push(i);
@@ -266,7 +302,7 @@ impl<'a, M: Clone + 'a> From<AboutDialog<'a, M>> for Element<'a, M> {
         if let Some(v) = a.version {
             col = col.push(
                 container(t.caption(v))
-                    .padding([2.0, 10.0])
+                    .padding(crate::Metrics::desktop().small_button_padding)
                     .style(sc::tinted(Role::Accent)),
             );
         }
@@ -279,7 +315,7 @@ impl<'a, M: Clone + 'a> From<AboutDialog<'a, M>> for Element<'a, M> {
         if let Some(l) = a.license {
             col = col.push(t.caption(l).style(st::dim));
         }
-        let mut c = column![container(col).padding(m.dialog_padding)];
+        let mut c = column![container(col).padding(a.padding.unwrap_or(m.dialog_padding))];
         if let Some(msg) = a.on_close {
             c = c.push(separator_h()).push(
                 button(container(text("Close")).center(Length::Fill))
@@ -309,7 +345,7 @@ pub fn shortcuts_dialog<'a, M: Clone + 'a>(
     on_close: M,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
-    let t = Typography::default();
+    let t = Typography::desktop();
     let mut col = column![].spacing(m.space_l);
     for (title, items) in sections {
         let mut list = column![t.heading(title)].spacing(m.space_s);
@@ -378,4 +414,27 @@ fn dialog_frame<'a, M: Clone + 'a>(
         .clip(true)
         .style(sc::dialog)
         .into()
+}
+
+#[cfg(test)]
+mod spacing_params_tests {
+    use super::*;
+
+    #[test]
+    fn dialogs_take_spacing_and_padding() {
+        let a = AlertDialog::<u8>::new("H")
+            .body("b")
+            .response("OK", ResponseAppearance::Default, 1)
+            .spacing(3.0)
+            .padding(5.0);
+        assert_eq!((a.spacing, a.padding), (Some(3.0), Some(iced::Padding::from(5.0))));
+        let _: Element<'_, u8> = a.into();
+        let b = AboutDialog::<u8>::new("App")
+            .version("1")
+            .spacing(2.0)
+            .padding([1.0, 2.0])
+            .align(Horizontal::Left);
+        assert_eq!(b.align, Horizontal::Left);
+        let _: Element<'_, u8> = b.into();
+    }
 }

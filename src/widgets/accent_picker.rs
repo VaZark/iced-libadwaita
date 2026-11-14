@@ -21,6 +21,7 @@ pub struct AccentPicker<'a, M> {
     dialog: bool,
     scrim: bool,
     close_on_outside: bool,
+    spacing: Option<f32>,
     metrics: Metrics,
 }
 
@@ -35,6 +36,7 @@ pub fn accent_picker<'a, M: Clone + 'a>(
         dialog: false,
         scrim: true,
         close_on_outside: true,
+        spacing: None,
         metrics: Metrics::desktop(),
     }
 }
@@ -45,6 +47,11 @@ impl<'a, M: Clone + 'a> AccentPicker<'a, M> {
     /// [`AccentColor::parse`] and select the result.
     pub fn custom(mut self, text: &'a str, on_text: impl Fn(String) -> M + 'a) -> Self {
         self.custom = Some((text, std::rc::Rc::new(on_text)));
+        self
+    }
+    /// The gap between swatches (default `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
         self
     }
     /// Opens the color picker as a dialog centered in the window (default: a popover).
@@ -145,6 +152,21 @@ impl<'a, M: Clone + 'a> From<AccentPicker<'a, M>> for Element<'a, M> {
                     .into(),
             );
         }
-        row(swatches).spacing(m.space_s).wrap().into()
+        row(swatches)
+            .spacing(p.spacing.unwrap_or(m.space_s))
+            .wrap()
+            .into()
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_swatch_gap_is_a_parameter() {
+        let p = accent_picker(AccentColor::Blue, |_| ()).spacing(3.0);
+        assert_eq!(p.spacing, Some(3.0));
+        let _: Element<'_, ()> = p.into();
     }
 }

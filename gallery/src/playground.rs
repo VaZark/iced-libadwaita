@@ -1,5 +1,5 @@
 //! A playground, after Mantine's docs "configurator" demos: one live component and a panel of
-//! controls for its properties, with the code that builds what is shown. A page uses one
+//! controls for its properties. A page uses one
 //! wherever a single instance can express the component; it keeps separate static demos only
 //! where a playground cannot (several states side by side, a different layout per size).
 //!
@@ -11,12 +11,12 @@
 //!     Spec::slider("value", "Value", 0.0..=100.0, 40.0),  // a slider, to scrub a value
 //! ]);
 //! // update:  Msg::Play(m) => self.play.update(m)
-//! // view:    self.play.view(metrics, preview, code, Msg::Play)
+//! // view:    self.play.view(metrics, preview, Msg::Play)
 //! ```
 
 use iced_adaptive_design as iad;
 
-use iad::components::{ToggleItem, typography as ty};
+use iad::components::typography as ty;
 use iad::{Element, Metrics};
 use iad::{components as cmp, widgets as w};
 use iced::Length;
@@ -118,8 +118,6 @@ pub enum Msg {
     NumberText(&'static str, String),
     Text(&'static str, String),
     Reset,
-    /// The Preview / Code switch: `true` is Code.
-    Tab(bool),
 }
 
 pub struct Playground {
@@ -128,8 +126,6 @@ pub struct Playground {
     /// What each number input shows (empty for the other controls): kept as typed, so typing is
     /// not interrupted.
     texts: Vec<String>,
-    /// The Code tab is showing (else Preview).
-    code: bool,
 }
 
 /// What a number input shows at the default (empty for the other kinds).
@@ -160,14 +156,11 @@ impl Playground {
             specs,
             values,
             texts,
-            // GALLERY_CODE=1 starts every page on its Code tab (for screenshots).
-            code: std::env::var_os("GALLERY_CODE").is_some(),
         }
     }
 
     pub fn update(&mut self, m: Msg) {
         match m {
-            Msg::Tab(code) => self.code = code,
             Msg::Reset => {
                 self.values = self.specs.iter().map(default_of).collect();
                 self.texts = self.specs.iter().map(default_text).collect();
@@ -241,7 +234,7 @@ impl Playground {
             _ => 0.0,
         }
     }
-    /// Whether `key` is not at its default (to leave defaults out of the code).
+    /// Whether `key` is not at its default.
     pub fn changed(&self, key: &str) -> bool {
         self.specs
             .iter()
@@ -249,25 +242,16 @@ impl Playground {
             .is_some_and(|i| self.values[i] != default_of(&self.specs[i]))
     }
 
-    /// A Preview / Code switch over the component and its code, then the properties panel.
-    /// With no controls (a page that only has a snippet) the preview is the page's own demo,
-    /// unframed, and there is no panel. `wrap` turns a [`Msg`] into the page's message.
+    /// The component in a frame, then the properties panel. `wrap` turns a [`Msg`] into the
+    /// page's message.
     pub fn view<'a, M: Clone + 'a>(
         &'a self,
         m: Metrics,
         preview: Element<'a, M>,
-        code: String,
         wrap: impl Fn(Msg) -> M + Copy + 'a,
     ) -> Element<'a, M> {
-        let tabs = tab_row(m, self.code, move |c| wrap(Msg::Tab(c)));
         let framed = !self.specs.is_empty();
-        let stage: Element<'a, M> = if self.code {
-            container(ty::monospace(code).size(13))
-                .padding(m.space_m)
-                .width(Length::Fill)
-                .style(frame)
-                .into()
-        } else if framed {
+        let stage: Element<'a, M> = if framed {
             container(preview)
                 .padding(m.space_l)
                 .width(Length::Fill)
@@ -276,7 +260,7 @@ impl Playground {
         } else {
             preview
         };
-        let mut page = column![tabs, stage].spacing(m.space_m);
+        let mut page = column![stage].spacing(m.space_m);
         if framed {
             let mut props = w::PreferencesGroup::<M>::new()
                 .title("Properties")
@@ -293,20 +277,6 @@ impl Playground {
     }
 }
 
-/// The Preview / Code tabs: the library's `Tabs` in the floating variant, as in Mantine's docs.
-fn tab_row<'a, M: Clone + 'a>(
-    m: Metrics,
-    code: bool,
-    on_tab: impl Fn(bool) -> M + Copy + 'a,
-) -> Element<'a, M> {
-    w::Tabs::new(Some(code), on_tab)
-        .variant(w::TabsVariant::Floating)
-        .tab(w::TabItem::new(false, "Preview"))
-        .tab(w::TabItem::new(true, "Code"))
-        .metrics(m)
-        .into()
-}
-
 /// The preview's frame: just a hairline border around the page's own background, so the
 /// component sits as it would in an app. No fill, no card, no shadow.
 fn frame(theme: &iad::Theme) -> iced::widget::container::Style {
@@ -318,20 +288,6 @@ fn frame(theme: &iad::Theme) -> iced::widget::container::Style {
         },
         ..Default::default()
     }
-}
-
-/// A "Code" section: the snippet in a plain frame, like the playground's. Pages that cannot be a
-/// playground show one too.
-pub fn code_block<'a, M: 'a>(m: Metrics, code: String) -> Element<'a, M> {
-    column![
-        ty::heading("Code"),
-        container(ty::monospace(code).size(13))
-            .padding(m.space_m)
-            .width(Length::Fill)
-            .style(frame)
-    ]
-    .spacing(m.space_m)
-    .into()
 }
 
 fn control<'a, M: Clone + 'a>(
@@ -349,14 +305,14 @@ fn control<'a, M: Clone + 'a>(
                 .into()
         }
         (Kind::Choice(options, _), Value::Choice(i)) => {
-            let items = options
-                .iter()
-                .enumerate()
-                .map(|(n, o)| ToggleItem::new(n, *o))
-                .collect();
-            w::ToggleGroupRow::new(s.label, items, Some(*i), move |n| wrap(Msg::Choice(key, n)))
-                .metrics(m)
-                .into()
+            // A toggle group while the row is wide, a dropdown when it is narrow (many options).
+            let options: &'a [&'static str] = options;
+            w::ChoiceRow::new(s.label, options, options.get(*i).copied(), move |label| {
+                let n = options.iter().position(|o| *o == label).unwrap_or(0);
+                wrap(Msg::Choice(key, n))
+            })
+            .metrics(m)
+            .into()
         }
         (Kind::Number(range, default), Value::Number(_)) => {
             let rule = number_rule(range, *default);

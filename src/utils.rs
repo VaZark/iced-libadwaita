@@ -6,7 +6,6 @@
 
 use crate::{Scheme, Theme, config};
 use iced::{Subscription, Task};
-use std::time::Duration;
 
 // Per-process user choice; never writes desktop settings or the shared config file.
 static SCHEME_OVERRIDE: crate::system::AtomicScheme = crate::system::AtomicScheme::new();
@@ -41,6 +40,7 @@ fn scheme_with_override(
     }
     match config.color_scheme {
         config::Pick::Fixed(scheme) => scheme,
+        config::Pick::System if config.desktop_opt_out => Scheme::Light,
         config::Pick::System => detected.unwrap_or(Scheme::Light),
     }
 }
@@ -60,54 +60,28 @@ pub fn theme() -> Theme {
 /// Current effective appearance. Desktop settings are shared across the process.
 pub fn theme_settings() -> ThemeSettings {
     let config = config::current();
-    effective_settings(
-        &config,
-        crate::system::color_scheme(),
-        crate::system::desktop_preferences().icon_theme,
-    )
+    effective_settings(&config, crate::system::color_scheme())
 }
 
-fn effective_settings(
-    config: &config::Config,
-    scheme: Option<Scheme>,
-    icons: Option<String>,
-) -> ThemeSettings {
+fn effective_settings(config: &config::Config, scheme: Option<Scheme>) -> ThemeSettings {
     ThemeSettings {
         scheme: effective_scheme(config, scheme),
         icon_theme: match &config.icon_theme {
             config::Pick::Fixed(value) => value.clone(),
-            config::Pick::System => icons.unwrap_or_else(|| "hicolor".into()),
+            config::Pick::System => "hicolor".into(),
         },
     }
 }
 
 /// Detect the initial desktop scheme using iced's native settings/portal integration.
-/// Reading the result also initializes shared toolkit icon-theme preferences.
 pub fn detect_theme() -> Task<ThemeSettings> {
     crate::system::detect_color_scheme().map(|_| theme_settings())
 }
 
-/// Follow native color-scheme events and changes to desktop-neutral GTK settings files.
-/// File preferences are checked every second; identical snapshots are not emitted repeatedly.
-/// Map this subscription to an application message so the new theme is drawn.
+/// Follow the portal's color-scheme changes. Map this subscription to an application message so
+/// the new theme is drawn.
 pub fn follow_theme() -> Subscription<ThemeSettings> {
-    Subscription::batch([
-        crate::system::follow_color_scheme().map(|_| theme_settings()),
-        Subscription::run(theme_file_changes),
-    ])
-}
-
-fn theme_file_changes() -> impl iced::futures::Stream<Item = ThemeSettings> {
-    iced::futures::stream::unfold(None, |mut previous| async move {
-        loop {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            let next = theme_settings();
-            if previous.as_ref() != Some(&next) {
-                previous = Some(next.clone());
-                return Some((next, previous));
-            }
-        }
-    })
+    crate::system::follow_color_scheme().map(|_| theme_settings())
 }
 
 #[cfg(test)]
@@ -140,27 +114,27 @@ mod tests {
     #[test]
     fn explicit_global_configuration_wins_over_detected_theme_changes() {
         let mut config = config::Config::default();
-        let system = effective_settings(&config, Some(Scheme::Dark), Some("breeze-dark".into()));
+        let system = effective_settings(&config, Some(Scheme::Dark));
         assert_eq!(
             system,
             ThemeSettings {
                 scheme: Scheme::Dark,
-                icon_theme: "breeze-dark".into()
+                icon_theme: "hicolor".into()
             }
         );
-        let changed = effective_settings(&config, Some(Scheme::Light), Some("Papirus".into()));
+        let changed = effective_settings(&config, Some(Scheme::Light));
         assert_ne!(system, changed);
         config.color_scheme = config::Pick::Fixed(Scheme::Light);
         config.icon_theme = config::Pick::Fixed("custom".into());
         assert_eq!(
-            effective_settings(&config, Some(Scheme::Dark), Some("breeze-dark".into())),
+            effective_settings(&config, Some(Scheme::Dark)),
             ThemeSettings {
                 scheme: Scheme::Light,
                 icon_theme: "custom".into()
             }
         );
         assert_eq!(
-            effective_settings(&config::Config::default(), None, None),
+            effective_settings(&config::Config::default(), None),
             ThemeSettings {
                 scheme: Scheme::Light,
                 icon_theme: "hicolor".into()

@@ -388,6 +388,8 @@ pub struct ColorPicker<'a, M> {
     format: Format,
     readout: bool,
     width: Length,
+    spacing: Option<f32>,
+    swatch_spacing: Option<f32>,
     metrics: Metrics,
 }
 
@@ -401,6 +403,8 @@ impl<'a, M: Clone + 'a> ColorPicker<'a, M> {
             format: Format::Hex,
             readout: true,
             width: Length::Fixed(240.0),
+            spacing: None,
+            swatch_spacing: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -430,6 +434,16 @@ impl<'a, M: Clone + 'a> ColorPicker<'a, M> {
     }
     pub fn width(mut self, w: impl Into<Length>) -> Self {
         self.width = w.into();
+        self
+    }
+    /// The gap between the square and sliders, the swatches and the readout (default `space_m`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The gap between swatches (default `space_xs`).
+    pub fn swatch_spacing(mut self, px: f32) -> Self {
+        self.swatch_spacing = Some(px);
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -468,7 +482,7 @@ impl<'a, M: Clone + 'a> From<ColorPicker<'a, M>> for Element<'a, M> {
                 .map(|f| Box::new(move |c| f(c)) as Box<dyn Fn(Hsva) -> M + 'a>),
             metrics: m,
         };
-        let mut col = column![Element::from(surface)].spacing(m.space_m);
+        let mut col = column![Element::from(surface)].spacing(p.spacing.unwrap_or(m.space_m));
         if !p.swatches.is_empty() {
             let chips: Vec<Element<'a, M>> = p
                 .swatches
@@ -482,7 +496,7 @@ impl<'a, M: Clone + 'a> From<ColorPicker<'a, M>> for Element<'a, M> {
                         .into()
                 })
                 .collect();
-            col = col.push(wrap_box(chips, m.space_xs));
+            col = col.push(wrap_box(chips, p.swatch_spacing.unwrap_or(m.space_xs)));
         }
         if p.readout {
             let format = if p.alpha && !p.format.has_alpha() {
@@ -523,6 +537,7 @@ pub struct ColorInput<'a, M> {
     window_radius: f32,
     disabled: bool,
     open_initially: bool,
+    spacing: Option<f32>,
     metrics: Metrics,
 }
 
@@ -551,8 +566,14 @@ impl<'a, M: Clone + 'a> ColorInput<'a, M> {
             window_radius: Metrics::desktop().radius_window,
             disabled: false,
             open_initially: false,
+            spacing: None,
             metrics: Metrics::desktop(),
         }
+    }
+    /// The gap between the picker's parts (default `space_m`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
     }
     pub fn alpha(mut self, on: bool) -> Self {
         self.alpha = on;
@@ -620,6 +641,7 @@ impl<'a, M: Clone + 'a> From<ColorInput<'a, M>> for Element<'a, M> {
             .width(Length::Fill)
             .metrics(m);
         picker.swatches = i.swatches;
+        picker.spacing = i.spacing;
         let invalid = !i.text.trim().is_empty() && Hsva::parse(i.text).is_none();
         // The color code is what the picker is opened for: its entry takes focus.
         let mut entry = crate::components::entry("", i.text)
@@ -761,5 +783,22 @@ mod tests {
         ]);
         assert_eq!(p.swatches.len(), 2);
         let _: Element<'_, u8> = p.alpha(true).format(Format::Rgb).into();
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_picker_gaps_are_parameters() {
+        let p = ColorPicker::<()>::new(Hsva::new(10.0, 0.5, 0.5, 1.0), |_| ())
+            .spacing(3.0)
+            .swatch_spacing(1.0);
+        assert_eq!((p.spacing, p.swatch_spacing), (Some(3.0), Some(1.0)));
+        let _: Element<'_, ()> = p.into();
+        let i = ColorInput::<()>::new(Hsva::new(10.0, 0.5, 0.5, 1.0), "", |_| (), |_| ()).spacing(4.0);
+        assert_eq!(i.spacing, Some(4.0));
+        let _: Element<'_, ()> = i.into();
     }
 }

@@ -17,7 +17,7 @@ include = ["/src/**", "/docs/man/**", "/docs/lib/**", "/README.md", "/LICENSE*",
 opt-level = 2
 
 [workspace]
-members = ["gallery", "xtask", "icons"]
+members = ["gallery", "theme-editor", "xtask", "icons"]
 default-members = ["."]
 
 [dependencies]

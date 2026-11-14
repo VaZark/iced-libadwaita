@@ -56,6 +56,19 @@ fn dot<'a, M: 'a>(color: Color, size: f32) -> Element<'a, M> {
         .into()
 }
 
+/// The spacing of an [`icon_color_picker_with`]; what is left `None` is the theme's.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct IconPickerLayout {
+    /// The gap between icons and between colours (default: the theme's `space_xxs`).
+    pub spacing: Option<f32>,
+    /// The padding around each icon and colour (default: the theme's `inset`).
+    pub cell_padding: Option<iced::Padding>,
+    /// The gap between the icons, the divider and the colours (default: the theme's `gap`).
+    pub section_spacing: Option<f32>,
+    /// The padding around the trigger (default: the theme's `space_xs`).
+    pub trigger_padding: Option<iced::Padding>,
+}
+
 /// `icon` (a name from [`ICON_CHOICES`], or none for the default) in `color`, `size` across;
 /// pressed, it opens the icons over the colours. `typed` is the text the colour picker's own field shows.
 /// `on_icon` is given the name chosen (`None` for the default folder); `on_text` the colour
@@ -69,17 +82,44 @@ pub fn icon_color_picker<'a, M: Clone + 'a>(
     on_text: impl Fn(String) -> M + 'a,
     on_pick: impl Fn(Hsva) -> M + 'a,
 ) -> Element<'a, M> {
+    icon_color_picker_with(
+        IconPickerLayout::default(),
+        icon,
+        color,
+        typed,
+        size,
+        on_icon,
+        on_text,
+        on_pick,
+    )
+}
+
+/// [`icon_color_picker`] with its spacing and padding given by `layout`.
+#[allow(clippy::too_many_arguments)]
+pub fn icon_color_picker_with<'a, M: Clone + 'a>(
+    layout: IconPickerLayout,
+    icon: Option<&str>,
+    color: Color,
+    typed: &'a str,
+    size: f32,
+    on_icon: impl Fn(Option<&'static str>) -> M + 'a,
+    on_text: impl Fn(String) -> M + 'a,
+    on_pick: impl Fn(Hsva) -> M + 'a,
+) -> Element<'a, M> {
+    let m = crate::Metrics::desktop();
+    let spacing = layout.spacing.unwrap_or(m.space_xxs);
+    let cell_padding = layout.cell_padding.unwrap_or(iced::Padding::from(m.inset));
     let trigger = container(
         Icon::from_choice(icon)
             .view(size)
             .style(move |_: &Theme, _| svg::Style { color: Some(color) }),
     )
-    .padding(4)
+    .padding(layout.trigger_padding.unwrap_or(iced::Padding::from(m.space_xs)))
     .center_y(Length::Shrink);
 
     // The icons, in rows.
-    let mut icons = column![].spacing(2);
-    let mut line = row![].spacing(2).align_y(Alignment::Center);
+    let mut icons = column![].spacing(spacing);
+    let mut line = row![].spacing(spacing).align_y(Alignment::Center);
     let mut n = 0;
     for (i, c) in ICON_CHOICES.iter().enumerate() {
         // The first is the default folder: choosing it stores nothing.
@@ -89,7 +129,7 @@ pub fn icon_color_picker<'a, M: Clone + 'a>(
                     .view(18.0)
                     .style(move |_: &Theme, _| svg::Style { color: Some(color) }),
             )
-            .padding(8)
+            .padding(cell_padding)
             .style(sb::flat)
             .on_press(on_icon((i != 0).then_some(c.name))),
             c.label,
@@ -100,7 +140,7 @@ pub fn icon_color_picker<'a, M: Clone + 'a>(
         if n % PER_ROW == 0 {
             icons = icons.push(std::mem::replace(
                 &mut line,
-                row![].spacing(2).align_y(Alignment::Center),
+                row![].spacing(spacing).align_y(Alignment::Center),
             ));
         }
     }
@@ -111,14 +151,14 @@ pub fn icon_color_picker<'a, M: Clone + 'a>(
     // The colours, at the bottom: the suggestions, then a last circle that opens the picker for
     // any colour.
     let on_pick = std::rc::Rc::new(on_pick);
-    let mut colours = row![].spacing(2).align_y(Alignment::Center);
+    let mut colours = row![].spacing(spacing).align_y(Alignment::Center);
     for hex in SUGGESTED {
         let [r, g, b] = rgb8(hex);
         let c = Color::from_rgb8(r, g, b);
         let pick = on_pick.clone();
         colours = colours.push(
             button(dot(c, 18.0))
-                .padding(8)
+                .padding(cell_padding)
                 .style(sb::flat)
                 .on_press(pick(Hsva::from_rgb8(r, g, b))),
         );
@@ -131,10 +171,10 @@ pub fn icon_color_picker<'a, M: Clone + 'a>(
                 .swatches(SUGGESTED)
                 .trigger(ring(color, 18.0)),
         )
-        .padding(8),
+        .padding(cell_padding),
     );
     let content = column![icons, crate::components::divider(), colours.wrap()]
-        .spacing(8)
+        .spacing(layout.section_spacing.unwrap_or(m.gap))
         .width(Length::Fixed(PER_ROW as f32 * CELL));
 
     Popover::new(trigger, popover([Element::from(content)], 420.0))
@@ -148,6 +188,26 @@ pub fn icon_color_picker<'a, M: Clone + 'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_layout_is_a_parameter() {
+        let layout = IconPickerLayout {
+            spacing: Some(1.0),
+            cell_padding: Some(2.0.into()),
+            section_spacing: Some(3.0),
+            trigger_padding: Some(4.0.into()),
+        };
+        let _: Element<'_, ()> = icon_color_picker_with(
+            layout,
+            None,
+            Color::BLACK,
+            "",
+            24.0,
+            |_| (),
+            |_| (),
+            |_| (),
+        );
+    }
 
     #[test]
     fn the_suggestions_read_as_colours() {

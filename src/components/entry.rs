@@ -55,6 +55,8 @@ pub struct Entry<'a, M> {
     left_width: Option<f32>,
     right_width: Option<f32>,
     section_height: Option<f32>,
+    padding: Option<iced::Padding>,
+    section_spacing: Option<f32>,
     id: Option<iced::widget::Id>,
 }
 
@@ -90,6 +92,8 @@ impl<'a, M> Entry<'a, M> {
             left_width: None,
             right_width: None,
             section_height: None,
+            padding: None,
+            section_spacing: None,
             id: None,
         }
     }
@@ -101,6 +105,17 @@ impl<'a, M> Entry<'a, M> {
     /// Embed in an EntryRow, which supplies the surface and outer padding.
     pub(crate) fn embedded(mut self) -> Self {
         self.embedded = true;
+        self
+    }
+    /// The padding around the text (default `entry_padding`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// The inset of a left or right section from the edge, and the gap between it and the text
+    /// (default `space_xs`).
+    pub fn section_spacing(mut self, px: f32) -> Self {
+        self.section_spacing = Some(px);
         self
     }
     /// Align the EntryRow label with the editable text after its optional sections.
@@ -203,18 +218,23 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
             .right
             .as_ref()
             .map(|_| slot_width(e.right_width, default_w));
+        let section_gap = if e.embedded {
+            0.0
+        } else {
+            e.section_spacing.unwrap_or(m.space_xs)
+        };
         let mut padding = text_padding(
             if e.embedded {
                 iced::Padding::ZERO
             } else {
-                m.entry_padding
+                e.padding.unwrap_or(m.entry_padding)
             },
-            if e.embedded { 0.0 } else { m.space_xs },
-            if e.embedded { 0.0 } else { m.space_xs },
+            section_gap,
+            section_gap,
             lw,
             rw,
         );
-        let text_size = crate::Typography::default().body;
+        let text_size = crate::Typography::desktop().body;
         if lw.is_some() || rw.is_some() {
             let inset = ((e.section_height.unwrap_or(default_w).max(default_w) - text_size * 1.3)
                 / 2.0)
@@ -304,7 +324,7 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
             iced::widget::space().width(Length::Fill),
             slot(e.right, rw)
         ]
-        .padding([0.0, if e.embedded { 0.0 } else { m.space_xs }])
+        .padding([0.0, section_gap])
         .height(Length::Fill)
         .width(Length::Fill);
         iced::widget::stack![content, layer].width(e.width).into()
@@ -336,6 +356,7 @@ pub struct TextView<'a, M> {
     single_line: bool,
     embedded: bool,
     flat: bool,
+    padding: Option<iced::Padding>,
     metrics: Metrics,
 }
 
@@ -351,11 +372,17 @@ pub fn text_view<'a, M>(content: &'a text_editor::Content) -> TextView<'a, M> {
         single_line: false,
         embedded: false,
         flat: false,
+        padding: None,
         metrics: Metrics::desktop(),
     }
 }
 
 impl<'a, M> TextView<'a, M> {
+    /// The padding around the text (default `entry_padding`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
     /// Transparent editor surface with normal focus and validation behavior.
     pub fn flat(mut self, flat: bool) -> Self {
         self.flat = flat;
@@ -428,7 +455,7 @@ impl<'a, M: Clone + 'a> From<TextView<'a, M>> for Element<'a, M> {
         let growth = t.growth();
         let mut e = text_editor(t.content)
             .size(TEXT_SIZE)
-            .padding(t.metrics.entry_padding)
+            .padding(t.padding.unwrap_or(t.metrics.entry_padding))
             .style(styles::text_editor::default);
         if t.embedded || t.flat {
             let embedded = t.embedded;
@@ -579,5 +606,22 @@ mod section_alignment_tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn entry_and_text_view_padding_are_parameters() {
+        let e = entry::<()>("", "x").padding([1.0, 2.0]).section_spacing(3.0);
+        assert_eq!(e.padding, Some(iced::Padding::from([1.0, 2.0])));
+        assert_eq!(e.section_spacing, Some(3.0));
+        let _: Element<'_, ()> = e.into();
+        let content = iced::widget::text_editor::Content::new();
+        let t = text_view::<()>(&content).padding(5.0);
+        assert_eq!(t.padding, Some(iced::Padding::from(5.0)));
+        let _: Element<'_, ()> = t.into();
     }
 }

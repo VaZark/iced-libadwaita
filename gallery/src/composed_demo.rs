@@ -1,5 +1,5 @@
 //! `ComposedComponent`: a histogram and a range slider that edit one range. The library's
-//! `HistogramRangeSlider` is one; the Code tab shows how it is defined.
+//! `HistogramRangeSlider` is one; the library defines it in `widgets/histogram_range_slider.rs`.
 
 use iced_adaptive_design as iad;
 

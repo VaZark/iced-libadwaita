@@ -68,6 +68,7 @@ pub struct ToolbarView<'a, M> {
     content: Element<'a, M>,
     top_style: BarStyle,
     bottom_style: BarStyle,
+    spacing: f32,
 }
 
 pub fn toolbar_view<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> ToolbarView<'a, M> {
@@ -82,6 +83,7 @@ impl<'a, M: 'a> ToolbarView<'a, M> {
             content: content.into(),
             top_style: BarStyle::Flat,
             bottom_style: BarStyle::Flat,
+            spacing: 0.0,
         }
     }
     /// `add_top_bar`.
@@ -99,6 +101,11 @@ impl<'a, M: 'a> ToolbarView<'a, M> {
         self.top_style = s;
         self
     }
+    /// The gap between the bars and the content (default: 0, bars sit flush).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = px;
+        self
+    }
     /// `bottom-bar-style`.
     pub fn bottom_bar_style(mut self, s: BarStyle) -> Self {
         self.bottom_style = s;
@@ -108,7 +115,7 @@ impl<'a, M: 'a> ToolbarView<'a, M> {
 
 impl<'a, M: 'a> From<ToolbarView<'a, M>> for Element<'a, M> {
     fn from(t: ToolbarView<'a, M>) -> Self {
-        let mut col = column![];
+        let mut col = column![].spacing(t.spacing);
         let has_top = !t.top.is_empty();
         let has_bottom = !t.bottom.is_empty();
         for b in t.top {
@@ -153,6 +160,9 @@ pub struct ActionBar<'a, M> {
     center: Option<Element<'a, M>>,
     end: Vec<Element<'a, M>>,
     metrics: Metrics,
+    spacing: Option<f32>,
+    section_spacing: Option<f32>,
+    padding: Option<iced::Padding>,
 }
 
 pub fn action_bar<'a, M>() -> ActionBar<'a, M> {
@@ -166,6 +176,9 @@ impl<'a, M> ActionBar<'a, M> {
             center: None,
             end: Vec::new(),
             metrics: Metrics::desktop(),
+            spacing: None,
+            section_spacing: None,
+            padding: None,
         }
     }
     pub fn pack_start(mut self, e: impl Into<Element<'a, M>>) -> Self {
@@ -180,6 +193,21 @@ impl<'a, M> ActionBar<'a, M> {
         self.center = Some(e.into());
         self
     }
+    /// The gap between the items of the start and end sides (default: the theme's `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The gap between the start, center and end sections (default: the theme's `space_m`).
+    pub fn section_spacing(mut self, px: f32) -> Self {
+        self.section_spacing = Some(px);
+        self
+    }
+    /// Padding around the bar (default: the theme's `space_s`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
 }
 
 impl<'a, M: 'a> Default for ActionBar<'a, M> {
@@ -192,7 +220,7 @@ impl<'a, M: 'a> From<ActionBar<'a, M>> for Element<'a, M> {
     fn from(a: ActionBar<'a, M>) -> Self {
         let m = a.metrics;
         let side = |v: Vec<Element<'a, M>>, h| {
-            container(row(v).spacing(m.space_s).align_y(Vertical::Center))
+            container(row(v).spacing(a.spacing.unwrap_or(m.space_s)).align_y(Vertical::Center))
                 .width(Length::FillPortion(1))
                 .align_x(h)
         };
@@ -203,11 +231,30 @@ impl<'a, M: 'a> From<ActionBar<'a, M>> for Element<'a, M> {
                 side(a.end, iced::alignment::Horizontal::Right),
             ]
             .align_y(Vertical::Center)
-            .spacing(m.space_m),
+            .spacing(a.section_spacing.unwrap_or(m.space_m)),
         )
-        .padding(m.space_s)
+        .padding(a.padding.unwrap_or(iced::Padding::from(m.space_s)))
         .width(Length::Fill)
         .style(sc::headerbar)
         .into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_bars_take_their_own_spacing_and_padding() {
+        let t = ToolbarView::<()>::new(space()).top_bar(space()).spacing(4.0);
+        assert_eq!(t.spacing, 4.0);
+        let _: Element<'_, ()> = t.into();
+        let a = ActionBar::<()>::new()
+            .pack_start(space())
+            .spacing(1.0)
+            .section_spacing(2.0)
+            .padding([3.0, 4.0]);
+        assert_eq!((a.spacing, a.section_spacing), (Some(1.0), Some(2.0)));
+        let _: Element<'_, ()> = a.into();
     }
 }

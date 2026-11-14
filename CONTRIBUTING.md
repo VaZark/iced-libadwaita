@@ -6,7 +6,7 @@ Stable Rust (edition 2024) and the system libraries iced needs on Linux (Wayland
 
 ```text
 cargo build                       # the library only
-cargo build --workspace           # library, gallery, xtask
+cargo build --workspace           # library, gallery, theme editor, xtask
 cargo test
 cargo clippy --all-targets --workspace
 cargo xtask man                   # build man pages in target/man/
@@ -24,6 +24,8 @@ Local pre-commit hooks: dprint formats JSON, Markdown and TOML; `cargo fmt --all
 | ---------------------- | ---------------------------------------------------------------------------------------------- |
 | `src/`                 | the library, in layers (see DESIGN.md): `layouts/`, `primitives/` (headless rules), `binds/`, `components/`, `metas/`, `widgets/`, `styles/`, `windows/`, theme, config |
 | `gallery/`             | the gallery, a separate crate                                                                  |
+| `theme-editor/`        | the theme editor: edits theme files in place, registers them, tries them in the gallery        |
+| `themes/`              | theme files: `libadwaita.conf`, `cosmic.conf`, and a few fun ones                           |
 | `xtask/`               | repository tasks                                                                               |
 | `docs/man/`            | handwritten overview and config man sources; all built pages go in `target/man/` |
 | `docs/lib/`            | user guide. Published with the crate and `docs/man/`                                                |
@@ -42,6 +44,27 @@ Builder methods on `self` are its properties. A method that takes an element is 
 
 Write the doc comment. The page follows.
 
+## Theme files
+
+The library has no built-in look: with no theme file an app is drawn like HTML without CSS (black on white, square, no shadows). The look is a theme file in the key-file format of [docs/lib/theme-config.md](docs/lib/theme-config.md). `themes/` has the shipped ones. To try one, point `IAD_THEME` at it:
+
+```text
+IAD_THEME=themes/libadwaita.conf cargo run -p iced-adaptive-design-gallery
+IAD_THEME=themes/cosmic.conf      cargo run -p iced-adaptive-design-gallery
+IAD_THEME=none                   cargo run -p iced-adaptive-design-gallery   # the bare look
+```
+
+Without `IAD_THEME`, the first `default.conf` found in `$XDG_DATA_HOME/iad/themes/` (`~/.local/share/iad/themes/`), then in `iad/themes/` of each `$XDG_DATA_DIRS` entry, applies. To make a look your default on this machine:
+
+```text
+mkdir -p ~/.local/share/iad/themes
+ln -s "$PWD/themes/cosmic.conf" ~/.local/share/iad/themes/default.conf
+```
+
+An unreadable `IAD_THEME` path prints a warning and falls through to those directories. An app that opts out of inheriting (`Inheritance::OptOut`) ignores all of this and uses only its own look.
+
+Edit theme files in the theme editor: `cargo run -p iced-adaptive-design-theme-editor [FILE]`. It has a control for each token by its type. Its Themes list shows real files only: the **registered** ones (the `*.conf` in `$XDG_DATA_HOME/iad/themes/` and the other data dirs, with the target of each symlink and a `default` tag on the one `default.conf` points at), the folders you add, and the recent files; click one to load it. **Save** and **Save as** write the original file (created if missing, written through a symlink); nothing else is ever written. A ● before a name, in the window title and in the status line means unsaved changes. **Try it out** writes the current values, saved or not, to a separate temp file and starts the gallery with `IAD_THEME` pointing at it; press it again to restart the gallery with new values. **Register** makes a symlink `<name>.conf` in the data dir so every app and this list see the file (**Unregister** removes only that symlink), and **Set as default** points `default.conf` at it, the file apps use without `IAD_THEME`. The editor remembers the open file, folders, recent files, section and variant in `~/.config/iad-theme-editor/state.conf`. A new token goes in `Schema::toolkit()` (`src/theme_config.rs`) with a type and range: prefer typed numbers (`Length`, `Percentage`) and enum strings over new Rust enums or switches. Add its value to `themes/libadwaita.conf` so that look stays complete, and check that the gallery with `IAD_THEME=themes/libadwaita.conf` is pixel-identical to before.
+
 ## The gallery
 
 `cargo run -p iced-adaptive-design-gallery` is the visual test. Render every page in light and dark with `-- --screenshot DIR` and look at the images.
@@ -58,6 +81,7 @@ GALLERY_MENU=page|dropdown
 GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push|breakpoint
 GALLERY_ANIM=keys                 wait 6 s, then capture: send keys meanwhile
 GALLERY_ANIM=theme                capture system appearance, app override, then system again
+IAD_THEME=path.conf               draw with this theme file (IAD_THEME=none: the bare look)
 GALLERY_ANIM=appshell             open the AppShell window (GALLERY_SHELL_SIZE=WxH)
 GALLERY_ANIM=shell-back|embedded-back
 APPSHELL_PIN=mobile|tablet|desktop
@@ -87,7 +111,7 @@ Screenshots can be stale on slow debug builds. Wait before calling a page broken
 Not done until it works end to end. Add it to the library, never only to an example. In the same change:
 
 - A `///` comment on the method, then `cargo xtask man`.
-- A control in the component's playground (`gallery/src/plays.rs`): the `specs` entry, its use in `build`, its line in the generated code.
+- A control in the component's playground (`gallery/src/plays.rs`): the `specs` entry and its use in `build`.
 - A line in its `docs/hig-inferences/widgets/` page.
 - If a desktop config key backs the default: `docs/lib/desktop-config.md`, `docs/lib/desktop.conf.example`, `docs/man/iad-desktop.conf.5`.
 

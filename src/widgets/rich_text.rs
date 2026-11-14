@@ -108,6 +108,12 @@ pub struct RichText<'a, M> {
     max_blocks: Option<usize>,
     on_link: Option<Rc<dyn Fn(String) -> M + 'a>>,
     on_task: Option<Rc<dyn Fn(usize, bool) -> M + 'a>>,
+    spacing: Option<f32>,
+    code_padding: Option<f32>,
+    code_spacing: Option<f32>,
+    quote_indent: Option<f32>,
+    marker_width: Option<f32>,
+    marker_spacing: Option<f32>,
 }
 
 /// Where we are while drawing: footnote numbers, the task counter, and the callbacks.
@@ -118,6 +124,11 @@ struct Ctx<'a, M> {
     tasks: Cell<usize>,
     on_link: Option<Rc<dyn Fn(String) -> M + 'a>>,
     on_task: Option<Rc<dyn Fn(usize, bool) -> M + 'a>>,
+    code_padding: f32,
+    code_spacing: f32,
+    quote_indent: f32,
+    marker_width: f32,
+    marker_spacing: f32,
 }
 
 impl<'a, M: Clone + 'a> RichText<'a, M> {
@@ -129,12 +140,49 @@ impl<'a, M: Clone + 'a> RichText<'a, M> {
             max_blocks: None,
             on_link: None,
             on_task: None,
+            spacing: None,
+            code_padding: None,
+            code_spacing: None,
+            quote_indent: None,
+            marker_width: None,
+            marker_spacing: None,
         }
     }
 
     /// Smaller text and tighter spacing, for a card.
     pub fn compact(mut self, on: bool) -> Self {
         self.compact = on;
+        self
+    }
+
+    /// The gap between blocks (default: the theme's `space_m`, `space_s` when compact).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding inside a code block (default: the theme's `code_padding`).
+    pub fn code_padding(mut self, px: f32) -> Self {
+        self.code_padding = Some(px);
+        self
+    }
+    /// The gap between a code block's language and its code (default: the theme's `space_xs`).
+    pub fn code_spacing(mut self, px: f32) -> Self {
+        self.code_spacing = Some(px);
+        self
+    }
+    /// How far a quote's text is indented past its bar (default 14).
+    pub fn quote_indent(mut self, px: f32) -> Self {
+        self.quote_indent = Some(px);
+        self
+    }
+    /// The width of a list marker's column (default 24).
+    pub fn marker_width(mut self, px: f32) -> Self {
+        self.marker_width = Some(px);
+        self
+    }
+    /// The gap between a list marker and its item (default: the theme's `gap`).
+    pub fn marker_spacing(mut self, px: f32) -> Self {
+        self.marker_spacing = Some(px);
         self
     }
 
@@ -162,13 +210,21 @@ impl<'a, M: Clone + 'a> RichText<'a, M> {
 impl<'a, M: Clone + 'a> From<RichText<'a, M>> for Element<'a, M> {
     fn from(r: RichText<'a, M>) -> Self {
         let k = if r.compact { 0.9 } else { 1.0 };
+        let m = crate::Metrics::desktop();
         let cx = Ctx {
             look: r.look.scaled(k),
-            gap: if r.compact { 6.0 } else { 12.0 },
+            gap: r
+                .spacing
+                .unwrap_or(if r.compact { m.space_s } else { m.space_m }),
             order: rt::footnote_order(r.blocks),
             tasks: Cell::new(0),
             on_link: r.on_link,
             on_task: r.on_task,
+            code_padding: r.code_padding.unwrap_or(m.code_padding),
+            code_spacing: r.code_spacing.unwrap_or(m.space_xs),
+            quote_indent: r.quote_indent.unwrap_or(14.0),
+            marker_width: r.marker_width.unwrap_or(24.0),
+            marker_spacing: r.marker_spacing.unwrap_or(m.gap),
         };
         let shown = r
             .max_blocks
@@ -212,7 +268,7 @@ fn one<'a>(cx_look: &Look, text: String, st: &Style) -> Span<'a, String, Font> {
         s = s
             .background(Background::Color(cx_look.code_bg))
             .border(Border::default().rounded(cx_look.radius / 2.0))
-            .padding([0.0, 3.0]);
+            .padding([0.0, crate::Metrics::desktop().inline_padding_x]);
     }
     if let Some(url) = &st.link {
         s = s.link(url.clone()).underline(true);
@@ -372,7 +428,7 @@ fn block<'a, M: Clone + 'a>(cx: &Ctx<'a, M>, b: &'a Block, depth: usize) -> Elem
             // The bar is a second layer over the text, so it is as tall as the text: a `Fill`
             // bar in a row would have no height to fill.
             stack![
-                container(blocks(cx, inner, depth)).padding(Padding::ZERO.left(14.0)),
+                container(blocks(cx, inner, depth)).padding(Padding::ZERO.left(cx.quote_indent)),
                 container(space().width(3.0).height(Length::Fill)).style(move |_: &Theme| {
                     container::Style {
                         background: Some(Background::Color(bar)),
@@ -391,7 +447,7 @@ fn block<'a, M: Clone + 'a>(cx: &Ctx<'a, M>, b: &'a Block, depth: usize) -> Elem
                 size: cx.look.mono,
                 ..Style::default()
             };
-            let mut col = column![].spacing(4);
+            let mut col = column![].spacing(cx.code_spacing);
             if let Some(l) = lang.as_deref().filter(|l| !l.is_empty()) {
                 col = col.push(text(l.to_string()).size(cx.look.caption).color(cx.look.dim));
             }
@@ -402,7 +458,7 @@ fn block<'a, M: Clone + 'a>(cx: &Ctx<'a, M>, b: &'a Block, depth: usize) -> Elem
             );
             let (bg, radius) = (cx.look.code_bg, cx.look.radius);
             container(col)
-                .padding(10)
+                .padding(cx.code_padding)
                 .width(Length::Fill)
                 .style(move |_: &Theme| container::Style {
                     background: Some(Background::Color(bg)),
@@ -442,8 +498,8 @@ fn list<'a, M: Clone + 'a>(
                 .into(),
         };
         let content = blocks(cx, &item.blocks, depth + 1);
-        row![container(lead).width(24.0).align_x(Alignment::End), content]
-            .spacing(8)
+        row![container(lead).width(cx.marker_width).align_x(Alignment::End), content]
+            .spacing(cx.marker_spacing)
             .into()
     });
     column(rows)
@@ -473,12 +529,12 @@ fn table<'a, M: Clone + 'a>(
             };
             container(line_aligned(cx, rt::cell(cells, c), st, h))
                 .width(Length::FillPortion(1))
-                .padding([4, 8])
+                .padding([crate::Metrics::desktop().space_xs, crate::Metrics::desktop().gap])
                 .into()
         }))
         .into()
     };
-    let mut col = column![one_row(head, true), divider()].spacing(2);
+    let mut col = column![one_row(head, true), divider()].spacing(crate::Metrics::desktop().space_xxs);
     for r in rows {
         col = col.push(one_row(r, false));
     }
@@ -496,7 +552,7 @@ fn definitions<'a, M: Clone + 'a>(
             size: cx.look.body,
             ..Style::default()
         };
-        let mut col = column![line(cx, &d.term, term)].spacing(2);
+        let mut col = column![line(cx, &d.term, term)].spacing(crate::Metrics::desktop().space_xxs);
         for detail in &d.details {
             col = col.push(
                 container(line(cx, detail, body_style(cx))).padding(Padding::ZERO.left(16.0)),
@@ -529,6 +585,11 @@ fn footnotes<'a, M: Clone + 'a>(
         tasks: Cell::new(0),
         on_link: cx.on_link.clone(),
         on_task: None,
+        code_padding: cx.code_padding,
+        code_spacing: cx.code_spacing,
+        quote_indent: cx.quote_indent,
+        marker_width: cx.marker_width,
+        marker_spacing: cx.marker_spacing,
     };
     let rows = sorted.into_iter().enumerate().map(|(i, n)| {
         let k = number(n);
@@ -543,10 +604,43 @@ fn footnotes<'a, M: Clone + 'a>(
             .align_x(Alignment::End),
             blocks(&small, &n.blocks, depth),
         ]
-        .spacing(8)
+        .spacing(crate::Metrics::desktop().gap)
         .into()
     });
     column![divider(), column(rows).spacing(cx.gap / 2.0)]
         .spacing(cx.gap / 2.0)
         .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rt::{Block, Inline, Item};
+
+    #[test]
+    fn the_gaps_and_indents_are_parameters() {
+        let blocks = vec![
+            Block::Quote(vec![Block::Rule]),
+            Block::List {
+                start: None,
+                items: vec![Item {
+                    checked: None,
+                    blocks: vec![Block::Paragraph(vec![Inline::Text("x".into())])],
+                }],
+            },
+            Block::CodeBlock {
+                lang: Some("rs".into()),
+                code: "let x = 1;".into(),
+            },
+        ];
+        let r = RichText::<()>::new(&Theme::light(), &blocks)
+            .spacing(3.0)
+            .code_padding(4.0)
+            .code_spacing(5.0)
+            .quote_indent(6.0)
+            .marker_width(7.0)
+            .marker_spacing(8.0);
+        assert_eq!((r.spacing, r.marker_width), (Some(3.0), Some(7.0)));
+        let _: Element<'_, ()> = r.into();
+    }
 }

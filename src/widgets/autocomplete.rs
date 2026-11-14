@@ -80,6 +80,9 @@ pub struct Autocomplete<'a, T, M> {
     placeholder: String,
     disabled: bool,
     width: Length,
+    spacing: Option<f32>,
+    item_padding: Option<iced::Padding>,
+    notice_padding: Option<iced::Padding>,
     metrics: Metrics,
     revealed: bool,
     free_text: bool,
@@ -109,6 +112,9 @@ impl<'a, T, M> Autocomplete<'a, T, M> {
             placeholder: String::new(),
             disabled: false,
             width: Length::Fill,
+            spacing: None,
+            item_padding: None,
+            notice_padding: None,
             metrics: Metrics::desktop(),
             revealed: true,
             free_text: true,
@@ -156,6 +162,21 @@ impl<'a, T, M> Autocomplete<'a, T, M> {
     }
     pub fn width(mut self, w: impl Into<Length>) -> Self {
         self.width = w.into();
+        self
+    }
+    /// The gap inside a notice (spinner and text, message and retry; default `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding of each result (default `space_s` above and below, `space_m` at the sides).
+    pub fn item_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.item_padding = Some(p.into());
+        self
+    }
+    /// The padding of a notice such as "No results" (default a little more than a result's).
+    pub fn notice_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.notice_padding = Some(p.into());
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -361,11 +382,18 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> f
             .collect();
         let notice = |el: Element<'a, M>| -> Element<'a, M> {
             container(el)
-                .padding([m.space_s + 2.0, m.space_m])
+                .padding(a.notice_padding.unwrap_or(iced::Padding::from([
+                    m.space_s + m.space_xxs,
+                    m.space_m,
+                ])))
                 .width(Length::Fill)
                 .into()
         };
         let dim = crate::styles::text::dim;
+        let gap = a.spacing.unwrap_or(m.space_s);
+        let item_padding = a
+            .item_padding
+            .unwrap_or(iced::Padding::from([m.space_s, m.space_m]));
         let (body, items): (Body, Vec<Element<'a, M>>) = match l.status() {
             _ if !enabled => (Body::None, Vec::new()),
             Status::Idle => (Body::None, Vec::new()),
@@ -375,7 +403,7 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> f
                         .style(crate::styles::text::error)
                         .width(Length::Fill)
                 ]
-                .spacing(m.space_s)
+                .spacing(gap)
                 .align_y(iced::alignment::Vertical::Center);
                 if let Some(retry) = a.on_retry.clone() {
                     r = r.push(button(text("Retry")).style(sb::flat).on_press(retry));
@@ -392,7 +420,7 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> f
                             None => text(label.clone()).wrapping(text::Wrapping::None).into(),
                         };
                         container(content)
-                            .padding([m.space_s, m.space_m])
+                            .padding(item_padding)
                             .width(Length::Fill)
                             .into()
                     })
@@ -401,7 +429,7 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> f
             }
             Status::Waiting(_) | Status::Loading { .. } => {
                 let r = row![busy(m.icon_size), text("Searching…").style(dim)]
-                    .spacing(m.space_s)
+                    .spacing(gap)
                     .align_y(iced::alignment::Vertical::Center);
                 (Body::Notice, vec![notice(r.into())])
             }

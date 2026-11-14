@@ -1,7 +1,7 @@
 //! A controlled System → Light → Dark → System appearance button.
 use crate::{AppearanceIcon, Element, Metrics};
 use iced::{
-    Length,
+    Length, Padding,
     widget::{button, container},
 };
 
@@ -23,6 +23,7 @@ pub struct ThemeToggle<'a, M> {
     mode: ThemeMode,
     on_toggle: Option<Box<dyn Fn(ThemeMode) -> M + 'a>>,
     disabled: bool,
+    padding: Padding,
     metrics: Metrics,
 }
 impl<'a, M> ThemeToggle<'a, M> {
@@ -31,11 +32,18 @@ impl<'a, M> ThemeToggle<'a, M> {
             mode,
             on_toggle: None,
             disabled: false,
+            padding: Padding::ZERO,
             metrics: Metrics::desktop(),
         }
     }
     pub fn on_toggle(mut self, on_toggle: impl Fn(ThemeMode) -> M + 'a) -> Self {
         self.on_toggle = Some(Box::new(on_toggle));
+        self
+    }
+    /// Padding around the icon inside the button (default none: the icon is centered in a
+    /// square of `button_min_height`).
+    pub fn padding(mut self, p: impl Into<Padding>) -> Self {
+        self.padding = p.into();
         self
     }
     pub fn disabled(mut self, disabled: bool) -> Self {
@@ -59,7 +67,7 @@ impl<'a, M: Clone + 'a> From<ThemeToggle<'a, M>> for Element<'a, M> {
         let content = container(toggle.mode.icon().view(toggle.metrics.icon_size + 2.0))
             .center(Length::Fixed(toggle.metrics.button_min_height));
         let control = button(content)
-            .padding(0)
+            .padding(toggle.padding)
             .style(crate::styles::button::flat)
             .on_press_maybe(toggle.press());
         crate::components::tooltip(
@@ -113,5 +121,17 @@ mod tests {
                 assert!(pixels.data().chunks_exact(4).any(|p| p[3] > 0));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_icon_padding_is_a_parameter() {
+        let t = ThemeToggle::<()>::new(ThemeMode::System).padding(4.0);
+        assert_eq!(t.padding, Padding::from(4.0));
+        let _: Element<'_, ()> = t.into();
     }
 }

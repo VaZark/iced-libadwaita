@@ -50,6 +50,8 @@ pub struct DateInput<'a, M> {
     close_on_outside: bool,
     window_radius: f32,
     revealed: bool,
+    spacing: Option<f32>,
+    padding: Option<f32>,
     metrics: Metrics,
     embedded: bool,
     flat: bool,
@@ -89,6 +91,8 @@ impl<'a, M> DateInput<'a, M> {
             close_on_outside: true,
             window_radius: Metrics::desktop().radius_window,
             revealed: true,
+            spacing: None,
+            padding: None,
             metrics: Metrics::desktop(),
             embedded: false,
             flat: false,
@@ -199,6 +203,17 @@ impl<'a, M> DateInput<'a, M> {
         self.window_radius = r;
         self
     }
+    /// The gap between the calendar's header, days and Today button, and between the entry and
+    /// the calendar when shown inline (default `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding between the popover's edge and the calendar (default `space_xs`).
+    pub fn padding(mut self, px: f32) -> Self {
+        self.padding = Some(px);
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -248,6 +263,8 @@ pub(crate) struct Opening {
     pub window_radius: f32,
     pub disabled: bool,
     pub open_initially: bool,
+    /// The padding around the calendar in its popover (default `space_xs`).
+    pub padding: Option<f32>,
 }
 
 /// The calendar button for an entry's left section: opens `calendar`.
@@ -258,7 +275,7 @@ pub(crate) fn opener<'a, M: 'a>(
 ) -> Element<'a, M> {
     let mut p = Popover::new(crate::EntryIcon::Calendar.view(m.icon_size), calendar)
         .appearance(Appearance::Flat)
-        .padding(m.space_xs)
+        .padding(o.padding.unwrap_or(m.space_xs))
         .align(Align::Start)
         .popover_width(POPOVER_WIDTH)
         .keep_open(true)
@@ -302,6 +319,8 @@ pub(crate) struct Cal<'a, M> {
     /// No gap between the days of a week, so a highlighted range reads as one band.
     pub band: bool,
     pub metrics: Metrics,
+    /// The gap between header, days and Today (default `space_s`).
+    pub spacing: Option<f32>,
     /// Whether the app handles `CalendarView` changes (`on_nav`); without it the title is plain
     /// text and only the month-level `on_view` path exists.
     pub navigable: bool,
@@ -499,11 +518,11 @@ pub(crate) fn calendar<'a, M: Clone + 'a>(
     // or when today is outside min..max. Absent when the app cannot take a view change.
     let home = CalendarView::jump_to(c.today).clamped(min_level, max_level);
     let mut col = column![header, body]
-        .spacing(m.space_s)
+        .spacing(c.spacing.unwrap_or(m.space_s))
         .align_x(Horizontal::Center)
         .width(Length::Fill);
     if let Some(msg) = (c.nav)(home) {
-        let mut b = button(text("Today").size(m.space_m + 1.0))
+        let mut b = button(text("Today").size(crate::Typography::desktop().small))
             .padding([m.space_xs, m.space_m])
             .style(sb::flat);
         if can_jump(c.today, c.min, c.max) && view != home {
@@ -549,6 +568,7 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
                 max,
                 band: false,
                 metrics: m,
+                spacing: d.spacing,
                 navigable: d.on_nav.is_some(),
                 nav: &nav,
                 select: &select,
@@ -578,7 +598,9 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
             if let Some(f) = on_input {
                 display = display.on_input(move |value| f(value));
             }
-            column![display, grid].spacing(m.space_s).into()
+            column![display, grid]
+                .spacing(d.spacing.unwrap_or(m.space_s))
+                .into()
         } else {
             grid
         };
@@ -592,6 +614,7 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
                 window_radius: d.window_radius,
                 disabled: d.disabled,
                 open_initially: d.open_initially,
+                padding: d.padding,
             },
             m,
         );
@@ -704,5 +727,17 @@ mod tests {
             mk("2026-13-02").revealed(false).text_state(),
             EntryState::Normal
         );
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_calendar_gaps_are_parameters() {
+        let d = DateInput::<()>::new("", Date::today(), |_| ()).spacing(1.0).padding(2.0);
+        assert_eq!((d.spacing, d.padding), (Some(1.0), Some(2.0)));
+        let _: Element<'_, ()> = d.into();
     }
 }

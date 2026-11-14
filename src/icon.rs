@@ -508,9 +508,7 @@ impl From<Icon> for IconSource {
         if let Some(source) = icon_overrides().read().unwrap().get(&icon).cloned() {
             return source;
         }
-        icon.bundled_source()
-            .map(Self::svg)
-            .unwrap_or(Self::Icon(icon))
+        Self::svg(icon.bundled_source())
     }
 }
 impl From<svg::Handle> for IconSource {
@@ -552,7 +550,7 @@ mod tests {
         names.sort();
         names.dedup();
         assert_eq!(names.len(), ICON_CHOICES.len(), "names are unique");
-        assert!(ICON_CHOICES.iter().all(|c| c.icon.bundled_source().is_some()));
+        assert!(ICON_CHOICES.iter().all(|c| !c.icon.bundled_source().is_empty()));
         // None, and a name from a newer version, are the folder.
         assert_eq!(Icon::from_choice(None), Icon::Folder);
         assert_eq!(Icon::from_choice(Some("not-yet")), Icon::Folder);
@@ -569,10 +567,7 @@ mod tests {
         set_icon_override(icon, Some(svg.clone().into()));
         assert!(matches!(IconSource::from(icon), IconSource::Svg(handle) if handle == svg));
         set_icon_override(icon, None);
-        assert!(matches!(
-            IconSource::from(icon),
-            IconSource::Icon(Icon::Compact)
-        ));
+        assert!(matches!(IconSource::from(icon), IconSource::Svg(_)));
     }
     #[test]
     fn every_variant_has_a_unique_mapping() {

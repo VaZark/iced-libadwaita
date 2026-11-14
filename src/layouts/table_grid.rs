@@ -61,7 +61,7 @@ impl<'a, M: 'a> TableGrid<'a, M> {
         Self {
             cells: cells.into_iter().collect(),
             columns: 12,
-            spacing: 12.0,
+            spacing: crate::Metrics::desktop().space_m,
             align: Vertical::Top,
         }
     }

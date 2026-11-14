@@ -230,6 +230,11 @@ pub struct Menu<M> {
     sections: Vec<Vec<MenuItem<M>>>,
     icon_side: MenuIconSide,
     check_style: MenuCheckStyle,
+    item_spacing: Option<f32>,
+    item_padding_x: Option<f32>,
+    separator_spacing: Option<f32>,
+    list_spacing: Option<f32>,
+    padding: Option<iced::Padding>,
 }
 
 impl<M> Menu<M> {
@@ -239,6 +244,11 @@ impl<M> Menu<M> {
             sections: Vec::new(),
             icon_side: MenuIconSide::End,
             check_style: MenuCheckStyle::Text,
+            item_spacing: None,
+            item_padding_x: None,
+            separator_spacing: None,
+            list_spacing: None,
+            padding: None,
         }
     }
     /// The edge that holds the items' icons (and check marks, with [`MenuCheckStyle::Mark`]): [`MenuIconSide::End`] by default,
@@ -254,6 +264,35 @@ impl<M> Menu<M> {
         self.check_style = style;
         self
     }
+    /// The gap between the parts of a row: lead, label, accelerator, mark (default: the theme's
+    /// `space_m`).
+    pub fn item_spacing(mut self, px: f32) -> Self {
+        self.item_spacing = Some(px.max(0.0));
+        self
+    }
+    /// The horizontal padding of a dropdown row (default: the theme's `space_m`).
+    pub fn item_padding_x(mut self, px: f32) -> Self {
+        self.item_padding_x = Some(px.max(0.0));
+        self
+    }
+    /// The air above and below the hairline between sections of a dropdown (default: the
+    /// theme's `space_xs`).
+    pub fn separator_spacing(mut self, px: f32) -> Self {
+        self.separator_spacing = Some(px.max(0.0));
+        self
+    }
+    /// The gap between the lists of the full-page menu and the bottom sheet (default: the
+    /// theme's `space_l`).
+    pub fn list_spacing(mut self, px: f32) -> Self {
+        self.list_spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding around the full-page menu and the sheet's content (default: the theme's
+    /// `page_padding`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
     /// Adds a group of items.
     pub fn section(mut self, items: impl IntoIterator<Item = MenuItem<M>>) -> Self {
         self.sections.push(items.into_iter().collect());
@@ -267,14 +306,15 @@ impl<M> Menu<M> {
         M: Clone + 'a,
     {
         let m = Metrics::desktop();
-        let t = Typography::default();
+        let t = Typography::desktop();
         let mut head = column![t.heading(self.title.clone())];
         if let Some(s) = subtitle {
             head = head.push(t.caption(s).style(st::dim));
         }
+        let pad = self.padding.unwrap_or(m.page_padding);
         container(column![
-            container(head).padding(m.page_padding),
-            container(touch_lists(self)).padding(m.page_padding),
+            container(head).padding(pad),
+            container(touch_lists(self)).padding(pad),
         ])
         .width(Length::Fill)
         .into()
@@ -440,9 +480,10 @@ fn row_content<'a, M: Clone + 'a>(
     style: MenuCheckStyle,
     slots: Slots,
     touch: bool,
+    gap: f32,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
-    let t = Typography::default();
+    let t = Typography::desktop();
     // The accelerator is shown only when it is available (see `shortcut::hint`).
     let accel = crate::shortcut::hint(item.accel.as_deref(), !item.disabled, touch);
     let disabled = item.disabled;
@@ -539,7 +580,7 @@ fn row_content<'a, M: Clone + 'a>(
     if trail.is_empty() && slots.trail && switch.is_none() {
         trail.push(blank());
     }
-    let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
+    let mut r = row![].spacing(gap).align_y(Vertical::Center);
     r = r
         .extend(lead)
         .push(lbl)
@@ -587,14 +628,13 @@ pub(crate) fn popover_content<'a, M: Clone + 'a>(
 }
 
 /// A hairline between groups of rows.
-fn separator<'a, M: 'a>() -> Element<'a, M> {
-    let m = Metrics::desktop();
+fn separator<'a, M: 'a>(air: f32) -> Element<'a, M> {
     container(
         container(space().height(1))
             .width(Length::Fill)
             .style(sc::popover_separator),
     )
-    .padding([m.space_xs, 0.0])
+    .padding([air, 0.0])
     .into()
 }
 
@@ -606,11 +646,14 @@ fn dropdown_items<'a, M: Clone + 'a>(
 ) -> Vec<Element<'a, M>> {
     let m = Metrics::desktop();
     let slots = slots(menu);
+    let gap = menu.item_spacing.unwrap_or(m.space_m);
+    let pad_x = menu.item_padding_x.unwrap_or(m.space_m);
+    let air = menu.separator_spacing.unwrap_or(m.space_xs);
     let mut out: Vec<Element<'a, M>> = Vec::new();
     let mut next_submenu = 0;
     for (si, section) in menu.sections.iter().enumerate() {
         if si > 0 {
-            out.push(separator());
+            out.push(separator(air));
         }
         for item in section {
             let content = container(row_content(
@@ -619,8 +662,9 @@ fn dropdown_items<'a, M: Clone + 'a>(
                 menu.check_style,
                 slots,
                 false,
+                gap,
             ))
-            .padding([0.0, m.space_m])
+            .padding([0.0, pad_x])
             .center_y(Length::Fixed(32.0));
             if let Kind::Submenu { .. } = &item.kind {
                 let target = pages.and_then(|(children, _)| children.get(next_submenu).copied());
@@ -657,7 +701,7 @@ fn dropdown_items<'a, M: Clone + 'a>(
 /// `parent`.
 fn back_row<'a, M: Clone + 'a>(menu: &Menu<M>, parent: usize, request: &Request) -> Element<'a, M> {
     let m = Metrics::desktop();
-    let t = Typography::default();
+    let t = Typography::desktop();
     NavRow::new(
         container(
             row![
@@ -695,12 +739,12 @@ fn pages_content<'a, M: Clone + 'a>(menu: &Menu<M>, width: f32, initial: usize) 
             let mut rows: Vec<Element<'a, M>> = Vec::new();
             if let Some(p) = parent {
                 rows.push(back_row(m, *p, &request));
-                rows.push(separator());
+                rows.push(separator(m.separator_spacing.unwrap_or(Metrics::desktop().space_xs)));
             }
             rows.extend(dropdown_items(m, Some((children, &request))));
             // Just the rows, scrolling if they are many: the surface is drawn once, around the
             // pages, so they slide inside one card rather than as cards side by side.
-            crate::layouts::scrolled_window(column(rows).spacing(2).width(Length::Fill)).into()
+            crate::layouts::scrolled_window(column(rows).spacing(crate::Metrics::desktop().space_xxs).width(Length::Fill)).into()
         })
         .collect();
     let m = Metrics::desktop();
@@ -717,9 +761,10 @@ fn pages_content<'a, M: Clone + 'a>(menu: &Menu<M>, width: f32, initial: usize) 
 /// [`Menu::sheet`].
 fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M, Theme> {
     let m = Metrics::desktop();
-    let t = Typography::default();
+    let t = Typography::desktop();
     let slots = slots(menu);
-    let mut lists = column![].spacing(m.space_l);
+    let gap = menu.item_spacing.unwrap_or(m.space_m);
+    let mut lists = column![].spacing(menu.list_spacing.unwrap_or(m.space_l));
     for section in &menu.sections {
         let rows: Vec<Element<'a, M>> = section
             .iter()
@@ -732,6 +777,7 @@ fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M,
                         menu.check_style,
                         slots,
                         true,
+                        gap,
                     ))
                     .padding(m.row_padding)
                     .center_y(Length::Fixed(m.row_min_height)),
@@ -763,7 +809,7 @@ fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M,
 
 fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M> {
     let m = Metrics::desktop();
-    let t = Typography::default();
+    let t = Typography::desktop();
 
     // Header: back arrow (hit area handled by the overlay) + centered title.
     let header = container(
@@ -788,7 +834,9 @@ fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M>
     let lists = touch_lists(menu);
 
     let body = scrolled_window(clamp(
-        container(lists).padding(m.page_padding).width(Length::Fill),
+        container(lists)
+            .padding(menu.padding.unwrap_or(m.page_padding))
+            .width(Length::Fill),
         m.clamp_maximum,
     ))
     .width(Length::Fill)
@@ -851,6 +899,20 @@ impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_menu_takes_its_gaps_and_padding() {
+        let m = Menu::<u8>::new("M")
+            .section([MenuItem::action("A", 1)])
+            .item_spacing(2.0)
+            .item_padding_x(3.0)
+            .separator_spacing(4.0)
+            .list_spacing(5.0)
+            .padding(6.0);
+        assert_eq!((m.item_spacing, m.item_padding_x), (Some(2.0), Some(3.0)));
+        assert_eq!((m.separator_spacing, m.list_spacing), (Some(4.0), Some(5.0)));
+        let _: Element<'_, u8> = m.sheet(None);
+    }
 
     #[test]
     fn only_a_command_closes_the_menu_unless_the_item_says_otherwise() {

@@ -139,7 +139,7 @@ impl<'a, M: Clone + 'a> From<Overlay<'a, M>> for Element<'a, M> {
             None => (
                 container(opaque(content))
                     .center(Length::Fill)
-                    .padding(12)
+                    .padding(crate::Metrics::desktop().space_m)
                     .into(),
                 iced::Vector::new(0.0, 24.0),
             ),

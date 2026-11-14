@@ -10,8 +10,8 @@
 //!   animation from the current value (and velocity, for springs).
 //! * [`presets`]: the parameters libadwaita itself uses, with their sources.
 //!
-//! Like libadwaita, animations are skipped when the system disables them
-//! (`gtk-enable-animations`); see [`enabled`] / [`set_enabled`].
+//! Animations are skipped when the config disables them (`[motion] animations=false`); see
+//! [`enabled`] / [`set_enabled`].
 //!
 //! The math is pure and unit-tested; widgets drive it from iced's redraw events.
 
@@ -539,7 +539,7 @@ pub mod presets {
 }
 
 // ---------------------------------------------------------------------------
-// Global enable switch (`gtk-enable-animations`)
+// Global enable switch (`[motion] animations`)
 // ---------------------------------------------------------------------------
 
 /// 0 = follow the system, 1 = forced on, 2 = forced off.
@@ -578,7 +578,7 @@ pub fn set_enabled(enabled: Option<bool>) {
 }
 
 /// Whether animations play: the process override ([`set_enabled`]), else the desktop config
-/// (`[motion] animations`), else the system's `enable-animations` (GNOME setting, default on). Disabled animations jump straight to the end value,
+/// (`[motion] animations`), else on. Disabled animations jump straight to the end value,
 /// like libadwaita's `follow-enable-animations-setting`.
 pub fn enabled() -> bool {
     match OVERRIDE.load(Ordering::Relaxed) {
@@ -586,7 +586,7 @@ pub fn enabled() -> bool {
         2 => false,
         _ => match crate::config::current().animations {
             crate::config::Pick::Fixed(on) => on,
-            crate::config::Pick::System => crate::system::animations_enabled(),
+            crate::config::Pick::System => true,
         },
     }
 }

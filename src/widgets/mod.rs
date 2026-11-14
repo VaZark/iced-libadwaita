@@ -12,6 +12,7 @@ pub(crate) mod banner;
 pub(crate) mod carousel;
 pub(crate) mod chart;
 pub(crate) mod chip_group;
+pub(crate) mod choice_row;
 pub(crate) mod collapsible;
 pub(crate) mod color_picker;
 pub(crate) mod date_input;
@@ -84,11 +85,12 @@ pub use dialog::{
 };
 pub use slide_pages::SlidePages;
 pub use drag::{DragSource, DropZone, drag_source, drop_zone, drop_zone_at};
-pub use icon_picker::icon_color_picker;
+pub use icon_picker::{IconPickerLayout, icon_color_picker, icon_color_picker_with};
 pub use dropdown::{DROPDOWN_MAX_WIDTH, DROPDOWN_MIN_WIDTH, DropdownOptions, dropdown, dropdown_disabled, dropdown_lead, dropdown_with, menu_item, menu_item_disabled, menu_item_lead};
 pub use extra::{
     breakpoint_bin, carousel_indicator_dots, carousel_indicator_lines, inline_view_switcher,
-    path_bar, shortcut_label, sidebar, tab_button, view_switcher, view_switcher_bar, wrap_box,
+    path_bar, shortcut_label, shortcut_label_with, sidebar, tab_button, view_switcher,
+    view_switcher_bar, view_switcher_bar_with, wrap_box,
 };
 pub use field::{Field, FieldLayout, outlined as field_outline};
 pub use floating_indicator::FloatingIndicator;
@@ -116,7 +118,7 @@ pub use pagination::label as pagination_label;
 pub use pagination::{PageSize, Pagination, PaginationSize, page_size_dropdown};
 pub use popover::{
     Align as PopoverAlign, Appearance as PopoverAppearance, Popover, PopoverBounds,
-    Presentation as PopoverPresentation, popover, popover_bounds,
+    Presentation as PopoverPresentation, popover, popover_bounds, popover_spaced,
 };
 pub use preferences::{PreferencesGroup, PreferencesPage, preferences_group, preferences_page};
 pub use profile_header::ProfileHeader;
@@ -125,6 +127,7 @@ pub use rich_text::RichText;
 pub use tag_group_list::{TagGroupList, TagItem};
 pub use reorderable_list::ReorderableList;
 pub use resizable::Resizable;
+pub use choice_row::{ChoicePresentation, ChoiceRow};
 pub use responsive_table::{
     Column, Mode as TableMode, Presentation as TablePresentation, ResponsiveTable,
 };

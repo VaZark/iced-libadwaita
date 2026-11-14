@@ -306,16 +306,27 @@ impl<'a, M: 'a> Popover<'a, M> {
     }
 }
 
-/// The popover surface wrapping `items`: scrolls past `max_height`.
+/// The popover surface wrapping `items`: scrolls past `max_height`. The items are `space_xxs`
+/// apart and the surface pads them by `popover_padding`; [`popover_spaced`] sets both.
 pub fn popover<'a, M: 'a>(
     items: impl IntoIterator<Item = Element<'a, M>>,
     max_height: f32,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
+    popover_spaced(items, max_height, m.space_xxs, m.popover_padding)
+}
+
+/// [`popover`] with its own gap between the items and padding around them.
+pub fn popover_spaced<'a, M: 'a>(
+    items: impl IntoIterator<Item = Element<'a, M>>,
+    max_height: f32,
+    spacing: f32,
+    padding: impl Into<Padding>,
+) -> Element<'a, M> {
     container(crate::layouts::scrolled_window(
-        column(items).spacing(2).width(Length::Fill),
+        column(items).spacing(spacing).width(Length::Fill),
     ))
-    .padding(m.popover_padding)
+    .padding(padding)
     .max_height(max_height)
     .style(sc::popover)
     .into()
@@ -898,5 +909,20 @@ mod tests {
         );
         assert_eq!(PopoverBounds::from_key("page"), None);
         assert_eq!(PopoverBounds::default(), PopoverBounds::Content);
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_surface_gap_and_padding_are_parameters() {
+        let _: Element<'_, ()> = popover_spaced(
+            [iced::widget::text("a").into(), iced::widget::text("b").into()],
+            200.0,
+            9.0,
+            [3.0, 5.0],
+        );
     }
 }

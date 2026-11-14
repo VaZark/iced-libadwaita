@@ -50,6 +50,7 @@ pub struct Spoiler<'a, M> {
     show: String,
     hide: String,
     width: Length,
+    gap: Option<f32>,
     metrics: Metrics,
 }
 
@@ -64,6 +65,7 @@ impl<'a, M: Clone + 'a> Spoiler<'a, M> {
             show: "Show more".into(),
             hide: "Hide".into(),
             width: Length::Fill,
+            gap: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -93,6 +95,11 @@ impl<'a, M: Clone + 'a> Spoiler<'a, M> {
     /// The control was pressed: the state the spoiler would take.
     pub fn on_toggle(mut self, f: impl Fn(bool) -> M + 'a) -> Self {
         self.on_toggle = Some(Rc::new(f));
+        self
+    }
+    /// The gap between the content and the show/hide control (default `space_xs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.gap = Some(px);
         self
     }
     pub fn labels(mut self, show: impl Into<String>, hide: impl Into<String>) -> Self {
@@ -407,7 +414,7 @@ impl<'a, M: Clone + 'a> From<Spoiler<'a, M>> for Element<'a, M> {
             children: vec![s.content, control],
             max_height: s.max_height,
             expanded: s.expanded,
-            gap: s.metrics.space_xs,
+            gap: s.gap.unwrap_or(s.metrics.space_xs),
             width: s.width,
         })
     }
@@ -504,5 +511,17 @@ mod tests {
             .expanded(true)
             .on_toggle(|open| open as u8)
             .into();
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_control_gap_is_a_parameter() {
+        let s = Spoiler::<()>::new(iced::widget::text("x")).spacing(11.0);
+        assert_eq!(s.gap, Some(11.0));
+        let _: Element<'_, ()> = s.into();
     }
 }

@@ -105,6 +105,10 @@ pub struct Tabs<'a, K, M> {
     variant: TabsVariant,
     grow: bool,
     metrics: Metrics,
+    spacing: Option<f32>,
+    padding: Option<iced::Padding>,
+    icon_spacing: Option<f32>,
+    panel_spacing: Option<f32>,
 }
 
 impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
@@ -117,6 +121,10 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
             variant: TabsVariant::default(),
             grow: false,
             metrics: Metrics::desktop(),
+            spacing: None,
+            padding: None,
+            icon_spacing: None,
+            panel_spacing: None,
         }
     }
     pub fn tab(mut self, item: TabItem<'a, K, M>) -> Self {
@@ -135,6 +143,26 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
     /// The tabs share the width equally (not for `Floating`, which hugs its tabs).
     pub fn grow(mut self, grow: bool) -> Self {
         self.grow = grow;
+        self
+    }
+    /// The gap between the tabs (default: the theme's `space_xs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding inside each tab's button (default: the theme's `space_xs` by `space_m`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// The gap between a tab's icon and its label (default: the theme's `space_s`).
+    pub fn icon_spacing(mut self, px: f32) -> Self {
+        self.icon_spacing = Some(px);
+        self
+    }
+    /// The gap between the tab list and the active panel (default: the theme's `space_m`).
+    pub fn panel_spacing(mut self, px: f32) -> Self {
+        self.panel_spacing = Some(px);
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -186,13 +214,15 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
                 t.style(st::dim)
             }
         };
-        let mut content = row![].spacing(m.space_s).align_y(Vertical::Center);
+        let mut content = row![]
+            .spacing(self.icon_spacing.unwrap_or(m.space_s))
+            .align_y(Vertical::Center);
         if let Some(icon) = item.icon {
             content = content.push(icon.view(m.icon_size));
         }
         content = content.push(text(item.label.clone()));
         let b = button(content)
-            .padding([m.space_xs, m.space_m])
+            .padding(self.padding.unwrap_or(iced::Padding::from([m.space_xs, m.space_m])))
             .on_press_maybe(self.press(i));
         let title: Element<'a, M> = match self.variant {
             TabsVariant::Pills if active => b.style(sb::suggested_pill),
@@ -213,7 +243,7 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
                 .map(|i| self.tab_button(i, active == Some(i)))
                 .collect();
             return FloatingIndicator::new(tabs, active.unwrap_or(0))
-                .spacing(m.space_xs)
+                .spacing(self.spacing.unwrap_or(m.space_xs))
                 .into();
         }
         let width = if self.grow {
@@ -221,7 +251,7 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
         } else {
             Length::Shrink
         };
-        let mut tabs = row![].spacing(m.space_xs);
+        let mut tabs = row![].spacing(self.spacing.unwrap_or(m.space_xs));
         for i in 0..self.items.len() {
             let on = active == Some(i);
             let button = self.tab_button(i, on);
@@ -281,7 +311,9 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> From<Tabs<'a, K, M>> for Elem
             .and_then(|i| t.items[i].panel.as_ref())
             .map(|build| build());
         match panel {
-            Some(p) => column![list, p].spacing(t.metrics.space_m).into(),
+            Some(p) => column![list, p]
+                .spacing(t.panel_spacing.unwrap_or(t.metrics.space_m))
+                .into(),
             None => list,
         }
     }
@@ -290,6 +322,25 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> From<Tabs<'a, K, M>> for Elem
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_gaps_and_padding_are_parameters() {
+        for v in [
+            TabsVariant::Default,
+            TabsVariant::Floating,
+            TabsVariant::Pills,
+            TabsVariant::Outline,
+        ] {
+            let t = tabs(Some(0))
+                .variant(v)
+                .spacing(3.0)
+                .padding([1.0, 2.0])
+                .icon_spacing(1.0)
+                .panel_spacing(9.0);
+            assert_eq!((t.spacing, t.panel_spacing), (Some(3.0), Some(9.0)));
+            let _: Element<'_, u8> = t.into();
+        }
+    }
 
     fn tabs(active: Option<u8>) -> Tabs<'static, u8, u8> {
         Tabs::new(active, |k| k)

@@ -34,6 +34,28 @@ pub(crate) fn row_frame<'a, M: 'a>(
     .align_y(Vertical::Center)
 }
 
+/// The spacing and padding of the inner [`ActionRow`] of a row built on one.
+macro_rules! forward_row_spacing {
+    () => {
+        /// The gap between the row's prefix, title block and suffix (default: the theme's
+        /// `row_spacing`).
+        pub fn spacing(mut self, px: f32) -> Self {
+            self.row = self.row.spacing(px);
+            self
+        }
+        /// The gap between the title and the subtitle (default: the theme's `space_xxs`).
+        pub fn title_spacing(mut self, px: f32) -> Self {
+            self.row = self.row.title_spacing(px);
+            self
+        }
+        /// The padding around the row's content (default: the theme's `row_padding`).
+        pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+            self.row = self.row.padding(p);
+            self
+        }
+    };
+}
+
 /// `AdwActionRow`.
 pub struct ActionRow<'a, M> {
     title: String,
@@ -46,6 +68,10 @@ pub struct ActionRow<'a, M> {
     collapse: CollapseBehavior,
     suffix_align: Horizontal,
     suffix_basis: Option<f32>,
+    spacing: Option<f32>,
+    title_spacing: Option<f32>,
+    line_spacing: Option<f32>,
+    padding: Option<iced::Padding>,
     metrics: Metrics,
     typography: Typography,
 }
@@ -72,8 +98,12 @@ impl<'a, M> ActionRow<'a, M> {
             collapse: Metrics::desktop().row_collapse,
             suffix_align: Horizontal::Left,
             suffix_basis: None,
+            spacing: None,
+            title_spacing: None,
+            line_spacing: None,
+            padding: None,
             metrics: Metrics::desktop(),
-            typography: Typography::default(),
+            typography: Typography::desktop(),
         }
     }
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {
@@ -127,6 +157,28 @@ impl<'a, M> ActionRow<'a, M> {
         self.suffix_basis = Some(px);
         self
     }
+    /// The gap between the prefix, the title block, the chevron and the suffix (default: the
+    /// theme's `row_spacing`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px.max(0.0));
+        self
+    }
+    /// The gap between the title and the subtitle (default: the theme's `space_xxs`).
+    pub fn title_spacing(mut self, px: f32) -> Self {
+        self.title_spacing = Some(px.max(0.0));
+        self
+    }
+    /// The gap between the title line and a suffix that wrapped below it (default: the theme's
+    /// `space_s`).
+    pub fn line_spacing(mut self, px: f32) -> Self {
+        self.line_spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding around the row's content (default: the theme's `row_padding`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -145,7 +197,7 @@ impl<'a, M: Clone + 'a> From<ActionRow<'a, M>> for Element<'a, M> {
                 .body(r.title)
                 .wrapping(text::Wrapping::WordOrGlyph)
         ]
-        .spacing(2);
+        .spacing(r.title_spacing.unwrap_or(m.space_xxs));
         if let Some(s) = r.subtitle {
             titles = titles.push(
                 r.typography
@@ -155,7 +207,8 @@ impl<'a, M: Clone + 'a> From<ActionRow<'a, M>> for Element<'a, M> {
                     .style(st::dim),
             );
         }
-        let mut main = row![].spacing(m.row_spacing).align_y(Vertical::Center);
+        let gap = r.spacing.unwrap_or(m.row_spacing);
+        let mut main = row![].spacing(gap).align_y(Vertical::Center);
         if let Some(p) = r.prefix {
             main = main.push(p);
         }
@@ -170,8 +223,8 @@ impl<'a, M: Clone + 'a> From<ActionRow<'a, M>> for Element<'a, M> {
         let line: Element<'a, M> = match r.suffix {
             Some(suffix) if r.wrap => {
                 let mut f = crate::layouts::FlexRow::new(main.width(Length::Fill), suffix)
-                    .spacing(m.row_spacing)
-                    .line_spacing(m.space_s)
+                    .spacing(gap)
+                    .line_spacing(r.line_spacing.unwrap_or(m.space_s))
                     .main_basis(m.row_wrap_basis)
                     .collapse(r.collapse)
                     .aside_align(r.suffix_align);
@@ -184,7 +237,7 @@ impl<'a, M: Clone + 'a> From<ActionRow<'a, M>> for Element<'a, M> {
             None => main.width(Length::Fill).into(),
         };
         let framed = container(row_frame(line, &m))
-            .padding(m.row_padding)
+            .padding(r.padding.unwrap_or(m.row_padding))
             .width(Length::Fill);
         match r.on_press {
             Some(msg) => button(framed)
@@ -208,6 +261,7 @@ pub struct SwitchRow<'a, M> {
 }
 
 impl<'a, M> SwitchRow<'a, M> {
+    forward_row_spacing!();
     pub fn new(title: impl Into<String>, active: bool, on_toggle: impl Fn(bool) -> M + 'a) -> Self {
         Self {
             // Compact fixed-size suffix: pin it to the end, no flex wrapping.
@@ -257,6 +311,7 @@ pub struct ButtonRow<M> {
     title: String,
     on_press: Option<M>,
     role: Role,
+    padding: Option<iced::Padding>,
     metrics: Metrics,
 }
 
@@ -265,7 +320,8 @@ impl<M> ButtonRow<M> {
         Self {
             title: title.into(),
             on_press: None,
-            role: Role::Accent,
+            role: Role::Primary,
+            padding: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -273,7 +329,12 @@ impl<M> ButtonRow<M> {
         self.on_press = Some(m);
         self
     }
-    /// `.suggested-action` ([`Role::Accent`]) or `.destructive-action`
+    /// The padding around the label (default: the theme's `row_padding`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// `.suggested-action` ([`Role::Primary`]) or `.destructive-action`
     /// ([`Role::Destructive`]) coloring.
     pub fn role(mut self, r: Role) -> Self {
         self.role = r;
@@ -289,7 +350,7 @@ impl<'a, M: Clone + 'a> From<ButtonRow<M>> for Element<'a, M> {
             color: Some(t.semantic.swatch(role).color),
         });
         let inner = container(row_frame(label, &m))
-            .padding(m.row_padding)
+            .padding(b.padding.unwrap_or(m.row_padding))
             .width(Length::Fill)
             .align_x(Horizontal::Center);
         let mut btn = button(inner)
@@ -317,9 +378,11 @@ where
     disabled: Option<OptionPredicate<'a, T>>,
     insensitive: bool,
     open_initially: bool,
+    value_spacing: Option<f32>,
 }
 
 impl<'a, T: ToString + PartialEq + Clone, M> ComboRow<'a, T, M> {
+    forward_row_spacing!();
     pub fn new(
         title: impl Into<String>,
         options: &'a [T],
@@ -335,6 +398,7 @@ impl<'a, T: ToString + PartialEq + Clone, M> ComboRow<'a, T, M> {
             disabled: None,
             insensitive: false,
             open_initially: false,
+            value_spacing: None,
         }
     }
     /// Insensitive: the value is dimmed and the popover cannot open.
@@ -349,6 +413,11 @@ impl<'a, T: ToString + PartialEq + Clone, M> ComboRow<'a, T, M> {
     }
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {
         self.row = self.row.subtitle(s);
+        self
+    }
+    /// The gap between the chosen value and the arrow (default: the theme's `space_s`).
+    pub fn value_spacing(mut self, px: f32) -> Self {
+        self.value_spacing = Some(px.max(0.0));
         self
     }
     /// Start with the popover open (screenshots, demos).
@@ -388,7 +457,7 @@ where
                     }),
                 }),
         ]
-        .spacing(m.space_s)
+        .spacing(c.value_spacing.unwrap_or(m.space_s))
         .align_y(Vertical::Center);
         let header: Element<'a, M> = c.row.suffix(value).into();
         let on_select = c.on_select;
@@ -421,9 +490,12 @@ pub struct SpinRow<'a, M> {
     step: f64,
     digits: usize,
     on_change: Box<dyn Fn(f64) -> M + 'a>,
+    control_spacing: f32,
+    value_width: f32,
 }
 
 impl<'a, M> SpinRow<'a, M> {
+    forward_row_spacing!();
     pub fn new(
         title: impl Into<String>,
         value: f64,
@@ -440,10 +512,22 @@ impl<'a, M> SpinRow<'a, M> {
             step,
             digits: 0,
             on_change: Box::new(on_change),
+            control_spacing: 0.0,
+            value_width: 44.0,
         }
     }
     pub fn digits(mut self, d: usize) -> Self {
         self.digits = d;
+        self
+    }
+    /// The gap between the minus button, the value and the plus button (default 0).
+    pub fn control_spacing(mut self, px: f32) -> Self {
+        self.control_spacing = px.max(0.0);
+        self
+    }
+    /// The width of the value between the buttons (default 44).
+    pub fn value_width(mut self, px: f32) -> Self {
+        self.value_width = px.max(0.0);
         self
     }
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {
@@ -467,10 +551,11 @@ impl<'a, M: Clone + 'a> From<SpinRow<'a, M>> for Element<'a, M> {
         let ctl = row![
             minus,
             container(typography::body(format!("{:.*}", s.digits, s.value)))
-                .width(Length::Fixed(44.0))
+                .width(Length::Fixed(s.value_width))
                 .align_x(Horizontal::Center),
             plus
         ]
+        .spacing(s.control_spacing)
         .align_y(Vertical::Center);
         s.row.suffix(ctl).into()
     }
@@ -486,6 +571,7 @@ pub struct ExpanderRow<'a, M> {
 }
 
 impl<'a, M> ExpanderRow<'a, M> {
+    forward_row_spacing!();
     pub fn new(
         title: impl Into<String>,
         expanded: bool,
@@ -586,6 +672,7 @@ pub struct SliderRow<'a, M> {
 }
 
 impl<'a, M> SliderRow<'a, M> {
+    forward_row_spacing!();
     pub fn new(
         title: impl Into<String>,
         value: f32,
@@ -644,10 +731,12 @@ pub struct RangeSliderRow<'a, M> {
     format: Option<Box<dyn Fn(f32) -> String + 'a>>,
     bounds: (f32, f32),
     basis: f32,
+    value_spacing: Option<f32>,
     metrics: Metrics,
 }
 
 impl<'a, M> RangeSliderRow<'a, M> {
+    forward_row_spacing!();
     pub fn new(
         title: impl Into<String>,
         value: (f32, f32),
@@ -662,6 +751,7 @@ impl<'a, M> RangeSliderRow<'a, M> {
             step: 1.0,
             format: None,
             basis: 240.0,
+            value_spacing: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -695,6 +785,11 @@ impl<'a, M> RangeSliderRow<'a, M> {
         self.format = Some(Box::new(f));
         self
     }
+    /// The gap between the slider and the `lo - hi` value (default: the theme's `space_m`).
+    pub fn value_spacing(mut self, px: f32) -> Self {
+        self.value_spacing = Some(px.max(0.0));
+        self
+    }
     /// The width the slider and the value take while sharing a line with the title.
     pub fn basis(mut self, px: f32) -> Self {
         self.basis = px;
@@ -725,7 +820,7 @@ impl<'a, M: Clone + 'a> From<RangeSliderRow<'a, M>> for Element<'a, M> {
             Some(f) => f(v),
             None => format!("{v:.decimals$}"),
         };
-        let size = r.metrics.space_m + 1.0;
+        let size = crate::Typography::desktop().small;
         // Wide enough for the longest end, so the slider does not move while dragging.
         let longest = fmt(r.bounds.0).len().max(fmt(r.bounds.1).len()) as f32;
         let label = container(
@@ -737,7 +832,7 @@ impl<'a, M: Clone + 'a> From<RangeSliderRow<'a, M>> for Element<'a, M> {
         .width(Length::Fixed((2.0 * longest + 3.0) * size * 0.56))
         .align_x(Horizontal::Right);
         let both = row![r.slider, label]
-            .spacing(r.metrics.space_m)
+            .spacing(r.value_spacing.unwrap_or(r.metrics.space_m))
             .align_y(Vertical::Center)
             .width(Length::Fill);
         r.row.suffix(both).suffix_basis(r.basis).into()
@@ -752,6 +847,7 @@ pub struct ToggleGroupRow<'a, T, M> {
 }
 
 impl<'a, T: Clone + PartialEq, M> ToggleGroupRow<'a, T, M> {
+    forward_row_spacing!();
     pub fn new(
         title: impl Into<String>,
         items: Vec<crate::components::ToggleItem<'a, T, M>>,
@@ -811,5 +907,64 @@ mod expander_indent_tests {
             Metrics::default().expander_indent,
             Metrics::default().icon_size + 8.0
         );
+    }
+}
+
+#[cfg(test)]
+mod spacing_params_tests {
+    use super::*;
+
+    fn each<'a>(row: impl Into<Element<'a, u8>>) {
+        let _: Element<'a, u8> = row.into();
+    }
+
+    #[test]
+    fn an_action_row_takes_its_gaps_and_padding() {
+        let r = ActionRow::<u8>::new("A")
+            .spacing(3.0)
+            .title_spacing(1.0)
+            .line_spacing(9.0)
+            .padding([2.0, 4.0]);
+        assert_eq!(
+            (r.spacing, r.title_spacing, r.line_spacing),
+            (Some(3.0), Some(1.0), Some(9.0))
+        );
+        assert_eq!(r.padding, Some(iced::Padding::from([2.0, 4.0])));
+        assert_eq!(ActionRow::<u8>::new("A").spacing(-5.0).spacing, Some(0.0));
+        each(r.subtitle("b").prefix(space()).suffix(space()));
+    }
+
+    #[test]
+    fn rows_built_on_an_action_row_forward_the_params() {
+        let o = [String::from("x")];
+        each(SwitchRow::new("A", true, |_| 0).spacing(2.0).padding(3.0));
+        each(ComboRow::new("A", &o, None, |_| 0).spacing(2.0).value_spacing(1.0));
+        each(ExpanderRow::new("A", true, |_| 0).title_spacing(2.0).padding(3.0));
+        each(SliderRow::new("A", 1.0, 0.0..=2.0, |_| 0).spacing(2.0));
+        each(RangeSliderRow::new("A", (0.0, 1.0), 0.0..=2.0, |_| 0).value_spacing(2.0));
+        each(
+            ToggleGroupRow::new("A", vec![crate::components::ToggleItem::new(1u8, "x")], None, |_| 0u8)
+                .padding(3.0),
+        );
+        let s = SwitchRow::<u8>::new("A", true, |_| 0).spacing(7.0);
+        assert_eq!(s.row.spacing, Some(7.0));
+        let c = ComboRow::new("A", &o, None, |_: String| 0u8).value_spacing(5.0);
+        assert_eq!(c.value_spacing, Some(5.0));
+    }
+
+    #[test]
+    fn a_spin_row_spaces_and_sizes_its_controls() {
+        let s = SpinRow::<u8>::new("A", 1.0, 0.0..=2.0, 1.0, |_| 0)
+            .control_spacing(6.0)
+            .value_width(60.0);
+        assert_eq!((s.control_spacing, s.value_width), (6.0, 60.0));
+        each(s);
+    }
+
+    #[test]
+    fn a_button_row_takes_padding() {
+        let b = ButtonRow::<u8>::new("A").padding([1.0, 2.0]);
+        assert_eq!(b.padding, Some(iced::Padding::from([1.0, 2.0])));
+        each(b);
     }
 }

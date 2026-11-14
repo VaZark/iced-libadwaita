@@ -29,6 +29,7 @@ pub struct MultiSelect<'a, T, M> {
     disabled: bool,
     width: Length,
     open_initially: bool,
+    spacing: Option<f32>,
     metrics: Metrics,
 }
 
@@ -43,6 +44,7 @@ impl<'a, T, M> MultiSelect<'a, T, M> {
             disabled: false,
             width: Length::Fill,
             open_initially: false,
+            spacing: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -67,6 +69,11 @@ impl<'a, T, M> MultiSelect<'a, T, M> {
     /// Start with the popover open (screenshots, demos).
     pub fn open_initially(mut self, open: bool) -> Self {
         self.open_initially = open;
+        self
+    }
+    /// The gap between the chips, and between them and the chevron (default `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -98,7 +105,8 @@ where
     fn from(s: MultiSelect<'a, T, M>) -> Self {
         let m = s.metrics;
         let disabled = s.disabled;
-        let mut pills = row![].spacing(m.space_s).align_y(Vertical::Center);
+        let gap = s.spacing.unwrap_or(m.space_s);
+        let mut pills = row![].spacing(gap).align_y(Vertical::Center);
         if s.selected.is_empty() {
             pills = pills.push(
                 text(s.placeholder)
@@ -124,7 +132,7 @@ where
             });
         let trigger = container(
             row![container(pills).width(Length::Fill), chevron]
-                .spacing(m.space_s)
+                .spacing(gap)
                 .align_y(Vertical::Center),
         )
         .center_y(Length::Fixed(m.button_min_height - m.button_padding.y()));
@@ -136,5 +144,18 @@ where
             .disabled(disabled)
             .open_initially(s.open_initially)
             .into()
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_gap_is_a_parameter() {
+        let opts = [1u8, 2];
+        let m = MultiSelect::<u8, ()>::new(&opts, &opts, |_| ()).spacing(5.0);
+        assert_eq!(m.spacing, Some(5.0));
+        let _: Element<'_, ()> = m.into();
     }
 }

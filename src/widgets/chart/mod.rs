@@ -103,7 +103,7 @@ where
 {
     let chart = iced::widget::canvas(program).width(width).height(height);
     match names {
-        Some(n) => column![chart, legend(n)].spacing(8).width(width).into(),
+        Some(n) => column![chart, legend(n)].spacing(crate::Metrics::desktop().gap).width(width).into(),
         None => chart.into(),
     }
 }

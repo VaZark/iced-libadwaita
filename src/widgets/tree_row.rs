@@ -48,6 +48,8 @@ pub struct TreeRow<'a, M> {
     children: Vec<Element<'a, M>>,
     indent: f32,
     metrics: Metrics,
+    handle_padding: Option<iced::Padding>,
+    handle_width: Option<f32>,
 }
 
 impl<'a, M: 'a> TreeRow<'a, M> {
@@ -64,6 +66,8 @@ impl<'a, M: 'a> TreeRow<'a, M> {
             // The toolkit's default; `indent(..)` overrides it for this row.
             indent: metrics.expander_indent,
             metrics,
+            handle_padding: None,
+            handle_width: None,
         }
     }
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {
@@ -112,6 +116,16 @@ impl<'a, M: 'a> TreeRow<'a, M> {
         self.indent = px.max(0.0);
         self
     }
+    /// The padding around the arrow cell (default: the theme's row padding on the left).
+    pub fn handle_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.handle_padding = Some(p.into());
+        self
+    }
+    /// The width of the arrow cell, which a leaf keeps too (default: the theme's icon size plus 8).
+    pub fn handle_width(mut self, px: f32) -> Self {
+        self.handle_width = Some(px.max(0.0));
+        self
+    }
     /// A nested row, or any element.
     pub fn push(mut self, child: impl Into<Element<'a, M>>) -> Self {
         self.children.push(child.into());
@@ -140,7 +154,7 @@ impl<'a, M: Clone + 'a> From<TreeRow<'a, M>> for Element<'a, M> {
         let action = x.on_activate.clone().or_else(|| toggle.clone());
         let separate_toggle = x.on_activate.is_some();
         // The arrow cell; a leaf keeps its width (GTK's indent-for-icon).
-        let cell = m.icon_size + 8.0;
+        let cell = x.handle_width.unwrap_or(m.icon_size + 8.0);
         let handle: Element<'a, M> = if x.has_arrow() {
             let icon = if x.expanded {
                 Icon::GoDown
@@ -162,7 +176,10 @@ impl<'a, M: Clone + 'a> From<TreeRow<'a, M>> for Element<'a, M> {
         };
         let selected = x.selected;
         let header = row![
-            container(handle).padding(iced::Padding::ZERO.left(m.row_padding.left)),
+            container(handle).padding(
+                x.handle_padding
+                    .unwrap_or(iced::Padding::ZERO.left(m.row_padding.left)),
+            ),
             Element::from(x.row),
         ]
         .align_y(Vertical::Center);
@@ -389,5 +406,21 @@ mod tests {
         let t = row().expanded(true).push(inner).push(iced::widget::space());
         assert_eq!(t.children.len(), 2);
         let _: Element<'static, u8> = t.into();
+    }
+}
+
+#[cfg(test)]
+mod spacing_tests {
+    use super::*;
+
+    #[test]
+    fn the_arrow_cell_is_a_parameter() {
+        let r = TreeRow::<u8>::new("a")
+            .push(TreeRow::new("b"))
+            .handle_padding([0.0, 4.0])
+            .handle_width(30.0)
+            .indent(8.0);
+        assert_eq!(r.handle_width, Some(30.0));
+        let _: Element<'_, u8> = r.into();
     }
 }

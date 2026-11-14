@@ -64,9 +64,18 @@ pub fn view_switcher_bar<'a, M: Clone + 'a, T: Clone + PartialEq + 'a>(
     active: Option<T>,
     on_select: impl Fn(T) -> M + 'a,
 ) -> Element<'a, M> {
-    let m = Metrics::desktop();
+    view_switcher_bar_with(items, active, on_select, Metrics::desktop().space_s)
+}
+
+/// [`view_switcher_bar`] with `padding` around the switcher (default: the theme's `space_s`).
+pub fn view_switcher_bar_with<'a, M: Clone + 'a, T: Clone + PartialEq + 'a>(
+    items: Vec<ToggleItem<'a, T, M>>,
+    active: Option<T>,
+    on_select: impl Fn(T) -> M + 'a,
+    padding: impl Into<iced::Padding>,
+) -> Element<'a, M> {
     container(Element::from(toggle_group(items, active, on_select)))
-        .padding(m.space_s)
+        .padding(padding)
         .center_x(Length::Fill)
         .style(sc::headerbar)
         .into()
@@ -80,15 +89,27 @@ pub fn sidebar<'a, M: 'a>(rows: impl IntoIterator<Item = Element<'a, M>>) -> Ele
 
 /// `AdwShortcutLabel`: renders an accelerator like `Ctrl+Shift+P` as keycaps.
 pub fn shortcut_label<'a, M: 'a>(accelerator: &str) -> Element<'a, M> {
-    let t = Typography::default();
-    let mut r = row![].spacing(4).align_y(Vertical::Center);
+    let m = Metrics::desktop();
+    shortcut_label_with(accelerator, m.space_xs, [m.space_xxs, m.space_s])
+}
+
+/// [`shortcut_label`] with `spacing` between the keycaps and `padding` inside each (default: the
+/// theme's `space_xs`, and `space_xxs` by `space_s`).
+pub fn shortcut_label_with<'a, M: 'a>(
+    accelerator: &str,
+    spacing: f32,
+    padding: impl Into<iced::Padding>,
+) -> Element<'a, M> {
+    let t = Typography::desktop();
+    let padding = padding.into();
+    let mut r = row![].spacing(spacing).align_y(Vertical::Center);
     for (i, key) in accelerator.split('+').enumerate() {
         if i > 0 {
             r = r.push(t.caption("+").style(st::dim));
         }
         r = r.push(
             container(t.caption(key.trim().to_string()))
-                .padding([2.0, 6.0])
+                .padding(padding)
                 .style(|th: &Theme| iced::widget::container::Style {
                     background: Some(iced::Background::Color(crate::color::alpha(
                         th.semantic.window.fg,
@@ -154,7 +175,7 @@ fn indicator<'a, M: Clone + 'a>(
     w: f32,
     h: f32,
 ) -> Element<'a, M> {
-    let mut r = row![].spacing(6).align_y(Vertical::Center);
+    let mut r = row![].spacing(crate::Metrics::desktop().space_s).align_y(Vertical::Center);
     for i in 0..count {
         let active = i == index;
         r = r.push(
@@ -172,7 +193,7 @@ fn indicator<'a, M: Clone + 'a>(
                 .on_press(on_navigate(i)),
         );
     }
-    container(r).padding(8).into()
+    container(r).padding(crate::Metrics::desktop().inset).into()
 }
 
 /// `AdwTabButton`: shows the open tab count, e.g. to open a tab overview.

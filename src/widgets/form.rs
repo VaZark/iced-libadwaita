@@ -98,6 +98,10 @@ pub struct Form<'a, M> {
     submitting: bool,
     enter: bool,
     actions: FormActions,
+    spacing: Option<f32>,
+    header_spacing: Option<f32>,
+    actions_spacing: Option<f32>,
+    padding: iced::Padding,
     metrics: Metrics,
 }
 
@@ -128,6 +132,10 @@ impl<'a, M: Clone + 'a> Form<'a, M> {
             submitting: false,
             enter: true,
             actions: FormActions::Spread,
+            spacing: None,
+            header_spacing: None,
+            actions_spacing: None,
+            padding: iced::Padding::ZERO,
             metrics: Metrics::desktop(),
         }
     }
@@ -213,6 +221,27 @@ impl<'a, M: Clone + 'a> Form<'a, M> {
         self.actions = l;
         self
     }
+    /// The gap between the heading, the steps, the content and the action bar (default: the
+    /// theme's `space_l`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px.max(0.0));
+        self
+    }
+    /// The gap between the title and the description (default: the theme's `space_xs`).
+    pub fn header_spacing(mut self, px: f32) -> Self {
+        self.header_spacing = Some(px.max(0.0));
+        self
+    }
+    /// The gap between the action buttons (default: the theme's `space_s`).
+    pub fn actions_spacing(mut self, px: f32) -> Self {
+        self.actions_spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding around the whole form (default none).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = p.into();
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -232,9 +261,11 @@ impl<'a, M: Clone + 'a> From<Form<'a, M>> for Element<'a, M> {
         let busy = f.submitting;
         let idle = |msg: &Option<M>| if busy { None } else { msg.clone() };
 
-        let mut body = column![].spacing(m.space_l).width(Length::Fill);
+        let mut body = column![]
+            .spacing(f.spacing.unwrap_or(m.space_l))
+            .width(Length::Fill);
         if f.title.is_some() || f.description.is_some() {
-            let mut head = column![].spacing(m.space_xs);
+            let mut head = column![].spacing(f.header_spacing.unwrap_or(m.space_xs));
             if let Some(t) = &f.title {
                 head = head.push(crate::components::typography::title_3(t.clone()));
             }
@@ -296,7 +327,8 @@ impl<'a, M: Clone + 'a> From<Form<'a, M>> for Element<'a, M> {
             (f.next_label.clone(), f.on_next.clone())
         };
         let primary = suggested_button(label(&primary_label)).on_press_maybe(idle(&primary_msg));
-        let mut right = row![].spacing(m.space_s);
+        let bar_gap = f.actions_spacing.unwrap_or(m.space_s);
+        let mut right = row![].spacing(bar_gap);
         if let Some(b) = back {
             right = right.push(b);
         }
@@ -304,13 +336,17 @@ impl<'a, M: Clone + 'a> From<Form<'a, M>> for Element<'a, M> {
         let bar: Element<'a, M> = match f.actions {
             FormActions::Spread => row![reset, space().width(Length::Fill), right].into(),
             FormActions::End => row![space().width(Length::Fill), reset, right]
-                .spacing(m.space_s)
+                .spacing(bar_gap)
                 .into(),
-            FormActions::Start => row![reset, right].spacing(m.space_s).into(),
+            FormActions::Start => row![reset, right].spacing(bar_gap).into(),
         };
         body = body.push(bar);
 
-        let el: Element<'a, M> = body.into();
+        let el: Element<'a, M> = if f.padding == iced::Padding::ZERO {
+            body.into()
+        } else {
+            container(body).padding(f.padding).into()
+        };
         match (f.enter, idle(&primary_msg)) {
             (true, Some(msg)) => Shortcuts::new().bind("Enter", msg).scope(el),
             _ => el,
@@ -379,5 +415,26 @@ impl<'a, M: Clone + 'a> From<StepIndicator<'a, M>> for Element<'a, M> {
             st = st.step(StepperStep::new(label));
         }
         st.into()
+    }
+}
+
+#[cfg(test)]
+mod spacing_params_tests {
+    use super::*;
+
+    #[test]
+    fn a_form_takes_its_gaps_and_padding() {
+        let f = Form::<u8>::new()
+            .title("T")
+            .description("D")
+            .step(Step::new("One", || iced::widget::text("x").into()))
+            .spacing(1.0)
+            .header_spacing(2.0)
+            .actions_spacing(3.0)
+            .padding(4.0)
+            .layout(FormActions::End);
+        assert_eq!((f.spacing, f.header_spacing, f.actions_spacing), (Some(1.0), Some(2.0), Some(3.0)));
+        assert_eq!(f.padding, iced::Padding::from(4.0));
+        let _: Element<'_, u8> = f.into();
     }
 }

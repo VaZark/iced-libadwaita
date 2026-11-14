@@ -8,7 +8,7 @@ use crate::styles;
 use crate::{Metrics, Role, Surface, Swatch, Theme};
 use iced::widget::{Button, Checkbox, Radio};
 use iced::widget::{button, checkbox, container, radio, text};
-use iced::{Length, Padding};
+use iced::Length;
 use std::ops::RangeInclusive;
 
 // ------------------------------------------------- CheckButton / RadioButton
@@ -65,10 +65,10 @@ pub fn link_button<'a, M: 'a>(label: impl Into<String>) -> Button<'a, M, Theme> 
 pub fn tag<'a, M: 'a>(label: impl Into<String>, role: Role) -> Element<'a, M> {
     container(
         text(label.into())
-            .size(Metrics::desktop().space_m + 1.0)
+            .size(crate::Typography::desktop().small)
             .wrapping(text::Wrapping::None),
     )
-    .padding(Padding::from([2.0, 10.0]))
+    .padding(Metrics::desktop().small_button_padding)
     .style(styles::container::tinted(role))
     .into()
 }

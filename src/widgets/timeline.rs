@@ -95,6 +95,9 @@ pub struct Timeline<'a, M> {
     align: TimelineAlign,
     reverse: bool,
     metrics: Metrics,
+    spacing: Option<f32>,
+    title_spacing: Option<f32>,
+    item_spacing: Option<f32>,
 }
 
 /// The status of item `i` of `n`, by the stepper primitive; reversed, the done items are the
@@ -138,6 +141,9 @@ impl<'a, M: 'a> Timeline<'a, M> {
             align: TimelineAlign::Left,
             reverse: false,
             metrics: Metrics::desktop(),
+            spacing: None,
+            title_spacing: None,
+            item_spacing: None,
         }
     }
     pub fn item(mut self, item: TimelineItem<'a, M>) -> Self {
@@ -152,6 +158,22 @@ impl<'a, M: 'a> Timeline<'a, M> {
     /// The line's thickness (default 2).
     pub fn line_width(mut self, px: f32) -> Self {
         self.line_width = px.max(1.0);
+        self
+    }
+    /// The gap between the line and the text (default: the theme's `space_m`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The gap between an item's title and its body (default: the theme's `space_xs`).
+    pub fn title_spacing(mut self, px: f32) -> Self {
+        self.title_spacing = Some(px);
+        self
+    }
+    /// The space under every item but the last, which the line crosses (default: the theme's
+    /// `space_l`).
+    pub fn item_spacing(mut self, px: f32) -> Self {
+        self.item_spacing = Some(px);
         self
     }
     pub fn align(mut self, a: TimelineAlign) -> Self {
@@ -246,7 +268,7 @@ impl<'a, M: 'a> From<Timeline<'a, M>> for Element<'a, M> {
             .align_x(Horizontal::Center)
             .width(t.bullet_size);
 
-            let mut text = column![ty::heading(item.title)].spacing(m.space_xs);
+            let mut text = column![ty::heading(item.title)].spacing(t.title_spacing.unwrap_or(m.space_xs));
             if let Some(body) = item.body {
                 text = text.push(body);
             }
@@ -254,7 +276,7 @@ impl<'a, M: 'a> From<Timeline<'a, M>> for Element<'a, M> {
             let text = container(text).padding(if last {
                 iced::Padding::ZERO
             } else {
-                iced::Padding::ZERO.bottom(m.space_l)
+                iced::Padding::ZERO.bottom(t.item_spacing.unwrap_or(m.space_l))
             });
             let line = match t.align {
                 TimelineAlign::Left => row![rail, text.width(Length::Fill)],
@@ -262,7 +284,7 @@ impl<'a, M: 'a> From<Timeline<'a, M>> for Element<'a, M> {
                     row![text.width(Length::Fill).align_right(Length::Fill), rail]
                 }
             }
-            .spacing(m.space_m);
+            .spacing(t.spacing.unwrap_or(m.space_m));
             col = col.push(line);
         }
         col.into()
@@ -279,6 +301,18 @@ mod tests {
         assert_eq!(st(0), Status::Completed);
         assert_eq!(st(1), Status::Current);
         assert_eq!(st(2), Status::Upcoming);
+    }
+
+    #[test]
+    fn the_gaps_are_parameters() {
+        let t = Timeline::<()>::new(0)
+            .item(TimelineItem::new("a").body(iced::widget::space()))
+            .item(TimelineItem::new("b"))
+            .spacing(4.0)
+            .title_spacing(2.0)
+            .item_spacing(30.0);
+        assert_eq!((t.spacing, t.title_spacing, t.item_spacing), (Some(4.0), Some(2.0), Some(30.0)));
+        let _: Element<'_, ()> = t.into();
     }
 
     #[test]

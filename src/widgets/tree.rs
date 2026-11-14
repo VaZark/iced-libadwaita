@@ -106,6 +106,9 @@ pub struct Tree<'a, M> {
     window: Option<Range<usize>>,
     on_event: Option<Emit<'a, M>>,
     metrics: Metrics,
+    icon_padding: Option<iced::Padding>,
+    label_padding: Option<iced::Padding>,
+    checkbox_padding: Option<iced::Padding>,
 }
 
 impl<'a, M: Clone + 'a> Tree<'a, M> {
@@ -126,6 +129,9 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
             window: None,
             on_event: None,
             metrics: Metrics::desktop(),
+            icon_padding: None,
+            label_padding: None,
+            checkbox_padding: None,
         }
     }
     /// Connecting lines down each level (Mantine's `withLines`).
@@ -187,6 +193,21 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
     /// The one message: apply it with [`TreeState::apply`].
     pub fn on_event(mut self, f: impl Fn(Event) -> M + 'a) -> Self {
         self.on_event = Some(Rc::new(f));
+        self
+    }
+    /// The padding around a row's icon (default: the theme's `space_xs` on each side).
+    pub fn icon_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.icon_padding = Some(p.into());
+        self
+    }
+    /// The padding around a row's label (default: the theme's `space_s` on each side).
+    pub fn label_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.label_padding = Some(p.into());
+        self
+    }
+    /// The padding around a row's checkbox (default: the theme's `space_xs` on each side).
+    pub fn checkbox_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.checkbox_padding = Some(p.into());
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -308,7 +329,10 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
         if let (Some(f), Some(n)) = (&self.icons, node)
             && let Some(icon) = f(n, r)
         {
-            line = line.push(container(icon.view(m.icon_size)).padding([0.0, m.space_xs]));
+            line = line.push(
+                container(icon.view(m.icon_size))
+                    .padding(self.icon_padding.unwrap_or(iced::Padding::from([0.0, m.space_xs]))),
+            );
         }
 
         let text: Element<'a, M> = match (&self.label, node) {
@@ -324,7 +348,7 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
         };
         line = line.push(
             button(text)
-                .padding([0.0, m.space_s])
+                .padding(self.label_padding.unwrap_or(iced::Padding::from([0.0, m.space_s])))
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .style(sb::flat_toggle(selected))
@@ -371,7 +395,10 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
                     },
                     ..Default::default()
                 });
-        button(container(boxed).padding([0.0, m.space_xs]))
+        button(container(boxed).padding(
+            self.checkbox_padding
+                .unwrap_or(iced::Padding::from([0.0, m.space_xs])),
+        ))
             .padding(0)
             .style(sb::flat)
             .on_press_maybe(self.emit(Event::Check(r.value.clone(), !on)))
@@ -909,6 +936,20 @@ mod tests {
             N::branch("a", "A", vec![N::new("a1", "A1")]),
             N::new("b", "B"),
         ]
+    }
+
+    #[test]
+    fn the_row_parts_take_their_own_padding() {
+        let d = data();
+        let state = TreeState::new();
+        let t = Tree::<()>::new(&d, &state)
+            .checkboxes(true)
+            .icons(|_, _| Some(Icon::Folder))
+            .icon_padding([0.0, 1.0])
+            .label_padding([0.0, 2.0])
+            .checkbox_padding([0.0, 3.0]);
+        assert_eq!(t.label_padding, Some(iced::Padding::from([0.0, 2.0])));
+        let _: Element<'_, ()> = t.into();
     }
 
     /// The rows the widget builds: open branches show their children; a window builds fewer.

@@ -12,7 +12,7 @@ flowchart TD
 ```
 
 - Components animate themselves: switch, reveal, drawer, dialogs, docks, toasts, popovers, page changes, navigation push, carousel. The app needs no subscription or timers.
-- Every animation is a trigger with its own animation and a `None` fallback. Under reduced motion (`enable-animations` off, or `[motion] reduced-motion=true`) all triggers are `None`: changes are instant. Set one trigger to `none` in the config to turn off only that one.
+- Every animation is a trigger with its own animation and a `None` fallback. Under reduced motion (`[motion] animations=false`, or `[motion] reduced-motion=true`) all triggers are `None`: changes are instant. Set one trigger to `none` in the config to turn off only that one.
 - Do not animate in the app what a component already animates. To animate something yourself, use `animation::Tween` with a `Spec`. Gate it with `Trigger::…::spec(..)` or `animation::enabled()`, so reduced motion is respected.
 - Springs for things the user moves (drawer, dock, carousel). Short eased transitions for state changes.
 

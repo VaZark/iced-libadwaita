@@ -49,6 +49,8 @@ pub struct Pagination<'a, M> {
     size: PaginationSize,
     disabled: bool,
     align: Horizontal,
+    spacing: Option<f32>,
+    cell_padding: Option<f32>,
     metrics: Metrics,
 }
 
@@ -65,6 +67,8 @@ impl<'a, M: 'a> Pagination<'a, M> {
             size: PaginationSize::Medium,
             disabled: false,
             align: Horizontal::Center,
+            spacing: None,
+            cell_padding: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -100,6 +104,17 @@ impl<'a, M: 'a> Pagination<'a, M> {
     /// Where the pager sits in the row it fills (default centered).
     pub fn align(mut self, align: Horizontal) -> Self {
         self.align = align;
+        self
+    }
+    /// The gap between the page buttons (default: the theme's `space_xs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding each side of a page number that decides how wide the buttons are when the
+    /// numbers get long (default: the theme's `space_m`).
+    pub fn cell_padding(mut self, px: f32) -> Self {
+        self.cell_padding = Some(px.max(0.0));
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -138,7 +153,7 @@ impl<'a, M: Clone + 'a> From<Pagination<'a, M>> for Element<'a, M> {
             .max()
             .unwrap_or(1);
         let h = p.side();
-        let w = h.max(digits as f32 * p.text_size() * 0.62 + 2.0 * p.metrics.space_m);
+        let w = h.max(digits as f32 * p.text_size() * 0.62 + 2.0 * p.cell_padding.unwrap_or(p.metrics.space_m));
         let cell = |content: Element<'a, M>| {
             container(content)
                 .center_x(Length::Fixed(w))
@@ -164,7 +179,9 @@ impl<'a, M: Clone + 'a> From<Pagination<'a, M>> for Element<'a, M> {
             .into()
         };
 
-        let mut r = row![].spacing(p.metrics.space_xs).align_y(Vertical::Center);
+        let mut r = row![]
+            .spacing(p.spacing.unwrap_or(p.metrics.space_xs))
+            .align_y(Vertical::Center);
         if p.edges {
             r = r.push(control(Icon::GoFirst, p.state.first_page()));
         }
@@ -231,4 +248,17 @@ pub fn page_size_dropdown<'a, M: Clone + 'a>(
     on_select: impl Fn(usize) -> M + 'a,
 ) -> crate::widgets::Popover<'a, M> {
     crate::widgets::dropdown(options, Some(PageSize(current)), move |s| on_select(s.0))
+}
+
+#[cfg(test)]
+mod spacing_params_tests {
+    use super::*;
+
+    #[test]
+    fn a_pager_takes_spacing_and_cell_padding() {
+        let state = State::new(100, 10);
+        let p = Pagination::new(&state, |n| n).spacing(2.0).cell_padding(3.0);
+        assert_eq!((p.spacing, p.cell_padding), (Some(2.0), Some(3.0)));
+        let _: Element<'_, usize> = p.into();
+    }
 }

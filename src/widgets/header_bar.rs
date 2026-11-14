@@ -85,8 +85,14 @@ pub struct HeaderBar<'a, M> {
     show_end_buttons: bool,
     on_drag: Option<M>,
     on_double_click: Option<M>,
+    on_middle_click: Option<M>,
+    on_right_click: Option<M>,
     corners: (f32, f32),
     flat: Option<bool>,
+    spacing: Option<f32>,
+    padding: Option<Padding>,
+    height: Option<f32>,
+    title_gap: Option<f32>,
     metrics: Metrics,
 }
 
@@ -109,8 +115,14 @@ impl<'a, M> HeaderBar<'a, M> {
             show_end_buttons: true,
             on_drag: None,
             on_double_click: None,
+            on_middle_click: None,
+            on_right_click: None,
             corners: (0.0, 0.0),
             flat: None,
+            spacing: None,
+            padding: None,
+            height: None,
+            title_gap: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -167,6 +179,16 @@ impl<'a, M> HeaderBar<'a, M> {
         self.on_double_click = Some(m);
         self
     }
+    /// Message for a middle click on the bar.
+    pub fn on_middle_click(mut self, m: M) -> Self {
+        self.on_middle_click = Some(m);
+        self
+    }
+    /// Message for a right click on the bar.
+    pub fn on_right_click(mut self, m: M) -> Self {
+        self.on_right_click = Some(m);
+        self
+    }
     /// Rounds the bar's top corners to match the window corners (pass
     /// [`window::State::radius`](crate::windows::State::radius); 0 when maximized).
     pub fn window_radius(mut self, r: f32) -> Self {
@@ -217,12 +239,41 @@ impl<'a, M> HeaderBar<'a, M> {
                 layout: None,
             })
             .on_drag(on_action(Action::Drag));
-        if chrome.maximize {
-            bar = bar.on_double_click(on_action(Action::ToggleMaximize));
+        // What a click on the bar does is the theme's `[windows] titlebar-*-click`.
+        let act = |click: &str| Action::titlebar(click, chrome).map(&on_action);
+        if let Some(m) = act("double") {
+            bar = bar.on_double_click(m);
+        }
+        if let Some(m) = act("middle") {
+            bar = bar.on_middle_click(m);
+        }
+        if let Some(m) = act("right") {
+            bar = bar.on_right_click(m);
         }
         bar
     }
 
+    /// The gap between the items packed at each side (default: the theme's `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding around the bar's content (default: the theme's `headerbar_padding`).
+    pub fn padding(mut self, p: impl Into<Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// The height of the bar (default: the theme's `headerbar_height`).
+    pub fn height(mut self, px: f32) -> Self {
+        self.height = Some(px.max(0.0));
+        self
+    }
+    /// The least gap between the title and the items at either side (default: the theme's
+    /// `space_m`).
+    pub fn title_gap(mut self, px: f32) -> Self {
+        self.title_gap = Some(px.max(0.0));
+        self
+    }
     pub fn window_corners(mut self, left: f32, right: f32) -> Self {
         self.corners = (left, right);
         self
@@ -239,19 +290,21 @@ impl<'a, M: Clone + 'a> Default for HeaderBar<'a, M> {
     }
 }
 
-/// A window button: a 24px circle with the chosen artwork.
+/// A window button with the chosen artwork, sized and rounded by the theme's `[windows]` tokens.
 fn ctl<'a, M: Clone + 'a>(icon: IconSource, msg: M, flat: Option<bool>) -> Element<'a, M> {
-    let m = Metrics::desktop();
-    iced::widget::button(container(icon.view(m.icon_size)).center(Length::Fixed(24.0)))
+    let size = crate::theme_config::window_button_size();
+    let radius = crate::theme_config::window_button_radius();
+    let icon_size = crate::theme_config::window_button_icon_size();
+    iced::widget::button(container(icon.view(icon_size)).center(Length::Fixed(size)))
         .padding(0)
         .style(move |t: &Theme, status| {
-            if flat.unwrap_or(t.flat_headerbars) {
+            let mut style = if flat.unwrap_or(t.flat_headerbars) {
                 crate::styles::button::circular(t, status)
             } else {
-                let mut style = crate::styles::button::headerbar(t, status);
-                style.border.radius = t.metrics.radius_pill.into();
-                style
-            }
+                crate::styles::button::headerbar(t, status)
+            };
+            style.border.radius = radius.into();
+            style
         })
         .on_press(msg)
         .into()
@@ -289,13 +342,22 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
                         .map(|m| ctl(h.control_icons.close.clone(), m, flat)),
                 }
             };
+            // The window buttons sit together, `[windows] button-gap` apart.
+            let group = |buttons: Vec<Element<'a, M>>| -> Option<Element<'a, M>> {
+                (!buttons.is_empty()).then(|| {
+                    row(buttons)
+                        .spacing(crate::theme_config::window_button_gap())
+                        .align_y(Vertical::Center)
+                        .into()
+                })
+            };
             if h.show_start_buttons {
-                let mut buttons: Vec<_> = layout.start.iter().copied().filter_map(&make).collect();
-                buttons.append(&mut start);
-                start = buttons;
+                let buttons: Vec<_> = layout.start.iter().copied().filter_map(&make).collect();
+                start.splice(0..0, group(buttons));
             }
             if h.show_end_buttons {
-                end.extend(layout.end.iter().copied().filter_map(&make));
+                let buttons: Vec<_> = layout.end.iter().copied().filter_map(&make).collect();
+                end.extend(group(buttons));
             }
         }
         let title: Element<'a, M> = match (h.title_widget, h.title) {
@@ -305,7 +367,7 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
         };
         let side = |items: Vec<Element<'a, M>>| -> Element<'a, M> {
             row(items)
-                .spacing(m.space_s)
+                .spacing(h.spacing.unwrap_or(m.space_s))
                 .align_y(Vertical::Center)
                 .into()
         };
@@ -313,10 +375,10 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
             side(start),
             title,
             side(end),
-            m.headerbar_height,
-            m.space_m,
+            h.height.unwrap_or(m.headerbar_height),
+            h.title_gap.unwrap_or(m.space_m),
         ))
-        .padding(m.headerbar_padding)
+        .padding(h.padding.unwrap_or(m.headerbar_padding))
         .width(Length::Fill)
         .style(move |t: &Theme| {
             if flat.unwrap_or(t.flat_headerbars) {
@@ -340,6 +402,12 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
         if let Some(d) = h.on_double_click {
             area = area.on_double_click(d);
         }
+        if let Some(d) = h.on_middle_click {
+            area = area.on_middle_press(d);
+        }
+        if let Some(d) = h.on_right_click {
+            area = area.on_right_press(d);
+        }
         area.into()
     }
 }
@@ -350,6 +418,18 @@ fn _assert_types(_: Padding, _: &Theme, _: text::Text<'static, Theme>) {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_header_bar_takes_spacing_padding_and_height() {
+        let bar = HeaderBar::<u8>::new()
+            .title("T")
+            .spacing(2.0)
+            .padding([1.0, 3.0])
+            .height(40.0)
+            .title_gap(5.0);
+        assert_eq!((bar.spacing, bar.height, bar.title_gap), (Some(2.0), Some(40.0), Some(5.0)));
+        let _: Element<'_, u8> = bar.into();
+    }
     use crate::windows::{Action, Chrome, State};
 
     #[test]

@@ -50,7 +50,7 @@ pub struct TagGroupList<'a, M> {
     separator: String,
     size: ChipSize,
     on_remove: Option<OnRemove<'a, M>>,
-    #[allow(dead_code)]
+    spacing: Option<f32>,
     metrics: Metrics,
 }
 
@@ -61,6 +61,7 @@ impl<'a, M: Clone + 'a> TagGroupList<'a, M> {
             separator: String::new(),
             size: ChipSize::Small,
             on_remove: None,
+            spacing: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -68,6 +69,12 @@ impl<'a, M: Clone + 'a> TagGroupList<'a, M> {
     /// What goes between groups. Nothing by default.
     pub fn separator(mut self, s: impl Into<String>) -> Self {
         self.separator = s.into();
+        self
+    }
+
+    /// The gap between the chips of a group (default `space_xs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
         self
     }
 
@@ -124,12 +131,24 @@ impl<'a, M: Clone + 'a> From<TagGroupList<'a, M>> for Element<'a, M> {
             });
             flow.push(
                 row(chips)
-                    .spacing(4)
+                    .spacing(list.spacing.unwrap_or(list.metrics.space_xs))
                     .align_y(Alignment::Center)
                     .wrap()
                     .into(),
             );
         }
         token_flow(flow)
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_chip_gap_is_a_parameter() {
+        let l = TagGroupList::<()>::new(vec![vec![TagItem::new("a"), TagItem::new("b")]]).spacing(7.0);
+        assert_eq!(l.spacing, Some(7.0));
+        let _: Element<'_, ()> = l.into();
     }
 }

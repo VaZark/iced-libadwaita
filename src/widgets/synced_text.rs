@@ -26,6 +26,10 @@ pub struct SyncedText<'a, M> {
     current: Option<usize>,
     on_seek: Box<dyn Fn(f32) -> M + 'a>,
     placeholder: String,
+    spacing: Option<f32>,
+    padding: Option<iced::Padding>,
+    line_padding: Option<iced::Padding>,
+    align: Alignment,
 }
 
 impl<'a, M> SyncedText<'a, M> {
@@ -38,6 +42,10 @@ impl<'a, M> SyncedText<'a, M> {
             current: None,
             on_seek: Box::new(on_seek),
             placeholder: "Nothing to show.".into(),
+            spacing: None,
+            padding: None,
+            line_padding: None,
+            align: Alignment::Start,
         }
     }
     /// The highlighted line.
@@ -49,6 +57,26 @@ impl<'a, M> SyncedText<'a, M> {
     pub fn position(self, pos: f32) -> Self {
         let current = synced::current(self.lines, pos);
         self.current(current)
+    }
+    /// The gap between lines (default: the theme's `space_xxs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding around the lines (default: the theme's `empty_padding_y` by `space_m`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// The padding inside each line's button (default: the theme's `space_xs` by `gap`).
+    pub fn line_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.line_padding = Some(p.into());
+        self
+    }
+    /// Where the lines sit across the column (default: [`Alignment::Start`]).
+    pub fn align(mut self, a: Alignment) -> Self {
+        self.align = a;
+        self
     }
     /// What an empty list says.
     pub fn placeholder(mut self, text: impl Into<String>) -> Self {
@@ -82,21 +110,28 @@ impl<'a, M: Clone + 'a> From<SyncedText<'a, M>> for Element<'a, M> {
         }
         let current = s.current;
         let on_seek = s.on_seek;
+        let m = crate::Metrics::desktop();
+        let line_padding = s
+            .line_padding
+            .unwrap_or(iced::Padding::from([m.space_xs, m.gap]));
         let rows = s.lines.iter().enumerate().map(|(i, l)| {
             let t = if Some(i) == current {
                 ty::title_3(l.text.as_str())
             } else {
                 ty::body(l.text.as_str()).size(18).style(st::dim)
             };
-            crate::components::flat_button(container(t).padding([4, 8]))
+            crate::components::flat_button(container(t).padding(line_padding))
                 .on_press(on_seek(l.at))
                 .into()
         });
         scrollable(
             column(rows)
-                .spacing(2)
-                .padding([60, 12])
-                .align_x(Alignment::Start)
+                .spacing(s.spacing.unwrap_or(m.space_xxs))
+                .padding(
+                    s.padding
+                        .unwrap_or(iced::Padding::from([m.empty_padding_y, m.space_m])),
+                )
+                .align_x(s.align)
                 .width(Length::Fill),
         )
         .id(s.id)
@@ -108,6 +143,18 @@ impl<'a, M: Clone + 'a> From<SyncedText<'a, M>> for Element<'a, M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_gaps_and_padding_are_parameters() {
+        let lines = [Line::new(0.0, "a"), Line::new(4.0, "b")];
+        let s = SyncedText::new("lyrics", &lines, |_| ())
+            .spacing(1.0)
+            .padding(2.0)
+            .line_padding([3.0, 4.0])
+            .align(Alignment::Center);
+        assert_eq!(s.spacing, Some(1.0));
+        let _: Element<'_, ()> = s.into();
+    }
 
     #[test]
     fn the_position_picks_the_current_line() {

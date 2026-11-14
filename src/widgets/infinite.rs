@@ -63,6 +63,8 @@ pub struct InfiniteList<'a, M> {
     scrolled: bool,
     height: Length,
     rotation: f32,
+    spacing: Option<f32>,
+    padding: Option<iced::Padding>,
     metrics: Metrics,
 }
 
@@ -80,6 +82,8 @@ impl<'a, M: Clone + 'a> InfiniteList<'a, M> {
             scrolled: true,
             height: Length::Fill,
             rotation: 0.0,
+            spacing: None,
+            padding: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -116,6 +120,17 @@ impl<'a, M: Clone + 'a> InfiniteList<'a, M> {
         self.rotation = radians;
         self
     }
+    /// The gap inside the footer, between the spinner and its text or the message and the
+    /// retry button (default `space_s`; between a failure's two lines `space_xs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding around the footer (default `space_m` on every side).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -133,7 +148,7 @@ impl<'a, M: Clone + 'a> InfiniteList<'a, M> {
                 crate::components::spinner(m.icon_size + 4.0, self.rotation),
                 dim(String::from("Loading\u{2026}")),
             ]
-            .spacing(m.space_s)
+            .spacing(self.spacing.unwrap_or(m.space_s))
             .align_y(Vertical::Center)
             .into(),
             Status::Failed(e) => {
@@ -151,7 +166,7 @@ impl<'a, M: Clone + 'a> InfiniteList<'a, M> {
                         .on_press(retry.clone()),
                     );
                 }
-                c.spacing(m.space_s).into()
+                c.spacing(self.spacing.unwrap_or(m.space_s)).into()
             }
             Status::Exhausted => dim(String::from(if self.empty {
                 "No results"
@@ -170,7 +185,7 @@ impl<'a, M: Clone + 'a> InfiniteList<'a, M> {
         let footer = container(inner)
             .width(Length::Fill)
             .center_x(Length::Fill)
-            .padding(m.space_m);
+            .padding(self.padding.unwrap_or(iced::Padding::from(m.space_m)));
         match (&self.status, self.trigger, &self.on_load_more) {
             (Status::Idle, LoadTrigger::Scroll, Some(more)) => Element::new(EndTrigger {
                 child: footer.into(),

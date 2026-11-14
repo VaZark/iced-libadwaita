@@ -69,7 +69,7 @@ pub fn label<'a>(content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
 macro_rules! free {
     ($($name:ident),*) => {$(
         pub fn $name<'a>(content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
-            Typography::default().$name(content)
+            Typography::desktop().$name(content)
         }
     )*};
 }

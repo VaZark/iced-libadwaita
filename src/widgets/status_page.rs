@@ -108,6 +108,7 @@ pub struct Page<'a, M> {
     content: Element<'a, M>,
     maximum: f32,
     metrics: Metrics,
+    padding: Option<iced::Padding>,
 }
 
 pub fn page<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Page<'a, M> {
@@ -120,7 +121,13 @@ impl<'a, M: 'a> Page<'a, M> {
             content: content.into(),
             maximum: 720.0,
             metrics: Metrics::desktop(),
+            padding: None,
         }
+    }
+    /// The padding around the content (default: the theme's page padding).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
     }
     /// `AdwClamp:maximum-size`.
     pub fn maximum_size(mut self, px: f32) -> Self {
@@ -138,7 +145,7 @@ impl<'a, M: 'a> From<Page<'a, M>> for Element<'a, M> {
         crate::layouts::scrolled_window(
             crate::layouts::Container::new(p.content)
                 .size(crate::layouts::ContainerSize::Px(p.maximum))
-                .padding(p.metrics.page_padding)
+                .padding(p.padding.unwrap_or(p.metrics.page_padding))
                 .metrics(p.metrics),
         )
         .width(Length::Fill)
@@ -155,6 +162,9 @@ pub struct StatusPage<'a, M> {
     child: Option<Element<'a, M>>,
     compact: bool,
     metrics: Metrics,
+    spacing: Option<f32>,
+    padding: Option<iced::Padding>,
+    maximum: f32,
 }
 
 pub fn status_page<'a, M>() -> StatusPage<'a, M> {
@@ -170,6 +180,9 @@ impl<'a, M> StatusPage<'a, M> {
             child: None,
             compact: false,
             metrics: Metrics::desktop(),
+            spacing: None,
+            padding: None,
+            maximum: 400.0,
         }
     }
     /// `icon-name` (any element, typically an [`Icon`](crate::Icon) view).
@@ -194,6 +207,22 @@ impl<'a, M> StatusPage<'a, M> {
         self.compact = c;
         self
     }
+    /// The gap between the icon, the title, the description and the child (default: the theme's
+    /// `space_m`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding around the content (default: the theme's `space_xl`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// The widest the content gets, in px (default 400).
+    pub fn maximum_size(mut self, px: f32) -> Self {
+        self.maximum = px;
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -209,9 +238,9 @@ impl<'a, M: 'a> Default for StatusPage<'a, M> {
 impl<'a, M: 'a> From<StatusPage<'a, M>> for Element<'a, M> {
     fn from(s: StatusPage<'a, M>) -> Self {
         let m = s.metrics;
-        let t = Typography::default();
+        let t = Typography::desktop();
         let mut col = column![]
-            .spacing(m.space_m)
+            .spacing(s.spacing.unwrap_or(m.space_m))
             .align_x(Horizontal::Center)
             .width(Length::Fill);
         if let Some(i) = s.icon {
@@ -230,8 +259,29 @@ impl<'a, M: 'a> From<StatusPage<'a, M>> for Element<'a, M> {
         if let Some(c) = s.child {
             col = col.push(c);
         }
-        container(clamp(container(col).padding(m.space_xl), 400.0))
+        container(clamp(
+            container(col).padding(s.padding.unwrap_or(iced::Padding::from(m.space_xl))),
+            s.maximum,
+        ))
             .center(Length::Fill)
             .into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_gaps_padding_and_width_are_parameters() {
+        let s = StatusPage::<()>::new()
+            .title("Empty")
+            .description("Nothing here")
+            .spacing(3.0)
+            .padding([4.0, 5.0])
+            .maximum_size(300.0);
+        assert_eq!((s.spacing, s.maximum), (Some(3.0), 300.0));
+        let _: Element<'_, ()> = s.into();
+        let _: Element<'_, ()> = Page::<()>::new(iced::widget::space()).padding(2.0).into();
     }
 }

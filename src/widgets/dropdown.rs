@@ -17,7 +17,7 @@ pub fn menu_item<'a, M: Clone + 'a>(
     selected: bool,
     on_press: M,
 ) -> Element<'a, M> {
-    menu_item_inner(label.into(), None, selected, Some(on_press), false)
+    menu_item_inner(label.into(), None, selected, Some(on_press), false, None)
 }
 
 /// A [`menu_item`] with `lead` (a colour dot, an icon) before the label.
@@ -27,7 +27,7 @@ pub fn menu_item_lead<'a, M: Clone + 'a>(
     selected: bool,
     on_press: M,
 ) -> Element<'a, M> {
-    menu_item_inner(label.into(), lead, selected, Some(on_press), false)
+    menu_item_inner(label.into(), lead, selected, Some(on_press), false, None)
 }
 
 /// A menu item that cannot be chosen: dimmed text, no hover or press effect, no message.
@@ -36,7 +36,28 @@ pub fn menu_item_disabled<'a, M: Clone + 'a>(
     label: impl Into<String>,
     selected: bool,
 ) -> Element<'a, M> {
-    menu_item_inner(label.into(), None, selected, None, false)
+    menu_item_inner(label.into(), None, selected, None, false, None)
+}
+
+/// The spacing inside one item of a popover list.
+#[derive(Clone, Copy)]
+struct ItemLayout {
+    /// Between the lead, the label and the check.
+    gap: f32,
+    /// Horizontal padding.
+    pad_x: f32,
+    /// Vertical padding of an item whose label wraps.
+    pad_y_wrapped: f32,
+}
+
+impl ItemLayout {
+    fn of(m: &Metrics) -> Self {
+        Self {
+            gap: m.space_m,
+            pad_x: m.space_m,
+            pad_y_wrapped: m.space_s,
+        }
+    }
 }
 
 fn menu_item_inner<'a, M: Clone + 'a>(
@@ -45,9 +66,11 @@ fn menu_item_inner<'a, M: Clone + 'a>(
     selected: bool,
     on_press: Option<M>,
     wrap: bool,
+    layout: Option<ItemLayout>,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
-    let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
+    let ItemLayout { gap, pad_x, pad_y_wrapped } = layout.unwrap_or(ItemLayout::of(&m));
+    let mut r = row![].spacing(gap).align_y(Vertical::Center);
     if let Some(l) = lead {
         r = r.push(l);
     }
@@ -78,9 +101,9 @@ fn menu_item_inner<'a, M: Clone + 'a>(
     let row = container(r);
     button(if wrap {
         // A wrapped label grows the row.
-        row.padding([6.0, m.space_m])
+        row.padding([pad_y_wrapped, pad_x])
     } else {
-        row.padding([0.0, m.space_m])
+        row.padding([0.0, pad_x])
             .center_y(Length::Fixed(32.0))
     })
     .padding(0)
@@ -167,6 +190,9 @@ pub struct DropdownOptions<'a, T, M> {
     wrap: bool,
     lead_width: f32,
     lead: Option<Box<dyn Fn(&T) -> Option<Element<'a, M>> + 'a>>,
+    spacing: Option<f32>,
+    item_spacing: Option<f32>,
+    item_padding_x: Option<f32>,
 }
 
 impl<T, M> Default for DropdownOptions<'_, T, M> {
@@ -177,6 +203,9 @@ impl<T, M> Default for DropdownOptions<'_, T, M> {
             wrap: false,
             lead_width: 0.0,
             lead: None,
+            spacing: None,
+            item_spacing: None,
+            item_padding_x: None,
         }
     }
 }
@@ -199,6 +228,23 @@ impl<'a, T, M> DropdownOptions<'a, T, M> {
     /// inside a word that does not fit, instead of cutting it with an ellipsis (the default).
     pub fn wrap(mut self, wrap: bool) -> Self {
         self.wrap = wrap;
+        self
+    }
+    /// The gap between the label and the arrow in the button, and the button's side padding
+    /// (default: the theme's `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px.max(0.0));
+        self
+    }
+    /// The gap between the lead, the label and the check in each list item (default: the
+    /// theme's `space_m`).
+    pub fn item_spacing(mut self, px: f32) -> Self {
+        self.item_spacing = Some(px.max(0.0));
+        self
+    }
+    /// The horizontal padding of each list item (default: the theme's `space_m`).
+    pub fn item_padding_x(mut self, px: f32) -> Self {
+        self.item_padding_x = Some(px.max(0.0));
         self
     }
     /// An element before each label (a colour dot, an icon), in the button and in the list.
@@ -265,8 +311,15 @@ where
     // What the button and the list each add around a label: the arrow, and the list's padding,
     // lead, gap and check. The list is as wide as the button, so the button is sized for the
     // larger, and a label that fits one fits the other.
-    let button_extra = m.icon_size + 2.0 * m.space_s;
-    let list_extra = 3.0 * m.space_m + m.icon_size + iced::Padding::from(m.popover_padding).x();
+    let gap_button = opts.spacing.unwrap_or(m.space_s);
+    let item = ItemLayout {
+        gap: opts.item_spacing.unwrap_or(m.space_m),
+        pad_x: opts.item_padding_x.unwrap_or(m.space_m),
+        ..ItemLayout::of(&m)
+    };
+    let button_extra = m.icon_size + 2.0 * gap_button;
+    let list_extra =
+        2.0 * item.pad_x + item.gap + m.icon_size + iced::Padding::from(m.popover_padding).x();
     let extra = button_extra.max(list_extra);
     // What a label has room for: the width, less all that.
     let room = opts.max_width - extra - opts.lead_width;
@@ -283,7 +336,7 @@ where
         text::Wrapping::None
     };
 
-    let mut shown = row![].spacing(m.space_s).align_y(Vertical::Center);
+    let mut shown = row![].spacing(gap_button).align_y(Vertical::Center);
     if let Some(l) = selected
         .as_ref()
         .and_then(|s| opts.lead.as_ref().and_then(|f| f(s)))
@@ -295,13 +348,13 @@ where
         shown.push(text(current).wrapping(wrapping).width(Length::Fill)),
         Icon::GoDown.view(m.icon_size)
     ]
-    .spacing(m.space_s)
+    .spacing(gap_button)
     .align_y(Vertical::Center);
 
     // The widest option, laid out and never drawn (see `SizeProbe`). The button takes the width
     // of the widest of its content, and the visible row fills it. The minimum is one more row of
     // that width.
-    let gap = if opts.lead_width > 0.0 { m.space_s } else { 0.0 };
+    let gap = if opts.lead_width > 0.0 { gap_button } else { 0.0 };
     let mut rows: Vec<Element<'a, M>> = options
         .iter()
         .map(|o| {
@@ -341,6 +394,7 @@ where
                 selected.as_ref() == Some(o),
                 Some(on_select(o.clone())),
                 opts.wrap,
+                Some(item),
             )
         })
         .collect::<Vec<_>>();
@@ -350,6 +404,17 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_dropdown_takes_its_gaps_and_still_builds() {
+        let o = DropdownOptions::<u8, ()>::default()
+            .spacing(2.0)
+            .item_spacing(3.0)
+            .item_padding_x(4.0);
+        assert_eq!((o.spacing, o.item_spacing, o.item_padding_x), (Some(2.0), Some(3.0), Some(4.0)));
+        let opts = [1u8, 2];
+        let _ = dropdown_with(&opts, Some(1), |_| (), o);
+    }
 
     #[test]
     fn a_long_label_is_cut_with_an_ellipsis_to_fit() {

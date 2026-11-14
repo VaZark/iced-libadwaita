@@ -175,6 +175,10 @@ pub struct Stepper<'a, M> {
     clickable: Option<Vec<bool>>,
     completed: Option<Box<dyn Fn() -> Element<'a, M> + 'a>>,
     content_spacing: Option<f32>,
+    spacing: Option<f32>,
+    icon_spacing: Option<f32>,
+    text_spacing: Option<f32>,
+    step_padding: Option<Padding>,
     metrics: Metrics,
 }
 
@@ -202,6 +206,10 @@ impl<'a, M: Clone + 'a> Stepper<'a, M> {
             clickable: None,
             completed: None,
             content_spacing: None,
+            spacing: None,
+            icon_spacing: None,
+            text_spacing: None,
+            step_padding: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -279,6 +287,28 @@ impl<'a, M: Clone + 'a> Stepper<'a, M> {
         self.content_spacing = Some(px);
         self
     }
+    /// The gap between steps and the lines joining them, in a horizontal stepper (default: the
+    /// theme's `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The gap between a step's circle and its text (default: the theme's `space_s`).
+    pub fn icon_spacing(mut self, px: f32) -> Self {
+        self.icon_spacing = Some(px);
+        self
+    }
+    /// The gap between a step's label and its description (default: the theme's `space_xxs`).
+    pub fn text_spacing(mut self, px: f32) -> Self {
+        self.text_spacing = Some(px);
+        self
+    }
+    /// The padding around each step's circle and text (default: the theme's `space_xs` by
+    /// `space_s`).
+    pub fn step_padding(mut self, p: impl Into<Padding>) -> Self {
+        self.step_padding = Some(p.into());
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -305,6 +335,10 @@ struct Look<M> {
     diameter: f32,
     scale: f32,
     right: bool,
+    spacing: Option<f32>,
+    icon_spacing: Option<f32>,
+    text_spacing: Option<f32>,
+    step_padding: Option<Padding>,
     m: Metrics,
 }
 
@@ -337,6 +371,15 @@ fn dim_fg(t: &Theme, disabled: bool) -> Color {
 }
 
 impl<M: Clone> Look<M> {
+    /// The gap between a step's label and its description.
+    fn text_gap(&self) -> f32 {
+        self.text_spacing.unwrap_or(self.m.space_xxs)
+    }
+    /// The padding around a step's circle and text.
+    fn step_pad(&self) -> Padding {
+        self.step_padding
+            .unwrap_or(Padding::from([self.m.space_xs, self.m.space_s]))
+    }
     fn glyph(&self) -> f32 {
         (self.m.space_m + 2.0) * self.diameter / 26.0
     }
@@ -452,7 +495,7 @@ impl<M: Clone> Look<M> {
         M: 'a,
     {
         let (status, dis) = (it.status, it.disabled);
-        let size = (self.m.space_m + 1.0) * self.scale;
+        let size = crate::Typography::desktop().small * self.scale;
         let wrap = if wrapping {
             text::Wrapping::Word
         } else {
@@ -480,7 +523,7 @@ impl<M: Clone> Look<M> {
                     }),
                 }
             });
-        let mut col = column![title].spacing(self.m.space_xxs);
+        let mut col = column![title].spacing(self.text_gap());
         if let Some(d) = &it.description {
             col = col.push(text(d.clone()).size(size - 2.0).wrapping(wrap).style(
                 move |t: &Theme| text::Style {
@@ -503,7 +546,9 @@ impl<M: Clone> Look<M> {
     {
         let it = &self.items[i];
         let mark = self.mark(i, it);
-        let mut r = row![].spacing(self.m.space_s).align_y(Alignment::Center);
+        let mut r = row![]
+            .spacing(self.icon_spacing.unwrap_or(self.m.space_s))
+            .align_y(Alignment::Center);
         if compact {
             r = r.push(mark);
         } else {
@@ -522,7 +567,7 @@ impl<M: Clone> Look<M> {
         if fill {
             r = r.width(Length::Fill);
         }
-        let pad = Padding::from([self.m.space_xs, self.m.space_s]);
+        let pad = self.step_pad();
         match &it.click {
             Some(msg) => {
                 let b = flat_button(r).padding(pad).on_press(msg.clone());
@@ -590,7 +635,7 @@ impl<M: Clone> Look<M> {
     /// Estimated width of step `i` with its text.
     fn estimate(&self, i: usize) -> f32 {
         let it = &self.items[i];
-        let size = (self.m.space_m + 1.0) * self.scale;
+        let size = crate::Typography::desktop().small * self.scale;
         let label = it.label.chars().count() as f32 * size * 0.58;
         let desc = it
             .description
@@ -605,7 +650,9 @@ impl<M: Clone> Look<M> {
         M: 'a,
     {
         let n = self.items.len();
-        let mut r = row![].align_y(Alignment::Center).spacing(self.m.space_s);
+        let mut r = row![]
+            .align_y(Alignment::Center)
+            .spacing(self.spacing.unwrap_or(self.m.space_s));
         for i in 0..n {
             let show_text = !compact || self.items[i].status == Status::Current;
             r = r.push(self.head(i, !show_text, false, false));
@@ -627,15 +674,16 @@ impl<M: Clone> Look<M> {
 
     /// The height of the one-line horizontal indicator.
     fn line_height(&self) -> f32 {
-        let size = (self.m.space_m + 1.0) * self.scale;
+        let size = crate::Typography::desktop().small * self.scale;
         let has_desc = self.items.iter().any(|i| i.description.is_some());
         let text_h = size * 1.4
             + if has_desc {
-                (size - 2.0) * 1.4 + self.m.space_xxs
+                (size - 2.0) * 1.4 + self.text_gap()
             } else {
                 0.0
             };
-        self.diameter.max(text_h) + 2.0 * self.m.space_xs
+        let pad = self.step_pad();
+        self.diameter.max(text_h) + pad.top + pad.bottom
     }
 
     /// The steps stacked, each followed by its connector line and `contents[i]`.
@@ -766,6 +814,10 @@ impl<'a, M: Clone + 'a> From<Stepper<'a, M>> for Element<'a, M> {
             diameter,
             scale: s.size.text_scale(),
             right: s.icon_position == StepperIconPosition::Right,
+            spacing: s.spacing,
+            icon_spacing: s.icon_spacing,
+            text_spacing: s.text_spacing,
+            step_padding: s.step_padding,
             m,
         };
         let gap = s.content_spacing.unwrap_or(m.space_l);
@@ -816,6 +868,27 @@ impl<'a, M: Clone + 'a> From<Stepper<'a, M>> for Element<'a, M> {
                     None => indicator,
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod spacing_tests {
+    use super::*;
+
+    #[test]
+    fn the_gaps_and_padding_are_parameters() {
+        for orientation in [StepperOrientation::Horizontal, StepperOrientation::Vertical] {
+            let s = Stepper::<u8>::new()
+                .step(StepperStep::new("A").description("first"))
+                .step(StepperStep::new("B"))
+                .orientation(orientation)
+                .spacing(2.0)
+                .icon_spacing(3.0)
+                .text_spacing(4.0)
+                .step_padding([1.0, 5.0]);
+            assert_eq!((s.spacing, s.icon_spacing, s.text_spacing), (Some(2.0), Some(3.0), Some(4.0)));
+            let _: Element<'_, u8> = s.into();
         }
     }
 }

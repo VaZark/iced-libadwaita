@@ -89,6 +89,8 @@ pub struct ReorderableList<'a, T, M> {
     edit_label: String,
     submit_label: String,
     cancel_label: String,
+    spacing: Option<f32>,
+    bar_spacing: Option<f32>,
     metrics: Metrics,
 }
 
@@ -111,6 +113,8 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
             edit_label: "Edit".into(),
             submit_label: "Done".into(),
             cancel_label: "Cancel".into(),
+            spacing: None,
+            bar_spacing: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -191,6 +195,16 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
         self.cancel_label = cancel.into();
         self
     }
+    /// The gap between the title bar and the rows (default `space_m`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The gap between the title bar's parts: title and buttons (default `space_s`).
+    pub fn bar_spacing(mut self, px: f32) -> Self {
+        self.bar_spacing = Some(px);
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -225,7 +239,9 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
 
     fn bar(&self, mode: Mode) -> Element<'a, M> {
         let m = &self.metrics;
-        let mut bar = row![].spacing(m.space_s).align_y(Vertical::Center);
+        let mut bar = row![]
+            .spacing(self.bar_spacing.unwrap_or(m.space_s))
+            .align_y(Vertical::Center);
         if let Some(t) = &self.title {
             bar = bar.push(crate::components::typography::heading(t.clone()));
         }
@@ -303,7 +319,9 @@ impl<'a, T, M: Clone + 'a> From<ReorderableList<'a, T, M>> for Element<'a, M> {
         } else {
             l.preview()
         };
-        let mut col = column![].spacing(l.metrics.space_m).width(Length::Fill);
+        let mut col = column![]
+            .spacing(l.spacing.unwrap_or(l.metrics.space_m))
+            .width(Length::Fill);
         if l.controls || l.title.is_some() {
             col = col.push(l.bar(mode));
         }
@@ -959,5 +977,20 @@ mod tests {
         type L = ReorderableList<'static, u8, ()>;
         assert_eq!(L::pick(false), Mode::Preview);
         assert_eq!(L::pick(true), Mode::Edit);
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_gaps_are_parameters() {
+        let items = [1u8];
+        let l = ReorderableList::<u8, ()>::new(&items, |_| iced::widget::text("x").into())
+            .spacing(2.0)
+            .bar_spacing(3.0);
+        assert_eq!((l.spacing, l.bar_spacing), (Some(2.0), Some(3.0)));
+        let _: Element<'_, ()> = l.into();
     }
 }

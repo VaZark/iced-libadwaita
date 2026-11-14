@@ -48,7 +48,6 @@ pub enum Setting {
     ColorScheme,
     Accent,
     FlatHeaderbars,
-    AutoContrast,
     Transparency,
     Tint,
     Density,
@@ -116,8 +115,6 @@ pub struct Config {
     pub color_scheme: Pick<Scheme>,
     pub accent: Pick<AccentColor>,
     pub flat_headerbars: bool,
-    /// Choose text colors on colored fills by contrast (`color-contrast()`).
-    pub auto_contrast: bool,
     pub density: Density,
     pub text_scale: f32,
     /// How see-through surfaces are, 0 (opaque) .. 1 ([`Theme::with_transparency`](crate::Theme::with_transparency)).
@@ -128,7 +125,7 @@ pub struct Config {
     pub shadows: bool,
     pub shadow_scale: f32,
     pub shadow_intensity: f32,
-    /// `system` follows `enable-animations`; `Fixed(bool)` forces it.
+    /// `system` is on; `Fixed(bool)` forces it either way.
     pub animations: Pick<bool>,
     /// `true`: every trigger resolves to [`Motion::None`] (prefers-reduced-motion).
     pub reduced_motion: bool,
@@ -193,7 +190,10 @@ pub struct Config {
     warnings: Vec<String>,
     metrics: Metrics,
     /// The app's theme config, whose metric tokens are applied over the density's metrics.
-    theme_config: Option<crate::theme_config::ThemeConfig>,
+    pub(crate) theme_config: Option<crate::theme_config::ThemeConfig>,
+    /// The app opted out of the desktop's look ([`Inheritance::OptOut`](crate::theme_config::Inheritance)):
+    /// nothing from `desktop.conf` applies and the portal's color scheme is not consulted.
+    pub(crate) desktop_opt_out: bool,
 }
 
 impl Default for Config {
@@ -204,7 +204,6 @@ impl Default for Config {
             color_scheme: Pick::System,
             accent: Pick::System,
             flat_headerbars: true,
-            auto_contrast: true,
             density: Density::Comfort,
             text_scale: 1.0,
             transparency: 0.0,
@@ -251,6 +250,7 @@ impl Default for Config {
             warnings: Vec::new(),
             metrics: Metrics::default(),
             theme_config: None,
+            desktop_opt_out: false,
         };
         c.metrics = c.compute_metrics();
         c
@@ -354,11 +354,6 @@ impl Config {
             parse_bool(v)
                 .map(|b| self.flat_headerbars = b)
                 .unwrap_or_else(|| bad!("appearance", "flat-headerbars", v));
-        }
-        if let Some(v) = get("appearance", "auto-contrast") {
-            parse_bool(v)
-                .map(|b| self.auto_contrast = b)
-                .unwrap_or_else(|| bad!("appearance", "auto-contrast", v));
         }
         if let Some(v) = get("appearance", "density") {
             match v {
@@ -677,7 +672,16 @@ impl Config {
     /// the theme: [`Theme::with_theme_config`](crate::Theme::with_theme_config).
     #[must_use]
     pub fn with_theme_config(mut self, cfg: &crate::theme_config::ThemeConfig) -> Self {
-        self.theme_config = Some(cfg.clone());
+        if cfg.inheritance() == crate::theme_config::Inheritance::OptOut {
+            // The app uses only its own look: discard everything the desktop files said.
+            self = Self {
+                overridden: self.overridden,
+                denied: self.denied,
+                desktop_opt_out: true,
+                ..Self::default()
+            };
+        }
+        self.theme_config = Some(cfg.for_policy(self.allow_app_overrides));
         self.metrics = self.compute_metrics();
         self
     }
@@ -708,9 +712,12 @@ impl Config {
         out
     }
 
-    /// Loads the layered files (missing files are fine) over the defaults.
+    /// Loads the layered files (missing files are fine) over the defaults, and the theme file
+    /// the toolkit finds ([`theme_config::theme_path`](crate::theme_config::theme_path): `IAD_THEME`, else
+    /// the installed `default.conf`; none means the bare look).
     pub fn load() -> Self {
         Self::load_from(&Self::search_paths())
+            .with_theme_config(&crate::theme_config::ThemeConfig::discover())
     }
 
     /// Like [`load`](Self::load) with explicit files, lowest priority first.
@@ -784,7 +791,6 @@ pub struct Overrides {
     color_scheme: Option<Scheme>,
     accent: Option<AccentColor>,
     flat_headerbars: Option<bool>,
-    auto_contrast: Option<bool>,
     density: Option<Density>,
     text_scale: Option<f32>,
     transparency: Option<f32>,
@@ -838,7 +844,6 @@ impl Overrides {
         bool,
         Setting::FlatHeaderbars
     );
-    override_fn!(auto_contrast, auto_contrast, bool, Setting::AutoContrast);
     override_fn!(density, density, Density, Setting::Density);
     override_fn!(text_scale, text_scale, f32, Setting::TextScale);
     override_fn!(transparency, transparency, f32, Setting::Transparency);
@@ -984,9 +989,6 @@ impl Overrides {
         if let Some(v) = self.flat_headerbars {
             c.flat_headerbars = v
         }
-        if let Some(v) = self.auto_contrast {
-            c.auto_contrast = v
-        }
         if let Some(v) = self.density {
             c.density = v
         }
@@ -1084,6 +1086,9 @@ pub fn install(config: Config) {
     }
     for w in &config.warnings {
         eprintln!("iced-adaptive-design: config: {w}");
+    }
+    if let Some(theme) = &config.theme_config {
+        crate::theme_config::install(theme.clone());
     }
     *CURRENT.write().unwrap() = Some(Arc::new(config));
 }

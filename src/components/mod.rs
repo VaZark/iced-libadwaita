@@ -27,9 +27,10 @@ pub use crate::widgets::{ThemeMode, ThemeToggle};
 pub use avatar::{Avatar, AvatarShape, avatar};
 pub use badge::{Badge, Chip, ChipSize, RoundBadge};
 pub use button::{
-    ButtonContent, SuggestedCircularButton, ToggleGroup, ToggleItem, circular_button,
+    ButtonContent, ButtonVariant, CircularButton, SuggestedCircularButton, ToggleGroup, ToggleItem, circular_button,
     destructive_button, flat_button, icon_button, pill_button, progress_bar, raised_button,
     suggested_button, suggested_circular_button, suggested_pill_button, toggle_group,
+    variant_button,
 };
 pub use controls::{
     check_button, color_swatch, link_button, radio_button, scale, status_swatch, tag,

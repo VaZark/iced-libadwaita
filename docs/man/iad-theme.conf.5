@@ -12,18 +12,22 @@ Highest priority first:
 .IP 2. 3
 The application theme file, \fI$XDG_CONFIG_HOME/<app\-id>/theme.conf\fR. The application declares its tokens and their defaults in a schema.
 .IP 3. 3
-The toolkit theme file, \fI$XDG_CONFIG_HOME/iced\-adaptive\-design/theme.conf\fR. The toolkit declares the tokens it understands, with its own values as defaults.
+The installed theme file: \fBIAD_THEME\fR=\fI<path>\fR (\fBnone\fR means no theme), else \fIdefault.conf\fR in \fI$XDG_DATA_HOME/iad/themes\fR, else in \fIiad/themes\fR of each \fI$XDG_DATA_DIRS\fR entry. The first file found is the only one read. A desktop or distribution installs its look there. The toolkit never writes it.
 .PP
-Below these, a token is its declared default, and the toolkit's look is what the desktop configuration makes of it.
+Below these, a token is its declared default. The toolkit has no built\-in look: with no theme file it draws like HTML without CSS (black on white, square, thin grey rules, no shadows).
 .PP
-A missing file is written from the declared defaults, every token commented out as \fI#key=default\fR under a description, so it documents the tokens and pins none of them. Uncomment a line to change it; delete the file to get a fresh one.
+A missing application theme file is written from the declared defaults, every token commented out as \fI#key=default\fR under a description, so it documents the tokens and pins none of them. Uncomment a line to change it; delete the file to get a fresh one.
 .SH TOKENS
-.SS [colors] and [colors-dark]
-\fBaccent\fR, \fBwindow\-bg\fR, \fBwindow\-fg\fR, \fBview\-bg\fR, \fBview\-fg\fR, \fBcard\-bg\fR, \fBcard\-fg\fR, \fBheaderbar\-bg\fR, \fBheaderbar\-fg\fR, \fBsidebar\-bg\fR, \fBsidebar\-fg\fR, \fBpopover\-bg\fR, \fBpopover\-fg\fR, \fBdialog\-bg\fR, \fBdialog\-fg\fR, \fBsuccess\fR, \fBwarning\fR, \fBdestructive\fR, \fBerror\fR. \fB[colors\-dark]\fR is read over \fB[colors]\fR on a dark scheme.
+.SS [colors], [light:colors] and [dark:colors]
+\fBaccent\fR, \fBwindow\-bg\fR, \fBwindow\-fg\fR, \fBview\-bg\fR, \fBview\-fg\fR, \fBcard\-bg\fR, \fBcard\-fg\fR, \fBheaderbar\-bg\fR, \fBheaderbar\-fg\fR, \fBsidebar\-bg\fR, \fBsidebar\-fg\fR, \fBpopover\-bg\fR, \fBpopover\-fg\fR, \fBdialog\-bg\fR, \fBdialog\-fg\fR, \fBsuccess\fR, \fBwarning\fR, \fBdestructive\fR, \fBerror\fR. The variant section of the active scheme is read over \fB[colors]\fR. Companions: \fB\-fg\fR, \fB\-text\fR and \fB\-shade\fR keys.
 .SS [metrics]
 Numbers in px: \fBspace\-xs\fR to \fBspace\-xl\fR, \fBradius\-s\fR, \fBradius\-m\fR, \fBradius\-l\fR, \fBradius\-menu\fR, \fBradius\-popover\fR, \fBradius\-toast\fR, \fBradius\-window\fR, \fBbutton\-padding\-y\fR and \fB\-x\fR, \fBentry\-padding\-y\fR and \fB\-x\fR, \fBrow\-padding\-y\fR and \fB\-x\fR, \fBpage\-padding\-y\fR and \fB\-x\fR, \fBcard\-padding\fR, \fBdialog\-padding\fR, \fBpopover\-padding\fR, \fBbutton\-min\-height\fR, \fBentry\-min\-height\fR, \fBrow\-min\-height\fR, \fBborder\-width\fR, \fBicon\-size\fR, \fBgroup\-spacing\fR, \fBclamp\-maximum\fR, \fBheaderbar\-height\fR, \fBsidebar\-width\fR. Radii are not clamped to the HIG maxima.
 .SS [typography]
 \fBtext\-scale\fR multiplies every text size; \fBbase\-size\fR is the body size in px before the scale.
+.SS [shadows]
+\fBcard\fR, \fBpopover\fR, \fBdialog\fR, \fBosd\fR: CSS box\-shadow lists, e.g. \fI0 1px 3px 1px rgba(0, 0, 6, 0.07)\fR.
+.SS [windows]
+\fBbutton\-layout\fR (\fIstart:end\fR, e.g. \fI:minimize,maximize,close\fR), \fBbutton\-size\fR (px), \fBbutton\-radius\fR (percent of the size, 50% is a circle), \fBtitlebar\-double\-click\fR, \fBtitlebar\-middle\-click\fR and \fBtitlebar\-right\-click\fR (\fBtoggle\-maximize\fR, \fBmenu\fR, \fBminimize\fR, \fBlower\fR, \fBnone\fR).
 .SS Other sections
 Whatever the application declares for its own objects.
 .SH SEE ALSO

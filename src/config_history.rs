@@ -139,7 +139,6 @@ pub const PROPERTIES: &[Property] = &[
     ),
     p("appearance", "accent", Choice(ACCENTS), "system"),
     p("appearance", "flat-headerbars", Bool, "true"),
-    p("appearance", "auto-contrast", Bool, "true"),
     p(
         "appearance",
         "density",

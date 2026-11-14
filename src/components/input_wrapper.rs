@@ -39,6 +39,9 @@ pub struct InputWrapper<'a, M> {
     hide_label: bool,
     show_valid: bool,
     layout: InputWrapperLayout,
+    spacing: Option<f32>,
+    label_spacing: Option<f32>,
+    inline_padding: Option<Padding>,
     metrics: Metrics,
 }
 
@@ -58,8 +61,27 @@ impl<'a, M: 'a> InputWrapper<'a, M> {
             hide_label: false,
             show_valid: false,
             layout: InputWrapperLayout::Stacked,
+            spacing: None,
+            label_spacing: None,
+            inline_padding: None,
             metrics: Metrics::desktop(),
         }
+    }
+    /// The gap between the label, the control and the note under it (default `space_xxs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// In the row layout, the gap between the label and the control (default `space_m`).
+    pub fn label_spacing(mut self, px: f32) -> Self {
+        self.label_spacing = Some(px);
+        self
+    }
+    /// The padding around an inline control (default `space_xxs` above and below, `space_xs`
+    /// at the sides).
+    pub fn inline_padding(mut self, p: impl Into<Padding>) -> Self {
+        self.inline_padding = Some(p.into());
+        self
     }
     /// Also draw the valid state (a success ring). Off by default: like CSS, only
     /// `:user-invalid` (and a warning) is highlighted, and `:user-valid` adds nothing special.
@@ -202,11 +224,15 @@ impl<'a, M: 'a> From<InputWrapper<'a, M>> for Element<'a, M> {
             Presentation::Valid if !f.show_valid => Presentation::Pristine,
             p => p,
         };
+        let gap = f.spacing.unwrap_or(m.space_xxs);
         let msg = validation::message(&f.validity, f.revealed()).map(str::to_owned);
         let disabled = f.disabled;
         let control: Element<'a, M> = if f.inline {
             container(f.control)
-                .padding(Padding::from([m.space_xxs, m.space_xs]))
+                .padding(
+                    f.inline_padding
+                        .unwrap_or(Padding::from([m.space_xxs, m.space_xs])),
+                )
                 .into()
         } else {
             f.control
@@ -222,9 +248,9 @@ impl<'a, M: 'a> From<InputWrapper<'a, M>> for Element<'a, M> {
 
         // Label (+ required marker).
         let label = if f.plain_label {
-            crate::Typography::default().body(f.label)
+            crate::Typography::desktop().body(f.label)
         } else {
-            text(f.label).size(m.space_m + 1.0).font(iced::Font {
+            text(f.label).size(crate::Typography::desktop().small).font(iced::Font {
                 weight: iced::font::Weight::Bold,
                 ..iced::Font::DEFAULT
             })
@@ -236,7 +262,7 @@ impl<'a, M: 'a> From<InputWrapper<'a, M>> for Element<'a, M> {
         title = title.push(if f.required {
             Element::from(
                 text("*")
-                    .size(m.space_m + 1.0)
+                    .size(crate::Typography::desktop().small)
                     .style(move |t: &Theme| text::Style {
                         color: Some(if disabled {
                             dim(t)
@@ -258,7 +284,7 @@ impl<'a, M: 'a> From<InputWrapper<'a, M>> for Element<'a, M> {
             } else {
                 Icon::DialogWarning
             };
-            let size = m.space_m + 1.0;
+            let size = crate::Typography::desktop().small;
             row![
                 icon.view(size)
                     .style(move |t: &Theme, _| iced::widget::svg::Style {
@@ -273,7 +299,7 @@ impl<'a, M: 'a> From<InputWrapper<'a, M>> for Element<'a, M> {
             .into()
         } else if let Some(d) = f.description {
             text(d)
-                .size(m.space_m + 1.0)
+                .size(crate::Typography::desktop().small)
                 .style(move |t: &Theme| text::Style {
                     color: Some(crate::color::fade(
                         t.semantic.window.fg,
@@ -291,7 +317,7 @@ impl<'a, M: 'a> From<InputWrapper<'a, M>> for Element<'a, M> {
         let note = container(note).padding(Padding {
             // A row with nothing to say below it takes no space for it.
             top: if has_note || (!f.hide_label && f.layout == InputWrapperLayout::Stacked) {
-                m.space_xxs
+                gap
             } else {
                 0.0
             },
@@ -322,7 +348,7 @@ impl<'a, M: 'a> From<InputWrapper<'a, M>> for Element<'a, M> {
             InputWrapperLayout::Stacked => column![
                 title,
                 container(outlined(control, p, m)).padding(Padding {
-                    top: m.space_xxs,
+                    top: gap,
                     ..Padding::ZERO
                 }),
                 note
@@ -338,7 +364,7 @@ impl<'a, M: 'a> From<InputWrapper<'a, M>> for Element<'a, M> {
                             .width(end)
                             .align_x(Alignment::End),
                     ]
-                    .spacing(m.space_m)
+                    .spacing(f.label_spacing.unwrap_or(m.space_m))
                     .align_y(Alignment::Center),
                     note
                 ]
@@ -397,5 +423,20 @@ mod tests {
             field().touched(true).disabled(true).presentation(),
             Presentation::Pristine
         );
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn wrapper_gaps_and_padding_are_parameters() {
+        let w = InputWrapper::<()>::new("L", iced::widget::space())
+            .spacing(1.0)
+            .label_spacing(2.0)
+            .inline_padding(3.0);
+        assert_eq!((w.spacing, w.label_spacing), (Some(1.0), Some(2.0)));
+        let _: Element<'_, ()> = w.into();
     }
 }

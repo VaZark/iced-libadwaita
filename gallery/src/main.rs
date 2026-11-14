@@ -8,7 +8,7 @@
 mod example_detail_header;
 use iad::components::typography as ty;
 use iad::styles as style;
-use iad::{AccentColor, Icon, Metrics, Role, Scheme, Theme};
+use iad::{Icon, Metrics, Role, Scheme, Theme};
 use iad::{binds as bnd, components as cmp, layouts as lay, metas as met, widgets as w};
 use iced::widget::{container, text};
 use iced::{Element as IcedElement, Length, Subscription, Task, window};
@@ -37,7 +37,6 @@ mod resizable_demo;
 mod sections_demo;
 mod stepper_demo;
 mod synced_demo;
-mod theme_config_demo;
 mod tree_demo;
 mod upstream_demo;
 mod virtual_demo;
@@ -45,7 +44,7 @@ mod widgets_demo;
 
 use nav::{Detail, Entry, Inline, Page};
 
-/// The motions the Theming page can play: libadwaita easings and the sheet spring.
+/// The motions the Motion page can play: libadwaita easings and the sheet spring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DemoMotion {
     Linear,
@@ -113,6 +112,28 @@ enum MenuMode {
     FullPage,
 }
 
+impl MenuMode {
+    const ALL: [MenuMode; 3] = [MenuMode::Auto, MenuMode::Dropdown, MenuMode::FullPage];
+
+    fn icon(&self) -> Icon {
+        match self {
+            MenuMode::Auto => Icon::Settings,
+            MenuMode::Dropdown => Icon::GoDown,
+            MenuMode::FullPage => Icon::Window,
+        }
+    }
+}
+
+impl std::fmt::Display for MenuMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            MenuMode::Auto => "Auto",
+            MenuMode::Dropdown => "Dropdown",
+            MenuMode::FullPage => "Full page",
+        })
+    }
+}
+
 /// The id of the search field, which takes focus when the search opens.
 const SEARCH_ID: &str = "gallery.search";
 
@@ -143,25 +164,6 @@ struct Gallery {
     /// The nested component page open inside `page`, if any.
     detail: Option<Detail>,
     scheme: Scheme,
-    accent: AccentColor,
-    accent_text: String,
-    compact: bool,
-    /// Surface transparency in percent, and what is typed for it.
-    transparency: u32,
-    /// Opt-in surface tint: whether it is on, and its color (alpha is the strength).
-    tint_on: bool,
-    tint: iced::Color,
-    tint_text: String,
-    transparency_text: String,
-    radius_m: f32,
-    radius_l: f32,
-    radius_toast: f32,
-    /// What the radius number inputs show: control, card, toast.
-    radius_text: [String; 3],
-    card_override: bool,
-    shadows_on: bool,
-    shadow_scale: f32,
-    shadow_intensity: f32,
     path_bar_title: bool,
     /// The header's title is a search entry and the content lists matching pages.
     searching: bool,
@@ -203,7 +205,6 @@ struct Gallery {
     composed: composed_demo::State,
     synced: synced_demo::State,
     upstream: upstream_demo::State,
-    theme_cfg: theme_config_demo::State,
     stepper: stepper_demo::State,
     data: data_demo::State,
     resizable: resizable_demo::State,
@@ -291,22 +292,6 @@ enum Message {
     SplitRun(&'static str),
     Appearance(w::ThemeMode),
     SystemTheme,
-    Accent(AccentColor),
-    AccentText(String),
-    Transparency(String),
-    Tint(iad::primitives::color_picker::Hsva),
-    TintOn(bool),
-    TintText(String),
-    Compact(bool),
-    RadiusM(f32),
-    RadiusL(f32),
-    RadiusToast(f32),
-    /// A radius number input: which (control, card, toast) and what was typed.
-    RadiusText(usize, String),
-    CardOverride(bool),
-    Shadows(bool),
-    ShadowScale(f32),
-    ShadowIntensity(f32),
     PathBarTitle(bool),
     ToggleSearch,
     SearchInput(String),
@@ -337,7 +322,6 @@ enum Message {
     Composed(composed_demo::Msg),
     Synced(synced_demo::Msg),
     Upstream(upstream_demo::Msg),
-    ThemeCfg(theme_config_demo::Msg),
     Stepper(stepper_demo::Msg),
     Data(data_demo::Msg),
     Resizable(resizable_demo::Msg),
@@ -488,13 +472,6 @@ impl Gallery {
             .collect();
         let mut widgets_demo = widgets_demo::State::default();
         widgets_demo.sync(plays.get(&Detail::Splitter), plays.get(&Detail::Spoiler));
-        let accent = match cfg.accent {
-            iad::config::Pick::Fixed(a) => a,
-            iad::config::Pick::System => AccentColor::Blue,
-        };
-        let tint_color = cfg
-            .tint
-            .unwrap_or(iced::Color::from_rgba(0.21, 0.52, 0.89, 0.25));
         let detect_theme = if shots.is_none() {
             iad::utils::detect_theme().map(|_| Message::SystemTheme)
         } else {
@@ -523,34 +500,6 @@ impl Gallery {
                 .unwrap_or(Page::Buttons),
             detail: start_detail,
             scheme: from_cfg.scheme,
-            accent,
-            accent_text: accent.key(),
-            compact: cfg.density == iad::config::Density::Compact,
-            transparency: (cfg.transparency * 100.0).round() as u32,
-            tint_on: cfg.tint.is_some(),
-            tint: tint_color,
-            tint_text: iad::primitives::color_picker::Hsva::from_rgba(
-                tint_color.r,
-                tint_color.g,
-                tint_color.b,
-                tint_color.a,
-            )
-            .format(iad::primitives::color_picker::Format::Hexa),
-            transparency_text: ((cfg.transparency * 100.0).round() as u32).to_string(),
-            radius_m: std::env::var("GALLERY_RM")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(Metrics::default().radius_m),
-            radius_toast: Metrics::default().radius_toast,
-            radius_l: std::env::var("GALLERY_RL")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(12.0),
-            radius_text: [String::new(), String::new(), String::new()],
-            card_override: false,
-            shadows_on: cfg.shadows,
-            shadow_scale: 1.0,
-            shadow_intensity: 1.0,
             path_bar_title: std::env::var_os("GALLERY_PATHBAR").is_some(),
             // GALLERY_SEARCH=<text> starts with the search open (screenshots).
             searching: std::env::var_os("GALLERY_SEARCH").is_some(),
@@ -593,7 +542,6 @@ impl Gallery {
             composed: composed_demo::State::default(),
             synced: synced_demo::State::default(),
             upstream: upstream_demo::State::default(),
-            theme_cfg: theme_config_demo::State::default(),
             stepper: stepper_demo::State::default(),
             data: data_demo::State::default(),
             resizable: resizable_demo::State::default(),
@@ -642,11 +590,6 @@ impl Gallery {
             shots,
             shot_tag: None,
         };
-        gallery.radius_text = [
-            format!("{:.0}", gallery.radius_m),
-            format!("{:.0}", gallery.radius_l),
-            format!("{:.0}", gallery.radius_toast),
-        ];
         if standalone {
             let open = gallery.open_shell();
             if let Some(c) = &gallery.shell {
@@ -699,47 +642,29 @@ impl Gallery {
         Task::batch([open.map(|_| Message::Noop), boot.map(Message::Shell)])
     }
 
+    /// The metrics the desktop config and the theme file give: the look is not set here.
     fn metrics(&self) -> Metrics {
-        let base = if self.compact {
-            Metrics::compact()
-        } else {
-            Metrics::default()
-        };
-        Metrics {
-            radius_m: self.radius_m,
-            radius_l: self.radius_l,
-            radius_toast: self.radius_toast,
-            ..base
-        }
+        Metrics::desktop()
     }
 
     fn theme(&self, _window: window::Id) -> Theme {
         self.build_theme()
     }
 
+    /// The theme the theme file (`IAD_THEME`, else the installed default) describes, in the
+    /// current scheme.
     fn build_theme(&self) -> Theme {
-        let shadows = if self.shadows_on {
-            iad::Shadows::default()
-                .with_scale(self.shadow_scale)
-                .with_intensity(self.shadow_intensity)
+        let cfg = iad::config::current();
+        let themed = Theme::new(self.scheme).with_theme_config(&iad::theme_config::current());
+        let shadows = if cfg.shadows {
+            themed.shadows.clone()
         } else {
             iad::Shadows::none()
         };
-        let mut t = Theme::new(self.scheme)
-            .accent(self.accent)
+        themed
             .with_metrics(self.metrics())
             .with_shadows(shadows)
-            .with_auto_contrast(iad::config::current().auto_contrast)
-            .with_transparency(self.transparency as f32 / 100.0)
-            .with_tint(self.tint_on.then_some(self.tint))
-            .with_transparent_window(Self::csd());
-        if self.card_override {
-            t = t.with_semantic(|s| {
-                s.card.bg = iad::color::hex(0x3d2c5a);
-                s.card.fg = iced::Color::WHITE;
-            });
-        }
-        t
+            .with_transparent_window(Self::csd())
     }
 
     /// Adds a toast to the queue (at most four kept, the oldest dropped first).
@@ -800,81 +725,6 @@ impl Gallery {
                     self.scheme = iad::utils::theme_settings().scheme;
                 }
             }
-            Message::Accent(a) => {
-                self.accent = a;
-                self.accent_text = a.key();
-            }
-            Message::AccentText(t) => {
-                if let Some(a) = AccentColor::parse(&t) {
-                    self.accent = a;
-                }
-                self.accent_text = t;
-            }
-            Message::Compact(c) => self.compact = c,
-            Message::TintOn(on) => self.tint_on = on,
-            Message::Tint(c) => {
-                self.tint = iced::Color::from_rgba(
-                    c.to_rgb8()[0] as f32 / 255.0,
-                    c.to_rgb8()[1] as f32 / 255.0,
-                    c.to_rgb8()[2] as f32 / 255.0,
-                    c.a,
-                );
-                self.tint_text = c.format(iad::primitives::color_picker::Format::Hexa);
-            }
-            Message::TintText(t) => {
-                if let Some(c) = iad::primitives::color_picker::Hsva::parse(&t) {
-                    let [r, g, b] = c.to_rgb8();
-                    self.tint = iced::Color::from_rgba8(r, g, b, c.a);
-                }
-                self.tint_text = t;
-            }
-            Message::Transparency(t) => {
-                if let Some(p) = iad::primitives::numeric::Numeric::integer()
-                    .min(0)
-                    .max(90)
-                    .parse(&t)
-                {
-                    self.transparency = p.units as u32;
-                }
-                self.transparency_text = t;
-            }
-            Message::RadiusM(r) => {
-                self.radius_m = r;
-                self.radius_text[0] = format!("{r:.0}");
-            }
-            Message::RadiusL(r) => {
-                self.radius_l = r;
-                self.radius_text[1] = format!("{r:.0}");
-            }
-            Message::RadiusToast(r) => {
-                self.radius_toast = r;
-                self.radius_text[2] = format!("{r:.0}");
-            }
-            Message::RadiusText(i, t) => {
-                let max = [
-                    Metrics::MAX_RADIUS_M,
-                    Metrics::MAX_RADIUS_L,
-                    Metrics::MAX_RADIUS_TOAST,
-                ][i];
-                let rule = iad::primitives::numeric::Numeric::integer()
-                    .min(0)
-                    .max(max as i32);
-                if rule.validate(&t).is_ok()
-                    && let Some(d) = rule.parse(&t)
-                {
-                    let v = d.units as f32;
-                    match i {
-                        0 => self.radius_m = v,
-                        1 => self.radius_l = v,
-                        _ => self.radius_toast = v,
-                    }
-                }
-                self.radius_text[i] = t;
-            }
-            Message::CardOverride(c) => self.card_override = c,
-            Message::Shadows(v) => self.shadows_on = v,
-            Message::ShadowScale(v) => self.shadow_scale = v,
-            Message::ShadowIntensity(v) => self.shadow_intensity = v,
             Message::PathBarTitle(v) => self.path_bar_title = v,
             Message::Wifi(v) => self.wifi = v,
             Message::Notifications(v) => self.notifications = v,
@@ -908,7 +758,6 @@ impl Gallery {
             Message::Range(m) => self.range.update(m),
             Message::Composed(m) => self.composed.update(m),
             Message::Upstream(m) => self.upstream.update(m),
-            Message::ThemeCfg(m) => self.theme_cfg.update(m),
             Message::Synced(m) => return self.synced.update(m).map(Message::Synced),
             Message::Stepper(m) => self.stepper.update(m),
             Message::Data(m) => return self.data.update(m).map(Message::Data),
@@ -1228,7 +1077,7 @@ impl Gallery {
                         "drawer" => Message::Drawer(true),
                         "reveal" => Message::Expanded(!self.expanded),
                         "carousel" => Message::Carousel(1),
-                        "page" => Message::Page(Page::Theming),
+                        "page" => Message::Page(Page::Typography),
                         "breakpoint" => Message::Narrow(true),
                         "push" => Message::Page(Page::Dialogs),
                         "dialog" => Message::OpenDialog(Dialog::Alert),
@@ -1265,24 +1114,6 @@ impl Gallery {
         };
         if i > total || (only.is_some() && i == total) {
             return iced::exit();
-        }
-        if i == total {
-            // Drive the real update path with the radius slider messages.
-            self.scheme = Scheme::Light;
-            self.page = Page::Theming;
-            self.detail = Some(Detail::ThemeShape);
-            self.dialog = None;
-            self.toasts.clear();
-            self.shot_tag = Some("radius0");
-            return Task::batch([
-                Task::done(Message::RadiusM(0.0)),
-                Task::done(Message::RadiusL(0.0)),
-                Task::done(Message::RadiusToast(0.0)),
-            ])
-            .chain(Task::perform(
-                tokio::time::sleep(Duration::from_millis(500)),
-                move |_| Message::Capture(i),
-            ));
         }
         if i < views.len() {
             self.scheme = if only.is_some() {
@@ -1394,7 +1225,7 @@ impl Gallery {
         let mobile = iad::breakpoints::is_mobile(width);
         let win_state = self.win;
         let corner = if csd {
-            win_state.radius(&iad::Metrics::default())
+            win_state.radius(&iad::Metrics::desktop())
         } else {
             0.0
         };

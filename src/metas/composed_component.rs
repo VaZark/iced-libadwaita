@@ -63,7 +63,7 @@ impl<'a, S: 'a, M: 'a> ComposedComponent<'a, S, M> {
             normalize: None,
             parts: Vec::new(),
             axis: ComposeAxis::Vertical,
-            spacing: 8.0,
+            spacing: crate::Metrics::desktop().gap,
             width: Length::Fill,
         }
     }

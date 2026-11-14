@@ -155,6 +155,10 @@ pub struct ResponsiveTable<'a, T, M> {
     footer: Option<Footer<'a, M>>,
     window: Option<Window>,
     on_scroll: Option<Scroll<'a, M>>,
+    spacing: Option<f32>,
+    padding: Option<Padding>,
+    column_spacing: Option<f32>,
+    card_spacing: Option<f32>,
 }
 
 impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
@@ -171,7 +175,14 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
             footer: None,
             window: None,
             on_scroll: None,
+            spacing: None,
+            padding: None,
+            column_spacing: None,
+            card_spacing: None,
         }
+    }
+    fn page_pad(&self) -> Padding {
+        self.padding.unwrap_or(self.metrics.page_padding)
     }
     pub fn column(mut self, c: Column<'a, T, M>) -> Self {
         self.columns.push(c);
@@ -189,6 +200,27 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
+        self
+    }
+    /// The gap between the header (or sort control), the body and the footer (default: the
+    /// theme's `space_s` as a table, `space_m` as cards).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding around the table (default: the theme's page padding).
+    pub fn padding(mut self, p: impl Into<Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// The gap between the cells of a row (default: the theme's `row_spacing`).
+    pub fn column_spacing(mut self, px: f32) -> Self {
+        self.column_spacing = Some(px);
+        self
+    }
+    /// The gap between cards (default: the theme's `space_m`).
+    pub fn card_spacing(mut self, px: f32) -> Self {
+        self.card_spacing = Some(px);
         self
     }
     /// Height of the table (default `Fill`; the body scrolls inside it).
@@ -272,7 +304,7 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
     pub fn needed_width(&self) -> f32 {
         let m = &self.metrics;
         let cols: f32 = self.columns.iter().map(|c| c.min_width).sum();
-        let gaps = self.columns.len().saturating_sub(1) as f32 * m.row_spacing;
+        let gaps = self.columns.len().saturating_sub(1) as f32 * self.column_spacing.unwrap_or(m.row_spacing);
         cols + gaps + m.card_padding.x()
     }
 }
@@ -339,7 +371,7 @@ fn table_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Elemen
             .into_iter()
             .zip(&t.columns)
             .map(|(c, col)| container(c).width(col.width).into()))
-        .spacing(m.row_spacing)
+        .spacing(t.column_spacing.unwrap_or(m.row_spacing))
     };
     let header = line(t.columns.iter().map(|c| header_cell(t, c)).collect());
     if let Some(w) = t.window {
@@ -357,11 +389,11 @@ fn table_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Elemen
         container(header).padding(m.card_padding),
         crate::layouts::scrolled_window(card).height(Length::Fill),
     ]
-    .spacing(m.space_s);
+    .spacing(t.spacing.unwrap_or(m.space_s));
     if let Some(footer) = &t.footer {
         body = body.push(footer());
     }
-    container(body).padding(m.page_padding).into()
+    container(body).padding(t.page_pad()).into()
 }
 
 /// The table of a long list: the header, then the window's rows at a fixed height with a
@@ -384,7 +416,7 @@ fn virtual_table_view<'a, T: 'a, M: Clone + 'a>(
                 .align_y(col.align_y)
                 .into()
         }))
-        .spacing(m.row_spacing)
+        .spacing(t.column_spacing.unwrap_or(m.row_spacing))
         .height(Length::Fill);
         rows = rows.push(column![
             container(cells)
@@ -416,11 +448,12 @@ fn virtual_table_view<'a, T: 'a, M: Clone + 'a>(
             f(v)
         });
     }
-    let mut body = column![container(header).padding(m.card_padding), scroll].spacing(m.space_s);
+    let mut body = column![container(header).padding(m.card_padding), scroll]
+        .spacing(t.spacing.unwrap_or(m.space_s));
     if let Some(footer) = &t.footer {
         body = body.push(footer());
     }
-    container(body).padding(m.page_padding).into()
+    container(body).padding(t.page_pad()).into()
 }
 
 /// A column header: dim caption text, or for a sortable column a button with the arrow.
@@ -554,17 +587,21 @@ fn cards_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Elemen
         return space().into();
     }
     let m = &t.metrics;
+    let mut card_metrics = *m;
+    if let Some(px) = t.column_spacing {
+        card_metrics.row_spacing = px;
+    }
     let cards = t.rows.iter().map(|item| {
         let inner = match &t.card {
             Some(build) => build(item),
-            None => default_card(&t.columns, item, m),
+            None => default_card(&t.columns, item, &card_metrics),
         };
         crate::widgets::Card::new(inner).into()
     });
     let scroll =
-        crate::layouts::scrolled_window(column(cards).spacing(m.space_m).width(Length::Fill))
+        crate::layouts::scrolled_window(column(cards).spacing(t.card_spacing.unwrap_or(m.space_m)).width(Length::Fill))
             .height(Length::Fill);
-    let mut body = column![].spacing(m.space_m);
+    let mut body = column![].spacing(t.spacing.unwrap_or(m.space_m));
     if let Some(sort) = sort_control(t) {
         body = body.push(sort);
     }
@@ -572,7 +609,7 @@ fn cards_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Elemen
     if let Some(footer) = &t.footer {
         body = body.push(footer());
     }
-    container(body).padding(m.page_padding).into()
+    container(body).padding(t.page_pad()).into()
 }
 
 /// The first column as a title, then a `label  value` line for each of the others.
@@ -731,5 +768,25 @@ mod tests {
             .column(Column::new("n", |_| space().into()))
             .virtualized(10_000, 40, 32.0);
         let _: Element<'_, ()> = t.into();
+    }
+
+    #[test]
+    fn the_gaps_and_padding_are_parameters() {
+        let rows = [1u32, 2];
+        let base = || {
+            ResponsiveTable::<u32, ()>::new(&rows)
+                .column(Column::new("a", |_| space().into()))
+                .column(Column::new("b", |_| space().into()))
+        };
+        let wide = base().column_spacing(100.0).needed_width();
+        assert_eq!(wide - base().needed_width(), 100.0 - Metrics::desktop().row_spacing);
+        for mode in [Mode::Table, Mode::Cards] {
+            let _: Element<'_, ()> = base()
+                .mode(mode)
+                .spacing(1.0)
+                .padding([2.0, 3.0])
+                .card_spacing(4.0)
+                .into();
+        }
     }
 }

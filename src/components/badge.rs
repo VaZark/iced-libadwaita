@@ -17,6 +17,7 @@ pub struct Badge {
     label: String,
     role: Role,
     solid: bool,
+    padding: Option<Padding>,
     metrics: Metrics,
 }
 
@@ -26,6 +27,7 @@ impl Badge {
             label: label.into(),
             role: Role::Neutral,
             solid: false,
+            padding: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -46,6 +48,11 @@ impl Badge {
         self.solid = solid;
         self
     }
+    /// The padding around the label (default a hair above and below, `space_s` at the sides).
+    pub fn padding(mut self, p: impl Into<Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -56,10 +63,13 @@ impl<'a, M: 'a> From<Badge> for Element<'a, M> {
     fn from(b: Badge) -> Self {
         let c = container(
             text(b.label)
-                .size(b.metrics.space_m + 1.0)
+                .size(crate::Typography::desktop().small)
                 .wrapping(text::Wrapping::None),
         )
-        .padding(Padding::from([1.0, b.metrics.space_s + 1.0]))
+        .padding(b.padding.unwrap_or(Padding::from([
+            b.metrics.space_xxs * 0.5,
+            b.metrics.space_s + b.metrics.space_xxs * 0.5,
+        ])))
         .center_y(Length::Shrink);
         if b.solid {
             c.style(sc::role(b.role)).into()
@@ -165,10 +175,12 @@ impl ChipSize {
 
     /// `(text size, icon size, vertical padding, horizontal padding)` for `m`.
     fn dims(self, m: &Metrics) -> (f32, f32, f32, f32) {
+        // Medium follows the metrics; the others step from it.
+        let (t, i, p, r) = (crate::Typography::desktop().small, m.icon_size - 2.0, m.space_xxs, m.space_m - 1.0);
         match self {
-            Self::Small => (11.0, 10.0, 1.0, 8.0),
-            Self::Medium => (m.space_m + 1.0, m.icon_size - 2.0, 2.0, m.space_m - 1.0),
-            Self::Large => (15.0, 16.0, 4.0, 14.0),
+            Self::Small => (t - 2.0, i - 4.0, p * 0.5, r - 3.0),
+            Self::Medium => (t, i, p, r),
+            Self::Large => (t + 2.0, i + 2.0, p * 2.0, r + 3.0),
         }
     }
 }
@@ -187,6 +199,9 @@ pub struct Chip<'a, M> {
     disabled: bool,
     on_press: Option<M>,
     on_remove: Option<M>,
+    spacing: Option<f32>,
+    padding: Option<Padding>,
+    remove_padding: Option<Padding>,
     metrics: Metrics,
     _p: std::marker::PhantomData<&'a ()>,
 }
@@ -229,6 +244,9 @@ impl<'a, M> Chip<'a, M> {
             disabled: false,
             on_press: None,
             on_remove: None,
+            spacing: None,
+            padding: None,
+            remove_padding: None,
             metrics: Metrics::desktop(),
             _p: Default::default(),
         }
@@ -285,6 +303,22 @@ impl<'a, M> Chip<'a, M> {
     /// Pressing the chip body.
     pub fn on_press(mut self, m: M) -> Self {
         self.on_press = Some(m);
+        self
+    }
+    /// The gap between the icon and the label (default `space_s - 2`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding of the chip's body button (default from its [`ChipSize`]).
+    pub fn padding(mut self, p: impl Into<Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// The padding of the trailing ✕ button (default `space_xxs` above and below, `space_xs`
+    /// at the sides).
+    pub fn remove_padding(mut self, p: impl Into<Padding>) -> Self {
+        self.remove_padding = Some(p.into());
         self
     }
     /// Shows a trailing ✕ that sends `m`.
@@ -375,7 +409,9 @@ impl<'a, M: Clone + 'a> From<Chip<'a, M>> for Element<'a, M> {
                 ..Default::default()
             }
         };
-        let mut body = row![].spacing(m.space_s - 2.0).align_y(Vertical::Center);
+        let mut body = row![]
+            .spacing(c.spacing.unwrap_or(m.space_s - 2.0))
+            .align_y(Vertical::Center);
         if let Some(i) = &c.icon {
             body =
                 body.push(
@@ -390,7 +426,7 @@ impl<'a, M: Clone + 'a> From<Chip<'a, M>> for Element<'a, M> {
             body = body.push(text(c.label).size(text_size).wrapping(text::Wrapping::None));
         }
         let main = button(body)
-            .padding(Padding::from([pad_y, pad_x]))
+            .padding(c.padding.unwrap_or(Padding::from([pad_y, pad_x])))
             .style(inner)
             .on_press_maybe(c.on_press.filter(|_| !disabled));
         let mut pill = row![main].align_y(Vertical::Center);
@@ -403,7 +439,10 @@ impl<'a, M: Clone + 'a> From<Chip<'a, M>> for Element<'a, M> {
                             color: Some(tint(t)),
                         }),
                 )
-                .padding(Padding::from([2.0, 4.0]))
+                .padding(
+                    c.remove_padding
+                        .unwrap_or(Padding::from([m.space_xxs, m.space_xs])),
+                )
                 .style(inner)
                 .on_press_maybe((!disabled).then_some(rm)),
             );
@@ -477,5 +516,24 @@ mod tests {
             false,
         );
         assert_eq!(given, iced::Color::WHITE);
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn badge_and_chip_padding_and_gaps_are_parameters() {
+        let b = Badge::new("3").padding([1.0, 9.0]);
+        assert_eq!(b.padding, Some(Padding::from([1.0, 9.0])));
+        let _: Element<'_, ()> = b.into();
+        let c = Chip::<()>::new("x")
+            .spacing(1.0)
+            .padding(2.0)
+            .remove_padding(3.0)
+            .on_remove(());
+        assert_eq!((c.spacing, c.padding), (Some(1.0), Some(Padding::from(2.0))));
+        let _: Element<'_, ()> = c.into();
     }
 }

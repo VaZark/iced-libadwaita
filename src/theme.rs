@@ -81,16 +81,20 @@ impl Theme {
         } else {
             Shadows::none()
         };
-        t.with_metrics(c.metrics())
+        let mut t = t
+            .with_metrics(c.metrics())
             .with_typography(Typography::with_base(
                 Typography::default().base * c.text_scale,
             ))
             .with_shadows(shadows)
             .with_flat_headerbars(c.flat_headerbars)
-            .with_auto_contrast(c.auto_contrast)
             .with_tint(c.tint)
             .with_transparency(c.transparency)
-            .with_transparent_window(c.decorations == crate::config::DecorationMode::Csd)
+            .with_transparent_window(c.decorations == crate::config::DecorationMode::Csd);
+        if let Some(theme) = &c.theme_config {
+            t = t.with_theme_config(theme);
+        }
+        t
     }
 
     pub fn dark() -> Self {
@@ -102,8 +106,8 @@ impl Theme {
         let mut semantic = Semantic::from_palette(&palette, scheme);
         semantic.apply_contrast();
         let name = match scheme {
-            Scheme::Light => "Adwaita Light",
-            Scheme::Dark => "Adwaita Dark",
+            Scheme::Light => "Light",
+            Scheme::Dark => "Dark",
         }
         .to_string();
         Self {
@@ -116,7 +120,7 @@ impl Theme {
             shadows: Shadows::default(),
             transparent_window: true,
             flat_headerbars: true,
-            auto_contrast: true,
+            auto_contrast: false,
             transparency: 0.0,
             tint: None,
             tokens: Default::default(),
@@ -133,7 +137,7 @@ impl Theme {
     pub fn with_theme_config(mut self, cfg: &crate::theme_config::ThemeConfig) -> Self {
         let scheme = self.scheme;
         let resolved =
-            cfg.clone()
+            cfg.for_policy(crate::config::current().allow_app_overrides)
                 .with_variation(cfg.active_variation().unwrap_or(if scheme.is_dark() {
                     "dark"
                 } else {
@@ -141,14 +145,26 @@ impl Theme {
                 }));
         let cfg = &resolved;
         self = self.with_palette(|p| cfg.apply_to_palette(p, scheme));
+        // Text on colored fills is what the theme says (`*-fg`), unless it asks for contrast.
+        if let Some(on) = cfg.bool("colors", "auto-contrast") {
+            self = self.with_auto_contrast(on);
+        }
         let mut metrics = self.metrics;
         cfg.apply_to_metrics(&mut metrics);
         self.metrics = metrics;
+        cfg.apply_to_shadows(&mut self.shadows);
         if let Some(t) = cfg.typography() {
             self.typography = t;
         }
         self.tokens = std::sync::Arc::new(cfg.tokens());
         self
+    }
+
+    /// The variant `name` of `widget` (`theme.variant("button", "suggested")`): a named set of
+    /// style tokens from the theme file or the app's schema. See
+    /// [`Schema::variant`](crate::theme_config::Schema::variant).
+    pub fn variant(&self, widget: &str, name: &str) -> crate::theme_config::ResolvedVariant<'_> {
+        self.tokens.variant(widget, name)
     }
 
     /// An app theme token that is a color (see [`with_theme_config`](Self::with_theme_config)).
@@ -594,7 +610,7 @@ mod tests {
 
     #[test]
     fn background_edits_update_inherited_foregrounds_but_preserve_overrides() {
-        let changed = Theme::light().with_semantic(|s| {
+        let changed = Theme::light().with_auto_contrast(true).with_semantic(|s| {
             s.headerbar.bg = Color::BLACK;
             s.active_toggle.bg = Color::BLACK;
         });
@@ -697,8 +713,9 @@ mod shadow_and_scrollbar_tests {
 
     #[test]
     fn shadows_are_a_theme_setting() {
-        let on = Theme::light();
-        let off = Theme::light().with_shadows(Shadows::none());
+        let cfg = crate::theme_config::libadwaita();
+        let on = Theme::light().with_theme_config(&cfg);
+        let off = on.clone().with_shadows(Shadows::none());
         assert!(on.shadows.card().ring.is_some());
         assert!(off.shadows.card().ring.is_none());
         let flat = crate::styles::container::card(&off);
@@ -755,11 +772,11 @@ mod shadow_and_scrollbar_tests {
     }
 
     #[test]
-    fn radii_follow_adwaita_scss() {
+    fn the_built_in_radii_are_square() {
         let m = Metrics::default();
         assert_eq!(
             (m.radius_m, m.radius_l, m.radius_popover, m.radius_window),
-            (9.0, 12.0, 15.0, 15.0)
+            (0.0, 0.0, 0.0, 0.0)
         );
     }
 }
@@ -779,7 +796,7 @@ mod header_tests {
         use crate::color::{contrast_ratio, readable_on};
         for accent in AccentColor::ALL {
             for scheme in [Scheme::Light, Scheme::Dark] {
-                let t = Theme::new(scheme).accent(accent);
+                let t = Theme::new(scheme).with_auto_contrast(true).accent(accent);
                 let a = t.semantic.accent;
                 assert_eq!(a.fg, readable_on(a.bg), "{accent:?}");
                 assert!(
@@ -788,8 +805,10 @@ mod header_tests {
                 );
             }
         }
-        // A bright fill gets dark text; turning it off restores the palette's white.
-        let t = Theme::light().accent(AccentColor::Yellow);
+        // A bright fill gets dark text; turning it off restores the palette's white. It is
+        // off unless the theme asks for it.
+        assert!(!Theme::light().auto_contrast);
+        let t = Theme::light().with_auto_contrast(true).accent(AccentColor::Yellow);
         assert_eq!(t.semantic.accent.fg, crate::color::DARK_TEXT);
         let off = t.with_auto_contrast(false);
         assert_eq!(off.semantic.accent.fg, iced::Color::WHITE);
@@ -826,9 +845,10 @@ mod header_tests {
 
     #[test]
     fn a_tint_moves_the_color_towards_its_own_color_and_keeps_the_alpha() {
-        let plain = Theme::light().with_transparency(0.5);
+        let grey = |t: Theme| t.with_palette(|p| p.window_bg_color = iced::Color::from_rgb(0.5, 0.5, 0.5));
+        let plain = grey(Theme::light()).with_transparency(0.5);
         let red = iced::Color::from_rgba(1.0, 0.0, 0.0, 0.3);
-        let tinted = Theme::light().with_transparency(0.5).with_tint(Some(red));
+        let tinted = grey(Theme::light()).with_transparency(0.5).with_tint(Some(red));
         let (a, b) = (plain.semantic.window.bg, tinted.semantic.window.bg);
         assert_eq!(a.a, b.a, "transparency is kept");
         assert!(b.r > a.r && b.g < a.g, "towards red, not the accent");

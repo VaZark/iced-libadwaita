@@ -202,13 +202,19 @@ pub fn navigation_sidebar_rounded_padded<'a, M: 'a>(
     padding: SidebarPadding,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
+    sidebar_surface(rows, window_radius, padding.gap(&m), padding.inset(&m))
+}
+
+/// The rounded sidebar surface with the rows `gap` apart and `inset` around them.
+fn sidebar_surface<'a, M: 'a>(
+    rows: impl IntoIterator<Item = Element<'a, M>>,
+    window_radius: f32,
+    gap: f32,
+    inset: f32,
+) -> Element<'a, M> {
     // CSS has top/bottom list padding as well as horizontal row margins. The
     // last row's 2px bottom margin compensates the list's bottom padding - 2px.
-    container(
-        column(rows)
-            .spacing(padding.gap(&m))
-            .padding(padding.inset(&m)),
-    )
+    container(column(rows).spacing(gap).padding(inset))
     .width(Length::Fill)
     .height(Length::Fill)
     .style(move |_: &crate::Theme| iced::widget::container::Style {
@@ -412,6 +418,8 @@ pub struct SidebarList<'a, M> {
     style: SidebarStyle,
     window_radius: f32,
     padding: SidebarPadding,
+    spacing: Option<f32>,
+    inset: Option<f32>,
     cards_below: Option<crate::breakpoints::WidthClass>,
     fixed_top: usize,
     dragging: bool,
@@ -426,6 +434,8 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
             style: SidebarStyle::List,
             window_radius: 0.0,
             padding: SidebarPadding::Md,
+            spacing: None,
+            inset: None,
             cards_below: None,
             fixed_top: 0,
             dragging: false,
@@ -441,6 +451,16 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
     /// (default), `Lg` like GNOME Settings. An item's own [`SidebarItem::padding`] wins.
     pub fn padding(mut self, padding: SidebarPadding) -> Self {
         self.padding = padding;
+        self
+    }
+    /// The gap between rows in px, over the one the [`padding`](Self::padding) level gives.
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The inset between the list's edges and its rows in px, over the level's.
+    pub fn inset(mut self, px: f32) -> Self {
+        self.inset = Some(px);
         self
     }
     /// Chooses the style by the width of the list's own container, with the same rule as
@@ -571,14 +591,16 @@ fn list_view<'a, M: Clone + 'a>(
     fixed_top: usize,
     dragging: bool,
     pages: Option<Pages<M>>,
+    (gap_override, inset_override): (Option<f32>, Option<f32>),
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
-    let inset = level.inset(&m);
+    let inset = inset_override.unwrap_or(level.inset(&m));
+    let gap = gap_override.unwrap_or(level.gap(&m));
     let rows_of = |items: Vec<SidebarItem<M>>| -> Vec<Vec<Element<'a, M>>> {
         items.into_iter().map(|i| item_rows(i, level, dragging)).collect()
     };
     let stack = |rows: Vec<Vec<Element<'a, M>>>, padding: iced::Padding| {
-        column(rows.into_iter().flatten()).spacing(level.gap(&m)).padding(padding)
+        column(rows.into_iter().flatten()).spacing(gap).padding(padding)
     };
     // Pages: the items stay, and the pages slide beneath them.
     if let Some(Pages { pages, current, depths }) = pages {
@@ -589,7 +611,7 @@ fn list_view<'a, M: Clone + 'a>(
             .map(|page| {
                 crate::layouts::scrolled_window(stack(
                     rows_of(page),
-                    iced::Padding { top: level.gap(&m), right: inset, bottom: inset, left: inset },
+                    iced::Padding { top: gap, right: inset, bottom: inset, left: inset },
                 ))
                 .height(Length::Fill)
                 .into()
@@ -608,13 +630,13 @@ fn list_view<'a, M: Clone + 'a>(
     // Each item as its row, with its divider above if it has one.
     let rows = rows_of(items);
     if fixed_top == 0 || fixed_top >= rows.len() {
-        return navigation_sidebar_rounded_padded(rows.into_iter().flatten(), radius, level);
+        return sidebar_surface(rows.into_iter().flatten(), radius, gap, inset);
     }
     // The first items stay; the rest scroll beneath them.
     let mut rest = rows;
     let top: Vec<_> = rest.drain(..fixed_top).collect();
     let top = stack(top, iced::Padding { top: inset, right: inset, bottom: 0.0, left: inset });
-    let rest = stack(rest, iced::Padding { top: level.gap(&m), right: inset, bottom: inset, left: inset });
+    let rest = stack(rest, iced::Padding { top: gap, right: inset, bottom: inset, left: inset });
     container(column![top, crate::layouts::scrolled_window(rest).height(Length::Fill)])
         .width(Length::Fill)
         .height(Length::Fill)
@@ -653,11 +675,12 @@ impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
         if let Some(class) = l.cards_below {
             let (items, level, radius, fixed, dragging) =
                 (l.items, l.padding, l.window_radius, l.fixed_top, l.dragging);
+            let (gap, inset) = (l.spacing, l.inset);
             let cards = items.clone();
             return MetaComponent::new()
                 .width(Length::Fill)
                 .variant(SidebarStyle::List, When::from_class(class), move |_| {
-                    list_view(items.clone(), level, radius, fixed, dragging, None)
+                    list_view(items.clone(), level, radius, fixed, dragging, None, (gap, inset))
                 })
                 .variant(SidebarStyle::Cards, When::always(), move |_| {
                     cards_view(cards.clone())
@@ -665,7 +688,15 @@ impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
                 .into();
         }
         match l.style {
-            SidebarStyle::List => list_view(l.items, l.padding, l.window_radius, l.fixed_top, l.dragging, l.pages),
+            SidebarStyle::List => list_view(
+                l.items,
+                l.padding,
+                l.window_radius,
+                l.fixed_top,
+                l.dragging,
+                l.pages,
+                (l.spacing, l.inset),
+            ),
             SidebarStyle::Cards => cards_view(l.items),
         }
     }
@@ -1218,7 +1249,7 @@ mod tests {
 
     #[test]
     fn sidebar_padding_levels_grow_in_every_measure() {
-        let m = Metrics::default();
+        let m = crate::theme_config::libadwaita_metrics();
         let [sm, md, lg] = SidebarPadding::ALL;
         for f in [SidebarPadding::row_height, SidebarPadding::row_padding] {
             assert!(f(sm, &m) < f(md, &m) && f(md, &m) < f(lg, &m));
@@ -1246,5 +1277,17 @@ mod tests {
         assert!(bp.matches(Size::new(400.0, 600.0)));
         assert!(!bp.matches(Size::new(401.0, 600.0)));
         assert!(Breakpoint::min_width(500.0).matches(Size::new(500.0, 1.0)));
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_list_gap_and_inset_are_parameters() {
+        let l = SidebarList::<()>::new([SidebarItem::new("a", ())]).spacing(6.0).inset(3.0);
+        assert_eq!((l.spacing, l.inset), (Some(6.0), Some(3.0)));
+        let _: Element<'_, ()> = l.into();
     }
 }

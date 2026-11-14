@@ -30,7 +30,8 @@ let theme = iad::Theme::dark()
 ## Rules
 
 - Use roles, not colors. `Role::{Accent, Success, Warning, Error, Destructive}` for status. Never a fixed hue for meaning.
-- Text on colored fills is chosen by contrast (CSS `color-contrast()`): light or dark, whichever contrasts more. Override with a component's `text_color` or `Theme::with_semantic`. Turn off with `with_auto_contrast(false)`.
+- Text on colored fills is what the theme defines (`accent-fg`, `primary-fg`, `success-fg`, …), as in Bootstrap and Mantine. A theme can opt in to picking light or dark text by contrast with `[colors] auto-contrast=true` (`Theme::with_auto_contrast`). A component's `text_color` or `Theme::with_semantic` overrides either.
+- Primary actions (suggested buttons) use the `primary` color, not the accent. The accent is for selection, focus and links, and may follow the desktop; the primary color is the theme's own.
 - Radii are capped at the HIG values (controls 9, cards 12, popovers and windows 15). Lower them (`radius_m`, `radius_l`, `radius_toast`). Do not raise them.
 - Shadows are settings: `Shadows::none()`, `.with_scale`, `.with_intensity`. A card draws each layer as its own rounded shape, so the shadow follows the border.
 - Density: `Metrics::compact()` or `[appearance] density=compact`.

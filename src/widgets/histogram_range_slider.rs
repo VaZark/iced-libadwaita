@@ -27,6 +27,7 @@ pub struct HistogramRangeSlider<'a, M> {
     step: Option<f32>,
     height: f32,
     full: bool,
+    spacing: Option<f32>,
 }
 
 impl<'a, M: 'a> HistogramRangeSlider<'a, M> {
@@ -45,12 +46,18 @@ impl<'a, M: 'a> HistogramRangeSlider<'a, M> {
             step: None,
             height: 48.0,
             full: false,
+            spacing: None,
         }
     }
     /// How far a thumb moves at a time, and the least the thumbs may be apart. Without one the
     /// thumbs move freely.
     pub fn step(mut self, step: f32) -> Self {
         self.step = Some(step.max(f32::EPSILON));
+        self
+    }
+    /// The gap between the bars and the thumbs' track (default `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
         self
     }
     /// The height of the bars (default 48).
@@ -67,7 +74,7 @@ impl<'a, M: 'a> HistogramRangeSlider<'a, M> {
 
 impl<'a, M: 'a> From<HistogramRangeSlider<'a, M>> for Element<'a, M> {
     fn from(c: HistogramRangeSlider<'a, M>) -> Self {
-        let (full, step, height) = (c.full, c.step, c.height);
+        let (full, step, height, spacing) = (c.full, c.step, c.height, c.spacing);
         let h: Rc<Histogram> = Rc::new(c.histogram.into_owned());
         let (min, max) = (h.min(), h.max());
         ComposedComponent::new(c.range, c.on_change)
@@ -94,7 +101,7 @@ impl<'a, M: 'a> From<HistogramRangeSlider<'a, M>> for Element<'a, M> {
             })
             // The rule, once, whichever part sent the value: lo <= hi.
             .normalize(|(lo, hi)| (lo.min(hi), lo.max(hi)))
-            .spacing(6.0)
+            .spacing(spacing.unwrap_or(crate::Metrics::desktop().space_s))
             .into()
     }
 }
@@ -114,5 +121,18 @@ mod tests {
             ((80.0, 120.0), Some(1.0), 32.0)
         );
         assert!(!s.full);
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_gap_is_a_parameter() {
+        let h = Histogram::from_counts(0.0, 10.0, &[1, 2, 3]);
+        let s = HistogramRangeSlider::<()>::new(h, (2.0, 6.0), |_| ()).spacing(9.0);
+        assert_eq!(s.spacing, Some(9.0));
+        let _: Element<'_, ()> = s.into();
     }
 }

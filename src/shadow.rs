@@ -1,4 +1,4 @@
-//! Shadow tokens, modeled on libadwaita's stylesheet.
+//! Shadow tokens. The bare baseline has none; `themes/libadwaita.conf` models libadwaita's.
 //!
 //! Adwaita builds elevation from *stacked* CSS box-shadows (a 1px ring plus one
 //! or two blurred layers). iced draws one shadow per quad, so each [`Elevation`]
@@ -17,7 +17,6 @@
 //! Layer values (light) come from libadwaita `_lists.scss`, `_popovers.scss`,
 //! `_dialogs.scss` and `_toolbars.scss`; see `docs/hig-inferences/design-language/shadows.md`.
 
-use crate::color::{black, ink};
 use iced::{Color, Shadow, Vector};
 
 /// One CSS box-shadow layer: `x y blur spread color`.
@@ -65,6 +64,88 @@ impl Elevation {
     }
 }
 
+impl Elevation {
+    /// Parses CSS box-shadow syntax: `x y blur spread color, ...` (lengths in `px`, `none` for
+    /// no layers). Returns `None` when any layer is malformed.
+    pub fn parse(text: &str) -> Option<Self> {
+        let text = text.trim();
+        if text.eq_ignore_ascii_case("none") || text.is_empty() {
+            return Some(Self::none());
+        }
+        let mut layers = Vec::new();
+        for part in split_top_level(text) {
+            let part = part.trim();
+            let mut n: Vec<f32> = Vec::new();
+            let mut rest = part;
+            while let Some((tok, tail)) = rest.split_once(char::is_whitespace) {
+                match tok.trim_end_matches("px").parse::<f32>() {
+                    Ok(v) if n.len() < 4 => n.push(v),
+                    _ => break,
+                }
+                rest = tail.trim_start();
+            }
+            let (color, n) = (rest, n);
+            let color = match crate::theme_config::VariableType::Color.parse(color)? {
+                crate::theme_config::Value::Color(c) => c,
+                _ => return None,
+            };
+            let [x, y] = <[f32; 2]>::try_from(n.get(..2)?).ok()?;
+            layers.push(Layer::new(
+                x,
+                y,
+                n.get(2).copied().unwrap_or(0.0),
+                n.get(3).copied().unwrap_or(0.0),
+                color,
+            ));
+        }
+        Some(Self { layers })
+    }
+
+    /// The elevation in CSS box-shadow syntax (the inverse of [`parse`](Self::parse)).
+    pub fn to_css(&self) -> String {
+        if self.layers.is_empty() {
+            return "none".into();
+        }
+        let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+        self.layers
+            .iter()
+            .map(|l| {
+                let c = l.color;
+                format!(
+                    "{}px {}px {}px {}px rgba({}, {}, {}, {})",
+                    l.x,
+                    l.y,
+                    l.blur,
+                    l.spread,
+                    b(c.r),
+                    b(c.g),
+                    b(c.b),
+                    c.a
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+/// Splits on commas that are not inside parentheses.
+fn split_top_level(text: &str) -> Vec<&str> {
+    let (mut depth, mut start, mut out) = (0i32, 0, Vec::new());
+    for (i, c) in text.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ',' if depth == 0 => {
+                out.push(&text[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    out.push(&text[start..]);
+    out
+}
+
 /// An elevation resolved for drawing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Resolved {
@@ -90,9 +171,9 @@ impl Resolved {
 pub struct Shadows {
     /// Master switch.
     pub enabled: bool,
-    /// Multiplies offsets and blur radii (1.0 = Adwaita).
+    /// Multiplies offsets and blur radii (1.0 = as themed).
     pub scale: f32,
-    /// Multiplies layer alpha (1.0 = Adwaita).
+    /// Multiplies layer alpha (1.0 = as themed).
     pub intensity: f32,
     /// `.card` / `.boxed-list`.
     pub card: Elevation,
@@ -105,41 +186,16 @@ pub struct Shadows {
 }
 
 impl Shadows {
-    /// libadwaita's values.
-    pub fn adwaita() -> Self {
+    /// The bare baseline: shadows on, but no elevation has any layers (a theme adds them).
+    pub fn bare() -> Self {
         Self {
             enabled: true,
             scale: 1.0,
             intensity: 1.0,
-            // _lists.scss: 0 0 0 1px ink 3%, 0 1px 3px 1px ink 7%, 0 2px 6px 2px ink 3%
-            card: Elevation::new([
-                Layer::new(0.0, 0.0, 0.0, 1.0, ink(0.03)),
-                Layer::new(0.0, 1.0, 3.0, 1.0, ink(0.07)),
-                Layer::new(0.0, 2.0, 6.0, 2.0, ink(0.03)),
-            ]),
-            // _popovers.scss: 0 0 0 1px black 5%, 0 1px 5px 1px black 9%, 0 2px 14px 3px black 5%
-            popover: Elevation::new([
-                Layer::new(0.0, 0.0, 0.0, 1.0, black(0.05)),
-                Layer::new(0.0, 1.0, 5.0, 1.0, black(0.09)),
-                Layer::new(0.0, 2.0, 14.0, 3.0, black(0.05)),
-            ]),
-            // _dialogs.scss floating-sheet: 0 0 14px 2px ink 3%, 0 0 5px 2px ink 10%, 0 0 0 1px black 5%
-            dialog: Elevation::new([
-                Layer::new(0.0, 0.0, 14.0, 2.0, ink(0.03)),
-                Layer::new(0.0, 0.0, 5.0, 2.0, ink(0.10)),
-                Layer::new(0.0, 0.0, 0.0, 1.0, black(0.05)),
-            ]),
-            // _popovers.scss `.osd popover > contents`: 0 0 1px white 10%
-            osd: Elevation::new([Layer::new(
-                0.0,
-                0.0,
-                0.0,
-                1.0,
-                Color {
-                    a: 0.10,
-                    ..Color::WHITE
-                },
-            )]),
+            card: Elevation::none(),
+            popover: Elevation::none(),
+            dialog: Elevation::none(),
+            osd: Elevation::none(),
         }
     }
 
@@ -147,7 +203,7 @@ impl Shadows {
     pub fn none() -> Self {
         Self {
             enabled: false,
-            ..Self::adwaita()
+            ..Self::bare()
         }
     }
 
@@ -223,7 +279,7 @@ impl Shadows {
 
 impl Default for Shadows {
     fn default() -> Self {
-        Self::adwaita()
+        Self::bare()
     }
 }
 
@@ -231,9 +287,27 @@ impl Default for Shadows {
 mod tests {
     use super::*;
 
+    /// A themed set of shadows (the bare baseline has no layers).
+    fn themed() -> Shadows {
+        let e = |css| Elevation::parse(css).unwrap();
+        Shadows {
+            card: e("0 0 0 1px rgba(0, 0, 6, 0.03), 0 1px 3px 1px rgba(0, 0, 6, 0.07)"),
+            dialog: e("0 0 14px 2px rgba(0, 0, 6, 0.03), 0 0 5px 2px rgba(0, 0, 6, 0.1)"),
+            ..Shadows::bare()
+        }
+    }
+
+    #[test]
+    fn css_round_trips_and_rejects_garbage() {
+        let css = "0px 1px 3px 1px rgba(0, 0, 6, 0.07), 0px 0px 0px 1px rgba(255, 255, 255, 0.1)";
+        assert_eq!(Elevation::parse(css).unwrap().to_css(), css);
+        assert_eq!(Elevation::parse("none"), Some(Elevation::none()));
+        assert!(Elevation::parse("0 0 blur red").is_none());
+    }
+
     #[test]
     fn card_has_ring_and_soft_shadow() {
-        let r = Shadows::adwaita().card();
+        let r = themed().card();
         assert!(r.ring.is_some());
         assert!(r.shadow.blur_radius > 0.0 && r.shadow.color.a > 0.0);
         assert_eq!(r.border(12.0).width, 1.0);
@@ -249,8 +323,8 @@ mod tests {
 
     #[test]
     fn scale_and_intensity_apply() {
-        let a = Shadows::adwaita().dialog();
-        let b = Shadows::adwaita()
+        let a = themed().dialog();
+        let b = themed()
             .with_scale(2.0)
             .with_intensity(0.5)
             .dialog();

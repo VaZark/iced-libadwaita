@@ -170,11 +170,6 @@ impl Gallery {
                 self.group("Every element").push(w::card(full)),
                 self.group("Compact, first blocks only").push(w::card(compact)),
                 self.group("Tag groups, read only").push(w::card(tag_groups())),
-                playground::code_block(
-                    m,
-                    "let doc = vec![Block::Heading { level: 1, id: None, content: vec![Inline::Text(\"Title\".into())] }, /* … */];\n\nRichText::new(&theme, &doc)\n    .on_link(Msg::OpenUrl)               // a link was pressed\n    .on_task(|n, on| Msg::Task(n, on))   // task n (reading order) was toggled\n    .compact(true).max_blocks(4)         // for a card"
-                        .to_string(),
-                ),
             ]
             .spacing(m.group_spacing),
         )

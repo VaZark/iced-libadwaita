@@ -152,7 +152,7 @@ pub fn frame<'a, M: Clone + 'a>(
     state: State,
     on_resize: impl Fn(Direction) -> M + 'a,
 ) -> Element<'a, M> {
-    let radius = state.radius(&Metrics::default());
+    let radius = state.radius(&Metrics::desktop());
     let edge = state.is_edge_to_edge();
     let body = container(content)
         .width(Length::Fill)
@@ -233,11 +233,25 @@ pub enum Action {
     Minimize,
     ToggleMaximize,
     Close,
+    /// Show the window's system menu.
+    Menu,
     /// Press on a resize grip of the [`frame`].
     Resize(Direction),
 }
 
 impl Action {
+    /// What a click on the title bar does, from the theme's `[windows] titlebar-<click>-click`
+    /// (`click` is `double`, `middle` or `right`). `None` when the token says `none`, or names an
+    /// action this window's buttons do not allow (a dialog cannot maximize or minimize).
+    pub fn titlebar(click: &str, chrome: &Chrome) -> Option<Self> {
+        match crate::theme_config::titlebar_action(click).as_str() {
+            "toggle-maximize" => chrome.maximize.then_some(Self::ToggleMaximize),
+            "minimize" => chrome.minimize.then_some(Self::Minimize),
+            "menu" => Some(Self::Menu),
+            _ => None,
+        }
+    }
+
     /// The task that does it to window `id`.
     pub fn perform<T>(self, id: iced::window::Id) -> Task<T> {
         match self {
@@ -245,6 +259,7 @@ impl Action {
             Self::Minimize => iced::window::minimize(id, true),
             Self::ToggleMaximize => iced::window::toggle_maximize(id),
             Self::Close => iced::window::close(id),
+            Self::Menu => iced::window::show_system_menu(id),
             Self::Resize(d) => iced::window::drag_resize(id, d),
         }
     }
@@ -306,7 +321,7 @@ impl Chrome {
     /// The window corner radius: none without client-side decorations, and none edge to edge.
     pub fn radius(&self) -> f32 {
         if self.csd {
-            self.state.radius(&Metrics::default())
+            self.state.radius(&Metrics::desktop())
         } else {
             0.0
         }
@@ -425,7 +440,7 @@ mod tests {
 
     #[test]
     fn edge_to_edge_when_maximized_or_fullscreen() {
-        let m = Metrics::default();
+        let m = crate::theme_config::libadwaita_metrics();
         assert_eq!(State::default().radius(&m), 15.0);
         assert_eq!(
             State {

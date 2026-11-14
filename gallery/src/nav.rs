@@ -5,7 +5,7 @@ use iced_adaptive_design::Icon;
 use iced_adaptive_design::layouts as lay;
 
 /// A level-1 page (a sidebar entry). Groups with details list their components; the others
-/// (`Typography`, `Theming`) are a single page.
+/// (`Typography`, `RichText`) are a single page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Page {
     Buttons,
@@ -18,11 +18,10 @@ pub enum Page {
     Dialogs,
     Typography,
     RichText,
-    Theming,
 }
 
 impl Page {
-    pub const ALL: [Page; 11] = [
+    pub const ALL: [Page; 10] = [
         Page::Buttons,
         Page::Inputs,
         Page::Lists,
@@ -33,7 +32,6 @@ impl Page {
         Page::Dialogs,
         Page::Typography,
         Page::RichText,
-        Page::Theming,
     ];
 
     pub fn title(self) -> &'static str {
@@ -48,7 +46,6 @@ impl Page {
             Page::Dialogs => "Dialogs & Sheets",
             Page::Typography => "Typography",
             Page::RichText => "Rich text",
-            Page::Theming => "Theming",
         }
     }
 
@@ -65,7 +62,6 @@ impl Page {
             Page::Dialogs => "Alerts, about, shortcuts and sheets",
             Page::Typography => "Text styles and colors",
             Page::RichText => "Headings, lists, tasks, code, tables and footnotes",
-            Page::Theming => "Colors, radii, shadows and motion",
         }
     }
 
@@ -81,7 +77,6 @@ impl Page {
             Page::Dialogs => Icon::Sidebar,
             Page::Typography => Icon::Search,
             Page::RichText => Icon::Note,
-            Page::Theming => Icon::Settings,
         }
     }
 
@@ -193,6 +188,7 @@ impl Page {
                         n(Splitter),
                     ],
                 ),
+                ("Window", vec![n(WindowShell), n(Motion)]),
                 (
                     "Flow",
                     vec![
@@ -246,19 +242,6 @@ impl Page {
                     n(Docked),
                 ],
             )],
-            Page::Theming => vec![
-                (
-                    "Look",
-                    vec![
-                        n(ThemeColors),
-                        n(ThemeShape),
-                        n(ColorHelpers),
-                        n(ThemeConfig),
-                    ],
-                ),
-                ("Behavior", vec![n(ThemeMotion), n(ThemeWindow)]),
-                ("Reference", vec![n(Surfaces)]),
-            ],
             Page::Typography | Page::RichText => vec![],
         }
     }
@@ -334,7 +317,6 @@ pub enum Detail {
     ShortcutLabel,
     MultiSelect,
     AnchoredPopover,
-    Surfaces,
 
     MetaComponent,
     Reorderable,
@@ -380,13 +362,9 @@ pub enum Detail {
     Sankey,
     Sunburst,
     // (the last ones moved from inline demos: two or more properties)
-    // Theming
-    ThemeColors,
-    ColorHelpers,
-    ThemeConfig,
-    ThemeShape,
-    ThemeMotion,
-    ThemeWindow,
+    // Window behavior
+    WindowShell,
+    Motion,
 }
 
 /// A component with one demo, rendered inline on its group page.
@@ -421,7 +399,6 @@ pub enum Inline {
     AnchoredPopover,
     ResponsiveTable,
     Accordion,
-    Surfaces,
 }
 
 impl Detail {
@@ -516,7 +493,6 @@ impl Detail {
             Detail::ShortcutLabel => "Shortcut label",
             Detail::MultiSelect => "Multi select",
             Detail::AnchoredPopover => "Anchored popover",
-            Detail::Surfaces => "Surfaces",
             Detail::PathBar => "Path bar",
             Detail::MenuButton => "Menu button",
             Detail::Banner => "Banner",
@@ -560,12 +536,8 @@ impl Detail {
             Detail::Sankey => "Sankey",
             Detail::Sunburst => "Sunburst",
             Detail::SyncedText => "Synced text",
-            Detail::ThemeColors => "Colors",
-            Detail::ColorHelpers => "Color helpers",
-            Detail::ThemeConfig => "App theme config",
-            Detail::ThemeShape => "Shape & shadows",
-            Detail::ThemeMotion => "Motion",
-            Detail::ThemeWindow => "Window & menus",
+            Detail::Motion => "Motion",
+            Detail::WindowShell => "Window & sidebar",
         }
     }
 
@@ -629,7 +601,6 @@ impl Detail {
             Detail::ShortcutLabel => "Key combinations",
             Detail::MultiSelect => "Several choices in a dropdown",
             Detail::AnchoredPopover => "Side, flip and shift",
-            Detail::Surfaces => "The semantic surfaces and status colors",
             Detail::PathBar => "Path and search variants",
             Detail::MenuButton => "Menu, primary menu and popover presentations",
             Detail::Banner => "Roles, buttons and revealing",
@@ -675,12 +646,8 @@ impl Detail {
             Detail::Container => "Centered content at a named maximum width",
             Detail::Composed => "Several components editing one shared state, as one widget",
             Detail::SyncedText => "Timed lines with the current one highlighted",
-            Detail::ThemeColors => "Scheme, accent, density and a card color override",
-            Detail::ColorHelpers => "Seeded colors and a contrast floor",
-            Detail::ThemeConfig => "Hardcoded, app theme, toolkit theme: layered and regenerable",
-            Detail::ThemeShape => "Control, card and toast radii, shadows, with a live preview",
-            Detail::ThemeMotion => "Animations on or off, easings and springs",
-            Detail::ThemeWindow => "Menu presentation, mobile sidebar and the path bar title",
+            Detail::Motion => "Animations on or off, easings and springs",
+            Detail::WindowShell => "Menu presentation, mobile sidebar and the path bar title",
         }
     }
 }

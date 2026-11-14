@@ -11,6 +11,8 @@ use iced::{Length, Padding};
 pub struct ButtonContent<'a, M> {
     label: String,
     icon: Option<Icon>,
+    spacing: Option<f32>,
+    icon_end: bool,
     metrics: Metrics,
     _p: std::marker::PhantomData<&'a M>,
 }
@@ -20,12 +22,24 @@ impl<'a, M> ButtonContent<'a, M> {
         Self {
             label: label.into(),
             icon: None,
+            spacing: None,
+            icon_end: false,
             metrics: Metrics::desktop(),
             _p: std::marker::PhantomData,
         }
     }
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
+        self
+    }
+    /// The gap between the icon and the label (default `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// Puts the icon after the label instead of before it (default before).
+    pub fn icon_end(mut self, end: bool) -> Self {
+        self.icon_end = end;
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -36,11 +50,16 @@ impl<'a, M> ButtonContent<'a, M> {
 
 impl<'a, M: 'a> From<ButtonContent<'a, M>> for Element<'a, M> {
     fn from(c: ButtonContent<'a, M>) -> Self {
-        let mut r = row![].spacing(c.metrics.space_s).align_y(Vertical::Center);
-        if let Some(i) = c.icon {
-            r = r.push(i.view(c.metrics.icon_size));
+        let mut r = row![]
+            .spacing(c.spacing.unwrap_or(c.metrics.space_s))
+            .align_y(Vertical::Center);
+        let label = crate::components::typography::label(c.label);
+        match (c.icon, c.icon_end) {
+            (Some(i), false) => r = r.push(i.view(c.metrics.icon_size)).push(label),
+            (Some(i), true) => r = r.push(label).push(i.view(c.metrics.icon_size)),
+            (None, _) => r = r.push(label),
         }
-        r.push(crate::components::typography::label(c.label)).into()
+        r.into()
     }
 }
 
@@ -80,22 +99,22 @@ pub(crate) fn sized<'a, M: 'a>(
 
 /// Standard button (`.default`).
 pub fn raised_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    sized(content, &Metrics::desktop()).style(sb::default)
+    sized(content, &Metrics::desktop()).style(sb::variant("default"))
 }
 
 /// `.flat` button.
 pub fn flat_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    sized(content, &Metrics::desktop()).style(sb::flat)
+    sized(content, &Metrics::desktop()).style(sb::variant("flat"))
 }
 
 /// `.suggested-action` button.
 pub fn suggested_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    sized(content, &Metrics::desktop()).style(sb::suggested)
+    sized(content, &Metrics::desktop()).style(sb::variant("suggested"))
 }
 
 /// `.destructive-action` button.
 pub fn destructive_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    sized(content, &Metrics::desktop()).style(sb::destructive)
+    sized(content, &Metrics::desktop()).style(sb::variant("destructive"))
 }
 
 /// `.pill` button.
@@ -103,7 +122,7 @@ pub fn pill_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, 
     let m = Metrics::desktop();
     button(content.into())
         .padding(m.pill_padding)
-        .style(sb::pill)
+        .style(sb::variant("pill"))
 }
 
 /// `.pill.suggested-action` button.
@@ -113,7 +132,7 @@ pub fn suggested_pill_button<'a, M: 'a>(
     let m = Metrics::desktop();
     button(content.into())
         .padding(m.pill_padding)
-        .style(sb::suggested_pill)
+        .style(sb::variant("suggested-pill"))
 }
 
 /// `GtkProgressBar` with Adwaita's 6px thickness.
@@ -124,40 +143,67 @@ pub fn progress_bar<'a>(
     iced::widget::progress_bar(range, value).girth(Metrics::desktop().progress_height)
 }
 
-/// A square `.circular` icon button (flat by default, like header bar buttons).
-pub fn circular_button<'a, M: 'a>(icon: Icon) -> Button<'a, M, Theme> {
-    let m = Metrics::desktop();
-    button(container(icon.view(m.icon_size)).center(Length::Fixed(m.button_min_height)))
-        .padding(Padding::from(0.0))
-        .style(sb::circular_flat)
-}
-
-/// A round `.suggested-action` button around any content: the play button of a player, a
-/// primary action that is only an icon. [`circular_button`] is the flat one.
-///
-/// The diameter is the metrics' button height by default; [`size`](SuggestedCircularButton::size)
-/// sets it (a player's play button is bigger than a toolbar's).
-pub struct SuggestedCircularButton<'a, M> {
-    content: Element<'a, M>,
-    size: f32,
-    on_press: Option<M>,
-}
-
-/// See [`SuggestedCircularButton`].
-pub fn suggested_circular_button<'a, M: 'a>(
+/// A button of any look: the **variant** `name` (`[button.<name>]` in a theme file, or declared by
+/// the app), around `content`. A name the theme does not declare draws the neutral button.
+pub fn variant_button<'a, M: 'a>(
     content: impl Into<Element<'a, M>>,
-) -> SuggestedCircularButton<'a, M> {
-    SuggestedCircularButton {
-        content: content.into(),
-        size: Metrics::desktop().button_min_height,
-        on_press: None,
+    name: impl Into<String>,
+) -> Button<'a, M, Theme> {
+    sized(content, &Metrics::desktop()).style(sb::variant(&name.into()))
+}
+
+/// Selects a button's **variant**: `button(label).variant("brand")`. See
+/// [`styles::button::variant`](crate::styles::button::variant).
+pub trait ButtonVariant: Sized {
+    /// Styles the button as the variant `name`.
+    fn variant(self, name: impl Into<String>) -> Self;
+}
+
+impl<'a, M: 'a> ButtonVariant for Button<'a, M, Theme> {
+    fn variant(self, name: impl Into<String>) -> Self {
+        self.style(sb::variant(&name.into()))
     }
 }
 
-impl<'a, M: 'a> SuggestedCircularButton<'a, M> {
+/// A button that is a circle: a square of [`size`](CircularButton::size) px whose content is
+/// centered and clipped to that square, and whose corner radius is **half the size whatever the
+/// variant or the theme says**. A border radius on a button of any shape cannot promise a circle
+/// (a wider button gives a pill, and an oversized radius an ellipse), so this is a widget of its
+/// own that fixes width and height to the same value.
+///
+/// The diameter is the theme's `[metrics] circular-button-size`, or the button height when unset.
+/// Its [`variant`](CircularButton::variant) is `flat` unless set: any variant (`suggested`,
+/// `default`, an app's own) styles its colors; its shape stays a circle.
+pub struct CircularButton<'a, M> {
+    content: Element<'a, M>,
+    size: f32,
+    variant: String,
+    on_press: Option<M>,
+}
+
+impl<'a, M: 'a> CircularButton<'a, M> {
+    /// A circular button around any content.
+    pub fn new(content: impl Into<Element<'a, M>>) -> Self {
+        Self {
+            content: content.into(),
+            size: crate::theme_config::circular_button_size()
+                .unwrap_or_else(|| Metrics::desktop().button_min_height),
+            variant: "flat".into(),
+            on_press: None,
+        }
+    }
+    /// A circular button around an icon at the theme's icon size.
+    pub fn icon(icon: Icon) -> Self {
+        Self::new(icon.view(Metrics::desktop().icon_size))
+    }
     /// The diameter in px.
     pub fn size(mut self, px: f32) -> Self {
         self.size = px.max(1.0);
+        self
+    }
+    /// The variant that styles its colors (default `flat`).
+    pub fn variant(mut self, name: impl Into<String>) -> Self {
+        self.variant = name.into();
         self
     }
     pub fn on_press(mut self, msg: M) -> Self {
@@ -169,15 +215,81 @@ impl<'a, M: 'a> SuggestedCircularButton<'a, M> {
         self.on_press = msg;
         self
     }
+    /// The diameter in px.
+    pub fn diameter(&self) -> f32 {
+        self.size
+    }
+    /// The corner radius in px: half the diameter.
+    pub fn radius(&self) -> f32 {
+        self.size / 2.0
+    }
+}
+
+impl<'a, M: Clone + 'a> From<CircularButton<'a, M>> for Element<'a, M> {
+    fn from(b: CircularButton<'a, M>) -> Self {
+        circular_shell(b.content, b.size)
+            .style(sb::circular_variant(&b.variant, b.size))
+            .on_press_maybe(b.on_press)
+            .into()
+    }
+}
+
+/// A button exactly `size` by `size` with its content centered and clipped to the square.
+fn circular_shell<'a, M: 'a>(content: impl Into<Element<'a, M>>, size: f32) -> Button<'a, M, Theme> {
+    button(container(content).center(Length::Fixed(size)).clip(true))
+        .width(Length::Fixed(size))
+        .height(Length::Fixed(size))
+        .padding(Padding::from(0.0))
+}
+
+/// A square `.circular` icon button (flat by default, like header bar buttons). A
+/// [`CircularButton`] is the same with a variant and a size.
+pub fn circular_button<'a, M: 'a>(icon: Icon) -> Button<'a, M, Theme> {
+    let size = crate::theme_config::circular_button_size()
+        .unwrap_or_else(|| Metrics::desktop().button_min_height);
+    circular_shell(icon.view(Metrics::desktop().icon_size), size)
+        .style(sb::circular_variant("flat", size))
+}
+
+/// A round `.suggested-action` button around any content: the play button of a player, a
+/// primary action that is only an icon. [`circular_button`] is the flat one.
+///
+/// The diameter is the metrics' button height by default; [`size`](SuggestedCircularButton::size)
+/// sets it (a player's play button is bigger than a toolbar's). It is a [`CircularButton`] with
+/// the `suggested` variant.
+pub struct SuggestedCircularButton<'a, M> {
+    inner: CircularButton<'a, M>,
+}
+
+/// See [`SuggestedCircularButton`].
+pub fn suggested_circular_button<'a, M: 'a>(
+    content: impl Into<Element<'a, M>>,
+) -> SuggestedCircularButton<'a, M> {
+    SuggestedCircularButton {
+        inner: CircularButton::new(content).variant("suggested"),
+    }
+}
+
+impl<'a, M: 'a> SuggestedCircularButton<'a, M> {
+    /// The diameter in px.
+    pub fn size(mut self, px: f32) -> Self {
+        self.inner = self.inner.size(px);
+        self
+    }
+    pub fn on_press(mut self, msg: M) -> Self {
+        self.inner = self.inner.on_press(msg);
+        self
+    }
+    /// Pressable only when there is a message; disabled otherwise.
+    pub fn on_press_maybe(mut self, msg: Option<M>) -> Self {
+        self.inner = self.inner.on_press_maybe(msg);
+        self
+    }
 }
 
 impl<'a, M: Clone + 'a> From<SuggestedCircularButton<'a, M>> for Element<'a, M> {
     fn from(b: SuggestedCircularButton<'a, M>) -> Self {
-        button(container(b.content).center(Length::Fixed(b.size)))
-            .padding(Padding::from(0.0))
-            .style(sb::circular_suggested)
-            .on_press_maybe(b.on_press)
-            .into()
+        b.inner.into()
     }
 }
 
@@ -190,10 +302,10 @@ mod circular_tests {
         let b: SuggestedCircularButton<'_, u8> = suggested_circular_button(iced::widget::space())
             .size(44.0)
             .on_press(1);
-        assert_eq!((b.size, b.on_press), (44.0, Some(1)));
+        assert_eq!((b.inner.size, b.inner.on_press), (44.0, Some(1)));
         let d: SuggestedCircularButton<'_, u8> =
             suggested_circular_button(iced::widget::space()).on_press_maybe(None);
-        assert!(d.on_press.is_none());
+        assert!(d.inner.on_press.is_none());
     }
 }
 
@@ -399,5 +511,55 @@ mod tests {
         assert_eq!(size_of(Size::new(40.0, 19.0)).height, 24.0);
         // ...and taller content grows the box instead of overflowing it.
         assert_eq!(size_of(Size::new(40.0, 32.0)).height, 32.0);
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn button_content_gap_and_icon_side_are_parameters() {
+        let c = ButtonContent::<()>::new("Go").icon(Icon::Check).spacing(2.0).icon_end(true);
+        assert_eq!((c.spacing, c.icon_end), (Some(2.0), true));
+        let _: Element<'_, ()> = c.into();
+    }
+}
+
+#[cfg(test)]
+mod circular_button_tests {
+    use super::*;
+    use iced::widget::button::Status;
+
+    #[test]
+    fn a_circular_button_is_a_square_with_half_its_size_as_radius_whatever_the_theme_says() {
+        let b = CircularButton::<()>::new(iced::widget::space()).size(40.0);
+        assert_eq!((b.diameter(), b.radius()), (40.0, 20.0));
+        // A theme with a small radius and a variant that sets another one cannot change it.
+        let cfg = crate::theme_config::ThemeConfig::builder("t")
+            .files(false)
+            .toolkit_text("[metrics]\nradius-m=2\nradius-pill=2\n[button.suggested]\nradius=5px\n")
+            .app_text("")
+            .build();
+        let theme = Theme::light().with_theme_config(&cfg);
+        for name in ["flat", "suggested", "default", "unknown"] {
+            let style = sb::circular_variant(name, 40.0)(&theme, Status::Active);
+            assert_eq!(style.border.radius, 20.0.into(), "{name}");
+        }
+        let _: Element<'_, ()> = b.variant("suggested").on_press(()).into();
+    }
+
+    #[test]
+    fn the_diameter_follows_the_theme_unless_set() {
+        let b = CircularButton::<()>::new(iced::widget::space());
+        assert_eq!(b.diameter(), Metrics::desktop().button_min_height);
+        assert_eq!(CircularButton::<()>::new(iced::widget::space()).size(0.0).diameter(), 1.0);
+    }
+
+    #[test]
+    fn the_variant_extension_styles_a_plain_button() {
+        let b: Button<'_, (), Theme> = flat_button(iced::widget::space()).variant("suggested");
+        let _: Element<'_, ()> = b.into();
+        let _: Element<'_, ()> = variant_button(iced::widget::space(), "flat").into();
     }
 }

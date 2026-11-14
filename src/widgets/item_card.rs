@@ -40,6 +40,9 @@ pub struct ItemCard<'a, M> {
     picture: Option<Element<'a, M>>,
     density: Density,
     on_press: Option<M>,
+    spacing: Option<f32>,
+    padding: Option<iced::Padding>,
+    picture_align: iced::alignment::Horizontal,
     metrics: Metrics,
 }
 
@@ -51,12 +54,31 @@ impl<'a, M: Clone + 'a> ItemCard<'a, M> {
             picture: None,
             density: Density::Comfort,
             on_press: None,
+            spacing: None,
+            padding: None,
+            picture_align: iced::alignment::Horizontal::Center,
             metrics: Metrics::desktop(),
         }
     }
     /// The dimmed line under the title: the artist, the year, a count.
     pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
         self.subtitle = Some(subtitle.into());
+        self
+    }
+    /// The gap between the picture, the title and the subtitle of a card (default: the theme's
+    /// `space_xs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding inside a card (default: the theme's `card_padding`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// Where the picture sits across the card (default `Horizontal::Center`).
+    pub fn picture_align(mut self, a: iced::alignment::Horizontal) -> Self {
+        self.picture_align = a;
         self
     }
     /// The picture: a cover, an avatar. Make it big for a card and small for the compact row.
@@ -98,11 +120,11 @@ impl<'a, M: Clone + 'a> From<ItemCard<'a, M>> for Element<'a, M> {
                 .into();
         }
         let mut body = column![]
-            .spacing(m.space_xs)
+            .spacing(c.spacing.unwrap_or(m.space_xs))
             .width(Length::Fill)
             .height(Length::Fill);
         if let Some(p) = c.picture {
-            body = body.push(container(p).center_x(Length::Fill));
+            body = body.push(container(p).width(Length::Fill).align_x(c.picture_align));
         }
         // Text stays inside the card: it wraps at words (and, for one word wider than the card,
         // at characters). `heading` alone never wraps.
@@ -124,7 +146,7 @@ impl<'a, M: Clone + 'a> From<ItemCard<'a, M>> for Element<'a, M> {
         }
         // The card draws its own surface; the button only adds the events.
         let surface = container(body)
-            .padding(m.card_padding)
+            .padding(c.padding.unwrap_or(m.card_padding))
             .width(Length::Fill)
             .height(Length::Fill)
             .style(crate::styles::container::card);
@@ -141,6 +163,18 @@ impl<'a, M: Clone + 'a> From<ItemCard<'a, M>> for Element<'a, M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_card_takes_spacing_padding_and_picture_alignment() {
+        let c = ItemCard::<u8>::new("A")
+            .subtitle("b")
+            .picture(iced::widget::space())
+            .spacing(3.0)
+            .padding(5.0)
+            .picture_align(iced::alignment::Horizontal::Left);
+        assert_eq!((c.spacing, c.padding), (Some(3.0), Some(iced::Padding::from(5.0))));
+        let _: Element<'_, u8> = c.into();
+    }
 
     #[test]
     fn the_builder_keeps_its_parts() {

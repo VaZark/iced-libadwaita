@@ -6,7 +6,7 @@
 
 Two levels.
 
-1. **Sidebar: functional groups.** Buttons, Inputs, Rows & Lists, Data, Layout, Navigation, Feedback, Dialogs & Sheets. Components are grouped by what they are for, not how they look. Typography and Theming are single pages.
+1. **Sidebar: functional groups.** Buttons, Inputs, Rows & Lists, Data, Layout, Navigation, Feedback, Dialogs & Sheets. Components are grouped by what they are for, not how they look. Typography and Rich text are single pages.
 2. **Group page.** Lists its components in sections. Each is shown one of three ways (below).
 
 `nav.rs` holds the tree (`Page` → sections → entries). `details.rs` holds the content. The header search finds any component.
@@ -39,8 +39,7 @@ Examples: Text input (validation, password, color, width) is nested. Check butto
 A nested page whose component one instance can express is a playground (`playground.rs`):
 
 - one live component in a plain bordered frame,
-- a **Properties** panel with Reset,
-- the **Code** that builds what is shown, following the controls.
+- a **Properties** panel with Reset.
 
 Controls:
 
@@ -65,14 +64,6 @@ Rules:
 - Do not add a page for a single card. When a component gets a second property, move it from `Inline` to `Detail`.
 - Keep demos small. Do not repeat another component's demo.
 
-## Preview and Code
-
-Every nested page has **Preview | Code** tabs. `GALLERY_CODE=1` starts on Code.
-
-- Playground: the code is generated from the controls. The panel stays on both tabs.
-- No playground: the Preview is its own demo and the Code is a fixed snippet (`plays::snippet`). Add a snippet when you add a page.
-- Dialogs and the AppShell are nested pages: an Open button and their code.
-
 ## Dialogs and overlays
 
 - Alert, About, Shortcuts and Preferences open as modal dialogs in the gallery window. The window is faded and disabled behind them.
@@ -83,10 +74,9 @@ Every nested page has **Preview | Code** tabs. `GALLERY_CODE=1` starts on Code.
 
 Large or remote data, on one page: tables (responsive, sorting and pagination, a 100,000-row virtualized table, a table loading in chunks) and trees (async branches, virtualization, a files tree, a docs editor). The virtualized and async pages use `primitives::virtualize` and `primitives::loading`. Tree and table use the same ones.
 
-## Theming pages
+## Look and window pages
 
-- Colors: scheme, accent (named or custom with a color input), transparency, tint (opt-in), compact metrics, card color.
-- Shape: radii as number inputs, shadow sliders.
+The gallery has no theming controls: its look is the theme file (`IAD_THEME=path.conf`, else the installed default; edit one in the theme editor, which can start the gallery with it). Layout > **Window & sidebar** has the menu presentation, the mobile sidebar (drawer or parent page), sidebar row padding and the path bar title. Layout > **Motion** has the animations switch and an easing/spring player.
 
 ## Running
 
@@ -100,7 +90,7 @@ More switches are in [CONTRIBUTING.md](../CONTRIBUTING.md#the-gallery). `GALLERY
 
 ## Adding a property
 
-Add it to the playground in the same change: a control in `specs`, its use in `build`, its line in the generated code. A property with a toolkit default is a plain value that starts at it. The control shows the default. The generated code adds the call once it changes. Example: Expander row > Indent, default 24 px from `[rows] expander-indent`.
+Add it to the playground in the same change: a control in `specs` and its use in `build`. A property with a toolkit default is a plain value that starts at it. The control shows the default. Example: Expander row > Indent, default 24 px from `[rows] expander-indent`.
 
 Also update the method's doc comment (`cargo xtask man`) and the component's page. See [CONTRIBUTING.md](../CONTRIBUTING.md#working-on-a-component).
 

@@ -34,6 +34,9 @@ pub struct SectionDivider<'a, M> {
     on_toggle: Option<M>,
     action: Option<Element<'a, M>>,
     metrics: Metrics,
+    spacing: Option<f32>,
+    end_spacing: Option<f32>,
+    padding: Option<iced::Padding>,
 }
 
 impl<'a, M> SectionDivider<'a, M> {
@@ -48,6 +51,9 @@ impl<'a, M> SectionDivider<'a, M> {
             on_toggle: None,
             action: None,
             metrics: Metrics::desktop(),
+            spacing: None,
+            end_spacing: None,
+            padding: None,
         }
     }
 
@@ -95,6 +101,23 @@ impl<'a, M> SectionDivider<'a, M> {
         self
     }
 
+    /// The gap between the name, its detail and the line (default: the theme's `space_m`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The gap between the line and the chevron, action or trailing slot (default: the theme's
+    /// `space_s`).
+    pub fn end_spacing(mut self, px: f32) -> Self {
+        self.end_spacing = Some(px);
+        self
+    }
+    /// Padding around the divider (default: none).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -115,7 +138,7 @@ impl<'a, M: Clone + 'a> From<SectionDivider<'a, M>> for Element<'a, M> {
                 ..Default::default()
             });
         let mut head = row![ty::heading(d.title)]
-            .spacing(m.space_m)
+            .spacing(d.spacing.unwrap_or(m.space_m))
             .align_y(Alignment::Center);
         if let Some(detail) = d.detail {
             head = head.push(ty::caption(detail).style(crate::styles::text::dim));
@@ -140,12 +163,15 @@ impl<'a, M: Clone + 'a> From<SectionDivider<'a, M>> for Element<'a, M> {
             (None, _) => iced::widget::space().width(0).into(),
         };
         let mut row = row![head, end]
-            .spacing(m.space_s)
+            .spacing(d.end_spacing.unwrap_or(m.space_s))
             .align_y(Alignment::Center);
         if let Some(trailing) = d.trailing {
             row = row.push(trailing);
         }
-        row.into()
+        match d.padding {
+            Some(p) => container(row).padding(p).into(),
+            None => row.into(),
+        }
     }
 }
 
@@ -165,5 +191,11 @@ mod tests {
             .action(icon_button(Icon::Delete).on_press(2))
             .into();
         let _: Element<'_, u8> = SectionDivider::new("Plain").into();
+        let d = SectionDivider::<u8>::new("Spaced")
+            .spacing(2.0)
+            .end_spacing(3.0)
+            .padding([1.0, 4.0]);
+        assert_eq!((d.spacing, d.end_spacing), (Some(2.0), Some(3.0)));
+        let _: Element<'_, u8> = d.into();
     }
 }

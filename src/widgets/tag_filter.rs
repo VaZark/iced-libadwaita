@@ -68,6 +68,10 @@ pub struct TagFilter<'a, K: Clone, M> {
     add_tip: String,
     separator: Box<dyn Fn(usize) -> String + 'a>,
     add_button: Option<Element<'a, M>>,
+    spacing: Option<f32>,
+    pill_spacing: Option<f32>,
+    field_padding: Option<iced::Padding>,
+    chips_spacing: Option<f32>,
 }
 
 impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M> {
@@ -124,6 +128,10 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
             add_tip: "Finish this group and start another".into(),
             separator: Box::new(|_| ",".into()),
             add_button: None,
+            spacing: None,
+            pill_spacing: None,
+            field_padding: None,
+            chips_spacing: None,
         }
     }
     /// Several alternative groups (true) or a single one (false, the default). A single-group
@@ -160,6 +168,28 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
     /// Transparent entry with flat row styling, for use outside a boxed list.
     pub fn flat(mut self, flat: bool) -> Self {
         self.flat = flat;
+        self
+    }
+    /// The gap between the leading slot, the pills and field, the trailing slot and the add
+    /// button (default: the theme's `space_xs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The gap between the pills of a group (default: the theme's `space_xs`).
+    pub fn pill_spacing(mut self, px: f32) -> Self {
+        self.pill_spacing = Some(px);
+        self
+    }
+    /// The padding of the text field among the pills (default: the theme's `space_xs` by
+    /// `space_xxs`).
+    pub fn field_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.field_padding = Some(p.into());
+        self
+    }
+    /// The gap between the entry and the chips to choose from (default: the theme's `gap`).
+    pub fn chips_spacing(mut self, px: f32) -> Self {
+        self.chips_spacing = Some(px);
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -269,7 +299,7 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
             }
             if !group.is_empty() {
                 let cluster: Element<'a, M> = row(group.iter().map(|key| self.pill(index, key)))
-                    .spacing(4)
+                    .spacing(self.pill_spacing.unwrap_or(crate::Metrics::desktop().space_xs))
                     .align_y(Alignment::Center)
                     .wrap()
                     .into();
@@ -316,7 +346,10 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
         let mut field = text_input(if items.is_empty() { &f.placeholder } else { "" }, f.query)
             .on_input(move |q| on_query(q))
             .style(crate::styles::text_input::embedded)
-            .padding([4, 2])
+            .padding(f.field_padding.unwrap_or(iced::Padding::from([
+                crate::Metrics::desktop().space_xs,
+                crate::Metrics::desktop().space_xxs,
+            ])))
             .size(14)
             .width(Length::Fill);
         if let Some(id) = f.field_id.clone() {
@@ -338,7 +371,9 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
         } else {
             token_flow(items)
         };
-        let mut line = row![].spacing(4).align_y(Alignment::Center);
+        let mut line = row![]
+            .spacing(f.spacing.unwrap_or(crate::Metrics::desktop().space_xs))
+            .align_y(Alignment::Center);
         if let Some(leading) = f.leading.take() {
             line = line.push(leading);
         }
@@ -387,7 +422,7 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
             }
         };
         column![Element::from(entry), chips]
-            .spacing(8)
+            .spacing(f.chips_spacing.unwrap_or(crate::Metrics::desktop().gap))
             .width(Length::Fill)
             .into()
     }
@@ -418,6 +453,19 @@ mod tests {
                 groups.toggle("calm");
             }
         }
+    }
+
+    #[test]
+    fn the_gaps_and_padding_are_parameters() {
+        let mut groups = TagGroups::new();
+        groups.toggle("rock");
+        let f = TagFilter::new(&groups, options(), "", |e| e, |_| GroupEvent::AddGroup)
+            .spacing(1.0)
+            .pill_spacing(2.0)
+            .field_padding([3.0, 4.0])
+            .chips_spacing(5.0);
+        assert_eq!((f.spacing, f.pill_spacing, f.chips_spacing), (Some(1.0), Some(2.0), Some(5.0)));
+        let _: Element<'_, GroupEvent<&str>> = f.into();
     }
 
     #[test]

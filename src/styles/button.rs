@@ -32,6 +32,122 @@ fn linked_radius(r: f32, pos: Position) -> iced::border::Radius {
     }
 }
 
+/// Overrides what the variant's tokens set (`bg`, `fg`, `border`, `border-width`, `radius`,
+/// `hover-bg`, `active-bg`) on `style`, the look the built-in computed for `status`. A token the
+/// theme leaves unset keeps the built-in value.
+fn apply(
+    v: &crate::theme_config::ResolvedVariant<'_>,
+    theme: &Theme,
+    status: Status,
+    mut style: Style,
+) -> Style {
+    let s = &theme.semantic;
+    let disabled = |c: Color| fade(c, s.opacity.disabled);
+    let fill = |c: Color| Some(Background::Color(c));
+    match (v.color("bg"), status) {
+        (Some(bg), Status::Active) => style.background = fill(bg),
+        (Some(bg), Status::Hovered) => {
+            style.background = fill(v.color("hover-bg").unwrap_or_else(|| s.hover_fill(bg)))
+        }
+        (Some(bg), Status::Pressed) => {
+            style.background = fill(v.color("active-bg").unwrap_or_else(|| s.active_fill(bg)))
+        }
+        (Some(bg), Status::Disabled) => style.background = fill(disabled(bg)),
+        (None, Status::Hovered) => {
+            if let Some(c) = v.color("hover-bg") {
+                style.background = fill(c);
+            }
+        }
+        (None, Status::Pressed) => {
+            if let Some(c) = v.color("active-bg") {
+                style.background = fill(c);
+            }
+        }
+        (None, _) => {}
+    }
+    if let Some(fg) = v.color("fg") {
+        style.text_color = if status == Status::Disabled { disabled(fg) } else { fg };
+    }
+    if let Some(c) = v.color("border") {
+        style.border.color = c;
+        if style.border.width == 0.0 {
+            style.border.width = theme.metrics.border_width;
+        }
+    }
+    if let Some(w) = v.length("border-width") {
+        style.border.width = w;
+    }
+    if let Some(r) = v.length("radius") {
+        style.border.radius = r.into();
+    }
+    style
+}
+
+/// The built-in look of the default variant called `name`; the neutral button for any other name.
+fn builtin(name: &str) -> fn(&Theme, Status) -> Style {
+    match name {
+        "raised" => raised_base,
+        "flat" => flat_base,
+        "headerbar" => headerbar_base,
+        "suggested" => suggested_base,
+        "destructive" => destructive_base,
+        "opaque" => opaque_base,
+        "pill" => pill_base,
+        "suggested-pill" => suggested_pill_base,
+        "link" => link_base,
+        "osd" => osd_base,
+        "card" => card_base,
+        _ => default_base,
+    }
+}
+
+/// `base` with the tokens of the variant `name` over it, when the theme declares it. The public
+/// styles are these: each is the default variant of its name, so a theme can restyle it.
+fn tuned(
+    name: &str,
+    theme: &Theme,
+    status: Status,
+    base: fn(&Theme, Status) -> Style,
+) -> Style {
+    let style = base(theme, status);
+    let v = theme.variant("button", name);
+    if v.exists() {
+        apply(&v, theme, status, style)
+    } else {
+        style
+    }
+}
+
+/// The style of the **variant** `name`: a named set of style tokens (`[button.<name>]` in a theme
+/// file, or declared by the app with [`Schema::variant`](crate::theme_config::Schema::variant)),
+/// over the built-in look of the toolkit's default variant of that name. A name the theme does not
+/// declare (an app that opted out of the defaults, or a typo) draws the neutral button.
+///
+/// ```ignore
+/// button(label).style(styles::button::variant("brand"))
+/// ```
+pub fn variant(name: &str) -> impl Fn(&Theme, Status) -> Style + Clone + use<> {
+    let name = name.to_string();
+    move |theme, status| {
+        let v = theme.variant("button", &name);
+        if !v.exists() {
+            return default(theme, status);
+        }
+        apply(&v, theme, status, builtin(&name)(theme, status))
+    }
+}
+
+/// [`variant`] for a button that is a circle of `size` px: the corner radius is half the size
+/// whatever the variant or the theme says.
+pub fn circular_variant(name: &str, size: f32) -> impl Fn(&Theme, Status) -> Style + Clone + use<> {
+    let style = variant(name);
+    move |theme, status| {
+        let mut s = style(theme, status);
+        s.border.radius = (size / 2.0).into();
+        s
+    }
+}
+
 /// Translucent state-layer button built from `fg` (`alpha(currentColor, x)`).
 fn tinted(
     theme: &Theme,
@@ -95,7 +211,7 @@ fn filled(
 }
 
 /// The standard button: translucent foreground background, 6px radius.
-pub fn default(theme: &Theme, status: Status) -> Style {
+fn default_base(theme: &Theme, status: Status) -> Style {
     tinted(
         theme,
         status,
@@ -106,12 +222,12 @@ pub fn default(theme: &Theme, status: Status) -> Style {
 }
 
 /// `.raised`: identical to default (kept for API parity with GTK).
-pub fn raised(theme: &Theme, status: Status) -> Style {
-    default(theme, status)
+fn raised_base(theme: &Theme, status: Status) -> Style {
+    default_base(theme, status)
 }
 
 /// `.flat`: transparent until hovered.
-pub fn flat(theme: &Theme, status: Status) -> Style {
+fn flat_base(theme: &Theme, status: Status) -> Style {
     tinted(
         theme,
         status,
@@ -122,7 +238,7 @@ pub fn flat(theme: &Theme, status: Status) -> Style {
 }
 
 /// `.flat` using the headerbar foreground.
-pub fn headerbar(theme: &Theme, status: Status) -> Style {
+fn headerbar_base(theme: &Theme, status: Status) -> Style {
     tinted(
         theme,
         status,
@@ -133,18 +249,18 @@ pub fn headerbar(theme: &Theme, status: Status) -> Style {
 }
 
 /// `.suggested-action`.
-pub fn suggested(theme: &Theme, status: Status) -> Style {
-    role(Role::Accent)(theme, status)
+fn suggested_base(theme: &Theme, status: Status) -> Style {
+    role(Role::Primary)(theme, status)
 }
 
 /// `.destructive-action`.
-pub fn destructive(theme: &Theme, status: Status) -> Style {
+fn destructive_base(theme: &Theme, status: Status) -> Style {
     role(Role::Destructive)(theme, status)
 }
 
-/// `.opaque`: solid accent fill (same as suggested, kept for parity).
-pub fn opaque(theme: &Theme, status: Status) -> Style {
-    suggested(theme, status)
+/// `.opaque`: solid primary fill (same as suggested, kept for parity).
+fn opaque_base(theme: &Theme, status: Status) -> Style {
+    suggested_base(theme, status)
 }
 
 /// Solid button for any [`Role`]. `Role::Neutral` falls back to [`default`].
@@ -171,7 +287,7 @@ pub fn role_with_text(r: Role, fg: Color) -> impl Fn(&Theme, Status) -> Style + 
 }
 
 /// `.pill`: fully rounded standard button.
-pub fn pill(theme: &Theme, status: Status) -> Style {
+fn pill_base(theme: &Theme, status: Status) -> Style {
     tinted(
         theme,
         status,
@@ -182,8 +298,8 @@ pub fn pill(theme: &Theme, status: Status) -> Style {
 }
 
 /// `.pill.suggested-action`.
-pub fn suggested_pill(theme: &Theme, status: Status) -> Style {
-    let sw = theme.semantic.accent;
+fn suggested_pill_base(theme: &Theme, status: Status) -> Style {
+    let sw = theme.semantic.primary;
     filled(
         theme,
         status,
@@ -226,7 +342,7 @@ pub fn events(theme: &Theme, status: Status) -> Style {
 }
 
 /// `.card`: a clickable card surface.
-pub fn card(theme: &Theme, status: Status) -> Style {
+fn card_base(theme: &Theme, status: Status) -> Style {
     let s = &theme.semantic;
     let bg = match status {
         Status::Hovered => crate::color::mix(s.card.bg, s.card.fg, 0.04),
@@ -247,7 +363,7 @@ pub fn card(theme: &Theme, status: Status) -> Style {
 }
 
 /// `.osd`: dark translucent button for overlays.
-pub fn osd(theme: &Theme, status: Status) -> Style {
+fn osd_base(theme: &Theme, status: Status) -> Style {
     let osd = theme.semantic.osd;
     let layer = match status {
         Status::Hovered => 0.15,
@@ -265,7 +381,7 @@ pub fn osd(theme: &Theme, status: Status) -> Style {
 
 /// `.link`: accent-colored text that underlines on hover (underline omitted;
 /// iced buttons cannot underline children).
-pub fn link(theme: &Theme, status: Status) -> Style {
+fn link_base(theme: &Theme, status: Status) -> Style {
     let c = theme.semantic.accent.color;
     Style {
         background: None,
@@ -458,6 +574,66 @@ pub fn menu_item(selected: bool) -> impl Fn(&Theme, Status) -> Style + Copy {
             snap: false,
         }
     }
+}
+
+/// The standard button: translucent foreground background, 6px radius (`[button.default]`).
+pub fn default(theme: &Theme, status: Status) -> Style {
+    tuned("default", theme, status, default_base)
+}
+
+/// `.raised`: identical to default (`[button.raised]`).
+pub fn raised(theme: &Theme, status: Status) -> Style {
+    tuned("raised", theme, status, raised_base)
+}
+
+/// `.flat`: transparent until hovered (`[button.flat]`).
+pub fn flat(theme: &Theme, status: Status) -> Style {
+    tuned("flat", theme, status, flat_base)
+}
+
+/// `.flat` using the headerbar foreground (`[button.headerbar]`).
+pub fn headerbar(theme: &Theme, status: Status) -> Style {
+    tuned("headerbar", theme, status, headerbar_base)
+}
+
+/// `.suggested-action`: the primary color (`[button.suggested]`).
+pub fn suggested(theme: &Theme, status: Status) -> Style {
+    tuned("suggested", theme, status, suggested_base)
+}
+
+/// `.destructive-action` (`[button.destructive]`).
+pub fn destructive(theme: &Theme, status: Status) -> Style {
+    tuned("destructive", theme, status, destructive_base)
+}
+
+/// `.opaque`: solid primary fill (`[button.opaque]`).
+pub fn opaque(theme: &Theme, status: Status) -> Style {
+    tuned("opaque", theme, status, opaque_base)
+}
+
+/// `.pill`: fully rounded standard button (`[button.pill]`).
+pub fn pill(theme: &Theme, status: Status) -> Style {
+    tuned("pill", theme, status, pill_base)
+}
+
+/// `.pill.suggested-action` (`[button.suggested-pill]`).
+pub fn suggested_pill(theme: &Theme, status: Status) -> Style {
+    tuned("suggested-pill", theme, status, suggested_pill_base)
+}
+
+/// `.link`: accent-colored text (`[button.link]`).
+pub fn link(theme: &Theme, status: Status) -> Style {
+    tuned("link", theme, status, link_base)
+}
+
+/// `.osd`: dark translucent button for overlays (`[button.osd]`).
+pub fn osd(theme: &Theme, status: Status) -> Style {
+    tuned("osd", theme, status, osd_base)
+}
+
+/// `.card`: a clickable card surface (`[button.card]`).
+pub fn card(theme: &Theme, status: Status) -> Style {
+    tuned("card", theme, status, card_base)
 }
 
 #[cfg(test)]

@@ -24,8 +24,8 @@
 //! A token is a typed value ([`Value`]: a color, a number, a bool or text) under a section and a
 //! key, in the same key-file format as the desktop config.
 //!
-//! * **Toolkit tokens** (see [`Schema::toolkit`]): `[colors]` and `[colors-dark]` (the palette:
-//!   `accent`, `window-bg`, `card-bg`, …; `colors-dark` wins on a dark scheme), `[metrics]`
+//! * **Toolkit tokens** (see [`Schema::toolkit`]): `[colors]` and `[light:colors]`/`[dark:colors]` (the palette:
+//!   `accent`, `window-bg`, `card-bg`, …; the scheme's variant wins over the base), `[metrics]`
 //!   (radii, paddings, heights, spacing) and `[typography]` (`text-scale`, `base-size`).
 //!   Radii are **not** clamped to the HIG maxima here: a different vibe may be rounder or squarer.
 //! * **App tokens**: any other section and key the app declares, for its own objects: a cover's
@@ -65,6 +65,7 @@ pub use variable::{Rounding, VariableType};
 
 use crate::metrics::{Metrics, Typography};
 use crate::palette::{AccentColor, Palette, Scheme};
+use crate::shadow::{Elevation, Shadows};
 use iced::Color;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -153,6 +154,95 @@ pub struct Spec {
 pub struct Schema {
     specs: Vec<Spec>,
     variations: Vec<String>,
+    /// The declared widget variants, `(widget, name)`.
+    variants: Vec<(String, String)>,
+}
+
+/// The variants the toolkit provides, per widget: each is a named set of style tokens in the
+/// section `[<widget>.<variant>]` (see [`Schema::variant`]). An app opts out of them with
+/// [`Builder::default_variants`].
+pub const DEFAULT_VARIANTS: &[(&str, &[&str])] = &[(
+    "button",
+    &[
+        "default",
+        "raised",
+        "flat",
+        "headerbar",
+        "suggested",
+        "destructive",
+        "opaque",
+        "pill",
+        "suggested-pill",
+        "link",
+        "osd",
+        "card",
+    ],
+)];
+
+/// Which of the toolkit's [default variants](DEFAULT_VARIANTS) an app keeps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DefaultVariants {
+    /// All of them (the default).
+    #[default]
+    All,
+    /// None: the app declares every variant it uses. A widget asked for a variant that is not
+    /// declared draws its neutral base style.
+    None,
+    /// Only the defaults of these widgets (`"button"`, …).
+    Only(&'static [&'static str]),
+    /// The defaults of every widget but these.
+    Without(&'static [&'static str]),
+}
+
+impl DefaultVariants {
+    /// Whether the defaults of `widget` are kept.
+    pub fn keeps(self, widget: &str) -> bool {
+        match self {
+            Self::All => true,
+            Self::None => false,
+            Self::Only(list) => list.contains(&widget),
+            Self::Without(list) => !list.contains(&widget),
+        }
+    }
+    fn parse(s: &str) -> Option<Self> {
+        match s.trim() {
+            "all" => Some(Self::All),
+            "none" => Some(Self::None),
+            _ => None,
+        }
+    }
+}
+
+/// A style key a widget's variants understand: a color, or a length in px up to `length_max`.
+/// Every key is optional; an unset key is what the widget's built-in look computes.
+struct VariantKey {
+    key: &'static str,
+    length_max: Option<f64>,
+    doc: &'static str,
+}
+
+const BUTTON_KEYS: &[VariantKey] = &[
+    VariantKey { key: "bg", length_max: None, doc: "Background fill" },
+    VariantKey { key: "fg", length_max: None, doc: "Text and icon color" },
+    VariantKey { key: "border", length_max: None, doc: "Border color" },
+    VariantKey { key: "border-width", length_max: Some(16.0), doc: "Border width in px" },
+    VariantKey { key: "radius", length_max: Some(1000.0), doc: "Corner radius in px" },
+    VariantKey { key: "hover-bg", length_max: None, doc: "Background while hovered (derived from bg when unset)" },
+    VariantKey { key: "active-bg", length_max: None, doc: "Background while pressed (derived from bg when unset)" },
+];
+
+fn variant_keys(widget: &str) -> &'static [VariantKey] {
+    match widget {
+        "button" => BUTTON_KEYS,
+        _ => &[],
+    }
+}
+
+fn variant_key_type(k: &VariantKey) -> VariableType {
+    match k.length_max {
+        Some(max) => VariableType::Length { min: Some(0.0), max: Some(max) },
+        None => VariableType::Color,
+    }
 }
 
 impl Schema {
@@ -277,9 +367,81 @@ impl Schema {
     pub fn text(self, section: &str, key: &str, default: &str, doc: &str) -> Self {
         self.push(section, key, Value::Text(default.into()), doc)
     }
+    /// Declares the **variant** `name` of `widget`: a named set of style tokens in the section
+    /// `[<widget>.<name>]` that a widget selects with `.variant(name)`. Declare a new name to add
+    /// a variant, or a name the toolkit already provides to replace it (the tokens given become
+    /// its declared defaults; a theme file can still change them).
+    ///
+    /// For a widget the toolkit knows (`"button"`: `bg`, `fg`, `border`, `border-width`, `radius`,
+    /// `hover-bg`, `active-bg`) every key is declared, typed, and unset keys keep the built-in look.
+    /// For any other widget only the keys given are declared, typed by their value.
+    ///
+    /// # Panics
+    /// If `widget` or `name` is empty or contains anything but ASCII letters, digits, `-` and `_`.
+    pub fn variant(mut self, widget: &str, name: &str, tokens: &[(&str, Value)]) -> Self {
+        let ok = |s: &str| {
+            !s.is_empty()
+                && s.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        };
+        assert!(ok(widget) && ok(name), "invalid variant name {widget}.{name}");
+        let section = format!("{widget}.{name}");
+        let known = variant_keys(widget);
+        for k in known {
+            self = self.variable(&section, k.key, variant_key_type(k), None, k.doc);
+        }
+        for (key, value) in tokens {
+            let (ty, doc) = match known.iter().find(|k| k.key == *key) {
+                Some(k) => (variant_key_type(k), k.doc),
+                None => (
+                    match value.kind() {
+                        Kind::Length => VariableType::Length { min: None, max: None },
+                        Kind::Percentage => VariableType::Percentage {
+                            min: None,
+                            max: None,
+                            rounds: None,
+                        },
+                        kind => VariableType::untyped(kind).expect(
+                            "variant tokens are colors, lengths, percentages, numbers, bools or text",
+                        ),
+                    },
+                    "",
+                ),
+            };
+            self = self.variable(&section, key, ty, Some(value.clone()), doc);
+        }
+        let entry = (widget.to_string(), name.to_string());
+        if !self.variants.contains(&entry) {
+            self.variants.push(entry);
+        }
+        self
+    }
+    /// The declared variants, `(widget, name)`.
+    pub fn variants_declared(&self) -> &[(String, String)] {
+        &self.variants
+    }
+    /// This schema without the toolkit's default variants that `keep` does not keep.
+    fn without_default_variants(mut self, keep: DefaultVariants) -> Self {
+        for (widget, names) in DEFAULT_VARIANTS {
+            if keep.keeps(widget) {
+                continue;
+            }
+            for name in *names {
+                let section = format!("{widget}.{name}");
+                self.specs.retain(|s| s.section != section);
+                self.variants.retain(|(w, n)| !(w == widget && n == name));
+            }
+        }
+        self
+    }
     /// This schema with `other`'s tokens added (`other` wins a clash).
     pub fn with(mut self, other: &Schema) -> Self {
         self = self.variations(other.variations.clone());
+        for entry in &other.variants {
+            if !self.variants.contains(entry) {
+                self.variants.push(entry.clone());
+            }
+        }
         for s in &other.specs {
             self = self.variable(&s.section, &s.key, s.ty.clone(), s.default.clone(), &s.doc);
         }
@@ -298,7 +460,6 @@ impl Schema {
     pub fn toolkit() -> Self {
         let mut s = Self::new();
         let base = Palette::new(Scheme::Light);
-        let dark = Palette::new(Scheme::Dark);
         // The accent drives a family of colors, so it is not a plain palette field.
         s = s.push(
             "colors",
@@ -306,16 +467,15 @@ impl Schema {
             Value::Color(base.accent_bg_color),
             "The accent color (derives its text and standalone variants)",
         );
-        s = s.push(
-            "colors-dark",
-            "accent",
-            Value::Color(dark.accent_bg_color),
-            "The accent color on a dark scheme",
-        );
         for (key, doc, get, _) in COLORS {
             s = s.push("colors", key, Value::Color(get(&base)), doc);
-            s = s.push("colors-dark", key, Value::Color(get(&dark)), doc);
         }
+        s = s.boolean(
+            "colors",
+            "auto-contrast",
+            false,
+            "Pick light or dark text on colored fills by contrast, instead of the theme's -fg colors",
+        );
         let m = Metrics::default();
         for (key, doc, get, _) in METRICS {
             s = s.push("metrics", key, Value::Number(get(&m)), doc);
@@ -327,6 +487,119 @@ impl Schema {
             Value::Number(1.0),
             "Multiplies every text size",
         );
+        for (widget, names) in DEFAULT_VARIANTS {
+            for name in *names {
+                s = s.variant(widget, name, &[]);
+            }
+        }
+        s = s.variable(
+            "metrics",
+            "circular-button-size",
+            VariableType::Length { min: Some(8.0), max: Some(128.0) },
+            None,
+            "Diameter of a circular button (unset: the button height)",
+        );
+        s = s.variable(
+            "theme",
+            "default-variants",
+            VariableType::String {
+                values: ["all", "none"].map(String::from).to_vec(),
+                accepts_random: false,
+            },
+            Some(Value::Text("all".into())),
+            "Keep (all) or drop (none) the toolkit's default widget variants",
+        );
+        s = s.text("theme", "name", "", "A display name for the theme");
+        s = s.text("theme", "key", "", "A stable identifier for the theme");
+        s = s.variable(
+            "theme",
+            "mode",
+            VariableType::String {
+                values: ["inherit", "override", "optout"].map(String::from).to_vec(),
+                accepts_random: false,
+            },
+            Some(Value::Text("inherit".into())),
+            "How the app relates to the desktop's look: inherit, override or optout",
+        );
+        s = s.text(
+            "windows",
+            "button-layout",
+            "appmenu:close",
+            "Window buttons and their side: `start:end`, e.g. `:minimize,maximize,close`",
+        );
+        s = s.variable(
+            "windows",
+            "button-size",
+            VariableType::Length { min: Some(8.0), max: Some(64.0) },
+            Some(Value::Length(24.0)),
+            "Window button edge in px",
+        );
+        s = s.variable(
+            "windows",
+            "button-gap",
+            VariableType::Length { min: Some(0.0), max: Some(32.0) },
+            Some(Value::Length(4.0)),
+            "Space between window buttons in px",
+        );
+        s = s.variable(
+            "windows",
+            "button-icon-size",
+            VariableType::Length { min: Some(8.0), max: Some(48.0) },
+            Some(Value::Length(16.0)),
+            "Window button icon size in px",
+        );
+        s = s.variable(
+            "windows",
+            "button-radius",
+            VariableType::Percentage { min: Some(0.0), max: Some(50.0), rounds: None },
+            Some(Value::Percentage(50.0)),
+            "Window button corner radius as a share of its size (0 square, 50 circle)",
+        );
+        for (key, doc) in [
+            ("titlebar-double-click", "Double-clicking the title bar"),
+            ("titlebar-middle-click", "Middle-clicking the title bar"),
+            ("titlebar-right-click", "Right-clicking the title bar"),
+        ] {
+            s = s.variable(
+                "windows",
+                key,
+                VariableType::String {
+                    values: ["toggle-maximize", "menu", "minimize", "none"]
+                        .map(String::from)
+                        .to_vec(),
+                    accepts_random: false,
+                },
+                Some(Value::Text(
+                    if key.ends_with("double-click") { "toggle-maximize" }
+                    else if key.ends_with("right-click") { "menu" } else { "none" }.into(),
+                )),
+                doc,
+            );
+        }
+        let sh = Shadows::bare();
+        for (key, doc, e) in [
+            ("card", "Cards and boxed lists", &sh.card),
+            ("popover", "Popovers and menus", &sh.popover),
+            ("dialog", "Floating dialogs", &sh.dialog),
+            ("osd", "On-screen-display surfaces (toasts)", &sh.osd),
+        ] {
+            s = s.push("shadows", key, Value::Text(e.to_css()), &format!("{doc}: CSS box-shadow list"));
+        }
+        let ratio = Typography::default();
+        for (key, doc, _) in TYPE_RATIOS {
+            let value = match *key {
+                "title-1" => ratio.title_1,
+                "title-2" => ratio.title_2,
+                "title-3" => ratio.title_3,
+                "title-4" => ratio.title_4,
+                "heading" => ratio.heading,
+                "caption-heading" => ratio.caption_heading,
+                "caption" => ratio.caption,
+                "small" => ratio.small,
+                _ => ratio.monospace,
+            } / ratio.base;
+            s = s.push("typography", key, Value::Number(value), doc);
+        }
         s.push(
             "typography",
             "base-size",
@@ -440,6 +713,21 @@ type ColorSet = fn(&mut Palette, Color);
 type MetricGet = fn(&Metrics) -> f32;
 type MetricSet = fn(&mut Metrics, f32);
 
+type TypeSet = fn(&mut Typography, f32);
+
+/// The text-size ratio tokens (multiples of the base size): key, description, write.
+const TYPE_RATIOS: &[(&str, &str, TypeSet)] = &[
+    ("title-1", "Title 1 size, relative to the base", |t, v| t.title_1 = v),
+    ("title-2", "Title 2 size, relative to the base", |t, v| t.title_2 = v),
+    ("title-3", "Title 3 size, relative to the base", |t, v| t.title_3 = v),
+    ("title-4", "Title 4 size, relative to the base", |t, v| t.title_4 = v),
+    ("heading", "Heading size, relative to the base", |t, v| t.heading = v),
+    ("caption-heading", "Caption heading size, relative to the base", |t, v| t.caption_heading = v),
+    ("caption", "Caption size, relative to the base", |t, v| t.caption = v),
+    ("monospace", "Monospace size, relative to the base", |t, v| t.monospace = v),
+    ("small", "Labels, chips, tags and badges text size, relative to the base", |t, v| t.small = v),
+];
+
 macro_rules! colors {
     ($($key:literal, $doc:literal, $field:ident;)*) => {
         /// The palette tokens: key, description, read, write.
@@ -464,10 +752,39 @@ colors! {
     "popover-fg", "Text on popovers", popover_fg_color;
     "dialog-bg", "Dialogs", dialog_bg_color;
     "dialog-fg", "Text on dialogs", dialog_fg_color;
+    "primary", "Primary actions (suggested buttons); independent of the accent", primary_bg_color;
+    "primary-fg", "Text on primary fills", primary_fg_color;
+    "primary-text", "Primary color as text or an icon", primary_color;
     "success", "Success color", success_bg_color;
     "warning", "Warning color", warning_bg_color;
     "destructive", "Destructive action color", destructive_bg_color;
     "error", "Error color", error_bg_color;
+    "accent-fg", "Text on accent fills", accent_fg_color;
+    "accent-text", "Accent as text or an icon on a neutral surface", accent_color;
+    "destructive-fg", "Text on destructive fills", destructive_fg_color;
+    "destructive-text", "Destructive color as text", destructive_color;
+    "success-fg", "Text on success fills", success_fg_color;
+    "success-text", "Success color as text", success_color;
+    "warning-fg", "Text on warning fills", warning_fg_color;
+    "warning-text", "Warning color as text", warning_color;
+    "error-fg", "Text on error fills", error_fg_color;
+    "error-text", "Error color as text", error_color;
+    "headerbar-border", "Header bar border", headerbar_border_color;
+    "headerbar-shade", "Header bar bottom shade", headerbar_shade_color;
+    "headerbar-darker-shade", "Header bar darker shade", headerbar_darker_shade_color;
+    "card-shade", "Card outline shade", card_shade_color;
+    "popover-shade", "Popover outline shade", popover_shade_color;
+    "sidebar-border", "Sidebar border", sidebar_border_color;
+    "secondary-sidebar-bg", "The secondary sidebar", secondary_sidebar_bg_color;
+    "secondary-sidebar-fg", "Text on the secondary sidebar", secondary_sidebar_fg_color;
+    "thumbnail-bg", "Thumbnails", thumbnail_bg_color;
+    "thumbnail-fg", "Text on thumbnails", thumbnail_fg_color;
+    "overview-bg", "Overview surfaces", overview_bg_color;
+    "overview-fg", "Text on overview surfaces", overview_fg_color;
+    "active-toggle-bg", "The active segment of a toggle group", active_toggle_bg_color;
+    "active-toggle-fg", "Text on the active toggle", active_toggle_fg_color;
+    "shade", "Generic shade (dividers, outlines)", shade_color;
+    "scrollbar-outline", "Scrollbar outline", scrollbar_outline_color;
 }
 
 macro_rules! metrics {
@@ -517,6 +834,32 @@ metrics! {
     "sidebar-width", "Sidebar width", |m| m.sidebar_width, |m, v| m.sidebar_width = v;
     "sidebar-row-height", "Sidebar row height", |m| m.sidebar_row_height, |m, v| m.sidebar_row_height = v;
     "scrollbar-width", "Scrollbar width", |m| m.scrollbar_width, |m, v| m.scrollbar_width = v;
+    "gap", "Gap between the parts of a composed widget", |m| m.gap, |m, v| m.gap = v;
+    "inset", "Padding around a composed widget's panel", |m| m.inset, |m, v| m.inset = v;
+    "code-padding", "Padding of a code block", |m| m.code_padding, |m, v| m.code_padding = v;
+    "inline-padding-x", "Horizontal padding of inline code", |m| m.inline_padding_x, |m, v| m.inline_padding_x = v;
+    "empty-padding-y", "Vertical padding of an empty state", |m| m.empty_padding_y, |m, v| m.empty_padding_y = v;
+    "small-button-padding-y", "Compact button vertical padding", |m| m.small_button_padding.top, |m, v| { m.small_button_padding.top = v; m.small_button_padding.bottom = v };
+    "small-button-padding-x", "Compact button horizontal padding", |m| m.small_button_padding.left, |m, v| { m.small_button_padding.left = v; m.small_button_padding.right = v };
+    "space-xxs", "Tiniest gap", |m| m.space_xxs, |m, v| m.space_xxs = v;
+    "space-xxl", "Hugest gap", |m| m.space_xxl, |m, v| m.space_xxl = v;
+    "radius-pill", "Pill buttons and circular widgets", |m| m.radius_pill, |m, v| m.radius_pill = v;
+    "pill-padding-y", "Pill button vertical padding", |m| m.pill_padding.top, |m, v| { m.pill_padding.top = v; m.pill_padding.bottom = v };
+    "pill-padding-x", "Pill button horizontal padding", |m| m.pill_padding.left, |m, v| { m.pill_padding.left = v; m.pill_padding.right = v };
+    "focus-ring-width", "Focus ring width", |m| m.focus_ring_width, |m, v| m.focus_ring_width = v;
+    "switch-size", "Switch height", |m| m.switch_size, |m, v| m.switch_size = v;
+    "checkbox-size", "Checkbox size", |m| m.checkbox_size, |m, v| m.checkbox_size = v;
+    "scrollbar-slider-width", "Visible scrollbar slider width", |m| m.scrollbar_slider_width, |m, v| m.scrollbar_slider_width = v;
+    "scrollbar-margin", "Gap between scrollbar slider and edge", |m| m.scrollbar_margin, |m, v| m.scrollbar_margin = v;
+    "progress-height", "Progress bar thickness", |m| m.progress_height, |m, v| m.progress_height = v;
+    "list-spacing", "Space between list rows", |m| m.list_spacing, |m, v| m.list_spacing = v;
+    "headerbar-padding-y", "Header bar vertical padding", |m| m.headerbar_padding.top, |m, v| { m.headerbar_padding.top = v; m.headerbar_padding.bottom = v };
+    "headerbar-padding-x", "Header bar horizontal padding", |m| m.headerbar_padding.left, |m, v| { m.headerbar_padding.left = v; m.headerbar_padding.right = v };
+    "toolbar-spacing", "Space between toolbar items", |m| m.toolbar_spacing, |m, v| m.toolbar_spacing = v;
+    "dialog-width", "Default dialog width", |m| m.dialog_width, |m, v| m.dialog_width = v;
+    "sidebar-padding", "Padding around the sidebar list", |m| m.sidebar_padding, |m, v| m.sidebar_padding = v;
+    "sidebar-spacing", "Gap between sidebar rows", |m| m.sidebar_spacing, |m, v| m.sidebar_spacing = v;
+    "sidebar-row-padding", "Horizontal padding inside a sidebar row", |m| m.sidebar_row_padding, |m, v| m.sidebar_row_padding = v;
 }
 
 // ------------------------------------------------------------ the layers
@@ -527,8 +870,8 @@ pub enum Source {
     /// Never set: the declared default (and, for a toolkit token, whatever the desktop config
     /// makes of it).
     Default,
-    /// The toolkit theme file.
-    Toolkit,
+    /// The theme file found by [`theme_path`].
+    Theme,
     /// The app theme file.
     App,
     /// Set in code. Discouraged.
@@ -539,7 +882,7 @@ impl Source {
     pub fn label(self) -> &'static str {
         match self {
             Self::Default => "default",
-            Self::Toolkit => "toolkit theme",
+            Self::Theme => "theme file",
             Self::App => "app theme",
             Self::Hardcoded => "hardcoded",
         }
@@ -553,14 +896,91 @@ fn config_home() -> Option<PathBuf> {
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
 }
 
-/// Where the toolkit theme file is.
-pub fn toolkit_path() -> Option<PathBuf> {
-    config_home().map(|h| h.join("iced-adaptive-design/theme.conf"))
+/// The directories theme files are installed in, most specific first: `$XDG_DATA_HOME/iad/themes`
+/// (default `~/.local/share/iad/themes`), then `iad/themes` in each of `$XDG_DATA_DIRS`
+/// (default `/usr/local/share:/usr/share`). A desktop or a distribution installs its themes in
+/// the latter; the user's own go in the former.
+pub fn theme_dirs() -> Vec<PathBuf> {
+    let home = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")));
+    let dirs = std::env::var("XDG_DATA_DIRS")
+        .ok()
+        .filter(|d| !d.is_empty())
+        .unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+    home.into_iter()
+        .chain(
+            dirs.split(':')
+                .filter(|d| !d.is_empty())
+                .map(PathBuf::from)
+                .filter(|p| p.is_absolute()),
+        )
+        .map(|d| d.join("iad/themes"))
+        .collect()
+}
+
+/// Which theme file applies: `IAD_THEME=<path>` if it names a readable file (`IAD_THEME=none`
+/// means no theme at all), else the first `default.conf` in [`theme_dirs`]. `None` is the bare
+/// look: the toolkit has no built-in style.
+pub fn theme_path() -> Option<PathBuf> {
+    pick_theme(std::env::var("IAD_THEME").ok().as_deref(), &theme_dirs())
+}
+
+fn pick_theme(env: Option<&str>, dirs: &[PathBuf]) -> Option<PathBuf> {
+    match env.map(str::trim).filter(|v| !v.is_empty()) {
+        Some("none") => return None,
+        Some(path) => {
+            let path = PathBuf::from(path);
+            if path.is_file() {
+                return Some(path);
+            }
+            eprintln!(
+                "iced-adaptive-design: IAD_THEME={} is not a readable file; looking further",
+                path.display()
+            );
+        }
+        None => {}
+    }
+    dirs.iter().map(|d| d.join("default.conf")).find(|p| p.is_file())
 }
 
 /// Where the theme file of the app `app_id` is.
 pub fn app_path(app_id: &str) -> Option<PathBuf> {
     config_home().map(|h| h.join(app_id).join("theme.conf"))
+}
+
+/// How an app relates to the look the desktop provides.
+///
+/// * **`Inherit`** (default): the app supplies no look. It gets the installed theme file (or the
+///   bare look) and follows the desktop config and the portal's light/dark.
+/// * **`OverrideValue`**: inherit everything, but the app sets some tokens in its theme file or
+///   in code. Allowed, **discouraged** (it can fight the user's theme) and reported on stderr at
+///   [`install`], listing each token.
+/// * **`OptOut`**: the app uses only its own look and never consults the desktop: no theme file
+///   lookup, no `desktop.conf`, no portal scheme. For apps with their own identity (a music
+///   player). It bundles its look in its own theme text or hardcoded tokens.
+///
+/// Declared with [`Builder::inheritance`] or `[theme] mode=inherit|override|optout` in the app
+/// theme file (code wins). When undeclared it is inferred: tokens set by the app mean
+/// `OverrideValue`, none mean `Inherit`; `OptOut` is never inferred.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Inheritance {
+    #[default]
+    Inherit,
+    OverrideValue,
+    OptOut,
+}
+
+impl Inheritance {
+    fn parse(s: &str) -> Option<Self> {
+        match s.trim() {
+            "inherit" => Some(Self::Inherit),
+            "override" => Some(Self::OverrideValue),
+            "optout" => Some(Self::OptOut),
+            _ => None,
+        }
+    }
 }
 
 /// Builds a [`ThemeConfig`]. See the [module](self).
@@ -573,6 +993,8 @@ pub struct Builder {
     files: bool,
     regenerate: bool,
     variation: Option<String>,
+    inheritance: Option<Inheritance>,
+    default_variants: Option<DefaultVariants>,
 }
 
 impl Builder {
@@ -586,7 +1008,21 @@ impl Builder {
             files: true,
             regenerate: true,
             variation: None,
+            inheritance: None,
+            default_variants: None,
         }
+    }
+    /// Declares how the app relates to the desktop's look (see [`Inheritance`]). Over the
+    /// `[theme] mode` of the app file.
+    pub fn inheritance(mut self, inheritance: Inheritance) -> Self {
+        self.inheritance = Some(inheritance);
+        self
+    }
+    /// Which of the toolkit's [default widget variants](DEFAULT_VARIANTS) the app keeps. Over the
+    /// `[theme] default-variants` token of the app file. The default is all of them.
+    pub fn default_variants(mut self, keep: DefaultVariants) -> Self {
+        self.default_variants = Some(keep);
+        self
     }
     pub fn variation(mut self, key: impl Into<String>) -> Self {
         self.variation = Some(key.into());
@@ -661,21 +1097,38 @@ impl Builder {
     }
 
     pub fn build(self) -> ThemeConfig {
-        let toolkit = Schema::toolkit();
-        let schema = toolkit.clone().with(&self.schema);
-        let toolkit_text = self.read_layer(
-            &self.toolkit_text,
-            toolkit_path(),
-            &toolkit,
-            "iced-adaptive-design theme: the toolkit's default look",
-        );
         let app_text = self.read_layer(
             &self.app_text,
             app_path(&self.app_id),
             &self.schema,
             &format!("{} theme: this app's look", self.app_id),
         );
-
+        let keep = self.default_variants.unwrap_or_else(|| {
+            crate::config::parse_keyfile(&app_text)
+                .get(&("theme".to_string(), "default-variants".to_string()))
+                .and_then(|v| DefaultVariants::parse(v))
+                .unwrap_or_default()
+        });
+        let toolkit = Schema::toolkit().without_default_variants(keep);
+        let schema = toolkit.clone().with(&self.schema);
+        let declared = self.inheritance.or_else(|| {
+            crate::config::parse_keyfile(&app_text)
+                .get(&("theme".to_string(), "mode".to_string()))
+                .and_then(|m| Inheritance::parse(m))
+        });
+        let opt_out = declared == Some(Inheritance::OptOut);
+        let toolkit_text = match (&self.toolkit_text, self.files && !opt_out) {
+            (Some(t), _) => t.clone(),
+            (None, true) => theme_path()
+                .map(|p| {
+                    std::fs::read_to_string(&p).unwrap_or_else(|e| {
+                        eprintln!("iced-adaptive-design: theme {}: {e}", p.display());
+                        String::new()
+                    })
+                })
+                .unwrap_or_default(),
+            (None, false) => String::new(),
+        };
         let mut cfg = ThemeConfig {
             values: BTreeMap::new(),
             schema,
@@ -683,13 +1136,19 @@ impl Builder {
             unknown: Vec::new(),
             hardcoded: Vec::new(),
             variation: None,
+            inheritance: Inheritance::Inherit,
+            inherited: BTreeMap::new(),
+            denied: Vec::new(),
         };
         for s in cfg.schema.specs().to_vec() {
             cfg.values
                 .insert((s.section, s.key), (s.default, Source::Default));
         }
         // Lowest priority first, so a later layer overwrites an earlier one.
-        for (text, source) in [(&toolkit_text, Source::Toolkit), (&app_text, Source::App)] {
+        for (text, source) in [(&toolkit_text, Source::Theme), (&app_text, Source::App)] {
+            if source == Source::App {
+                cfg.inherited = cfg.values.clone();
+            }
             cfg.warnings.extend(
                 syntax_errors(text)
                     .into_iter()
@@ -715,6 +1174,13 @@ impl Builder {
         if let Some(variation) = self.variation {
             cfg = cfg.with_variation(&variation);
         }
+        cfg.inheritance = declared.unwrap_or_else(|| {
+            if cfg.overrides().is_empty() {
+                Inheritance::Inherit
+            } else {
+                Inheritance::OverrideValue
+            }
+        });
 
         cfg
     }
@@ -730,6 +1196,11 @@ pub struct ThemeConfig {
     unknown: Vec<(String, String)>,
     hardcoded: Vec<(String, String)>,
     variation: Option<String>,
+    inheritance: Inheritance,
+    /// The values before the app's layers (theme file and defaults only).
+    inherited: BTreeMap<(String, String), (Option<Value>, Source)>,
+    /// App tokens the desktop policy refused (`[policy] allow-app-overrides=false`).
+    denied: Vec<(String, String)>,
 }
 
 impl ThemeConfig {
@@ -840,6 +1311,43 @@ impl ThemeConfig {
     pub fn unknown(&self) -> &[(String, String)] {
         &self.unknown
     }
+    /// How the app relates to the desktop's look.
+    pub fn inheritance(&self) -> Inheritance {
+        self.inheritance
+    }
+    /// The tokens the app itself sets (in its theme file or in code), over what the desktop
+    /// provides. `[theme]` metadata does not count.
+    pub fn overrides(&self) -> Vec<(String, String)> {
+        self.values
+            .iter()
+            .filter(|((section, _), (value, source))| {
+                value.is_some()
+                    && matches!(source, Source::App | Source::Hardcoded)
+                    && section.split_once(':').map_or(section.as_str(), |(_, b)| b) != "theme"
+            })
+            .map(|((section, key), _)| (section.clone(), key.clone()))
+            .collect()
+    }
+    /// This config as the desktop policy allows it. With `allow` (the desktop's
+    /// `[policy] allow-app-overrides`) it is unchanged; without, an `OverrideValue` app's tokens
+    /// (file and hardcoded) are dropped back to what the desktop provides and listed in
+    /// [`denied`](Self::denied). `OptOut` and `Inherit` apps are not overriding anything.
+    #[must_use]
+    pub fn for_policy(&self, allow: bool) -> Self {
+        if allow || self.inheritance != Inheritance::OverrideValue {
+            return self.clone();
+        }
+        let mut c = self.clone();
+        c.denied = self.overrides();
+        c.values = self.inherited.clone();
+        c.hardcoded.clear();
+        c.inheritance = Inheritance::Inherit;
+        c
+    }
+    /// The app tokens the desktop policy refused.
+    pub fn denied(&self) -> &[(String, String)] {
+        &self.denied
+    }
     /// The tokens set in code. Each should be a token in the app theme instead.
     pub fn hardcoded(&self) -> &[(String, String)] {
         &self.hardcoded
@@ -856,6 +1364,22 @@ impl ThemeConfig {
         }
     }
 
+    /// The `[shadows]` tokens that were set, applied to `shadows`. A malformed list is ignored.
+    pub fn apply_to_shadows(&self, shadows: &mut Shadows) {
+        for (key, slot) in [
+            ("card", &mut shadows.card),
+            ("popover", &mut shadows.popover),
+            ("dialog", &mut shadows.dialog),
+            ("osd", &mut shadows.osd),
+        ] {
+            if self.is_set("shadows", key)
+                && let Some(e) = self.text("shadows", key).and_then(Elevation::parse)
+            {
+                *slot = e;
+            }
+        }
+    }
+
     /// The names (`metrics` keys) of the metric tokens that were set, for reports.
     pub fn metric_overrides(&self) -> Vec<(&'static str, f32)> {
         METRICS
@@ -866,7 +1390,7 @@ impl ThemeConfig {
     }
 
     /// The toolkit color tokens that were set for `scheme`, applied to `palette`:
-    /// `[colors]`, then `[colors-dark]` over it on a dark scheme.
+    /// `[colors]`, then `[<variation>:colors]` over it (`[dark:colors]` on a dark scheme).
     pub fn apply_to_palette(&self, palette: &mut Palette, scheme: Scheme) {
         if self.variation.is_none() {
             return self
@@ -875,12 +1399,7 @@ impl ThemeConfig {
                 .apply_to_palette(palette, scheme);
         }
         let variation_section = format!("{}:colors", self.variation.as_deref().unwrap());
-        let mut sections = vec!["colors"];
-        if scheme.is_dark() {
-            sections.push("colors-dark");
-        }
-        // Explicit variation sections also win over the legacy dark-color section.
-        sections.push(&variation_section);
+        let sections = ["colors", variation_section.as_str()];
         for section in sections {
             if self.is_set(section, "accent")
                 && let Some(c) = self.color(section, "accent")
@@ -900,35 +1419,90 @@ impl ThemeConfig {
         }
     }
 
-    /// The text sizes the `[typography]` tokens imply, or `None` when neither was set.
+    /// The text sizes the `[typography]` tokens imply, or `None` when none was set. The sizes
+    /// are `base-size * text-scale * <ratio>`; unset ratios keep [`Typography`]'s.
     pub fn typography(&self) -> Option<Typography> {
-        if !self.is_set("typography", "text-scale") && !self.is_set("typography", "base-size") {
+        let any = TYPE_RATIOS
+            .iter()
+            .map(|(k, ..)| *k)
+            .chain(["text-scale", "base-size"])
+            .any(|k| self.is_set("typography", k));
+        if !any {
             return None;
         }
         let base = self.number("typography", "base-size")?;
         let scale = self.number("typography", "text-scale")?;
-        Some(Typography::with_base(base * scale))
+        let mut t = Typography::with_base(base * scale);
+        for (key, _, set) in TYPE_RATIOS {
+            if self.is_set("typography", key)
+                && let Some(r) = self.number("typography", key)
+            {
+                set(&mut t, base * scale * r);
+            }
+        }
+        Some(t)
     }
 
     /// Every resolved token, for a [`Theme`](crate::Theme) to carry (see
     /// [`Theme::token_color`](crate::Theme::token_color)).
     pub fn tokens(&self) -> Tokens {
-        Tokens(
-            self.entries()
+        Tokens {
+            values: self
+                .entries()
                 .map(|(spec, value, _)| ((spec.section.clone(), spec.key.clone()), value.clone()))
                 .collect(),
-        )
+            variants: Some(self.schema.variants.iter().cloned().collect()),
+        }
+    }
+}
+
+/// A widget variant resolved from a theme: a named set of typed style tokens (see
+/// [`Schema::variant`]). Every accessor is `None` for a key the theme leaves unset, and the widget
+/// then keeps its built-in look for that key.
+#[derive(Debug, Clone)]
+pub struct ResolvedVariant<'a> {
+    exists: bool,
+    section: String,
+    tokens: &'a Tokens,
+}
+
+impl ResolvedVariant<'_> {
+    /// Whether the variant is declared (by the toolkit's defaults or by the app). A widget asked
+    /// for one that is not draws its neutral base style.
+    pub fn exists(&self) -> bool {
+        self.exists
+    }
+    /// A color token (`bg`, `fg`, `border`, …).
+    pub fn color(&self, key: &str) -> Option<Color> {
+        self.tokens.color(&self.section, key)
+    }
+    /// A length token in px (`border-width`, `radius`, …).
+    pub fn length(&self, key: &str) -> Option<f32> {
+        self.tokens.number(&self.section, key)
+    }
+    /// A bool token.
+    pub fn bool(&self, key: &str) -> Option<bool> {
+        self.tokens.bool(&self.section, key)
+    }
+    /// A text or enum-string token.
+    pub fn text(&self, key: &str) -> Option<&str> {
+        self.tokens.text(&self.section, key)
     }
 }
 
 /// The resolved tokens a [`Theme`](crate::Theme) carries, so a style function can read an app's
 /// own colors and sizes from the theme it is given.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct Tokens(BTreeMap<(String, String), Value>);
+pub struct Tokens {
+    values: BTreeMap<(String, String), Value>,
+    /// The declared variants, `(widget, name)`; `None` when no theme config was applied (the
+    /// toolkit's default variants are then taken to exist).
+    variants: Option<std::collections::BTreeSet<(String, String)>>,
+}
 
 impl Tokens {
     pub fn get(&self, section: &str, key: &str) -> Option<&Value> {
-        self.0.get(&(section.to_string(), key.to_string()))
+        self.values.get(&(section.to_string(), key.to_string()))
     }
     pub fn color(&self, section: &str, key: &str) -> Option<Color> {
         match self.get(section, key)? {
@@ -955,13 +1529,36 @@ impl Tokens {
         }
     }
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.values.is_empty()
     }
+    /// The variant `name` of `widget`: whether it is declared, and its tokens.
+    pub fn variant(&self, widget: &str, name: &str) -> ResolvedVariant<'_> {
+        let exists = match &self.variants {
+            Some(set) => set.contains(&(widget.to_string(), name.to_string())),
+            None => DEFAULT_VARIANTS
+                .iter()
+                .any(|(w, names)| *w == widget && names.contains(&name)),
+        };
+        ResolvedVariant {
+            exists,
+            section: format!("{widget}.{name}"),
+            tokens: self,
+        }
+    }
+
 }
 
 // ----------------------------------------------------------------- global
 
 static CURRENT: RwLock<Option<Arc<ThemeConfig>>> = RwLock::new(None);
+
+impl ThemeConfig {
+    /// What an app that supplies no look of its own gets: the theme file the toolkit finds
+    /// ([`theme_path`]) over the declared defaults, and no app file.
+    pub fn discover() -> Self {
+        Self::builder("").app_text("").build()
+    }
+}
 
 /// Installs `config` as the process-wide theme config and reports, on stderr, any token hardcoded
 /// in code, any warning and any unknown token, so none is silent.
@@ -972,10 +1569,68 @@ pub fn install(config: ThemeConfig) {
             config.hardcoded
         );
     }
+    if config.inheritance == Inheritance::OverrideValue {
+        eprintln!(
+            "iced-adaptive-design: this app overrides theme tokens {:?} (override-value; discouraged: it can fight the user's theme)",
+            config.overrides()
+        );
+    }
+    if !config.denied.is_empty() {
+        eprintln!(
+            "iced-adaptive-design: the desktop policy forbids app overrides; ignored theme tokens {:?}",
+            config.denied
+        );
+    }
     for w in &config.warnings {
         eprintln!("iced-adaptive-design: theme: {w}");
     }
     *CURRENT.write().unwrap() = Some(Arc::new(config));
+}
+
+/// The built-in value of the `[colors]` token `key` for `scheme` (the bare palette, before any
+/// theme file), or `None` when `key` is not a palette token. The declared defaults of
+/// [`Schema::toolkit`] are scheme-neutral, so this is how to ask for a dark default.
+pub fn palette_default(scheme: Scheme, key: &str) -> Option<Color> {
+    let p = Palette::new(scheme);
+    if key == "accent" {
+        return Some(p.accent_bg_color);
+    }
+    COLORS.iter().find(|(k, ..)| *k == key).map(|(_, _, get, _)| get(&p))
+}
+
+/// The diameter of a circular button in px (`[metrics] circular-button-size`), or `None` when the
+/// theme leaves it unset (the button height applies).
+pub fn circular_button_size() -> Option<f32> {
+    current().number("metrics", "circular-button-size")
+}
+
+/// The window button edge in px (`[windows] button-size`).
+pub fn window_button_size() -> f32 {
+    current().number("windows", "button-size").unwrap_or(24.0)
+}
+
+/// The space between window buttons in px (`[windows] button-gap`).
+pub fn window_button_gap() -> f32 {
+    current().number("windows", "button-gap").unwrap_or(4.0)
+}
+
+/// The window button icon size in px (`[windows] button-icon-size`).
+pub fn window_button_icon_size() -> f32 {
+    current().number("windows", "button-icon-size").unwrap_or(16.0)
+}
+
+/// The window button corner radius in px: `[windows] button-radius` percent of the button size.
+pub fn window_button_radius() -> f32 {
+    window_button_size() * current().number("windows", "button-radius").unwrap_or(50.0) / 100.0
+}
+
+/// What a title-bar click does (`[windows] titlebar-<click>-click`): `toggle-maximize`, `menu`,
+/// `minimize` or `none`. `click` is `double`, `middle` or `right`.
+pub fn titlebar_action(click: &str) -> String {
+    current()
+        .text("windows", &format!("titlebar-{click}-click"))
+        .unwrap_or("none")
+        .to_string()
 }
 
 /// The installed theme config, or one with only the toolkit's declared defaults (nothing set).
@@ -1031,7 +1686,7 @@ mod tests {
         assert_eq!(c.source("cover", "size"), Source::App);
         // Only the toolkit file set this one.
         assert_eq!(c.number("metrics", "radius-l"), Some(2.0));
-        assert_eq!(c.source("metrics", "radius-l"), Source::Toolkit);
+        assert_eq!(c.source("metrics", "radius-l"), Source::Theme);
     }
 
     #[test]
@@ -1067,7 +1722,7 @@ mod tests {
             "[cover]\nsize=wide\nbackground=nope\n",
         );
         assert_eq!(c.number("cover", "size"), Some(100.0));
-        assert_eq!(c.source("cover", "size"), Source::Toolkit);
+        assert_eq!(c.source("cover", "size"), Source::Theme);
         assert_eq!(c.source("cover", "background"), Source::Default);
         assert_eq!(c.warnings().len(), 2);
     }
@@ -1115,8 +1770,7 @@ mod tests {
         };
         let _ = build();
         let app = app_path("org.example.App").unwrap();
-        let toolkit = toolkit_path().unwrap();
-        assert!(app.exists() && toolkit.exists());
+        assert!(app.exists());
         assert!(std::fs::read_to_string(&app).unwrap().contains("#size=88"));
         // The user edits it, then deletes it: the app writes a fresh one.
         std::fs::write(&app, "[cover]\nsize=200\n").unwrap();
@@ -1125,6 +1779,31 @@ mod tests {
         assert_eq!(build().number("cover", "size"), Some(88.0));
         assert!(app.exists());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_theme_lookup_prefers_the_env_then_the_data_dirs_then_nothing() {
+        let root = std::env::temp_dir().join(format!("iad-theme-lookup-{}", std::process::id()));
+        let (a, b) = (root.join("a"), root.join("b"));
+        for d in [&a, &b] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        let file = root.join("custom.conf");
+        std::fs::write(&file, "").unwrap();
+        std::fs::write(b.join("default.conf"), "").unwrap();
+        let dirs = [a.clone(), b.clone()];
+        assert_eq!(pick_theme(None, &dirs), Some(b.join("default.conf")));
+        std::fs::write(a.join("default.conf"), "").unwrap();
+        assert_eq!(pick_theme(None, &dirs), Some(a.join("default.conf")));
+        assert_eq!(pick_theme(file.to_str(), &dirs), Some(file.clone()));
+        assert_eq!(pick_theme(Some("none"), &dirs), None);
+        // An unreadable env path falls through to the data dirs.
+        assert_eq!(
+            pick_theme(Some("/nonexistent/x.conf"), &dirs),
+            Some(a.join("default.conf"))
+        );
+        assert_eq!(pick_theme(None, &[root.join("empty")]), None);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -1143,7 +1822,7 @@ mod tests {
     fn color_tokens_apply_per_scheme() {
         let c = build(
             "",
-            "[colors]\ncard-bg=#ff0000\n[colors-dark]\ncard-bg=#00ff00\n",
+            "[colors]\ncard-bg=#ff0000\n[dark:colors]\ncard-bg=#00ff00\n",
         );
         let mut light = Palette::new(Scheme::Light);
         c.apply_to_palette(&mut light, Scheme::Light);
@@ -1364,17 +2043,357 @@ mod typed_variable_tests {
     }
 }
 
+/// The libadwaita look, read from `themes/libadwaita.conf`, for tests that assert its values.
 #[cfg(test)]
-mod variation_palette_tests {
+pub(crate) fn libadwaita() -> ThemeConfig {
+    ThemeConfig::builder("libadwaita-test")
+        .files(false)
+        .app_text(include_str!("../themes/libadwaita.conf"))
+        .build()
+}
+
+/// The libadwaita metrics.
+#[cfg(test)]
+pub(crate) fn libadwaita_metrics() -> Metrics {
+    let mut m = Metrics::default();
+    libadwaita().apply_to_metrics(&mut m);
+    m
+}
+
+#[cfg(test)]
+mod libadwaita_theme_tests {
     use super::*;
+
     #[test]
-    fn explicit_dark_variation_wins_over_legacy_dark_colors() {
-        let cfg = ThemeConfig::builder("test")
+    fn every_shipped_theme_validates_against_the_toolkit_schema() {
+        for (name, text) in [
+            ("libadwaita", include_str!("../themes/libadwaita.conf")),
+            ("cosmic", include_str!("../themes/cosmic.conf")),
+            ("solarized", include_str!("../themes/solarized.conf")),
+            ("terminal", include_str!("../themes/terminal.conf")),
+            ("bubblegum", include_str!("../themes/bubblegum.conf")),
+            ("synthwave", include_str!("../themes/synthwave.conf")),
+        ] {
+            let report = Schema::toolkit().validate(text);
+            assert!(report.errors.is_empty(), "{name}: {:?}", report.errors);
+            assert!(report.unknown.is_empty(), "{name}: {:?}", report.unknown);
+            let cfg = ThemeConfig::builder("t").files(false).toolkit_text(text).app_text("").build();
+            assert!(cfg.warnings().is_empty(), "{name}: {:?}", cfg.warnings());
+        }
+    }
+
+    #[test]
+    fn the_libadwaita_file_is_valid_and_carries_libadwaita_values() {
+        let cfg = libadwaita();
+        assert!(cfg.warnings().is_empty(), "{:?}", cfg.warnings());
+        assert!(cfg.unknown().is_empty(), "{:?}", cfg.unknown());
+        let m = libadwaita_metrics();
+        assert_eq!(
+            (m.radius_m, m.radius_l, m.radius_popover, m.radius_window),
+            (9.0, 12.0, 15.0, 15.0)
+        );
+        let mut light = Palette::light();
+        cfg.apply_to_palette(&mut light, Scheme::Light);
+        assert_eq!(light.window_bg_color, crate::color::hex(0xfafafb));
+        assert_eq!(light.sidebar_bg_color, crate::color::hex(0xebebed));
+        let mut dark = Palette::dark();
+        cfg.apply_to_palette(&mut dark, Scheme::Dark);
+        assert_eq!(dark.window_bg_color, crate::color::hex(0x222226));
+        assert_eq!(dark.dialog_bg_color, crate::color::hex(0x36363a));
+        assert_eq!(dark.card_bg_color.a, 0.08);
+        let mut shadows = Shadows::bare();
+        cfg.apply_to_shadows(&mut shadows);
+        assert!(shadows.card().ring.is_some());
+        assert_eq!(cfg.text("windows", "button-layout"), Some("appmenu:close"));
+        assert_eq!(cfg.number("windows", "button-size"), Some(24.0));
+    }
+}
+
+#[cfg(test)]
+mod inheritance_tests {
+    use super::*;
+
+    fn cfg(app: &str) -> ThemeConfig {
+        ThemeConfig::builder("test").files(false).app_text(app).build()
+    }
+
+    #[test]
+    fn the_mode_is_inferred_from_what_the_app_sets() {
+        assert_eq!(cfg("").inheritance(), Inheritance::Inherit);
+        assert_eq!(
+            cfg("[theme]\nname=x\nkey=x\n").inheritance(),
+            Inheritance::Inherit,
+            "metadata is not an override"
+        );
+        let c = cfg("[metrics]\nradius-m=3\n");
+        assert_eq!(c.inheritance(), Inheritance::OverrideValue);
+        assert_eq!(c.overrides(), vec![("metrics".to_string(), "radius-m".to_string())]);
+        let c = cfg("[dark:colors]\ncard-bg=#000000\n");
+        assert_eq!(c.inheritance(), Inheritance::OverrideValue);
+    }
+
+    #[test]
+    fn the_file_declares_the_mode_and_code_wins() {
+        assert_eq!(cfg("[theme]\nmode=optout\n").inheritance(), Inheritance::OptOut);
+        assert_eq!(
+            cfg("[theme]\nmode=override\n").inheritance(),
+            Inheritance::OverrideValue
+        );
+        assert_eq!(
+            cfg("[theme]\nmode=bogus\n").inheritance(),
+            Inheritance::Inherit,
+            "an invalid mode is not a mode"
+        );
+        let c = ThemeConfig::builder("test")
             .files(false)
-            .app_text("[colors-dark]\ncard-bg=#ff0000\n[dark:colors]\ncard-bg=#00ff00")
+            .app_text("[theme]\nmode=optout\n")
+            .inheritance(Inheritance::Inherit)
             .build();
-        let mut palette = Palette::new(Scheme::Dark);
-        cfg.apply_to_palette(&mut palette, Scheme::Dark);
-        assert_eq!(crate::color::to_hex(palette.card_bg_color), "#00ff00");
+        assert_eq!(c.inheritance(), Inheritance::Inherit);
+    }
+
+    #[test]
+    fn opting_out_discards_the_desktop_files_and_the_portal_scheme() {
+        let desktop = crate::config::Config::from_keyfile("[appearance]\ncolor-scheme=dark\ntext-scale=1.5\n");
+        let out = desktop
+            .clone()
+            .with_theme_config(&cfg("[theme]\nmode=optout\n"));
+        assert!(out.desktop_opt_out);
+        assert_eq!(out.text_scale, 1.0);
+        let inherit = desktop.with_theme_config(&cfg(""));
+        assert!(!inherit.desktop_opt_out);
+        assert_eq!(inherit.text_scale, 1.5);
+        // No fixed scheme, so the portal would decide for an inheriting app; not for this one.
+        assert_eq!(
+            crate::utils::effective_scheme(&out, Some(Scheme::Dark)),
+            Scheme::Light
+        );
+    }
+}
+
+#[cfg(test)]
+mod policy_tests {
+    use super::*;
+
+    fn app(text: &str) -> ThemeConfig {
+        ThemeConfig::builder("test").files(false).app_text(text).build()
+    }
+
+    #[test]
+    fn a_policy_that_forbids_overrides_drops_the_apps_tokens_and_lists_them() {
+        let c = app("[metrics]\nradius-m=3\n");
+        assert_eq!(c.number("metrics", "radius-m"), Some(3.0));
+        let kept = c.for_policy(true);
+        assert_eq!(kept.number("metrics", "radius-m"), Some(3.0));
+        let denied = c.for_policy(false);
+        assert_eq!(denied.number("metrics", "radius-m"), Some(Metrics::default().radius_m));
+        assert_eq!(denied.denied(), [("metrics".to_string(), "radius-m".to_string())]);
+        assert_eq!(denied.inheritance(), Inheritance::Inherit);
+        assert!(denied.overrides().is_empty());
+    }
+
+    #[test]
+    fn the_policy_leaves_inherit_and_optout_apps_alone() {
+        let opt = app("[theme]\nmode=optout\n[metrics]\nradius-m=3\n");
+        assert_eq!(opt.for_policy(false).number("metrics", "radius-m"), Some(3.0));
+        assert!(opt.for_policy(false).denied().is_empty());
+        let inherit = app("");
+        assert!(inherit.for_policy(false).denied().is_empty());
+    }
+
+    #[test]
+    fn the_config_applies_the_policy_to_the_apps_theme() {
+        let mut desktop = crate::config::Config::default();
+        desktop.allow_app_overrides = false;
+        let out = desktop.with_theme_config(&app("[metrics]\nradius-m=3\n"));
+        assert_eq!(out.metrics().radius_m, Metrics::default().radius_m);
+        let free = crate::config::Config::default().with_theme_config(&app("[metrics]\nradius-m=3\n"));
+        assert_eq!(free.metrics().radius_m, 3.0);
+    }
+
+    #[test]
+    fn a_click_maps_to_an_action_the_window_allows() {
+        use crate::windows::{Action, Chrome, State};
+        let full = Chrome::new(State::default()).csd_override(true);
+        assert!(matches!(Action::titlebar("double", &full), Some(Action::ToggleMaximize)));
+        assert!(matches!(Action::titlebar("right", &full), Some(Action::Menu)));
+        assert!(Action::titlebar("middle", &full).is_none());
+        let dialog = full.close_only();
+        assert!(Action::titlebar("double", &dialog).is_none());
+    }
+}
+
+#[cfg(test)]
+mod primary_and_contrast_tests {
+    use super::*;
+
+    fn themed(text: &str) -> crate::Theme {
+        let cfg = ThemeConfig::builder("t").files(false).toolkit_text(text).app_text("").build();
+        crate::Theme::light().with_theme_config(&cfg)
+    }
+
+    #[test]
+    fn suggested_buttons_use_the_primary_color_not_the_accent() {
+        let t = themed("[colors]\naccent=#ff0000\nprimary=#00aa00\nprimary-fg=#fffffe\n");
+        let style = crate::styles::button::suggested(&t, iced::widget::button::Status::Active);
+        assert_eq!(style.background, Some(iced::Background::Color(crate::color::hex(0x00aa00))));
+        assert_eq!(t.semantic.accent.bg, crate::color::hex(0xff0000));
+        // A desktop accent change leaves the primary alone.
+        let t = t.accent(crate::AccentColor::Teal);
+        assert_eq!(t.semantic.primary.bg, crate::color::hex(0x00aa00));
+    }
+
+    #[test]
+    fn text_on_fills_is_the_themes_fg_until_it_opts_in_to_contrast() {
+        let fixed = themed("[colors]\nwarning=#ffee00\nwarning-fg=#ffffff\n");
+        assert_eq!(fixed.semantic.warning.fg, iced::Color::WHITE);
+        let auto = themed("[colors]\nwarning=#ffee00\nwarning-fg=#ffffff\nauto-contrast=true\n");
+        assert_eq!(auto.semantic.warning.fg, crate::color::DARK_TEXT);
+    }
+}
+
+#[cfg(test)]
+mod variant_tests {
+    use super::*;
+    use crate::styles::button as sb;
+    use iced::widget::button::Status;
+
+    fn build(b: Builder) -> crate::Theme {
+        crate::Theme::light().with_theme_config(&b.files(false).build())
+    }
+
+    /// A color as the hex it prints, so a 1-ulp difference between parsing and `hex()` is moot.
+    fn hx(c: Option<Color>) -> Option<String> {
+        c.map(crate::color::to_hex)
+    }
+
+    fn bg(s: iced::widget::button::Style) -> Option<String> {
+        hx(match s.background {
+            Some(iced::Background::Color(c)) => Some(c),
+            _ => None,
+        })
+    }
+
+    fn hex(rgb: u32) -> Option<String> {
+        Some(crate::color::to_hex(crate::color::hex(rgb)))
+    }
+
+    fn brand() -> Schema {
+        Schema::new().variant(
+            "button",
+            "brand",
+            &[("bg", Value::Color(crate::color::hex(0xaa0000))), ("radius", Value::Length(3.0))],
+        )
+    }
+
+    #[test]
+    fn the_toolkit_declares_the_default_button_variants_with_typed_keys() {
+        let schema = Schema::toolkit();
+        for name in DEFAULT_VARIANTS[0].1 {
+            let section = format!("button.{name}");
+            assert_eq!(schema.get(&section, "bg").unwrap().ty, VariableType::Color, "{name}");
+            assert!(matches!(
+                schema.get(&section, "radius").unwrap().ty,
+                VariableType::Length { .. }
+            ));
+            assert!(schema.get(&section, "bg").unwrap().default.is_none());
+        }
+        // A bad value is reported, not applied.
+        let r = schema.validate("[button.flat]\nbg=nope\nradius=3px\n");
+        assert_eq!(r.errors.len(), 1, "{:?}", r.errors);
+    }
+
+    #[test]
+    fn an_app_adds_a_variant_and_a_theme_file_restyles_it() {
+        let t = build(
+            ThemeConfig::builder("t")
+                .schema(brand())
+                .app_text("[button.brand]\nfg=#112233\n"),
+        );
+        let v = t.variant("button", "brand");
+        assert!(v.exists());
+        assert_eq!(hx(v.color("bg")), hex(0xaa0000), "declared default");
+        assert_eq!(hx(v.color("fg")), hex(0x112233), "from the file");
+        let style = sb::variant("brand")(&t, Status::Active);
+        assert_eq!(bg(style), hex(0xaa0000));
+        assert_eq!(crate::color::to_hex(style.text_color), "#112233");
+        assert_eq!(style.border.radius, 3.0.into());
+        // Hovering derives the fill from the same token.
+        assert_eq!(
+            bg(sb::variant("brand")(&t, Status::Hovered)),
+            hx(Some(t.semantic.hover_fill(crate::color::hex(0xaa0000))))
+        );
+    }
+
+    #[test]
+    fn a_theme_overrides_one_key_of_a_default_variant_and_the_rest_stays_built_in() {
+        let plain = crate::Theme::light();
+        let t = build(ThemeConfig::builder("t").toolkit_text("[button.suggested]\nbg=#00aa00\n").app_text(""));
+        let green = crate::color::hex(0x00aa00);
+        let gh = |c: Color| Some(crate::color::to_hex(c));
+        assert_eq!(bg(sb::suggested(&t, Status::Active)), gh(green));
+        assert_eq!(bg(sb::suggested(&t, Status::Pressed)), gh(t.semantic.active_fill(green)));
+        // The text color is still the palette's, and other variants are untouched.
+        assert_eq!(sb::suggested(&t, Status::Active).text_color, sb::suggested(&plain, Status::Active).text_color);
+        assert_eq!(bg(sb::destructive(&t, Status::Active)), bg(sb::destructive(&plain, Status::Active)));
+        // A radius alone leaves a flat button flat.
+        let t = build(ThemeConfig::builder("t").toolkit_text("[button.flat]\nradius=3px\n").app_text(""));
+        let flat = sb::flat(&t, Status::Active);
+        assert!(flat.background.is_none());
+        assert_eq!(flat.border.radius, 3.0.into());
+    }
+
+    #[test]
+    fn without_a_theme_config_the_default_variants_exist() {
+        let t = crate::Theme::light();
+        assert!(t.variant("button", "suggested").exists());
+        assert!(!t.variant("button", "nope").exists());
+        assert!(!t.variant("chip", "suggested").exists());
+    }
+
+    #[test]
+    fn opting_out_of_the_defaults_leaves_the_apps_own_and_draws_the_rest_neutral() {
+        let t = build(
+            ThemeConfig::builder("t")
+                .schema(brand())
+                .default_variants(DefaultVariants::None)
+                .app_text(""),
+        );
+        assert!(!t.variant("button", "suggested").exists());
+        assert!(t.variant("button", "brand").exists());
+        let neutral = sb::default(&t, Status::Active);
+        assert_eq!(bg(sb::variant("suggested")(&t, Status::Active)), bg(neutral));
+        assert_eq!(bg(sb::variant("typo")(&t, Status::Hovered)), bg(sb::default(&t, Status::Hovered)));
+        assert_eq!(bg(sb::variant("brand")(&t, Status::Active)), hex(0xaa0000));
+        // The file can ask for it too, and a file naming a dropped variant reports it as unknown.
+        let cfg = ThemeConfig::builder("t").files(false).app_text("[theme]\ndefault-variants=none\n[button.suggested]\nbg=#00aa00\n").build();
+        assert!(!cfg.schema().variants_declared().iter().any(|(_, n)| n == "suggested"));
+        assert!(cfg.unknown().iter().any(|(s, _)| s == "button.suggested"));
+    }
+
+    #[test]
+    fn some_widgets_keep_their_defaults_and_others_drop_them() {
+        assert!(DefaultVariants::All.keeps("button"));
+        assert!(!DefaultVariants::None.keeps("button"));
+        assert!(DefaultVariants::Only(&["button"]).keeps("button"));
+        assert!(!DefaultVariants::Only(&["chip"]).keeps("button"));
+        assert!(!DefaultVariants::Without(&["button"]).keeps("button"));
+        let t = build(
+            ThemeConfig::builder("t")
+                .default_variants(DefaultVariants::Without(&["button"]))
+                .app_text(""),
+        );
+        assert!(!t.variant("button", "flat").exists());
+    }
+
+    #[test]
+    fn an_app_replaces_a_default_variant_by_declaring_its_name() {
+        let schema = Schema::new().variant(
+            "button",
+            "suggested",
+            &[("bg", Value::Color(crate::color::hex(0x0000aa)))],
+        );
+        let t = build(ThemeConfig::builder("t").schema(schema).app_text(""));
+        assert_eq!(bg(sb::suggested(&t, Status::Active)), hex(0x0000aa));
     }
 }

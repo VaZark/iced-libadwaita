@@ -17,6 +17,9 @@ pub struct SearchBar<'a, M> {
     on_close: Option<M>,
     id: Option<iced::widget::Id>,
     width: Length,
+    spacing: Option<f32>,
+    padding: Option<iced::Padding>,
+    input_padding: Option<iced::Padding>,
     metrics: Metrics,
 }
 
@@ -29,11 +32,29 @@ pub fn search_bar<'a, M>(value: &'a str, on_input: impl Fn(String) -> M + 'a) ->
         on_close: None,
         id: None,
         width: Length::Fill,
+        spacing: None,
+        padding: None,
+        input_padding: None,
         metrics: Metrics::desktop(),
     }
 }
 
 impl<'a, M> SearchBar<'a, M> {
+    /// The gap between the icon, the field and the close button (default `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding of the pill (default `space_xxs` above and below, `space_m` at the sides).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// The padding inside the text field (default `space_s`).
+    pub fn input_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.input_padding = Some(p.into());
+        self
+    }
     pub fn placeholder(mut self, text: impl Into<String>) -> Self {
         self.placeholder = text.into();
         self
@@ -59,7 +80,7 @@ impl<'a, M: Clone + 'a> From<SearchBar<'a, M>> for Element<'a, M> {
         let m = b.metrics;
         let mut input = text_input(&b.placeholder, b.value)
             .on_input(b.on_input)
-            .padding(m.space_s)
+            .padding(b.input_padding.unwrap_or(iced::Padding::from(m.space_s)))
             .width(Length::Fill)
             .style(|theme: &Theme, status| {
                 // The pill draws the field: the input itself is bare.
@@ -72,13 +93,16 @@ impl<'a, M: Clone + 'a> From<SearchBar<'a, M>> for Element<'a, M> {
             input = input.id(id);
         }
         let mut r = row![Icon::Search.view(m.icon_size), input]
-            .spacing(m.space_s)
+            .spacing(b.spacing.unwrap_or(m.space_s))
             .align_y(Alignment::Center);
         if let Some(close) = b.on_close {
             r = r.push(icon_button(Icon::WindowClose).on_press(close));
         }
         container(r)
-            .padding([2.0, m.space_m])
+            .padding(
+                b.padding
+                    .unwrap_or(iced::Padding::from([m.space_xxs, m.space_m])),
+            )
             .width(b.width)
             .style(|theme: &Theme| {
                 let fg = theme.semantic.window.fg;
@@ -107,5 +131,17 @@ mod tests {
             .placeholder("What do you want to play?")
             .on_close(2)
             .into();
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn search_bar_gaps_and_padding_are_parameters() {
+        let b = search_bar("", |_: String| ()).spacing(1.0).padding(2.0).input_padding(3.0);
+        assert_eq!((b.spacing, b.padding), (Some(1.0), Some(iced::Padding::from(2.0))));
+        let _: Element<'_, ()> = b.into();
     }
 }

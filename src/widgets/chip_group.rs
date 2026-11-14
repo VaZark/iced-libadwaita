@@ -91,6 +91,8 @@ pub struct ChipGroup<'a, K: Clone, M> {
     min_contrast: f32,
     max_lines: Option<usize>,
     expand: Option<Expansion<'a, M>>,
+    spacing: Option<f32>,
+    search_gap: Option<f32>,
     metrics: Metrics,
 }
 
@@ -114,6 +116,8 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
             min_contrast: 4.5,
             max_lines: None,
             expand: None,
+            spacing: None,
+            search_gap: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -175,6 +179,16 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
         self.min_contrast = ratio;
         self
     }
+    /// The gap between chips, across and between lines (default `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The gap between the search entry and the chips (default `space_m`).
+    pub fn search_spacing(mut self, px: f32) -> Self {
+        self.search_gap = Some(px);
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -193,6 +207,7 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
 impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for Element<'a, M> {
     fn from(g: ChipGroup<'a, K, M>) -> Self {
         let m = g.metrics;
+        let gap = g.spacing.unwrap_or(m.space_s);
         let visible = g.visible();
         let body: Element<'a, M> = if visible.is_empty() {
             ty::caption(g.empty.clone()).style(st::dim).into()
@@ -242,17 +257,17 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for
                     items,
                     lines: g.max_lines.unwrap_or(3),
                     expanded,
-                    gap: m.space_s,
+                    gap,
                 })
             } else {
                 let wrapped = row(chips)
-                    .spacing(m.space_s)
+                    .spacing(gap)
                     .width(iced::Length::Fill)
                     .wrap()
-                    .vertical_spacing(m.space_s);
+                    .vertical_spacing(gap);
                 if let Some(lines) = g.max_lines {
                     let lines = lines as f32;
-                    let height = lines * g.size.height(&m) + (lines - 1.0) * m.space_s + 1.0;
+                    let height = lines * g.size.height(&m) + (lines - 1.0) * gap + 1.0;
                     iced::widget::container(wrapped)
                         .width(iced::Length::Fill)
                         .max_height(height)
@@ -271,7 +286,7 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for
                     .metrics(m),
                 body
             ]
-            .spacing(m.space_m)
+            .spacing(g.search_gap.unwrap_or(m.space_m))
             .into(),
             _ => body,
         }
@@ -661,5 +676,20 @@ mod tests {
             &layout::Limits::new(Size::ZERO, Size::new(300.0, 2000.0)),
         );
         assert!(!tree.state.downcast_ref::<FlowState>().overflow);
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_chip_and_search_gaps_are_parameters() {
+        let sel: [u8; 0] = [];
+        let g = ChipGroup::<u8, ()>::new([ChipOption::new(1, "a")], &sel, |_| ())
+            .spacing(1.0)
+            .search_spacing(2.0);
+        assert_eq!((g.spacing, g.search_gap), (Some(1.0), Some(2.0)));
+        let _: Element<'_, ()> = g.into();
     }
 }

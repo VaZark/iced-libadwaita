@@ -62,6 +62,8 @@ pub struct DateRangeInput<'a, M> {
     close_on_outside: bool,
     window_radius: f32,
     revealed: bool,
+    spacing: Option<f32>,
+    padding: Option<f32>,
     metrics: Metrics,
 }
 
@@ -93,6 +95,8 @@ impl<'a, M> DateRangeInput<'a, M> {
             close_on_outside: true,
             window_radius: Metrics::desktop().radius_window,
             revealed: true,
+            spacing: None,
+            padding: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -203,6 +207,17 @@ impl<'a, M> DateRangeInput<'a, M> {
     /// Rounds the dialog's fade to the window's corners (`window::State::radius`).
     pub fn window_radius(mut self, r: f32) -> Self {
         self.window_radius = r;
+        self
+    }
+    /// The gap between the calendar's header, days and Today button, and between the entry and
+    /// the calendar when shown inline (default `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding between the popover's edge and the calendar (default `space_xs`).
+    pub fn padding(mut self, px: f32) -> Self {
+        self.padding = Some(px);
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -340,6 +355,7 @@ impl<'a, M: Clone + 'a> From<DateRangeInput<'a, M>> for Element<'a, M> {
             max,
             band: true,
             metrics: m,
+            spacing: d.spacing,
             navigable: d.on_nav.is_some(),
             nav: &nav,
             select: &no_select,
@@ -379,6 +395,7 @@ impl<'a, M: Clone + 'a> From<DateRangeInput<'a, M>> for Element<'a, M> {
                 window_radius: d.window_radius,
                 disabled: d.disabled,
                 open_initially: d.open_initially,
+                padding: d.padding,
             },
             m,
         );
@@ -457,5 +474,17 @@ mod tests {
                 .validity()
                 .blocks_submit()
         );
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_calendar_gaps_are_parameters() {
+        let d = DateRangeInput::<()>::new("", Date::today(), |_| ()).spacing(1.0).padding(2.0);
+        assert_eq!((d.spacing, d.padding), (Some(1.0), Some(2.0)));
+        let _: Element<'_, ()> = d.into();
     }
 }

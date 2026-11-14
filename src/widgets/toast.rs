@@ -145,6 +145,10 @@ pub struct Toast<M> {
     status: Option<Role>,
     position: Option<ToastPosition>,
     radius: Option<f32>,
+    spacing: Option<f32>,
+    padding: Option<iced::Padding>,
+    stack_spacing: Option<f32>,
+    margin: Option<iced::Padding>,
 }
 
 impl<M> Toast<M> {
@@ -161,6 +165,10 @@ impl<M> Toast<M> {
             status: None,
             position: None,
             radius: None,
+            spacing: None,
+            padding: None,
+            stack_spacing: None,
+            margin: None,
         }
     }
     /// Auto-dismiss delay in milliseconds, overriding `[toasts] timeout` (default 3000).
@@ -173,6 +181,29 @@ impl<M> Toast<M> {
     /// (a full pill by default).
     pub fn radius(mut self, radius: f32) -> Self {
         self.radius = Some(radius.max(0.0));
+        self
+    }
+    /// The gap between the status dot, the title, the action and the dismiss button (default:
+    /// the theme's `space_m`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding inside the toast (default: the theme's `space_s` by `space_l`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// The gap between stacked toasts. Read from the first toast of a [`toast_stack`] (default:
+    /// the theme's `space_s`).
+    pub fn stack_spacing(mut self, px: f32) -> Self {
+        self.stack_spacing = Some(px);
+        self
+    }
+    /// The distance a stack keeps from its target's edges. Read from the first toast of a
+    /// [`toast_stack`] (default: the theme's `space_xl` on every side).
+    pub fn margin(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.margin = Some(p.into());
         self
     }
     /// Where the toast sits in its target. Without this it follows the desktop config
@@ -294,7 +325,9 @@ fn toast_element<'a, M: Clone + 'a>(t: Toast<M>, position: ToastPosition) -> Ele
             ..Default::default()
         }
     };
-    let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
+    let mut r = row![]
+        .spacing(t.spacing.unwrap_or(m.space_m))
+        .align_y(Vertical::Center);
     if let Some(status) = t.status.filter(|s| *s != Role::Neutral) {
         // The vivid fill of the status color reads on both the dark surfaces.
         let color = move |th: &Theme| th.semantic.swatch(status).bg;
@@ -330,7 +363,7 @@ fn toast_element<'a, M: Clone + 'a>(t: Toast<M>, position: ToastPosition) -> Ele
         );
     }
     let toast = container(r)
-        .padding([m.space_s, m.space_l])
+        .padding(t.padding.unwrap_or(iced::Padding::from([m.space_s, m.space_l])))
         .style(move |th: &Theme| {
             let (bg, fg) = colors(th, background, text_color, role);
             iced::widget::container::Style {
@@ -382,6 +415,8 @@ pub fn toast_stack<'a, M: Clone + 'a>(
         return crate::layouts::layered(content, None);
     };
     let m = Metrics::desktop();
+    let stack_spacing = first.stack_spacing.unwrap_or(m.space_s);
+    let margin = first.margin.unwrap_or(iced::Padding::from(m.space_xl));
     let position = first
         .position
         .unwrap_or_else(|| crate::config::current().toast_position);
@@ -391,7 +426,7 @@ pub fn toast_stack<'a, M: Clone + 'a>(
             .enumerate()
             .map(|(index, t)| (t.id.unwrap_or(index as u64), toast_element(t, position))),
     )
-    .spacing(m.space_s)
+    .spacing(stack_spacing)
     .align_items(position.horizontal().into());
     crate::layouts::layered(
         content,
@@ -401,7 +436,7 @@ pub fn toast_stack<'a, M: Clone + 'a>(
                 .height(Length::Fill)
                 .align_x(position.horizontal())
                 .align_y(position.vertical())
-                .padding(m.space_xl)
+                .padding(margin)
                 .into(),
         ),
     )
@@ -429,6 +464,21 @@ pub fn toast_stack_from<'a, M: Clone + 'a, T>(
 mod tests {
     use super::*;
     use crate::color::{DARK_TEXT, LIGHT_TEXT, contrast_ratio};
+
+    #[test]
+    fn the_gaps_padding_and_margin_are_parameters() {
+        let t = || {
+            Toast::new("Saved")
+                .status(Role::Success)
+                .action("Undo", 1u8)
+                .spacing(2.0)
+                .padding([3.0, 4.0])
+                .stack_spacing(5.0)
+                .margin(6.0)
+        };
+        assert_eq!((t().spacing, t().stack_spacing), (Some(2.0), Some(5.0)));
+        let _: Element<'_, u8> = toast_stack(iced::widget::space(), [t(), t()]);
+    }
 
     #[test]
     fn surface_is_dark_and_opaque_in_both_schemes() {

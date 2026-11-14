@@ -630,7 +630,7 @@ impl AppShell {
             .copied()
             .unwrap_or(Shell::Mobile);
         let (_, pad) = presentation(&layout);
-        let m = iad::Metrics::default();
+        let m = iad::Metrics::desktop();
         let height =
             rows * pad.row_height(&m) + (rows - 1.0) * pad.gap(&m) + 2.0 * pad.inset(&m) + 8.0;
         let list = w::SidebarList::new(items).follow(&self.adaptive, presentation);
