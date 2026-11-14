@@ -85,6 +85,29 @@ pub(crate) fn sized<'a, M: 'a>(
     content: impl Into<Element<'a, M>>,
     m: &Metrics,
 ) -> Button<'a, M, Theme> {
+    sized_variant(content, m, "")
+}
+
+/// [`sized`] for the variant `name`: when the theme gives that variant a bevel
+/// (`[button.<name>] border-style=raised`), the content sits in a [`Bevel`] that fills the
+/// button and takes the padding; otherwise the button is built exactly as before.
+pub(crate) fn sized_variant<'a, M: 'a>(
+    content: impl Into<Element<'a, M>>,
+    m: &Metrics,
+    name: &str,
+) -> Button<'a, M, Theme> {
+    if !name.is_empty() {
+        let section = format!("button.{name}");
+        if let Some((style, width)) = crate::components::bevel_of(&section) {
+            let inner = min_height(content, m.button_min_height - m.button_padding.y());
+            return button(
+                crate::components::Bevel::new(inner, section, style, width)
+                    .padding(m.button_padding)
+                    .pressable(true),
+            )
+            .padding(Padding::ZERO);
+        }
+    }
     // A minimum height, not a fixed one: a strut of the minimum inner height beside the
     // content, which is centered against it. A one-line label gets the standard height; taller
     // content (an icon over a label) makes the button grow instead of spilling out of it, since
@@ -99,22 +122,22 @@ pub(crate) fn sized<'a, M: 'a>(
 
 /// Standard button (`.default`).
 pub fn raised_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    sized(content, &Metrics::desktop()).style(sb::variant("default"))
+    sized_variant(content, &Metrics::desktop(), "default").style(sb::variant("default"))
 }
 
 /// `.flat` button.
 pub fn flat_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    sized(content, &Metrics::desktop()).style(sb::variant("flat"))
+    sized_variant(content, &Metrics::desktop(), "flat").style(sb::variant("flat"))
 }
 
 /// `.suggested-action` button.
 pub fn suggested_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    sized(content, &Metrics::desktop()).style(sb::variant("suggested"))
+    sized_variant(content, &Metrics::desktop(), "suggested").style(sb::variant("suggested"))
 }
 
 /// `.destructive-action` button.
 pub fn destructive_button<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Button<'a, M, Theme> {
-    sized(content, &Metrics::desktop()).style(sb::variant("destructive"))
+    sized_variant(content, &Metrics::desktop(), "destructive").style(sb::variant("destructive"))
 }
 
 /// `.pill` button.
@@ -149,7 +172,8 @@ pub fn variant_button<'a, M: 'a>(
     content: impl Into<Element<'a, M>>,
     name: impl Into<String>,
 ) -> Button<'a, M, Theme> {
-    sized(content, &Metrics::desktop()).style(sb::variant(&name.into()))
+    let name = name.into();
+    sized_variant(content, &Metrics::desktop(), &name).style(sb::variant(&name))
 }
 
 /// Selects a button's **variant**: `button(label).variant("brand")`. See

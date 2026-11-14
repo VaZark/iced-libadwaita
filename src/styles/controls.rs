@@ -17,8 +17,8 @@ pub mod text_input {
             Status::Focused { .. } => (
                 o.control,
                 Border {
-                    color: s.accent.bg,
-                    width: theme.metrics.focus_ring_width,
+                    color: s.focus_ring,
+                    width: theme.focus_width(),
                     radius: 0.0.into(),
                 },
             ),
@@ -26,7 +26,12 @@ pub mod text_input {
         };
         let disabled = status == Status::Disabled;
         Style {
-            background: Background::Color(alpha(fg, fill)),
+            // A theme can give fields a fill of their own (`[frame.field] bg`), e.g. a white one.
+            background: Background::Color(
+                theme
+                    .token_color("frame.field", "bg")
+                    .unwrap_or_else(|| alpha(fg, fill)),
+            ),
             border: Border {
                 radius: theme.metrics.radius_m.into(),
                 ..border
@@ -53,7 +58,7 @@ pub mod text_input {
     pub fn error(theme: &Theme, status: Status) -> Style {
         let mut st = default(theme, status);
         st.border.color = theme.semantic.error.color;
-        st.border.width = theme.metrics.focus_ring_width;
+        st.border.width = theme.focus_width();
         st
     }
 
@@ -61,7 +66,7 @@ pub mod text_input {
     pub fn warning(theme: &Theme, status: Status) -> Style {
         let mut st = default(theme, status);
         st.border.color = theme.semantic.warning.color;
-        st.border.width = theme.metrics.focus_ring_width;
+        st.border.width = theme.focus_width();
         st
     }
 
@@ -69,7 +74,7 @@ pub mod text_input {
     pub fn success(theme: &Theme, status: Status) -> Style {
         let mut st = default(theme, status);
         st.border.color = theme.semantic.success.color;
-        st.border.width = theme.metrics.focus_ring_width;
+        st.border.width = theme.focus_width();
         st
     }
 
@@ -95,12 +100,12 @@ pub mod text_editor {
             background: Background::Color(crate::color::alpha(s.window.fg, s.opacity.control)),
             border: Border {
                 color: if focused {
-                    s.accent.bg
+                    s.focus_ring
                 } else {
                     iced::Color::TRANSPARENT
                 },
                 width: if focused {
-                    theme.metrics.focus_ring_width
+                    theme.focus_width()
                 } else {
                     0.0
                 },
@@ -305,7 +310,7 @@ pub mod progress_bar {
         let s = &theme.semantic;
         Style {
             background: Background::Color(alpha(s.window.fg, s.opacity.trough)),
-            bar: Background::Color(s.accent.bg),
+            bar: theme.surface_background("progress", s.accent.bg),
             border: Border::default().rounded(theme.metrics.radius_pill),
         }
     }
@@ -480,7 +485,7 @@ mod flat_entry_tests {
                 iced::Background::Color(crate::color::alpha(theme.semantic.window.fg, 0.03))
             );
             let focused = text_input::flat(&theme, Status::Focused { is_hovered: false });
-            assert_eq!(focused.border.width, theme.metrics.focus_ring_width);
+            assert_eq!(focused.border.width, theme.focus_width());
             assert_eq!(focused.border.color, theme.semantic.accent.bg);
             assert_eq!(
                 text_input::flat(&theme, Status::Disabled).value,

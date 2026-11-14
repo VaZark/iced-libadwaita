@@ -9,7 +9,7 @@
 //!
 //! ```ignore
 //! TableGrid::new([
-//!     TableCell::new(chart).span(8),
+//!     TableCell::new(list).span(8),
 //!     TableCell::new(summary).span(4),
 //!     TableCell::new(table).span(12),
 //! ])

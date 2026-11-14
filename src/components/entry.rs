@@ -269,7 +269,7 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
                 };
                 if let Some(color) = color {
                     style.border.color = color;
-                    style.border.width = theme.metrics.focus_ring_width;
+                    style.border.width = theme.focus_width();
                 }
                 style
             });
@@ -288,7 +288,7 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
                 style.border.width = if embedded {
                     0.0
                 } else {
-                    t.metrics.focus_ring_width
+                    t.focus_width()
                 };
                 style.value = c;
                 style
@@ -305,7 +305,12 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
         }
         let content: Element<'a, M> = input.into();
         if lw.is_none() && rw.is_none() {
-            return content;
+            // An embedded entry sits in another widget's frame.
+            return if e.embedded {
+                content
+            } else {
+                crate::components::framed(content, "field")
+            };
         }
         // The sections sit in a transparent layer over the input, inside its border and ring;
         // the input's padding keeps the text clear of them.
@@ -327,7 +332,12 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
         .padding([0.0, section_gap])
         .height(Length::Fill)
         .width(Length::Fill);
-        iced::widget::stack![content, layer].width(e.width).into()
+        let stacked = iced::widget::stack![content, layer].width(e.width);
+        if e.embedded {
+            stacked.into()
+        } else {
+            crate::components::framed(stacked, "field")
+        }
     }
 }
 

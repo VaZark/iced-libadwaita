@@ -1,0 +1,793 @@
+use super::*;
+use std::os::unix::fs::symlink;
+
+fn editor() -> Editor {
+    let mut e = Editor::with(None, None).0;
+    // Tests never look at, or write into, the real data dirs.
+    e.theme_dirs = Vec::new();
+    e.presets.clear();
+    e
+}
+
+fn with_text(text: &str) -> Editor {
+    let mut e = editor();
+    e.values = iad::config::parse_keyfile(text).into_iter().collect();
+    e.clean = e.generate();
+    e.refresh();
+    e
+}
+
+fn temp_dir(tag: &str) -> PathBuf {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static N: AtomicU32 = AtomicU32::new(0);
+    let d = std::env::temp_dir().join(format!(
+        "iad-editor-test-{tag}-{}-{}",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+fn read(p: &std::path::Path) -> String {
+    std::fs::read_to_string(p).unwrap()
+}
+
+#[test]
+fn the_shipped_themes_round_trip_through_the_editor() {
+    let dir = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../themes"));
+    let files = scan_folder(&dir);
+    assert!(files.len() >= 6);
+    for f in files {
+        let text = read(&f);
+        let e = with_text(&text);
+        let out = e.generate();
+        let a: BTreeMap<_, _> = iad::config::parse_keyfile(&text).into_iter().collect();
+        let b: BTreeMap<_, _> = iad::config::parse_keyfile(&out).into_iter().collect();
+        assert_eq!(a, b, "{}", f.display());
+        let report = Schema::toolkit().validate(&out);
+        assert!(report.errors.is_empty() && report.unknown.is_empty(), "{}", f.display());
+    }
+}
+
+#[test]
+fn only_what_is_set_is_written_and_a_variant_goes_in_its_own_section() {
+    let mut e = editor();
+    assert!(!e.generate().lines().any(|l| l.starts_with('[')));
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let _ = e.update(Msg::Variant(Variant::Dark));
+    let _ = e.update(Msg::Input("colors".into(), "window-bg".into(), "#101010".into()));
+    let out = e.generate();
+    assert!(out.contains("[metrics]\nradius-m=7\n"));
+    assert!(out.contains("[dark:colors]\nwindow-bg=#101010\n"));
+    assert!(!out.contains("[colors]"));
+    // An unset dark value shows the base's, and reset returns to it.
+    let _ = e.update(Msg::Reset("colors".into(), "window-bg".into()));
+    assert!(!e.generate().lines().any(|l| l.starts_with("[dark:")));
+}
+
+#[test]
+fn a_value_that_is_not_valid_yet_is_not_written() {
+    let mut e = editor();
+    let _ = e.update(Msg::Input("colors".into(), "window-bg".into(), "#12".into()));
+    assert!(!e.generate().contains("window-bg"));
+    let _ = e.update(Msg::Input("windows".into(), "button-size".into(), "30".into()));
+    assert!(e.generate().contains("button-size=30px"));
+}
+
+#[test]
+fn unknown_keys_are_kept() {
+    let e = with_text("[player]\nartwork=disc\n[colors]\naccent=#112233\n");
+    let out = e.generate();
+    assert!(out.contains("[player]\nartwork=disc\n"));
+    assert!(out.contains("accent=#112233"));
+}
+
+// ---------------------------------------------------------- the dot
+
+#[test]
+fn the_unsaved_dot_shows_only_when_there_are_unsaved_changes() {
+    let d = temp_dir("dot");
+    let f = d.join("t.conf");
+    std::fs::write(&f, "[metrics]\nradius-m=1\n").unwrap();
+    let mut e = editor();
+    e.load(f.clone());
+    assert!(!e.dirty());
+    assert_eq!(e.dot(), "");
+    assert!(!e.title().contains('●') && e.title().starts_with("t.conf"));
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "9".into()));
+    assert_eq!(e.dot(), "● ");
+    assert!(e.title().starts_with("● t.conf"));
+    let _ = e.update(Msg::SavedAs(Some(f.clone())));
+    assert_eq!(e.dot(), "");
+    assert!(!e.title().contains('●'));
+    let _ = std::fs::remove_dir_all(d);
+}
+
+// ------------------------------------------------------------ saving
+
+#[test]
+fn save_upserts_the_original_file() {
+    let d = temp_dir("save");
+    let f = d.join("mine.conf");
+    let mut e = editor();
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let _ = e.update(Msg::SavedAs(Some(f.clone())));
+    // Created.
+    assert!(read(&f).contains("[metrics]\nradius-m=7\n"));
+    assert!(!e.dirty());
+    // Replaced, by Save, at the same path.
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "8".into()));
+    assert!(e.dirty());
+    let _ = e.update(Msg::Save);
+    assert!(read(&f).contains("radius-m=8") && !read(&f).contains("radius-m=7"));
+    assert_eq!(e.path, Some(f));
+    assert!(!e.dirty());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn save_writes_through_a_symlink_to_its_target() {
+    let d = temp_dir("through");
+    let real = d.join("real.conf");
+    let link = d.join("link.conf");
+    std::fs::write(&real, "[metrics]\nradius-m=1\n").unwrap();
+    symlink(&real, &link).unwrap();
+    let mut e = editor();
+    e.load(link.clone());
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "5".into()));
+    let _ = e.update(Msg::Save);
+    assert!(is_link(&link), "the link is still a link");
+    assert!(read(&real).contains("radius-m=5"));
+    assert!(!e.dirty());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn save_without_a_path_asks_where_instead_of_writing() {
+    let mut e = editor();
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    assert!(e.path.is_none());
+    let task = e.update(Msg::Save);
+    assert!(task.units() > 0, "Save as opens the file dialog");
+    assert!(e.path.is_none() && e.dirty());
+}
+
+// -------------------------------------------------------- try it out
+
+/// An executable shell script in `dir`.
+fn script(dir: &std::path::Path, name: &str, body: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let path = dir.join(name);
+    std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path
+}
+
+/// Waits for a file a started program writes.
+fn wait_for(path: &std::path::Path) -> String {
+    for _ in 0..100 {
+        if let Ok(t) = std::fs::read_to_string(path) {
+            if !t.is_empty() {
+                return t;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(30));
+    }
+    panic!("{} never appeared", path.display());
+}
+
+#[test]
+fn try_it_out_runs_the_gallery_on_a_temp_file_and_leaves_the_original_alone() {
+    let d = temp_dir("try");
+    let f = d.join("orig.conf");
+    std::fs::write(&f, "[metrics]\nradius-m=1\n").unwrap();
+    let mut e = editor();
+    e.load(f.clone());
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let out = d.join("gallery.out");
+    e.bins.gallery = Some(script(
+        &d,
+        "gallery.sh",
+        &format!("echo \"$IAD_THEME\" > {o}.tmp; cat \"$IAD_THEME\" >> {o}.tmp; mv {o}.tmp {o}", o = out.display()),
+    ));
+    e.try_out("gallery");
+    let seen = wait_for(&out);
+    assert!(seen.contains("radius-m=7"), "the unsaved value: {seen}");
+    assert!(seen.contains("iad-theme-editor-"), "a temp file of its own");
+    assert_eq!(read(&f), "[metrics]\nradius-m=1\n", "the original is untouched");
+    assert!(e.dirty() && e.path == Some(f));
+    assert!(e.status.starts_with("Tried it out"), "{}", e.status);
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn a_toy_window_starts_with_its_name_and_the_unsaved_values() {
+    let d = temp_dir("toy");
+    let mut e = editor();
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "3".into()));
+    let out = d.join("toy.out");
+    e.bins.toys = Some(script(
+        &d,
+        "theme-toys.sh",
+        &format!("echo \"$@\" > {o}.tmp; cat \"$IAD_THEME\" >> {o}.tmp; mv {o}.tmp {o}", o = out.display()),
+    ));
+    let _ = e.update(Msg::TryOut("win95".into()));
+    let seen = wait_for(&out);
+    assert!(seen.starts_with("win95"), "{seen}");
+    assert!(seen.contains("radius-m=3"), "{seen}");
+    assert!(e.dirty() && e.path.is_none(), "nothing was saved");
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn starting_a_toy_again_replaces_the_old_window() {
+    let d = temp_dir("again");
+    let mut runner = toys::Runner::default();
+    let bins = toys::Bins {
+        gallery: None,
+        toys: Some(script(&d, "t.sh", "sleep 30")),
+    };
+    runner.launch("again", "", &bins).unwrap();
+    assert!(runner.running("again"));
+    runner.launch("again", "[metrics]\nradius-m=1\n", &bins).unwrap();
+    assert!(runner.running("again"), "the new one runs");
+    assert!(!runner.running("other"), "other kinds are not started");
+    drop(runner);
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn the_toy_list_is_what_the_program_says_or_the_fixed_five() {
+    let d = temp_dir("list");
+    let bins = toys::Bins {
+        gallery: None,
+        toys: Some(script(&d, "t.sh", "printf 'win95  Windows 95\\nmac: Mac OS\\n# a comment\\ngnome2\\n'")),
+    };
+    let toys = toys::list_toys(&bins);
+    assert_eq!(
+        toys.iter().map(|t| (t.name.as_str(), t.label.as_str())).collect::<Vec<_>>(),
+        [("win95", "Windows 95"), ("mac", "Mac OS"), ("gnome2", "gnome2")]
+    );
+    let fixed = toys::list_toys(&toys::Bins::default());
+    assert_eq!(fixed.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["win95", "winxp", "win7", "mac", "gnome2"]);
+    let broken = toys::Bins { gallery: None, toys: Some(script(&d, "bad.sh", "exit 3")) };
+    assert_eq!(toys::list_toys(&broken), toys::fallback());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+// ------------------------------------------------------- registering
+
+#[test]
+fn register_makes_a_symlink_and_replaces_an_old_one() {
+    let d = temp_dir("reg");
+    let (data, other) = (d.join("data"), d.join("else"));
+    std::fs::create_dir_all(&other).unwrap();
+    let a = other.join("mine.conf");
+    let b = other.join("sub");
+    std::fs::create_dir_all(&b).unwrap();
+    let b = b.join("mine.conf");
+    std::fs::write(&a, "").unwrap();
+    std::fs::write(&b, "").unwrap();
+    assert!(!is_registered(&data, &a));
+    let link = register(&data, &a).unwrap();
+    assert_eq!(link, data.join("mine.conf"));
+    assert!(is_link(&link) && canon(&link) == canon(&a));
+    assert!(is_registered(&data, &a));
+    assert_eq!(register(&data, &a), Err("already registered".to_string()));
+    // Another file with the same name replaces the old symlink.
+    register(&data, &b).unwrap();
+    assert_eq!(canon(&data.join("mine.conf")), canon(&b));
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn register_never_overwrites_a_regular_file() {
+    let d = temp_dir("regfile");
+    let data = d.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("mine.conf"), "keep me").unwrap();
+    let file = d.join("mine.conf");
+    std::fs::write(&file, "").unwrap();
+    let err = register(&data, &file).unwrap_err();
+    assert!(err.contains("regular file"), "{err}");
+    assert_eq!(read(&data.join("mine.conf")), "keep me");
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn unregister_removes_only_symlinks() {
+    let d = temp_dir("unreg");
+    let data = d.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    let file = d.join("mine.conf");
+    std::fs::write(&file, "x").unwrap();
+    register(&data, &file).unwrap();
+    assert_eq!(unregister(&data, &file), Ok(1));
+    assert!(!data.join("mine.conf").exists() && file.exists());
+    assert!(unregister(&data, &file).is_err());
+    // A regular file inside the data dir is registered but has no symlink to remove.
+    let inside = data.join("own.conf");
+    std::fs::write(&inside, "x").unwrap();
+    assert!(is_registered(&data, &inside));
+    assert!(unregister(&data, &inside).is_err());
+    assert!(inside.exists());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn set_as_default_points_default_conf_at_the_file_and_the_list_tags_it() {
+    let d = temp_dir("default");
+    let data = d.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    let (a, b) = (d.join("a.conf"), d.join("b.conf"));
+    std::fs::write(&a, "[theme]\nname=Alpha\nkey=a\n").unwrap();
+    std::fs::write(&b, "[theme]\nname=Beta\nkey=b\n").unwrap();
+    register(&data, &a).unwrap();
+    register(&data, &b).unwrap();
+    set_default(&data, &a).unwrap();
+    assert_eq!(default_target(&data), Some(canon(&a)));
+    let list = list_presets(&[data.clone()], &[], &[]);
+    assert_eq!(list.len(), 2, "default.conf is not a third entry");
+    let tagged: Vec<_> = list.iter().filter(|p| p.is_default).map(|p| p.name.as_str()).collect();
+    assert_eq!(tagged, ["Alpha"]);
+    // Replaced by another file.
+    set_default(&data, &b).unwrap();
+    let list = list_presets(&[data.clone()], &[], &[]);
+    assert_eq!(list.iter().filter(|p| p.is_default).map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Beta"]);
+    // A regular default.conf is not overwritten.
+    let other = temp_dir("default2");
+    std::fs::write(other.join("default.conf"), "mine").unwrap();
+    assert!(set_default(&other, &a).unwrap_err().contains("regular file"));
+    assert_eq!(read(&other.join("default.conf")), "mine");
+    let _ = std::fs::remove_dir_all(d);
+    let _ = std::fs::remove_dir_all(other);
+}
+
+#[test]
+fn a_default_that_is_not_registered_still_shows_up_tagged() {
+    let d = temp_dir("loosedefault");
+    let data = d.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    let f = d.join("far.conf");
+    std::fs::write(&f, "").unwrap();
+    set_default(&data, &f).unwrap();
+    let list = list_presets(&[data], &[], &[]);
+    assert_eq!(list.len(), 1);
+    assert!(list[0].is_default && list[0].group == "Registered");
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn the_registry_buttons_report_in_the_status_line_and_rescan() {
+    let d = temp_dir("buttons");
+    let data = d.join("data");
+    let f = d.join("t.conf");
+    std::fs::write(&f, "[theme]\nname=T\nkey=t\n").unwrap();
+    let mut e = editor();
+    e.theme_dirs = vec![data.clone()];
+    let _ = e.update(Msg::Register);
+    assert!(e.status.contains("Save the theme"), "no file yet");
+    e.load(f.clone());
+    let _ = e.update(Msg::Register);
+    assert!(e.status.starts_with("Registered"), "{}", e.status);
+    assert!(e.presets.iter().any(|p| p.group == "Registered" && p.name == "T"));
+    let _ = e.update(Msg::SetDefault);
+    assert!(e.presets.iter().any(|p| p.is_default));
+    let _ = e.update(Msg::Unregister);
+    assert!(!is_registered(&data, &f));
+    let _ = std::fs::remove_dir_all(d);
+}
+
+// ------------------------------------------------------------- list
+
+#[test]
+fn a_clean_environment_lists_nothing() {
+    let d = temp_dir("empty");
+    assert!(list_presets(&[d.clone()], &[], &[]).is_empty());
+    assert!(editor().presets.is_empty());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn the_list_has_the_registered_files_the_folders_and_the_recent_ones() {
+    let d = temp_dir("list");
+    let data = d.join("data");
+    let folder = d.join("folder");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("mine.conf"), "[theme]\nname=Mine\nkey=mine\n").unwrap();
+    std::fs::write(folder.join("plain.conf"), "").unwrap();
+    std::fs::write(data.join("own.conf"), "[theme]\nname=Own\nkey=own\n").unwrap();
+    let far = temp_dir("recent").join("far.conf");
+    std::fs::write(&far, "").unwrap();
+    register(&data, &folder.join("plain.conf")).unwrap();
+    let list = list_presets(
+        &[data.clone()],
+        &[folder.clone()],
+        &[far.clone(), folder.join("mine.conf"), d.join("gone.conf")],
+    );
+    let group = |n: &str| list.iter().find(|p| p.name == n).map(|p| p.group);
+    assert_eq!(group("Own"), Some("Registered"));
+    assert_eq!(group("plain"), Some("Registered"), "registered, so not repeated under Folders");
+    assert_eq!(group("Mine"), Some("Folders"));
+    assert_eq!(group("far"), Some("Recent"));
+    assert_eq!(list.iter().filter(|p| p.name == "Mine").count(), 1);
+    assert!(list.iter().all(|p| p.path.is_file()), "only real files, none missing");
+    // The symlink entry shows where it points.
+    let plain = list.iter().find(|p| p.name == "plain").unwrap();
+    assert_eq!(plain.target, Some(canon(&folder.join("plain.conf"))));
+    assert_eq!(list.iter().find(|p| p.name == "Own").unwrap().target, None);
+    // No embedded, shipped or repository group exists.
+    assert!(list.iter().all(|p| ["Registered", "Folders", "Recent"].contains(&p.group)));
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn a_folder_scan_lists_only_conf_files_by_name() {
+    let d = temp_dir("scan");
+    for f in ["b.conf", "a.conf", "notes.txt", "c.conf.bak"] {
+        std::fs::write(d.join(f), "").unwrap();
+    }
+    std::fs::create_dir(d.join("sub.conf")).unwrap();
+    symlink(d.join("nowhere.conf"), d.join("broken.conf")).unwrap();
+    let names: Vec<_> = scan_folder(&d)
+        .iter()
+        .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(names, ["a.conf", "b.conf"]);
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn switching_with_unsaved_changes_needs_a_second_click() {
+    let d = temp_dir("switch");
+    let (a, b) = (d.join("a.conf"), d.join("b.conf"));
+    std::fs::write(&a, "[metrics]\nradius-m=1\n").unwrap();
+    std::fs::write(&b, "[metrics]\nradius-m=2\n").unwrap();
+    let mut e = editor();
+    e.pick(Target::File(a.clone()));
+    assert_eq!(e.path, Some(a.clone()));
+    assert!(!e.dirty());
+    // Clean: switching is at once.
+    e.pick(Target::File(b.clone()));
+    assert_eq!(e.path, Some(b.clone()));
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "9".into()));
+    assert!(e.dirty());
+    e.pick(Target::File(a.clone()));
+    assert_eq!(e.path, Some(b.clone()), "the first click only warns");
+    assert!(e.status.contains("click again"));
+    assert_eq!(e.values[&("metrics".into(), "radius-m".into())], "9");
+    e.pick(Target::File(a.clone()));
+    assert_eq!(e.path, Some(a.clone()));
+    assert_eq!(e.values[&("metrics".into(), "radius-m".into())], "1");
+    // New is a switch too: it starts empty, with no path, and is not dirty.
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "4".into()));
+    let _ = e.update(Msg::New);
+    assert_eq!(e.path, Some(a.clone()), "the first click only warns");
+    let _ = e.update(Msg::New);
+    assert!(e.path.is_none() && e.values.is_empty() && !e.dirty());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+// ------------------------------------------------------------ state
+
+#[test]
+fn the_state_round_trips() {
+    let state = State {
+        last_file: Some("/a/one.conf".into()),
+        folders: vec!["/x".into(), "/y".into()],
+        recent: vec!["/a/one.conf".into(), "/b/two.conf".into()],
+        section: Some("metrics".into()),
+        variant: Some(Variant::Dark),
+    };
+    assert_eq!(State::parse(&state.to_text()), state);
+    assert_eq!(State::parse(""), State::default());
+    assert!(state.to_text().starts_with("[state]\nlast-file=/a/one.conf\n"));
+}
+
+#[test]
+fn the_recent_list_has_no_duplicates_and_a_limit() {
+    let mut s = State::default();
+    for i in 0..12 {
+        s.remember(std::path::Path::new(&format!("/t/{i}.conf")));
+    }
+    s.remember(std::path::Path::new("/t/5.conf"));
+    assert_eq!(s.recent.len(), RECENT_MAX);
+    assert_eq!(s.recent[0], PathBuf::from("/t/5.conf"));
+    assert_eq!(s.recent.iter().filter(|p| **p == PathBuf::from("/t/5.conf")).count(), 1);
+}
+
+#[test]
+fn the_open_file_section_and_variant_are_remembered_across_runs() {
+    let d = temp_dir("state");
+    let state = d.join("state.conf");
+    let theme = d.join("t.conf");
+    std::fs::write(&theme, "[theme]\nname=T\nkey=t\n").unwrap();
+    let (mut e, _) = Editor::with(Some(state.clone()), None);
+    e.theme_dirs = Vec::new();
+    let _ = e.update(Msg::Pick(theme.clone()));
+    let _ = e.update(Msg::Section("metrics".into()));
+    let _ = e.update(Msg::Variant(Variant::Light));
+    let _ = e.update(Msg::FolderAdded(Some(d.clone())));
+    let (again, _) = Editor::with(Some(state.clone()), None);
+    assert_eq!(again.path, Some(theme.clone()), "reopens the last file");
+    assert_eq!(again.section, "metrics");
+    assert_eq!(again.variant, Variant::Light);
+    assert_eq!(again.state.folders, vec![d.clone()]);
+    assert!(again.presets.iter().any(|p| p.path == theme));
+    // A file on the command line wins over the last one.
+    let other = d.join("o.conf");
+    std::fs::write(&other, "").unwrap();
+    let (cli, _) = Editor::with(Some(state), Some(other.clone()));
+    assert_eq!(cli.path, Some(other));
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn saving_remembers_the_file_as_last_and_recent() {
+    let d = temp_dir("remember");
+    let state = d.join("state.conf");
+    let (mut e, _) = Editor::with(Some(state.clone()), None);
+    e.theme_dirs = Vec::new();
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let file = d.join("mine.conf");
+    let _ = e.update(Msg::SavedAs(Some(file.clone())));
+    assert_eq!(e.state.last_file, Some(file.clone()));
+    assert_eq!(e.state.recent.first(), Some(&file));
+    assert!(read(&state).contains("mine.conf"));
+    assert!(!read(&state).contains("embedded"));
+    let _ = std::fs::remove_dir_all(d);
+}
+
+// ---------------------------------------------------------- save as + register
+
+#[test]
+fn save_as_writes_a_new_file_and_registers_it() {
+    let d = temp_dir("saveas");
+    let data = d.join("data");
+    let file = d.join("elsewhere").join("mine.conf");
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    let mut e = editor();
+    e.theme_dirs = vec![data.clone()];
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let _ = e.update(Msg::SavedAs(Some(file.clone())));
+    assert!(read(&file).contains("radius-m=7"), "the new file is written");
+    assert!(!e.dirty() && e.path == Some(file.clone()), "the editor edits the new file");
+    let link = data.join("mine.conf");
+    assert!(is_link(&link) && canon(&link) == canon(&file), "registered by a symlink");
+    assert!(e.status.starts_with("Saved and registered as"), "{}", e.status);
+    assert!(e.presets.iter().any(|p| p.path == link), "the list shows it");
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn save_as_inside_the_registry_needs_no_symlink() {
+    let d = temp_dir("saveas-in");
+    let data = d.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    let file = data.join("inside.conf");
+    let mut e = editor();
+    e.theme_dirs = vec![data.clone()];
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let _ = e.update(Msg::SavedAs(Some(file.clone())));
+    assert!(!is_link(&file) && file.is_file());
+    assert!(e.status.contains("registered already"), "{}", e.status);
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn save_as_does_not_overwrite_a_regular_file_in_the_registry_and_says_so() {
+    let d = temp_dir("saveas-clash");
+    let data = d.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("mine.conf"), "[metrics]\nradius-m=1\n").unwrap();
+    let file = d.join("mine.conf");
+    let mut e = editor();
+    e.theme_dirs = vec![data.clone()];
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let _ = e.update(Msg::SavedAs(Some(file.clone())));
+    assert!(file.is_file(), "the file is saved anyway");
+    assert_eq!(read(&data.join("mine.conf")), "[metrics]\nradius-m=1\n");
+    assert!(e.status.contains("could not register"), "{}", e.status);
+    assert!(e.toast.as_ref().is_some_and(|t| t.error));
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn save_only_updates_the_file_and_registers_nothing() {
+    let d = temp_dir("save-only");
+    let data = d.join("data");
+    let file = d.join("a.conf");
+    std::fs::write(&file, "").unwrap();
+    let mut e = editor();
+    e.theme_dirs = vec![data.clone()];
+    e.load(file.clone());
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let _ = e.update(Msg::Save);
+    assert!(read(&file).contains("radius-m=7") && !e.dirty());
+    assert!(!data.exists(), "Save does not register");
+    let _ = std::fs::remove_dir_all(d);
+}
+
+// ------------------------------------------------------------------- undo
+
+#[test]
+fn undo_and_redo_walk_the_edits_and_typing_in_one_token_is_one_step() {
+    let mut e = editor();
+    let set = |e: &mut Editor, section: &str, key: &str, v: &str| {
+        let _ = e.update(Msg::Input(section.into(), key.into(), v.into()));
+    };
+    set(&mut e, "metrics", "radius-m", "1");
+    set(&mut e, "metrics", "radius-m", "12");
+    set(&mut e, "metrics", "radius-l", "5");
+    assert_eq!(e.undo.len(), 2, "the two edits of radius-m are one step");
+    let _ = e.update(Msg::Undo);
+    assert!(e.generate().contains("radius-m=12") && !e.generate().contains("radius-l"));
+    let _ = e.update(Msg::Undo);
+    assert!(!e.generate().contains("radius-m"));
+    let _ = e.update(Msg::Redo);
+    assert!(e.generate().contains("radius-m=12"));
+    // A new edit drops what could have been redone.
+    set(&mut e, "metrics", "radius-s", "2");
+    assert!(e.redo.is_empty());
+    // The shown text follows undo.
+    let _ = e.update(Msg::Undo);
+    assert_eq!(e.texts[&("metrics".into(), "radius-m".into())], "12");
+}
+
+#[test]
+fn undo_has_a_limit_and_opening_a_file_starts_it_over() {
+    let mut e = editor();
+    for i in 0..(UNDO_MAX + 20) {
+        let _ = e.update(Msg::Toggle("colors".into(), "auto-contrast".into(), i % 2 == 0));
+    }
+    assert_eq!(e.undo.len(), UNDO_MAX);
+    let d = temp_dir("undo-open");
+    let f = d.join("a.conf");
+    std::fs::write(&f, "").unwrap();
+    e.load(f);
+    assert!(e.undo.is_empty() && e.redo.is_empty());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+// ------------------------------------------------- finding tokens, groups
+
+#[test]
+fn the_search_looks_at_names_descriptions_and_sections() {
+    let mut e = editor();
+    e.search = "radius".into();
+    let found: Vec<&Spec> = e.specs.iter().filter(|s| e.visible(s)).collect();
+    assert!(found.iter().any(|s| s.key == "radius-m"));
+    assert!(found.iter().all(|s| s.key.contains("radius") || s.doc.to_lowercase().contains("radius") || s.section.contains("radius")));
+    e.search = "NO SUCH TOKEN ANYWHERE".into();
+    assert!(e.specs.iter().all(|s| !e.visible(s)));
+    e.search.clear();
+    assert!(e.specs.iter().all(|s| e.visible(s)));
+}
+
+#[test]
+fn modified_only_shows_what_any_variant_sets_and_the_counts_follow() {
+    let mut e = with_text("[metrics]\nradius-m=4\n[dark:colors]\nwindow-bg=#101010\n");
+    e.modified_only = true;
+    let shown: Vec<(&str, &str)> = e
+        .specs
+        .iter()
+        .filter(|s| e.visible(s))
+        .map(|s| (s.section.as_str(), s.key.as_str()))
+        .collect();
+    assert_eq!(shown, [("colors", "window-bg"), ("metrics", "radius-m")]);
+    assert_eq!(e.set_count("metrics"), 1);
+    assert_eq!(e.set_count("colors"), 1, "a dark value counts");
+    assert_eq!(e.set_count("typography"), 0);
+}
+
+#[test]
+fn resetting_a_group_removes_only_what_the_current_variant_sets() {
+    let mut e = with_text("[metrics]\nradius-m=4\nradius-l=5\nspace-m=9\n[dark:metrics]\nradius-m=2\n");
+    let _ = e.update(Msg::ResetGroup("metrics".into(), "radius".into()));
+    let out = e.generate();
+    assert!(!out.contains("radius-m=4") && !out.contains("radius-l"), "{out}");
+    assert!(out.contains("space-m=9") && out.contains("[dark:metrics]"), "{out}");
+    let _ = e.update(Msg::Undo);
+    assert!(e.generate().contains("radius-l=5"), "reset is one undo step");
+}
+
+#[test]
+fn copy_from_base_fills_only_what_the_variant_does_not_set() {
+    let mut e = with_text("[theme]\nname=X\n[colors]\nwindow-bg=#111111\nview-bg=#222222\n[dark:colors]\nview-bg=#999999\n");
+    let _ = e.update(Msg::Variant(Variant::Base));
+    assert_eq!(e.copy_from_base(), 0, "nothing to copy into the base");
+    let _ = e.update(Msg::Variant(Variant::Dark));
+    let _ = e.update(Msg::CopyFromBase);
+    let out = e.generate();
+    assert!(out.contains("[dark:colors]\nwindow-bg=#111111\nview-bg=#999999\n"), "{out}");
+    assert!(!out.contains("[dark:theme]"), "the identity is not copied");
+    assert!(e.status.contains("Copied 1"), "{}", e.status);
+}
+
+// ----------------------------------------------------------------- gradients
+
+#[test]
+fn a_gradient_is_edited_by_angle_stops_and_colors() {
+    let mut e = editor();
+    let spec = e
+        .specs
+        .iter()
+        .find(|s| s.ty.kind() == iad::theme_config::Kind::Gradient)
+        .cloned()
+        .expect("the schema has gradient tokens");
+    let (s, k) = (spec.section.clone(), spec.key.clone());
+    assert!(!e.values.contains_key(&(s.clone(), k.clone())), "unset to begin with");
+    let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Start));
+    assert!(e.generate().contains(&format!("{k}=linear-gradient(90deg")), "{}", e.generate());
+    let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Angle("45".into())));
+    assert!(e.generate().contains(&format!("{k}=linear-gradient(45deg")), "{}", e.generate());
+    let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Add));
+    let g = iad::theme_config::Gradient::parse(&e.values[&(s.clone(), k.clone())]).unwrap();
+    assert_eq!(g.stops.len(), 3);
+    let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Color(0, "#ff0000".into())));
+    let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Remove(1)));
+    let g = iad::theme_config::Gradient::parse(&e.values[&(s.clone(), k.clone())]).unwrap();
+    assert_eq!(g.stops.len(), 2);
+    assert_eq!(g.stops[0].1, iced::Color::from_rgb(1.0, 0.0, 0.0));
+    let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Remove(0)));
+    assert_eq!(iad::theme_config::Gradient::parse(&e.values[&(s, k)]).unwrap().stops.len(), 2, "two stops stay");
+}
+
+// ------------------------------------------------------------------- preview
+
+#[test]
+fn editing_a_scheme_variant_previews_that_scheme() {
+    let mut e = editor();
+    let _ = e.update(Msg::Variant(Variant::Dark));
+    assert!(e.preview.dark);
+    let _ = e.update(Msg::Variant(Variant::Light));
+    assert!(!e.preview.dark);
+    let _ = e.update(Msg::PreviewDark(true));
+    let _ = e.update(Msg::Variant(Variant::Base));
+    assert!(e.preview.dark, "the base leaves the preview as chosen");
+}
+
+#[test]
+fn the_preview_follows_the_values_and_the_scheme() {
+    let mut e = editor();
+    let before = e.preview.theme.semantic.window.bg;
+    let _ = e.update(Msg::Input("colors".into(), "window-bg".into(), "#336699".into()));
+    assert_ne!(e.preview.theme.semantic.window.bg, before);
+    assert_eq!(iad::color::to_hex(e.preview.theme.semantic.window.bg), "#336699");
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "13".into()));
+    assert_eq!(e.preview.metrics.radius_m, 13.0);
+    let _ = e.update(Msg::PreviewDark(true));
+    assert!(e.preview.dark && e.preview.theme.scheme.is_dark());
+    // The editor's own chrome keeps its fixed look.
+    assert_ne!(e.theme.semantic.window.bg, iad::color::hex(0x336699));
+}
+
+#[test]
+fn the_main_menu_has_the_shortcuts_and_disables_what_does_not_apply() {
+    let e = editor();
+    let menu = e.main_menu();
+    let accels: Vec<String> = menu.accelerators().into_iter().map(|(a, _)| a).collect();
+    for a in ["Ctrl+N", "Ctrl+O", "Ctrl+S", "Ctrl+Shift+S"] {
+        assert!(accels.iter().any(|x| x == a), "{a} missing from {accels:?}");
+    }
+    assert!(!accels.iter().any(|x| x == "Ctrl+Z"), "undo is disabled with nothing to undo");
+    let mut e = editor();
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    assert!(e.main_menu().accelerators().iter().any(|(a, _)| a == "Ctrl+Z"));
+}
+
+#[test]
+fn the_views_build_in_every_mode() {
+    let mut e = editor();
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let _ = e.view();
+    e.search = "radius".into();
+    let _ = e.view();
+    e.show_preview = true;
+    e.variant = Variant::Dark;
+    let _ = e.view();
+    e.toast = Some(Notice { text: "x".into(), error: true });
+    let _ = e.view();
+}

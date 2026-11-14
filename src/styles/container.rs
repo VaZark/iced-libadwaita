@@ -16,6 +16,14 @@ fn surface(s: Surface, radius: f32) -> Style {
     }
 }
 
+/// [`surface`] painted with the theme's `[gradients] <name>` when it sets one.
+fn surface_named(theme: &Theme, name: &str, s: Surface, radius: f32) -> Style {
+    Style {
+        background: Some(theme.surface_background(name, s.bg)),
+        ..surface(s, radius)
+    }
+}
+
 /// No background; text color is inherited.
 pub fn transparent(_theme: &Theme) -> Style {
     Style::default()
@@ -23,22 +31,22 @@ pub fn transparent(_theme: &Theme) -> Style {
 
 /// `window` background.
 pub fn window(theme: &Theme) -> Style {
-    surface(theme.semantic.window, 0.0)
+    surface_named(theme, "window", theme.semantic.window, 0.0)
 }
 
 /// `.view`: lists, text areas.
 pub fn view(theme: &Theme) -> Style {
-    surface(theme.semantic.view, 0.0)
+    surface_named(theme, "view", theme.semantic.view, 0.0)
 }
 
 /// `headerbar` / `.toolbar` background.
 pub fn headerbar(theme: &Theme) -> Style {
-    surface(theme.semantic.headerbar, 0.0)
+    surface_named(theme, "headerbar", theme.semantic.headerbar, 0.0)
 }
 
 /// `.navigation-sidebar` pane background.
 pub fn sidebar(theme: &Theme) -> Style {
-    surface(theme.semantic.sidebar, 0.0)
+    surface_named(theme, "sidebar", theme.semantic.sidebar, 0.0)
 }
 
 /// Secondary sidebar pane (three-pane layouts).
@@ -52,7 +60,7 @@ pub fn dialog(theme: &Theme) -> Style {
     Style {
         border: r.border(theme.metrics.radius_window),
         shadow: r.shadow,
-        ..surface(theme.semantic.dialog, theme.metrics.radius_window)
+        ..surface_named(theme, "dialog", theme.semantic.dialog, theme.metrics.radius_window)
     }
 }
 
@@ -62,7 +70,7 @@ pub fn popover(theme: &Theme) -> Style {
     Style {
         border: r.border(theme.metrics.radius_popover),
         shadow: r.shadow,
-        ..surface(theme.semantic.popover, theme.metrics.radius_popover)
+        ..surface_named(theme, "popover", theme.semantic.popover, theme.metrics.radius_popover)
     }
 }
 
@@ -72,7 +80,7 @@ pub fn card(theme: &Theme) -> Style {
     Style {
         border: r.border(theme.metrics.radius_l),
         shadow: r.shadow,
-        ..surface(theme.semantic.card, theme.metrics.radius_l)
+        ..surface_named(theme, "card", theme.semantic.card, theme.metrics.radius_l)
     }
 }
 
@@ -84,7 +92,7 @@ pub fn card_surface(theme: &Theme) -> Style {
         // No ring: `card_shadow` draws the ring as part of the shadow (a hard 1px line over
         // the shadow beneath it reads as an outline).
         border: iced::Border::default().rounded(theme.metrics.radius_l),
-        ..surface(theme.semantic.card, theme.metrics.radius_l)
+        ..surface_named(theme, "card", theme.semantic.card, theme.metrics.radius_l)
     }
 }
 

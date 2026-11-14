@@ -20,7 +20,6 @@ type Element<'a> = iad::Element<'a, Message>;
 
 mod appshell;
 mod autocomplete_demo;
-mod chart_demo;
 mod composed_demo;
 mod data_demo;
 mod date_demo;

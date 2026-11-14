@@ -21,7 +21,6 @@ One file per libadwaita element. Each ends with an **iced mapping** section.
 - [CarouselIndicatorDots and CarouselIndicatorLines](carousel-indicators.md)
 - [Clamp](clamp.md)
 - [Container (centered content at a named maximum width)](container.md)
-- [Charts: line, bar, pie, funnel, sankey, sunburst](charts.md)
 - [ComboRow](combo-row.md)
 - [DateInput](date-input.md)
 - [DateRangeInput](date-range.md)

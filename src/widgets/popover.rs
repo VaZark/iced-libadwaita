@@ -323,13 +323,12 @@ pub fn popover_spaced<'a, M: 'a>(
     spacing: f32,
     padding: impl Into<Padding>,
 ) -> Element<'a, M> {
-    container(crate::layouts::scrolled_window(
+    crate::components::framed(container(crate::layouts::scrolled_window(
         column(items).spacing(spacing).width(Length::Fill),
     ))
     .padding(padding)
     .max_height(max_height)
-    .style(sc::popover)
-    .into()
+    .style(sc::popover), "popover")
 }
 
 impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {

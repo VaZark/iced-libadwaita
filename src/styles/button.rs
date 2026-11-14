@@ -65,17 +65,38 @@ fn apply(
         }
         (None, _) => {}
     }
+    // A gradient fill paints over the flat one; hover and pressed derive from it per stop.
+    let base = v.gradient("bg-gradient");
+    let gradient = match status {
+        Status::Active => base.cloned(),
+        Status::Hovered => v
+            .gradient("hover-bg-gradient")
+            .cloned()
+            .or_else(|| base.map(|g| g.map(|c| s.hover_fill(c)))),
+        Status::Pressed => v
+            .gradient("active-bg-gradient")
+            .cloned()
+            .or_else(|| base.map(|g| g.map(|c| s.active_fill(c)))),
+        Status::Disabled => base.map(|g| g.faded(s.opacity.disabled)),
+    };
+    if let Some(g) = gradient {
+        style.background = Some(g.background());
+    }
     if let Some(fg) = v.color("fg") {
         style.text_color = if status == Status::Disabled { disabled(fg) } else { fg };
     }
-    if let Some(c) = v.color("border") {
-        style.border.color = c;
-        if style.border.width == 0.0 {
-            style.border.width = theme.metrics.border_width;
+    // A drawn bevel (`border-style` raised, sunken, …) is the border: no solid one under it.
+    let bevelled = v.text("border-style").is_some_and(|s| s != "solid");
+    if !bevelled {
+        if let Some(c) = v.color("border") {
+            style.border.color = c;
+            if style.border.width == 0.0 {
+                style.border.width = theme.metrics.border_width;
+            }
         }
-    }
-    if let Some(w) = v.length("border-width") {
-        style.border.width = w;
+        if let Some(w) = v.length("border-width") {
+            style.border.width = w;
+        }
     }
     if let Some(r) = v.length("radius") {
         style.border.radius = r.into();

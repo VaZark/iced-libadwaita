@@ -750,11 +750,10 @@ fn pages_content<'a, M: Clone + 'a>(menu: &Menu<M>, width: f32, initial: usize) 
     let m = Metrics::desktop();
     let pad = iced::Padding::from(m.popover_padding);
     let inner = width - pad.left - pad.right;
-    container(MenuPages::new(pages, &request, inner, initial))
+    crate::components::framed(container(MenuPages::new(pages, &request, inner, initial))
         .padding(m.popover_padding)
         .max_height(360.0)
-        .style(sc::popover)
-        .into()
+        .style(sc::popover), "popover")
 }
 
 /// Large touch rows, one boxed list per section: the body of the full-page menu and of

@@ -216,7 +216,32 @@ pub fn frame<'a, M: Clone + 'a>(
     .width(Length::Fill)
     .height(Length::Fill);
 
-    stack![body, outline, grips].into()
+    // A theme can give the window a frame of its own (`[windows] frame-border-*`): a solid one in
+    // `frame-border`, or a drawn bevel colored by `[frame.window]`. The toolkit's own 1px outline
+    // is then not drawn.
+    match crate::theme_config::window_frame() {
+        None => stack![body, outline, grips].into(),
+        Some(f) => {
+            let framed: Element<'a, M> = match f.bevel {
+                Some(style) => crate::components::Bevel::new(body, "frame.window", style, f.width).into(),
+                None => container(body)
+                    .padding(f.width)
+                    .style(move |t: &Theme| iced::widget::container::Style {
+                        background: Some(iced::Background::Color(
+                            t.token_color("windows", "frame-border")
+                                .unwrap_or(t.semantic.window.fg),
+                        )),
+                        border: iced::Border {
+                            radius: radius.into(),
+                            ..iced::Border::default()
+                        },
+                        ..Default::default()
+                    })
+                    .into(),
+            };
+            stack![framed, grips].into()
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

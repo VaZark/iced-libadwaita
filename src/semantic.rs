@@ -190,7 +190,7 @@ impl Semantic {
             sidebar_border: p.sidebar_border_color,
             popover_shade: p.popover_shade_color,
             shade: p.shade_color,
-            focus_ring: alpha(p.accent_bg_color, 0.5),
+            focus_ring: p.accent_bg_color,
             selection: alpha(p.accent_bg_color, 0.3),
             osd: Surface {
                 bg: Color::from_rgba(0.0, 0.0, 0.0, 0.65),

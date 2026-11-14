@@ -445,15 +445,6 @@ impl Gallery {
             | Detail::Container
             | Detail::IconToggle
             | Detail::ClipWindow
-            | Detail::LineChart
-            | Detail::BarChart
-            | Detail::PieChart
-            | Detail::DonutChart
-            | Detail::BubbleChart
-            | Detail::ComboChart
-            | Detail::Funnel
-            | Detail::Sankey
-            | Detail::Sunburst
             | Detail::Docked
             | Detail::Tree
             | Detail::TreeRow

@@ -194,7 +194,7 @@ impl<'a, M: Clone + 'a> From<AlertDialog<'a, M>> for Element<'a, M> {
             );
         }
 
-        container(column![
+        crate::components::framed(container(column![
             container(body).padding(a.padding.unwrap_or(m.dialog_padding)),
             separator_h(),
             buttons
@@ -202,8 +202,7 @@ impl<'a, M: Clone + 'a> From<AlertDialog<'a, M>> for Element<'a, M> {
         .width(Length::Fill)
         .max_width(m.dialog_width)
         .clip(true)
-        .style(sc::dialog)
-        .into()
+        .style(sc::dialog), "dialog")
     }
 }
 
@@ -330,12 +329,11 @@ impl<'a, M: Clone + 'a> From<AboutDialog<'a, M>> for Element<'a, M> {
                     .on_press(msg),
             );
         }
-        container(c)
+        crate::components::framed(container(c)
             .width(Length::Fill)
             .max_width(m.dialog_width + 40.0)
             .clip(true)
-            .style(sc::dialog)
-            .into()
+            .style(sc::dialog), "dialog")
     }
 }
 
@@ -406,14 +404,13 @@ fn dialog_frame<'a, M: Clone + 'a>(
             ..Default::default()
         });
     let content = container(body).padding(Metrics::desktop().space_l);
-    container(crate::widgets::toolbar_view(crate::layouts::scrolled_window(content)).top_bar(bar))
+    crate::components::framed(container(crate::widgets::toolbar_view(crate::layouts::scrolled_window(content)).top_bar(bar))
         .width(Length::Fill)
         .height(Length::Fill)
         .max_width(width)
         .max_height(height)
         .clip(true)
-        .style(sc::dialog)
-        .into()
+        .style(sc::dialog), "dialog")
 }
 
 #[cfg(test)]

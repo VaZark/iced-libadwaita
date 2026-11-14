@@ -4,7 +4,7 @@ No libadwaita or GTK counterpart. The opposite of `MetaComponent`: a meta compon
 
 ## What it is
 
-Components that edit one value, shown together: a histogram over a range slider, a color box next to a hex entry, a calendar beside a date entry. Whichever part the user touches, the application receives one value through one message, and every part is built from that value on the next view, so the parts cannot disagree.
+Components that edit one value, shown together: a number entry beside a range slider, a color box next to a hex entry, a calendar beside a date entry. Whichever part the user touches, the application receives one value through one message, and every part is built from that value on the next view, so the parts cannot disagree.
 
 ## Anatomy and behavior
 

@@ -14,6 +14,28 @@ use iced::widget::{
     scrollable, slider, svg, text, text_editor, text_input, toggler,
 };
 
+/// The four colors of a drawn bevel (see [`Theme::bevel_colors`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BevelColors {
+    pub light: iced::Color,
+    pub dark: iced::Color,
+    pub light_inner: iced::Color,
+    pub dark_inner: iced::Color,
+}
+
+impl BevelColors {
+    /// The color of a tone.
+    pub fn tone(&self, tone: crate::primitives::bevel::Tone) -> iced::Color {
+        use crate::primitives::bevel::Tone;
+        match tone {
+            Tone::Light => self.light,
+            Tone::Dark => self.dark,
+            Tone::LightInner => self.light_inner,
+            Tone::DarkInner => self.dark_inner,
+        }
+    }
+}
+
 /// A libadwaita-flavoured iced theme.
 ///
 /// Holds the named [`Palette`], the derived [`Semantic`] layer, and the
@@ -156,6 +178,12 @@ impl Theme {
         if let Some(t) = cfg.typography() {
             self.typography = t;
         }
+        if let Some(flat) = cfg.bool("windows", "flat-headerbars") {
+            self.flat_headerbars = flat;
+        }
+        if let Some(c) = cfg.color("colors", "focus-ring") {
+            self.semantic.focus_ring = c;
+        }
         self.tokens = std::sync::Arc::new(cfg.tokens());
         self
     }
@@ -165,6 +193,62 @@ impl Theme {
     /// [`Schema::variant`](crate::theme_config::Schema::variant).
     pub fn variant(&self, widget: &str, name: &str) -> crate::theme_config::ResolvedVariant<'_> {
         self.tokens.variant(widget, name)
+    }
+
+    /// The gradient painting `surface` (`window`, `headerbar`, `titlebar`, `card`, …: the keys of
+    /// `[gradients]`), when the theme sets one; the surface is then drawn with it instead of its
+    /// flat color.
+    pub fn gradient(&self, surface: &str) -> Option<&crate::theme_config::Gradient> {
+        self.tokens.gradient("gradients", surface)
+    }
+
+    /// The background of `surface`: its gradient when the theme sets one, else `flat`.
+    pub fn surface_background(&self, surface: &str, flat: iced::Color) -> iced::Background {
+        match self.gradient(surface) {
+            Some(g) => g.background(),
+            None => iced::Background::Color(flat),
+        }
+    }
+
+    /// The theme's text font family, when it sets one (`[typography] font-family`).
+    pub fn font(&self) -> Option<iced::Font> {
+        self.tokens
+            .text("typography", "font-family")
+            .map(crate::theme_config::font_named)
+    }
+
+    /// The theme's monospace font family, when it sets one.
+    pub fn monospace_font(&self) -> Option<iced::Font> {
+        self.tokens
+            .text("typography", "monospace-font-family")
+            .map(crate::theme_config::font_named)
+    }
+
+    /// The width of the focus indicator: the metrics' `focus_ring_width` for `focus-style=ring`
+    /// (the default), 1px for `dotted` (iced draws a solid line; a dotted rectangle cannot be
+    /// drawn by a style), 0 for `none`.
+    pub fn focus_width(&self) -> f32 {
+        match self.tokens.text("metrics", "focus-style") {
+            Some("none") => 0.0,
+            Some("dotted") => 1.0_f32.min(self.metrics.focus_ring_width),
+            _ => self.metrics.focus_ring_width,
+        }
+    }
+
+    /// The four colors of the bevel of `section` (`frame.field`, `button.default`, …), each the
+    /// theme's key or the classic gray-frame default (white, black, `#dfdfdf`, `#808080`).
+    pub fn bevel_colors(&self, section: &str) -> BevelColors {
+        let c = |key: &str, default: u32| {
+            self.tokens
+                .color(section, key)
+                .unwrap_or_else(|| crate::color::hex(default))
+        };
+        BevelColors {
+            light: c("border-light", 0xffffff),
+            dark: c("border-dark", 0x000000),
+            light_inner: c("border-light-inner", 0xdfdfdf),
+            dark_inner: c("border-dark-inner", 0x808080),
+        }
     }
 
     /// An app theme token that is a color (see [`with_theme_config`](Self::with_theme_config)).

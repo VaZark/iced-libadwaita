@@ -3,12 +3,11 @@
 //! Each pulls [primitives](crate::primitives) (rules) and [binds](crate::binds) (event glue) and
 //! composes them with its look. Widgets and third-party widgets are built from these.
 //!
-//! * [`chart`]: the drawing pieces of the chart widgets (axis, legend, tooltip, series colors).
 
 pub(crate) mod avatar;
 pub(crate) mod badge;
+pub(crate) mod bevel;
 pub(crate) mod button;
-pub mod chart;
 pub(crate) mod controls;
 pub(crate) mod divider;
 pub(crate) mod elevated;
@@ -26,6 +25,7 @@ pub mod typography;
 pub use crate::widgets::{ThemeMode, ThemeToggle};
 pub use avatar::{Avatar, AvatarShape, avatar};
 pub use badge::{Badge, Chip, ChipSize, RoundBadge};
+pub use bevel::{Bevel, bevel_of, framed};
 pub use button::{
     ButtonContent, ButtonVariant, CircularButton, SuggestedCircularButton, ToggleGroup, ToggleItem, circular_button,
     destructive_button, flat_button, icon_button, pill_button, progress_bar, raised_button,

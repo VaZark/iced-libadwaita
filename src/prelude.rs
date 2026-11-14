@@ -20,7 +20,6 @@
 pub use crate::adaptive::{Adaptive, Hysteresis, Layouts, OutOfRange, adaptive};
 pub use crate::binds::*;
 pub use crate::breakpoints::WidthClass;
-pub use crate::components::chart;
 pub use crate::components::typography::{
     self, body, caption, heading, title_1, title_2, title_3, title_4,
 };

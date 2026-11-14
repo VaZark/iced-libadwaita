@@ -156,20 +156,6 @@ impl Page {
                     ],
                 ),
                 ("Timed", vec![n(SyncedText), n(VirtualList)]),
-                (
-                    "Charts",
-                    vec![
-                        n(LineChart),
-                        n(BarChart),
-                        n(PieChart),
-                        n(DonutChart),
-                        n(BubbleChart),
-                        n(ComboChart),
-                        n(Funnel),
-                        n(Sankey),
-                        n(Sunburst),
-                    ],
-                ),
             ],
             Page::Layout => vec![
                 (
@@ -352,15 +338,6 @@ pub enum Detail {
     Icons,
     Composed,
     SyncedText,
-    LineChart,
-    BarChart,
-    PieChart,
-    DonutChart,
-    BubbleChart,
-    ComboChart,
-    Funnel,
-    Sankey,
-    Sunburst,
     // (the last ones moved from inline demos: two or more properties)
     // Window behavior
     WindowShell,
@@ -413,17 +390,11 @@ impl Detail {
             .collect()
     }
 
-    /// How wide the page of this component reads: charts and wide demos get more room.
+    /// How wide the page of this component reads: wide demos get more room.
     pub fn container_size(self) -> lay::ContainerSize {
         use lay::ContainerSize::{Md, Sm};
         match self {
-            Detail::LineChart
-            | Detail::BarChart
-            | Detail::PieChart
-            | Detail::Funnel
-            | Detail::Sankey
-            | Detail::Sunburst
-            | Detail::Composed => Md,
+            Detail::Composed => Md,
             _ => Sm,
         }
     }
@@ -526,15 +497,6 @@ impl Detail {
             Detail::ChipGroup => "Chip group",
             Detail::History => "History",
             Detail::Composed => "Composed component",
-            Detail::LineChart => "Line chart",
-            Detail::BarChart => "Bar chart",
-            Detail::PieChart => "Pie chart",
-            Detail::DonutChart => "Donut chart",
-            Detail::BubbleChart => "Bubble chart",
-            Detail::ComboChart => "Combo chart",
-            Detail::Funnel => "Funnel",
-            Detail::Sankey => "Sankey",
-            Detail::Sunburst => "Sunburst",
             Detail::SyncedText => "Synced text",
             Detail::Motion => "Motion",
             Detail::WindowShell => "Window & sidebar",
@@ -621,15 +583,6 @@ impl Detail {
                 "Edit and preview, edit row, labels, own controls, disabled, lift"
             }
             Detail::MetaParent => "Notifies the children that announced an action",
-            Detail::LineChart => "Lines and areas: smooth, stepped, stacked, 100%",
-            Detail::BarChart => "Grouped, stacked, 100%, horizontal, histogram",
-            Detail::PieChart => "Parts of a whole, as a pie or a donut",
-            Detail::DonutChart => "Rings with the total in the middle",
-            Detail::BubbleChart => "Two axes and a size",
-            Detail::ComboChart => "Bars, lines and areas on one scale",
-            Detail::Funnel => "Stages that narrow",
-            Detail::Sankey => "Flows between nodes",
-            Detail::Sunburst => "A tree as rings",
             Detail::VirtualList => "Fixed-height rows, only those in view are built",
             Detail::MultilineEntry => "Growing multiline and single-line editors",
             Detail::PageHeader => "Cover, title, facts and actions, wide or narrow",

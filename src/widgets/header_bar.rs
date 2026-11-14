@@ -61,7 +61,13 @@ impl Default for WindowControlIcons {
 
 /// `AdwWindowTitle`: centered title with optional subtitle.
 pub fn window_title<'a, M: 'a>(title: &str, subtitle: Option<&str>) -> Element<'a, M> {
-    let mut c = column![typography::heading(title.to_string())].align_x(Horizontal::Center);
+    // Bold unless the theme's `[windows] titlebar-font-weight` says normal.
+    let name = if crate::theme_config::titlebar_bold() {
+        typography::heading(title.to_string())
+    } else {
+        typography::body(title.to_string()).wrapping(text::Wrapping::None)
+    };
+    let mut c = column![name].align_x(Horizontal::Center);
     if let Some(s) = subtitle {
         c = c.push(
             typography::caption(s.to_string())
@@ -295,6 +301,23 @@ fn ctl<'a, M: Clone + 'a>(icon: IconSource, msg: M, flat: Option<bool>) -> Eleme
     let size = crate::theme_config::window_button_size();
     let radius = crate::theme_config::window_button_radius();
     let icon_size = crate::theme_config::window_button_icon_size();
+    // A theme that names a button variant for the window buttons (`[windows] button-style`) styles
+    // them as that variant, bevel and gradient included; its radius and size are the variant's.
+    if let Some(name) = crate::theme_config::window_button_style() {
+        let face = container(icon.view(icon_size)).center(Length::Fixed(size));
+        let section = format!("button.{name}");
+        let content: Element<'a, M> = match crate::components::bevel_of(&section) {
+            Some((style, width)) => crate::components::Bevel::new(face, section, style, width)
+                .pressable(true)
+                .into(),
+            None => face.into(),
+        };
+        return iced::widget::button(content)
+            .padding(0)
+            .style(crate::styles::button::variant(&name))
+            .on_press(msg)
+            .into();
+    }
     iced::widget::button(container(icon.view(icon_size)).center(Length::Fixed(size)))
         .padding(0)
         .style(move |t: &Theme, status| {
@@ -317,6 +340,7 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
         let flat = h.flat;
         let mut start = h.start;
         let mut end = h.end;
+        let is_titlebar = h.controls.is_some();
         if let Some(c) = h.controls {
             let layout = c.layout.clone().unwrap_or_else(DecorationLayout::detect);
             let make = |b: WindowButton| -> Option<Element<'a, M>> {
@@ -360,10 +384,28 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
                 end.extend(group(buttons));
             }
         }
-        let title: Element<'a, M> = match (h.title_widget, h.title) {
+        let mut title: Element<'a, M> = match (h.title_widget, h.title) {
             (Some(w), _) => w,
             (None, Some(t)) => window_title(&t, h.subtitle.as_deref()),
             (None, None) => space().into(),
+        };
+        // The theme's title bar: the application icon, and where the title sits.
+        if is_titlebar && crate::theme_config::titlebar_icon() {
+            title = row![crate::Icon::Window.view(m.icon_size), title]
+                .spacing(m.space_xs)
+                .align_y(Vertical::Center)
+                .into();
+        }
+        let title = match crate::theme_config::titlebar_align() {
+            "start" if is_titlebar => {
+                start.push(title);
+                Element::from(space())
+            }
+            "end" if is_titlebar => {
+                end.insert(0, title);
+                Element::from(space())
+            }
+            _ => title,
         };
         let side = |items: Vec<Element<'a, M>>| -> Element<'a, M> {
             row(items)
@@ -388,11 +430,16 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
                     ..Default::default()
                 };
             }
-            iced::widget::container::Style {
+            let mut style = iced::widget::container::Style {
                 border: iced::Border::default()
                     .rounded(iced::border::top_left(corner_l).top_right(corner_r)),
                 ..sc::headerbar(t)
+            };
+            // The title bar of a window has its own gradient over the header bar's.
+            if is_titlebar && let Some(g) = t.gradient("titlebar") {
+                style.background = Some(g.background());
             }
+            style
         });
 
         let mut area = mouse_area(bar);

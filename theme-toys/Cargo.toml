@@ -1,0 +1,15 @@
+[package]
+name = "iced-adaptive-design-theme-toys"
+version = "0.1.0"
+edition = "2024"
+description = "One toy window per design language, drawn only by the theme in effect"
+publish = false
+
+[dependencies]
+iced-adaptive-design = { path = ".." }
+# Wayland only on Linux: no `x11` feature (see the gallery).
+iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "crisp", "web-colors", "thread-pool", "linux-theme-detection", "wayland", "advanced", "svg", "image", "tokio", "canvas"] }
+
+[[bin]]
+name = "theme-toys"
+path = "src/main.rs"

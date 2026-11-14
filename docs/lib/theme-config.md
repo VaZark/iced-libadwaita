@@ -111,6 +111,79 @@ let cfg = ThemeConfig::builder("org.example.App").schema(schema).build();
 
 The same convention will carry to the other widgets that take a hardcoded style per look: banners and toasts (roles), chips, badges and tags (roles), cards, rows, entries and switches. Each gets a key set of its own and a `.variant(name)`; nothing about a theme file changes.
 
+## Other design languages: gradients, bevels, window frame, font, focus
+
+A theme can take on a look that is not libadwaita's: a classic grey desktop with raised and sunken
+frames, a glossy 2000s one with gradient buttons and a thick coloured window frame. Nothing is
+hardcoded for those looks; they are tokens, typed and validated like the rest, and **a theme that
+sets none of them is drawn exactly as before.**
+
+**Gradients.** A gradient token is `linear-gradient(<angle>deg, <color> <pos>%, ...)`.
+
+```ini
+[gradients]
+titlebar=linear-gradient(90deg, #0a246a 0%, #a6caf0 100%)   # navy to light blue, left to right
+progress=linear-gradient(180deg, #5dd05d, #1e9a1e)           # positions spread evenly
+```
+
+The angle is CSS's (`0deg` up, `90deg` right, `180deg` down). Two to eight stops; a color is any
+form a color token takes; a given position is in `0..=100` and does not decrease, a missing one is
+spread evenly between its neighbours. Anything else is refused with a warning. Surfaces:
+`[gradients] window`, `view`, `headerbar`, `titlebar` (the title bar of a client-side decorated
+window, over `headerbar`), `sidebar`, `card`, `popover`, `dialog`, `progress`. A button variant takes
+`bg-gradient`, `hover-bg-gradient` and `active-bg-gradient`; without the last two the hover and
+pressed gradients are the base one with each stop lightened or darkened like a flat fill.
+
+**Bevels.** iced draws one border color per quad, so a two-tone frame is drawn by
+`components::Bevel`. A variant or a frame asks for one with `border-style`:
+
+```ini
+[button.default]
+border-style=raised          # solid (the toolkit's own border), raised, sunken, etched, bump, window
+border-width=2px             # 1 or 2 rings (1px each)
+border-light=#ffffff         # outer light edge       (top and left of a raised frame)
+border-dark=#000000          # outer dark edge        (bottom and right)
+border-light-inner=#dfdfdf   # inner light edge
+border-dark-inner=#808080    # inner dark edge
+
+[frame.field]                # text fields, entries
+border-style=sunken
+```
+
+```text
+raised, 2 rings       sunken, 2 rings
+L L L L L L L D       d d d d d d d L        L border-light        l border-light-inner
+L l l l l l d D       d D D D D D l L        D border-dark         d border-dark-inner
+L l         d D       d D         l L
+L l         d D       d D         l L
+L l d d d d d D       d D l l l l l L
+D D D D D D D D       L L L L L L L L
+```
+
+`etched` is a groove and `bump` a ridge (a dark and a light line); `window` is the frame of a
+window. Unset colors are the classic gray-frame ones (white, black, `#dfdfdf`, `#808080`). A
+button drawn with a bevel sinks while it is held down. The frames the toolkit's builders use are
+`[frame.<name>]` for `window`, `card`, `field`, `well`, `panel`, `popover` and `dialog`; a
+button's is its variant's own section. A `solid` or unset style is built exactly as it was.
+Limits: the toolkit's own `check_button`, `radio_button` and `progress_bar` are iced widgets that
+a theme can only restyle, not wrap, so they take colors and gradients but not a bevel.
+
+**Window frame and title bar** (`[windows]`): `frame-border-width` (px), `frame-border` (a solid
+frame color), `frame-border-style` (`solid` or a bevel, colored by `[frame.window]`),
+`titlebar-align` (`start`, `center`, `end`), `titlebar-font-weight` (`normal`, `bold`),
+`titlebar-icon` (the application icon at the start of the title) and `button-style` (the button
+variant of the window buttons: any `[button.<name>]`, bevel and gradient included).
+
+**Font.** `[typography] font-family` and `monospace-font-family` (1 to 64 characters, no control
+characters). The toolkit's text helpers apply them; for the text it does not style, set the
+application's default font: `iced::application(..).default_font(theme_config::default_font())`
+(iced needs a `&'static str` for a family name, so each distinct name is leaked once).
+`Theme::font()` and `Theme::monospace_font()` give the fonts to an app's own text.
+
+**Focus.** `[colors] focus-ring` is the color of the indicator (unset: the accent) and
+`[metrics] focus-style` is `ring` (the default, `focus-ring-width` wide), `dotted` or `none`.
+iced styles draw a solid line, so `dotted` is a 1px ring; `none` draws no indicator.
+
 ## Typed variables and variations
 
 Declare explicit constraints with `Schema::variable`. Its fallback is optional:

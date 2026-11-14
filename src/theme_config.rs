@@ -60,7 +60,9 @@
 //! let theme = Theme::from_config(&config::current()).with_theme_config(&cfg);
 //! ```
 
+mod gradient;
 mod variable;
+pub use gradient::Gradient;
 pub use variable::{Rounding, VariableType};
 
 use crate::metrics::{Metrics, Typography};
@@ -81,6 +83,8 @@ pub enum Value {
     Length(f64),
     Percentage(f64),
     Color(Color),
+    /// A linear gradient (`linear-gradient(90deg, #000 0%, #fff 100%)`).
+    Gradient(Gradient),
     Number(f32),
     Bool(bool),
     Text(String),
@@ -94,6 +98,7 @@ pub enum Kind {
     Length,
     Percentage,
     Color,
+    Gradient,
     Number,
     Bool,
     Text,
@@ -107,6 +112,7 @@ impl Value {
             Self::Length(_) => Kind::Length,
             Self::Percentage(_) => Kind::Percentage,
             Self::Color(_) => Kind::Color,
+            Self::Gradient(_) => Kind::Gradient,
             Self::Number(_) => Kind::Number,
             Self::Bool(_) => Kind::Bool,
             Self::Text(_) => Kind::Text,
@@ -128,6 +134,7 @@ impl Value {
             Self::Length(n) => format!("{n}px"),
             Self::Percentage(n) => format!("{n}%"),
             Self::Color(c) => crate::color::to_hex(*c),
+            Self::Gradient(g) => g.to_text(),
             Self::Number(n) => n.to_string(),
             Self::Bool(b) => b.to_string(),
             Self::Text(t) => t.clone(),
@@ -177,6 +184,9 @@ pub const DEFAULT_VARIANTS: &[(&str, &[&str])] = &[(
         "osd",
         "card",
     ],
+), (
+    "frame",
+    &["window", "card", "field", "well", "panel", "popover", "dialog"],
 )];
 
 /// Which of the toolkit's [default variants](DEFAULT_VARIANTS) an app keeps.
@@ -213,36 +223,152 @@ impl DefaultVariants {
     }
 }
 
-/// A style key a widget's variants understand: a color, or a length in px up to `length_max`.
-/// Every key is optional; an unset key is what the widget's built-in look computes.
+/// What a variant key holds.
+#[derive(Clone, Copy)]
+enum KeyTy {
+    Color,
+    /// A length in px, up to the maximum.
+    Length(f64),
+    Gradient,
+    /// One of these strings.
+    Enum(&'static [&'static str]),
+}
+
+/// A style key a widget's variants understand. Every key is optional; an unset key is what the
+/// widget's built-in look computes.
+#[derive(Clone, Copy)]
 struct VariantKey {
     key: &'static str,
-    length_max: Option<f64>,
+    ty: KeyTy,
     doc: &'static str,
 }
 
-const BUTTON_KEYS: &[VariantKey] = &[
-    VariantKey { key: "bg", length_max: None, doc: "Background fill" },
-    VariantKey { key: "fg", length_max: None, doc: "Text and icon color" },
-    VariantKey { key: "border", length_max: None, doc: "Border color" },
-    VariantKey { key: "border-width", length_max: Some(16.0), doc: "Border width in px" },
-    VariantKey { key: "radius", length_max: Some(1000.0), doc: "Corner radius in px" },
-    VariantKey { key: "hover-bg", length_max: None, doc: "Background while hovered (derived from bg when unset)" },
-    VariantKey { key: "active-bg", length_max: None, doc: "Background while pressed (derived from bg when unset)" },
-];
+/// The values of a `border-style` key. `solid` is the toolkit's own border; the others are drawn
+/// by [`Bevel`](crate::components::Bevel).
+pub const BORDER_STYLES: &[&str] = &["solid", "raised", "sunken", "etched", "bump", "window"];
+
+macro_rules! key {
+    ($key:literal, color, $doc:literal) => {
+        VariantKey { key: $key, ty: KeyTy::Color, doc: $doc }
+    };
+    ($key:literal, length($max:literal), $doc:literal) => {
+        VariantKey { key: $key, ty: KeyTy::Length($max), doc: $doc }
+    };
+    ($key:literal, gradient, $doc:literal) => {
+        VariantKey { key: $key, ty: KeyTy::Gradient, doc: $doc }
+    };
+    ($key:literal, border_style, $doc:literal) => {
+        VariantKey { key: $key, ty: KeyTy::Enum(BORDER_STYLES), doc: $doc }
+    };
+}
+
+/// The bevel keys shared by every widget that can be drawn with a two-tone frame.
+macro_rules! bevel_keys {
+    () => {
+        [
+            key!("border-style", border_style, "solid (the toolkit's border) or a drawn bevel: raised, sunken, etched, bump, window"),
+            key!("border-light", color, "Bevel: the light outer edge (top and left of a raised frame)"),
+            key!("border-dark", color, "Bevel: the dark outer edge (bottom and right of a raised frame)"),
+            key!("border-light-inner", color, "Bevel: the light inner edge"),
+            key!("border-dark-inner", color, "Bevel: the dark inner edge"),
+        ]
+    };
+}
+
+const BUTTON_KEYS: &[VariantKey] = &{
+    let bevel = bevel_keys!();
+    [
+        key!("bg", color, "Background fill"),
+        key!("fg", color, "Text and icon color"),
+        key!("border", color, "Border color"),
+        key!("border-width", length(16.0), "Border width in px"),
+        key!("radius", length(1000.0), "Corner radius in px"),
+        key!("hover-bg", color, "Background while hovered (derived from bg when unset)"),
+        key!("active-bg", color, "Background while pressed (derived from bg when unset)"),
+        key!("bg-gradient", gradient, "Background gradient (over bg)"),
+        key!("hover-bg-gradient", gradient, "Gradient while hovered (derived from bg-gradient when unset)"),
+        key!("active-bg-gradient", gradient, "Gradient while pressed (derived from bg-gradient when unset)"),
+        bevel[0], bevel[1], bevel[2], bevel[3], bevel[4],
+    ]
+};
+
+const FRAME_KEYS: &[VariantKey] = &{
+    let bevel = bevel_keys!();
+    [
+        key!("bg", color, "Fill of the framed surface (fields: the entry's background; unset: the toolkit's own)"),
+        key!("border-width", length(16.0), "Frame width in px (a bevel takes 1 or 2)"),
+        key!("radius", length(1000.0), "Corner radius in px (solid frames)"),
+        bevel[0], bevel[1], bevel[2], bevel[3], bevel[4],
+    ]
+};
 
 fn variant_keys(widget: &str) -> &'static [VariantKey] {
     match widget {
         "button" => BUTTON_KEYS,
+        "frame" => FRAME_KEYS,
         _ => &[],
     }
 }
 
 fn variant_key_type(k: &VariantKey) -> VariableType {
-    match k.length_max {
-        Some(max) => VariableType::Length { min: Some(0.0), max: Some(max) },
-        None => VariableType::Color,
+    match k.ty {
+        KeyTy::Color => VariableType::Color,
+        KeyTy::Length(max) => VariableType::Length { min: Some(0.0), max: Some(max) },
+        KeyTy::Gradient => VariableType::Gradient,
+        KeyTy::Enum(values) => VariableType::String {
+            values: values.iter().map(|v| v.to_string()).collect(),
+            accepts_random: false,
+        },
     }
+}
+
+/// The surfaces a `[gradients]` token can paint, and what each is.
+pub const GRADIENT_SURFACES: &[(&str, &str)] = &[
+    ("window", "The window background"),
+    ("view", "Content views and text areas"),
+    ("headerbar", "Header bars and toolbars"),
+    ("titlebar", "The title bar of a client-side decorated window (over headerbar)"),
+    ("sidebar", "The sidebar pane"),
+    ("card", "Cards and boxed lists"),
+    ("popover", "Popovers and menus"),
+    ("dialog", "Dialogs"),
+    ("progress", "The filled part of a progress bar"),
+];
+
+/// The enum values of `[windows] titlebar-align`.
+pub const TITLEBAR_ALIGNS: &[&str] = &["start", "center", "end"];
+/// The enum values of `[windows] titlebar-font-weight`.
+pub const TITLEBAR_WEIGHTS: &[&str] = &["normal", "bold"];
+/// The enum values of `[metrics] focus-style`.
+pub const FOCUS_STYLES: &[&str] = &["ring", "dotted", "none"];
+
+fn enum_type(values: &[&str]) -> VariableType {
+    VariableType::String {
+        values: values.iter().map(|v| v.to_string()).collect(),
+        accepts_random: false,
+    }
+}
+
+/// Declares the tokens that let a theme take on another design language: gradients, window
+/// frame, font, focus.
+fn declare_design_tokens(mut s: Schema) -> Schema {
+    for (key, doc) in GRADIENT_SURFACES {
+        s = s.variable("gradients", key, VariableType::Gradient, None, &format!("{doc}: a gradient over the flat color (unset: flat)"));
+    }
+    let len = |max: f64| VariableType::Length { min: Some(0.0), max: Some(max) };
+    s = s.variable("windows", "frame-border-width", len(32.0), None, "Width of the frame around a client-side decorated window, in px");
+    s = s.variable("windows", "frame-border", VariableType::Color, None, "Color of the window frame (a solid frame)");
+    s = s.variable("windows", "frame-border-style", enum_type(BORDER_STYLES), None, "solid, or a bevel: raised, sunken, etched, bump, window (colors from [frame.window])");
+    s = s.variable("windows", "titlebar-align", enum_type(TITLEBAR_ALIGNS), None, "Where the window title sits: start, center or end");
+    s = s.variable("windows", "titlebar-font-weight", enum_type(TITLEBAR_WEIGHTS), None, "Weight of the window title: normal or bold");
+    s = s.variable("windows", "flat-headerbars", VariableType::Bool, None, "Header bars with no background of their own (libadwaita's flat bars); false for a title bar with a color or gradient. Over the desktop's [appearance] flat-headerbars");
+    s = s.variable("windows", "titlebar-icon", VariableType::Bool, None, "Show the application icon at the start of the title bar");
+    s = s.variable("windows", "button-style", VariableType::String { values: vec![], accepts_random: true }, None, "The button variant of the window buttons (default: flat)");
+    s = s.variable("typography", "font-family", VariableType::Font, None, "The text font family (unset: the system default)");
+    s = s.variable("typography", "monospace-font-family", VariableType::Font, None, "The monospace font family");
+    s = s.variable("colors", "focus-ring", VariableType::Color, None, "The focus indicator color (unset: the accent at half strength)");
+    s = s.variable("metrics", "focus-style", enum_type(FOCUS_STYLES), None, "How focus is drawn: ring, dotted (a 1px dotted rectangle) or none");
+    s
 }
 
 impl Schema {
@@ -499,6 +625,7 @@ impl Schema {
             None,
             "Diameter of a circular button (unset: the button height)",
         );
+        s = declare_design_tokens(s);
         s = s.variable(
             "theme",
             "default-variants",
@@ -1488,6 +1615,10 @@ impl ResolvedVariant<'_> {
     pub fn text(&self, key: &str) -> Option<&str> {
         self.tokens.text(&self.section, key)
     }
+    /// A gradient token (`bg-gradient`, …).
+    pub fn gradient(&self, key: &str) -> Option<&Gradient> {
+        self.tokens.gradient(&self.section, key)
+    }
 }
 
 /// The resolved tokens a [`Theme`](crate::Theme) carries, so a style function can read an app's
@@ -1525,6 +1656,13 @@ impl Tokens {
     pub fn text(&self, section: &str, key: &str) -> Option<&str> {
         match self.get(section, key)? {
             Value::Text(t) => Some(t),
+            _ => None,
+        }
+    }
+    /// A gradient token (`[gradients] titlebar`, `bg-gradient` of a variant, …).
+    pub fn gradient(&self, section: &str, key: &str) -> Option<&Gradient> {
+        match self.get(section, key)? {
+            Value::Gradient(g) => Some(g),
             _ => None,
         }
     }
@@ -1602,6 +1740,105 @@ pub fn palette_default(scheme: Scheme, key: &str) -> Option<Color> {
 /// theme leaves it unset (the button height applies).
 pub fn circular_button_size() -> Option<f32> {
     current().number("metrics", "circular-button-size")
+}
+
+/// A font family name as a `&'static str`, which `iced::font::Family::Name` needs: each distinct
+/// name is leaked once.
+fn intern(name: &str) -> &'static str {
+    static NAMES: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+    let mut names = NAMES.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(n) = names.iter().find(|n| **n == name) {
+        return n;
+    }
+    let leaked: &'static str = Box::leak(name.to_string().into_boxed_str());
+    names.push(leaked);
+    leaked
+}
+
+/// The font for a family name (see [`font`]).
+pub(crate) fn font_named(name: &str) -> iced::Font {
+    iced::Font {
+        family: iced::font::Family::Name(intern(name)),
+        ..iced::Font::DEFAULT
+    }
+}
+
+/// The theme's text font (`[typography] font-family`), `None` when unset (the system default).
+pub fn font() -> Option<iced::Font> {
+    let cfg = current();
+    let name = cfg.text("typography", "font-family")?;
+    Some(iced::Font {
+        family: iced::font::Family::Name(intern(name)),
+        ..iced::Font::DEFAULT
+    })
+}
+
+/// The theme's monospace font (`[typography] monospace-font-family`), `None` when unset.
+pub fn monospace_font() -> Option<iced::Font> {
+    let cfg = current();
+    let name = cfg.text("typography", "monospace-font-family")?;
+    Some(iced::Font {
+        family: iced::font::Family::Name(intern(name)),
+        ..iced::Font::DEFAULT
+    })
+}
+
+/// The font an application sets as its default so every text, including text the toolkit does
+/// not style, uses the theme's family: `iced::application(..).default_font(theme_config::default_font())`.
+/// The system default when the theme sets none.
+pub fn default_font() -> iced::Font {
+    font().unwrap_or(iced::Font::DEFAULT)
+}
+
+/// The frame around a client-side decorated window, from `[windows] frame-border-*`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WindowFrame {
+    /// `frame-border-width` in px (always above 0 here).
+    pub width: f32,
+    /// A drawn bevel (`frame-border-style` raised, window, …, colored by `[frame.window]`), or
+    /// `None` for a solid frame in `frame-border`.
+    pub bevel: Option<crate::primitives::bevel::BevelStyle>,
+}
+
+/// The window frame the theme asks for, `None` when `frame-border-width` is unset or 0 (the
+/// toolkit's own 1px outline).
+pub fn window_frame() -> Option<WindowFrame> {
+    let cfg = current();
+    let width = cfg.number("windows", "frame-border-width").filter(|w| *w > 0.0)?;
+    let bevel = cfg
+        .text("windows", "frame-border-style")
+        .and_then(crate::primitives::bevel::BevelStyle::parse);
+    Some(WindowFrame { width, bevel })
+}
+
+/// Where the window title sits (`[windows] titlebar-align`): `"start"`, `"center"` (default) or
+/// `"end"`.
+pub fn titlebar_align() -> &'static str {
+    match current().text("windows", "titlebar-align") {
+        Some("start") => "start",
+        Some("end") => "end",
+        _ => "center",
+    }
+}
+
+/// Whether the window title is bold (`[windows] titlebar-font-weight`): unset is the toolkit's
+/// own bold heading.
+pub fn titlebar_bold() -> bool {
+    current().text("windows", "titlebar-font-weight") != Some("normal")
+}
+
+/// Whether the title bar shows the application icon at its start (`[windows] titlebar-icon`).
+pub fn titlebar_icon() -> bool {
+    current().bool("windows", "titlebar-icon").unwrap_or(false)
+}
+
+/// The button variant of the window buttons (`[windows] button-style`), `None` when unset (the
+/// toolkit's own round flat buttons).
+pub fn window_button_style() -> Option<String> {
+    current()
+        .text("windows", "button-style")
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
 }
 
 /// The window button edge in px (`[windows] button-size`).
@@ -2073,6 +2310,11 @@ mod libadwaita_theme_tests {
             ("terminal", include_str!("../themes/terminal.conf")),
             ("bubblegum", include_str!("../themes/bubblegum.conf")),
             ("synthwave", include_str!("../themes/synthwave.conf")),
+            ("win95", include_str!("../themes/win95.conf")),
+            ("winxp", include_str!("../themes/winxp.conf")),
+            ("win7", include_str!("../themes/win7.conf")),
+            ("mac", include_str!("../themes/mac.conf")),
+            ("gnome2", include_str!("../themes/gnome2.conf")),
         ] {
             let report = Schema::toolkit().validate(text);
             assert!(report.errors.is_empty(), "{name}: {:?}", report.errors);
@@ -2395,5 +2637,164 @@ mod variant_tests {
         );
         let t = build(ThemeConfig::builder("t").schema(schema).app_text(""));
         assert_eq!(bg(sb::suggested(&t, Status::Active)), hex(0x0000aa));
+    }
+}
+
+#[cfg(test)]
+mod design_language_tests {
+    use super::*;
+    use crate::components::bevel_of;
+    use crate::primitives::bevel::BevelStyle;
+    use iced::widget::button::Status;
+
+    const WIN95: &str = "\
+[theme]
+name=Test 95
+[colors]
+window-bg=#c0c0c0
+window-fg=#000000
+focus-ring=#000000
+[gradients]
+titlebar=linear-gradient(90deg, #000080 0%, #1084d0 100%)
+[windows]
+frame-border-width=4px
+frame-border=#c0c0c0
+frame-border-style=window
+titlebar-align=start
+titlebar-font-weight=bold
+titlebar-icon=true
+button-style=win95
+[typography]
+font-family=Tahoma
+monospace-font-family=Fixedsys
+[metrics]
+focus-style=dotted
+[button.default]
+bg=#c0c0c0
+border-style=raised
+border-width=2px
+border-light=#ffffff
+border-dark=#000000
+border-light-inner=#dfdfdf
+border-dark-inner=#808080
+bg-gradient=linear-gradient(180deg, #ffffff 0%, #c0c0c0 100%)
+[frame.field]
+border-style=sunken
+";
+
+    fn cfg(text: &str) -> ThemeConfig {
+        ThemeConfig::builder("t").files(false).toolkit_text(text).app_text("").build()
+    }
+
+    #[test]
+    fn every_design_token_is_declared_and_a_crude_95_validates() {
+        let report = Schema::toolkit().validate(WIN95);
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        assert!(report.unknown.is_empty(), "{:?}", report.unknown);
+        let c = cfg(WIN95);
+        assert!(c.warnings().is_empty(), "{:?}", c.warnings());
+        assert!(c.unknown().is_empty(), "{:?}", c.unknown());
+    }
+
+    #[test]
+    fn invalid_design_values_are_refused() {
+        for bad in [
+            "[button.default]\nborder-style=groove\n",
+            "[typography]\nfont-family=\n",
+            "[typography]\nfont-family=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+            "[windows]\ntitlebar-align=middle\n",
+            "[windows]\ntitlebar-font-weight=heavy\n",
+            "[windows]\nframe-border-width=900px\n",
+            "[metrics]\nfocus-style=wavy\n",
+            "[gradients]\ntitlebar=linear-gradient(90deg, #000)\n",
+            "[button.default]\nbg-gradient=#ffffff\n",
+        ] {
+            let c = cfg(bad);
+            assert!(!c.warnings().is_empty(), "{bad:?} was accepted");
+        }
+    }
+
+    #[test]
+    fn a_theme_carries_gradients_fonts_focus_and_bevel_colors() {
+        let t = crate::Theme::light().with_theme_config(&cfg(WIN95));
+        let g = t.gradient("titlebar").unwrap();
+        assert_eq!((g.angle, g.stops.len()), (90.0, 2));
+        assert!(t.gradient("card").is_none());
+        assert!(matches!(
+            t.surface_background("titlebar", iced::Color::WHITE),
+            iced::Background::Gradient(_)
+        ));
+        assert!(matches!(
+            t.surface_background("card", iced::Color::WHITE),
+            iced::Background::Color(_)
+        ));
+        assert_eq!(
+            t.font().map(|f| f.family),
+            Some(iced::font::Family::Name("Tahoma"))
+        );
+        assert_eq!(t.monospace_font().map(|f| f.family), Some(iced::font::Family::Name("Fixedsys")));
+        assert_eq!(t.focus_width(), 1.0);
+        assert_eq!(t.semantic.focus_ring, crate::color::hex(0x000000));
+        let b = t.bevel_colors("button.default");
+        assert_eq!((b.light, b.dark_inner), (crate::color::hex(0xffffff), crate::color::hex(0x808080)));
+        // An unset bevel section has the classic gray-frame colors.
+        assert_eq!(t.bevel_colors("frame.nothing").dark_inner, crate::color::hex(0x808080));
+    }
+
+    #[test]
+    fn without_design_tokens_nothing_changes() {
+        let t = crate::Theme::light();
+        assert!(t.gradient("titlebar").is_none() && t.font().is_none());
+        assert_eq!(t.focus_width(), t.metrics.focus_ring_width);
+    }
+
+    #[test]
+    fn a_button_variant_with_a_gradient_fills_with_it_and_derives_its_states() {
+        let t = crate::Theme::light().with_theme_config(&cfg(WIN95));
+        let style = crate::styles::button::variant("default");
+        let bg = |s| style(&t, s).background;
+        assert!(matches!(bg(Status::Active), Some(iced::Background::Gradient(_))));
+        assert_ne!(bg(Status::Active), bg(Status::Hovered), "hover derives from the gradient");
+        assert_ne!(bg(Status::Hovered), bg(Status::Pressed));
+        assert!(matches!(bg(Status::Disabled), Some(iced::Background::Gradient(_))));
+        // The bevel is the border: no solid one is drawn under it.
+        assert_eq!(style(&t, Status::Active).border.width, 0.0);
+    }
+
+    #[test]
+    fn a_variant_without_a_gradient_or_bevel_is_as_before() {
+        let plain = crate::Theme::light();
+        let themed = crate::Theme::light().with_theme_config(&cfg("[button.flat]\nbg=#ff0000\n"));
+        let a = crate::styles::button::variant("default")(&plain, Status::Active);
+        let b = crate::styles::button::variant("default")(&themed, Status::Active);
+        assert_eq!(a.background, b.background);
+        assert_eq!(a.border.width, b.border.width);
+    }
+
+    /// The installed theme config is process-wide: one test at a time sets it, then puts it back.
+    static GLOBAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn the_installed_theme_decides_which_builders_make_a_bevel_and_which_window_frame_is_drawn() {
+        let _guard = GLOBAL.lock().unwrap_or_else(|e| e.into_inner());
+        let before = (*current()).clone();
+        assert_eq!(bevel_of("button.default"), None);
+        assert_eq!(window_frame(), None);
+        install(cfg(WIN95));
+        assert_eq!(bevel_of("button.default"), Some((BevelStyle::Raised, 2.0)));
+        assert_eq!(bevel_of("frame.field"), Some((BevelStyle::Sunken, 2.0)));
+        assert_eq!(bevel_of("button.flat"), None);
+        let f = window_frame().unwrap();
+        assert_eq!((f.width, f.bevel), (4.0, Some(BevelStyle::Window)));
+        assert_eq!(titlebar_align(), "start");
+        assert!(titlebar_bold() && titlebar_icon());
+        assert_eq!(window_button_style().as_deref(), Some("win95"));
+        assert_eq!(font().map(|f| f.family), Some(iced::font::Family::Name("Tahoma")));
+        // The builders produce elements either way.
+        let _: crate::Element<'_, u8> = crate::components::raised_button(iced::widget::space()).into();
+        let _: crate::Element<'_, u8> = crate::components::framed(iced::widget::space(), "field");
+        install(before);
+        assert_eq!(bevel_of("button.default"), None);
+        assert!(font().is_none());
     }
 }
