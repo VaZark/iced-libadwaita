@@ -78,6 +78,31 @@ Large or remote data, on one page: tables (responsive, sorting and pagination, a
 
 The gallery has no theming controls: its look is the theme file (`IAD_THEME=path.conf`, else the installed default; edit one in the theme editor, which can start the gallery with it). Layout > **Window & sidebar** has the menu presentation, the mobile sidebar (drawer or parent page), sidebar row padding and the path bar title. Layout > **Motion** has the animations switch and an easing/spring player.
 
+## Committed-widget coverage audit
+
+Audited `src/widgets/mod.rs` at `7a6817b`, including the preceding theme/token
+change (`83b7945`) and recent widget history. Coverage includes widgets embedded
+in other examples: ChoiceRow in playground controls, TagFilter in Entries,
+TagGroupList in Rich text, and ToolbarView in the application shell. Re-exported
+configuration types, events, constants and convenience helpers do not each need
+a separate demo.
+
+`stable_demo.rs` adds searchable detail pages for the missing examples:
+
+| Group | Details |
+| --- | --- |
+| Inputs | Accent picker (named/custom colors, local selection only) |
+| Rows & Lists | Expander row with nested settings |
+| Data | Standalone SortHeader with three-state sorting of actual rows |
+| Layout | Collapsible, SectionDivider, ProfileHeader (wide/narrow), ToolbarView with HeaderBar and ActionBar |
+| Navigation | FloatingIndicator, SlidePages (forward/back), OverlaySplitView with NavigationPage/navigation_view |
+
+This scope excludes uncommitted library additions and theme-toys-specific
+rendering components (classic/block/pixel/bevel/pixmap treatments). Charts removed
+by `7a6817b` are intentionally not restored. Existing library edits are not part
+of the gallery changes. The accent picker demonstrates input; it does not alter
+the gallery's theme.
+
 ## Running
 
 ```text

@@ -30,10 +30,11 @@ mod nav;
 mod playground;
 mod plays;
 mod range_demo;
-mod rich_text_demo;
 mod reorder_demo;
 mod resizable_demo;
+mod rich_text_demo;
 mod sections_demo;
+mod stable_demo;
 mod stepper_demo;
 mod synced_demo;
 mod tree_demo;
@@ -210,6 +211,7 @@ struct Gallery {
     tree_demo: tree_demo::State,
     virtual_demo: virtual_demo::State,
     widgets_demo: widgets_demo::State,
+    stable_demo: stable_demo::State,
     /// The playground of each component page that has one.
     plays: std::collections::HashMap<Detail, playground::Playground>,
     reorder: reorder_demo::State,
@@ -327,6 +329,7 @@ enum Message {
     Tree(tree_demo::Msg),
     Virtual(virtual_demo::Msg),
     Widgets(widgets_demo::Msg),
+    Stable(stable_demo::Msg),
     /// A control of a component page's playground.
     Play(Detail, playground::Msg),
     Reorder(reorder_demo::Msg),
@@ -547,6 +550,7 @@ impl Gallery {
             tree_demo: tree_demo::State::default(),
             virtual_demo,
             widgets_demo,
+            stable_demo: stable_demo::State::default(),
             plays,
             reorder: reorder_demo::State::default(),
             form: form_demo::State::default(),
@@ -764,6 +768,7 @@ impl Gallery {
             Message::Tree(m) => return self.tree_demo.update(m).map(Message::Tree),
             Message::Virtual(m) => return self.virtual_demo.update(m).map(Message::Virtual),
             Message::Widgets(m) => return self.widgets_demo.update(m).map(Message::Widgets),
+            Message::Stable(m) => self.stable_demo.update(m),
             Message::Play(d, m) => {
                 if let Some(p) = self.plays.get_mut(&d) {
                     p.update(m);

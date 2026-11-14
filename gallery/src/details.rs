@@ -142,13 +142,16 @@ impl Gallery {
 
         // A page with a playground shows it: one live component and its controls.
         let played = self.plays.get(&d).and_then(|p| {
-            plays::build(self, d, p, m)
-                .map(|el| p.view(m, el, move |x| Message::Play(d, x)))
+            plays::build(self, d, p, m).map(|el| p.view(m, el, move |x| Message::Play(d, x)))
         });
         let body: Element<'_> = if let Some(b) = played {
             b
         } else {
             match d {
+            Detail::AccentPicker | Detail::Collapsible | Detail::ExpanderRow
+            | Detail::SectionDivider | Detail::ProfileHeader | Detail::FloatingIndicator
+            | Detail::SlidePages | Detail::SortHeader | Detail::Toolbar | Detail::OverlaySplitView =>
+                self.stable_demo.view(d, m).map(Message::Stable),
             Detail::Button => {
                 let enabled = row![
                     cmp::raised_button(lbl("Default")).on_press(Message::Noop),

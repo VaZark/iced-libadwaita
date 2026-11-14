@@ -123,6 +123,7 @@ impl Page {
                         n(Scale),
                         n(RangeSlider),
                         n(ColorPicker),
+                        n(AccentPicker),
                     ],
                 ),
                 ("Form components", vec![n(Stepper)]),
@@ -135,6 +136,7 @@ impl Page {
                         n(SwitchAndComboRows),
                         n(TreeRow),
                         n(ButtonRow),
+                        n(ExpanderRow),
                     ],
                 ),
                 ("Lists", vec![n(ItemRow)]),
@@ -143,7 +145,13 @@ impl Page {
             Page::Data => vec![
                 (
                     "Tables",
-                    vec![n(ResponsiveTable), n(Data), n(TableVirtual), n(TableAsync)],
+                    vec![
+                        n(ResponsiveTable),
+                        n(Data),
+                        n(SortHeader),
+                        n(TableVirtual),
+                        n(TableAsync),
+                    ],
                 ),
                 (
                     "Trees",
@@ -168,6 +176,9 @@ impl Page {
                         n(FlowGrid),
                         n(TableGrid),
                         n(SectionHeading),
+                        n(SectionDivider),
+                        n(ProfileHeader),
+                        n(Toolbar),
                         n(Card),
                         n(Clamp),
                         n(StatusPage),
@@ -180,6 +191,7 @@ impl Page {
                     vec![
                         n(WrapBox),
                         n(Collapse),
+                        n(Collapsible),
                         n(ClipWindow),
                         n(Divider),
                         n(Spoiler),
@@ -197,8 +209,14 @@ impl Page {
                 ),
             ],
             Page::Navigation => vec![
-                ("Switchers", vec![n(Tabs), n(ViewSwitcher), n(PathBar)]),
-                ("Paging", vec![n(Carousel), n(History)]),
+                (
+                    "Switchers",
+                    vec![n(Tabs), n(ViewSwitcher), n(PathBar), n(FloatingIndicator)],
+                ),
+                (
+                    "Paging",
+                    vec![n(Carousel), n(History), n(SlidePages), n(OverlaySplitView)],
+                ),
                 (
                     "Menus & shortcuts",
                     vec![n(MenuButton), n(ShortcutLabel), n(AnchoredPopover)],
@@ -243,6 +261,16 @@ pub enum Entry {
 /// A level-2 page: a component with two or more significantly different properties.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Detail {
+    AccentPicker,
+    Collapsible,
+    ExpanderRow,
+    SectionDivider,
+    ProfileHeader,
+    FloatingIndicator,
+    SlidePages,
+    SortHeader,
+    Toolbar,
+    OverlaySplitView,
     // Buttons
     Button,
     ButtonContent,
@@ -412,6 +440,16 @@ impl Detail {
 
     pub fn title(self) -> &'static str {
         match self {
+            Detail::AccentPicker => "Accent picker",
+            Detail::Collapsible => "Collapsible",
+            Detail::ExpanderRow => "Expander row",
+            Detail::SectionDivider => "Section divider",
+            Detail::ProfileHeader => "Profile header",
+            Detail::FloatingIndicator => "Floating indicator",
+            Detail::SlidePages => "Sliding pages",
+            Detail::SortHeader => "Sort header",
+            Detail::Toolbar => "Toolbar & action bar",
+            Detail::OverlaySplitView => "Overlay split view",
             Detail::Button => "Button",
             Detail::ButtonContent => "Button content",
             Detail::ToggleGroup => "Toggle group",
@@ -505,6 +543,30 @@ impl Detail {
 
     pub fn description(self) -> &'static str {
         match self {
+            Detail::AccentPicker => {
+                "Named accents and an editable custom color, with local selection state."
+            }
+            Detail::Collapsible => {
+                "A controlled disclosure with a custom trigger and animated body."
+            }
+            Detail::ExpanderRow => "A disclosure row revealing nested settings.",
+            Detail::SectionDivider => {
+                "A section boundary with a count and controlled collapse state."
+            }
+            Detail::ProfileHeader => {
+                "A profile image, identity and actions in wide or narrow layouts."
+            }
+            Detail::FloatingIndicator => "A sliding highlight behind custom switcher buttons.",
+            Detail::SlidePages => {
+                "Forward and backward page transitions driven by navigation depth."
+            }
+            Detail::SortHeader => {
+                "Standalone sortable columns with real three-state data ordering."
+            }
+            Detail::Toolbar => "A content view framed by a header and a bottom action bar.",
+            Detail::OverlaySplitView => {
+                "A sidebar that can become a dismissible overlay beside a navigation page."
+            }
             Detail::Button => "Styles, shapes and their disabled states",
             Detail::ButtonContent => "Icon and label, split button",
             Detail::ToggleGroup => "Text, icons, crowded and as a row",
