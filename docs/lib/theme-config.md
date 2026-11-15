@@ -75,6 +75,10 @@ Edit a theme file in the theme editor (`theme-editor/`), and see it in the galle
 
 ## Widget variants
 
+Responsive selection uses [breakpoint rules and logical variants](breakpoint-rules.md):
+`breakpoint-rules=xs:pills,md:outline` selects declared widget variants at the
+configured width thresholds, independently of light/dark scheme variations.
+
 A **variant** is a named set of typed style tokens that belongs to one widget. In a theme file it is the section `[<widget>.<variant>]`; every key is optional, and a key left unset is what the widget's built-in look computes from the palette, so a theme only writes what it changes.
 
 ```ini

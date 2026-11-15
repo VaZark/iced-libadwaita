@@ -28,7 +28,153 @@ fn prefix(key: &str) -> String {
     key.split('-').next().unwrap_or(key).to_string()
 }
 
+/// Keep persisted section IDs stable while presenting readable names.
+pub(crate) fn section_label(section: &str) -> String {
+    if let Some((widget, variant)) = section.split_once('.') {
+        return format!("{} · widget variant: {variant}", section_label(widget));
+    }
+    match section {
+        "tree" => "Tree · hierarchy geometry".into(),
+        "tree-row" => "Tree rows · nested settings".into(),
+        "navigation" => "Navigation · sidebars & drawers".into(),
+        _ => words(section),
+    }
+}
+
+fn words(value: &str) -> String {
+    let value = value.replace('-', " ");
+    let mut chars = value.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => value,
+    }
+}
+
+pub(crate) const RULE_CLASSES: [&str; 6] = ["xs", "sm", "md", "lg", "xl", "xxl"];
+
+pub(crate) fn declared_variants(widget: &str) -> Vec<String> {
+    iad::theme_config::Schema::toolkit()
+        .variants_declared()
+        .iter()
+        .filter(|(w, _)| w == widget)
+        .map(|(_, v)| v.clone())
+        .collect()
+}
+
+pub(crate) fn valid_rules(widget: &str, raw: &str) -> bool {
+    let names = declared_variants(widget);
+    iad::breakpoints::Rules::parse(raw, |v| names.iter().any(|n| n == v)).is_ok()
+}
+
 impl Editor {
+    fn rules_control<'a>(&'a self, spec: &Spec, raw: &str, m: iad::Metrics) -> Element<'a, Msg> {
+        let entries: Vec<(String, String)> = raw
+            .split(',')
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| {
+                s.split_once(':')
+                    .map_or((s.trim().into(), String::new()), |(b, v)| {
+                        (b.trim().into(), v.trim().into())
+                    })
+            })
+            .collect();
+        let variants = declared_variants(&spec.section);
+        let mut controls =
+            column![text("Minimum width → widget variant (not color scheme)")].spacing(m.space_xs);
+        if !valid_rules(&spec.section, raw) {
+            controls = controls.push(text("Invalid rules: choose declared variants and unique breakpoints, or remove the invalid rows."));
+        }
+        for (index, (class, variant)) in entries.iter().enumerate() {
+            let classes: Vec<String> = RULE_CLASSES
+                .iter()
+                .filter(|b| **b == class || !entries.iter().any(|(c, _)| c == **b))
+                .map(|b| b.to_string())
+                .collect();
+            let (s1, s2, s3) = (
+                spec.section.clone(),
+                spec.section.clone(),
+                spec.section.clone(),
+            );
+            controls = controls.push(
+                row![
+                    iced::widget::pick_list(classes, Some(class.clone()), move |v| Msg::Rule(
+                        s1.clone(),
+                        index,
+                        Some((Some(v), None))
+                    )),
+                    iced::widget::pick_list(variants.clone(), Some(variant.clone()), move |v| {
+                        Msg::Rule(s2.clone(), index, Some((None, Some(v))))
+                    }),
+                    cmp::flat_button(cmp::typography::label("Remove"))
+                        .on_press(Msg::Rule(s3, index, None)),
+                ]
+                .spacing(m.space_xs),
+            );
+        }
+        if entries.len() < RULE_CLASSES.len() && !variants.is_empty() {
+            controls = controls.push(
+                cmp::flat_button(cmp::typography::label("Add breakpoint rule")).on_press(
+                    Msg::Rule(spec.section.clone(), entries.len(), Some((None, None))),
+                ),
+            );
+        }
+        controls.into()
+    }
+
+    pub(crate) fn edit_rule(
+        &mut self,
+        section: String,
+        index: usize,
+        edit: Option<(Option<String>, Option<String>)>,
+    ) {
+        let raw = self
+            .texts
+            .get(&(section.clone(), "breakpoint-rules".into()))
+            .cloned()
+            .unwrap_or_default();
+        let mut entries: Vec<(String, String)> = raw
+            .split(',')
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| {
+                s.split_once(':')
+                    .map_or((s.into(), String::new()), |(b, v)| {
+                        (b.trim().into(), v.trim().into())
+                    })
+            })
+            .collect();
+        match edit {
+            None if index < entries.len() => {
+                entries.remove(index);
+            }
+            Some((class, variant)) if index < entries.len() => {
+                if let Some(v) = class {
+                    entries[index].0 = v;
+                }
+                if let Some(v) = variant {
+                    entries[index].1 = v;
+                }
+            }
+            Some(_) if index == entries.len() => {
+                if let (Some(class), Some(variant)) = (
+                    RULE_CLASSES
+                        .iter()
+                        .find(|b| !entries.iter().any(|(c, _)| c == **b)),
+                    declared_variants(&section).first(),
+                ) {
+                    entries.push((class.to_string(), variant.clone()));
+                }
+            }
+            _ => return,
+        }
+        let raw = entries
+            .iter()
+            .map(|(b, v)| format!("{b}:{v}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let _ = self.apply(Msg::Input(section, "breakpoint-rules".into(), raw));
+        self.last_edit = None;
+    }
+
     /// The tokens of `section`, grouped by the first word of their key (a word shared by at least
     /// two tokens is a group; the rest are "general").
     pub(crate) fn groups_of(&self, section: &str) -> Vec<(String, Vec<&Spec>)> {
@@ -37,7 +183,11 @@ impl Editor {
         let mut groups: Vec<(String, Vec<&Spec>)> = Vec::new();
         for s in &in_section {
             let p = prefix(&s.key);
-            let title = if count(&p) >= 2 { p } else { "general".to_string() };
+            let title = if count(&p) >= 2 {
+                p
+            } else {
+                "general".to_string()
+            };
             match groups.iter_mut().find(|(t, _)| *t == title) {
                 Some((_, v)) => v.push(s),
                 None => groups.push((title, vec![s])),
@@ -48,9 +198,10 @@ impl Editor {
 
     /// Whether the file sets the token in any variant.
     pub(crate) fn is_set_anywhere(&self, spec: &Spec) -> bool {
-        ["", "light:", "dark:"]
-            .iter()
-            .any(|p| self.values.contains_key(&(format!("{p}{}", spec.section), spec.key.clone())))
+        ["", "light:", "dark:"].iter().any(|p| {
+            self.values
+                .contains_key(&(format!("{p}{}", spec.section), spec.key.clone()))
+        })
     }
 
     /// How many tokens of `section` the file sets (in any variant).
@@ -71,6 +222,7 @@ impl Editor {
             || spec.key.to_lowercase().contains(&q)
             || spec.doc.to_lowercase().contains(&q)
             || spec.section.to_lowercase().contains(&q)
+            || section_label(&spec.section).to_lowercase().contains(&q)
     }
 
     /// The keys of `section` and group `group` that the current variant sets.
@@ -90,7 +242,10 @@ impl Editor {
         let sections: Vec<&String> = if searching {
             self.sections.iter().collect()
         } else {
-            self.sections.iter().filter(|s| **s == self.section).collect()
+            self.sections
+                .iter()
+                .filter(|s| **s == self.section)
+                .collect()
         };
         let mut page = column![].spacing(m.group_spacing);
         if let Variant::Light | Variant::Dark = self.variant {
@@ -141,9 +296,13 @@ impl Editor {
         let key = (section.to_string(), title.to_string());
         let folded = self.collapsed.contains(&key);
         let heading = if searching {
-            format!("{section} · {title}")
+            format!("{} · {}", section_label(section), words(title))
         } else {
-            title.to_string()
+            if title == "general" {
+                section_label(section)
+            } else {
+                words(title)
+            }
         };
         let set_here = self.group_keys(section, title).len();
         let mut buttons = row![].spacing(m.space_xs).align_y(Alignment::Center);
@@ -158,7 +317,11 @@ impl Editor {
         buttons = buttons.push(cmp::tooltip(
             cmp::icon_button(if folded { Icon::GoNext } else { Icon::GoDown })
                 .on_press(Msg::ToggleGroup(key.0.clone(), key.1.clone())),
-            if folded { "Show the tokens" } else { "Hide the tokens" },
+            if folded {
+                "Show the tokens"
+            } else {
+                "Hide the tokens"
+            },
             iad::components::TooltipPosition::Bottom,
         ));
         if folded {
@@ -170,7 +333,10 @@ impl Editor {
             .align_y(Alignment::Center)
             .into();
         }
-        let mut g = w::preferences_group().title(heading).header_suffix(buttons).metrics(m);
+        let mut g = w::preferences_group()
+            .title(heading)
+            .header_suffix(buttons)
+            .metrics(m);
         for spec in specs {
             g = g.push(self.token_row(spec, m));
         }
@@ -182,54 +348,72 @@ impl Editor {
         let (raw, set_here) = self.shown(spec);
         let section = spec.section.clone();
         let key = spec.key.clone();
-        let shown = self.texts.get(&(section.clone(), key.clone())).map_or("", String::as_str);
-        let default = spec.default.as_ref().map(Value::to_text).unwrap_or_default();
-        let control: Element<'a, Msg> = match &spec.ty {
-            VariableType::Bool => {
-                let (s, k) = (section.clone(), key.clone());
-                cmp::switch(raw == "true")
-                    .on_toggle(move |on| Msg::Toggle(s.clone(), k.clone(), on))
+        let shown = self
+            .texts
+            .get(&(section.clone(), key.clone()))
+            .map_or("", String::as_str);
+        let default = spec
+            .default
+            .as_ref()
+            .map(Value::to_text)
+            .unwrap_or_default();
+        let control: Element<'a, Msg> = if spec.key == "breakpoint-rules" {
+            self.rules_control(spec, shown, m)
+        } else {
+            match &spec.ty {
+                VariableType::Bool => {
+                    let (s, k) = (section.clone(), key.clone());
+                    cmp::switch(raw == "true")
+                        .on_toggle(move |on| Msg::Toggle(s.clone(), k.clone(), on))
+                        .into()
+                }
+                VariableType::String { values, .. } if !values.is_empty() => {
+                    let (s, k) = (section.clone(), key.clone());
+                    w::dropdown(values, Some(raw.clone()), move |v| {
+                        Msg::Input(s.clone(), k.clone(), v)
+                    })
                     .into()
-            }
-            VariableType::String { values, .. } if !values.is_empty() => {
-                let (s, k) = (section.clone(), key.clone());
-                w::dropdown(values, Some(raw.clone()), move |v| Msg::Input(s.clone(), k.clone(), v)).into()
-            }
-            VariableType::Color => self.color_control(&section, &key, &raw, shown, m),
-            VariableType::Gradient => self.gradient_control(&section, &key, &raw, m),
-            VariableType::Integer { .. }
-            | VariableType::Decimal { .. }
-            | VariableType::Length { .. }
-            | VariableType::Percentage { .. }
-            | VariableType::Number => {
-                let (s, k) = (section.clone(), key.clone());
-                let (lo, hi, digits, step) = bounds(&spec.ty, &spec.section);
-                let mut n = w::NumberInput::new(shown, move |v| Msg::Input(s.clone(), k.clone(), v))
-                    .decimals(digits)
-                    .step(step)
-                    .width(150.0);
-                if let Some(lo) = lo {
-                    n = n.min(lo);
                 }
-                if let Some(hi) = hi {
-                    n = n.max(hi);
+                VariableType::Color => self.color_control(&section, &key, &raw, shown, m),
+                VariableType::Gradient => self.gradient_control(&section, &key, &raw, m),
+                VariableType::Integer { .. }
+                | VariableType::Decimal { .. }
+                | VariableType::Length { .. }
+                | VariableType::Percentage { .. }
+                | VariableType::Number => {
+                    let (s, k) = (section.clone(), key.clone());
+                    let (lo, hi, digits, step) = bounds(&spec.ty, &spec.section);
+                    let mut n =
+                        w::NumberInput::new(shown, move |v| Msg::Input(s.clone(), k.clone(), v))
+                            .decimals(digits)
+                            .step(step)
+                            .width(150.0);
+                    if let Some(lo) = lo {
+                        n = n.min(lo);
+                    }
+                    if let Some(hi) = hi {
+                        n = n.max(hi);
+                    }
+                    let unit = match &spec.ty {
+                        VariableType::Length { .. } => Some("px"),
+                        VariableType::Percentage { .. } => Some("%"),
+                        _ => None,
+                    };
+                    match unit {
+                        Some(u) => row![n, text(u)]
+                            .spacing(m.space_xs)
+                            .align_y(Alignment::Center)
+                            .into(),
+                        None => n.into(),
+                    }
                 }
-                let unit = match &spec.ty {
-                    VariableType::Length { .. } => Some("px"),
-                    VariableType::Percentage { .. } => Some("%"),
-                    _ => None,
-                };
-                match unit {
-                    Some(u) => row![n, text(u)].spacing(m.space_xs).align_y(Alignment::Center).into(),
-                    None => n.into(),
+                _ => {
+                    let (s, k) = (section.clone(), key.clone());
+                    cmp::entry("", shown)
+                        .on_input(move |v| Msg::Input(s.clone(), k.clone(), v))
+                        .width(Length::Fixed(320.0))
+                        .into()
                 }
-            }
-            _ => {
-                let (s, k) = (section.clone(), key.clone());
-                cmp::entry("", shown)
-                    .on_input(move |v| Msg::Input(s.clone(), k.clone(), v))
-                    .width(Length::Fixed(320.0))
-                    .into()
             }
         };
         let reset: Element<'a, Msg> = if set_here {
@@ -259,7 +443,11 @@ impl Editor {
         w::ActionRow::new(spec.key.as_str())
             .subtitle(format!("{}  (default {default})", spec.doc))
             .prefix(dot)
-            .suffix(row![control, reset].spacing(m.space_s).align_y(Alignment::Center))
+            .suffix(
+                row![control, reset]
+                    .spacing(m.space_s)
+                    .align_y(Alignment::Center),
+            )
             .metrics(m)
             .into()
     }
@@ -282,7 +470,11 @@ impl Editor {
             let (s, k) = (s.clone(), k.clone());
             move |h: Hsva| {
                 let (r, g, b, a) = h.to_rgba();
-                Msg::Input(s.clone(), k.clone(), iad::color::to_hex(Color::from_rgba(r, g, b, a)))
+                Msg::Input(
+                    s.clone(),
+                    k.clone(),
+                    iad::color::to_hex(Color::from_rgba(r, g, b, a)),
+                )
             }
         })
         .alpha(true)
@@ -300,7 +492,13 @@ impl Editor {
     }
 
     /// The gradient editor: a preview strip, the angle, and the stops (color, position).
-    fn gradient_control<'a>(&'a self, section: &str, key: &str, raw: &str, m: iad::Metrics) -> Element<'a, Msg> {
+    fn gradient_control<'a>(
+        &'a self,
+        section: &str,
+        key: &str,
+        raw: &str,
+        m: iad::Metrics,
+    ) -> Element<'a, Msg> {
         let Some(g) = Gradient::parse(raw) else {
             return row![
                 text("None: the flat color shows")
@@ -337,12 +535,15 @@ impl Editor {
             });
         let angle = row![
             text("Angle").size(m.space_m + 1.0),
-            cmp::entry("90", self.gtexts.get(&at("angle")).cloned().unwrap_or_default())
-                .on_input({
-                    let (s, k) = (s.clone(), k.clone());
-                    move |v| edit(GradEdit::Angle(v), &s, &k)
-                })
-                .width(Length::Fixed(80.0)),
+            cmp::entry(
+                "90",
+                self.gtexts.get(&at("angle")).cloned().unwrap_or_default()
+            )
+            .on_input({
+                let (s, k) = (s.clone(), k.clone());
+                move |v| edit(GradEdit::Angle(v), &s, &k)
+            })
+            .width(Length::Fixed(80.0)),
             text("deg").size(m.space_m + 1.0),
             space().width(Length::Fill),
             cmp::tooltip(
@@ -357,33 +558,41 @@ impl Editor {
         let mut stops = column![].spacing(m.space_xs);
         for (i, (_, color)) in g.stops.iter().enumerate() {
             let hex = iad::color::to_hex(*color);
-            let picker = w::ColorPicker::new(Hsva::from_rgba(color.r, color.g, color.b, color.a), {
-                let (s, k) = (s.clone(), k.clone());
-                move |h: Hsva| {
-                    let (r, gr, b, a) = h.to_rgba();
-                    Msg::Gradient(
-                        s.clone(),
-                        k.clone(),
-                        GradEdit::Color(i, iad::color::to_hex(Color::from_rgba(r, gr, b, a))),
-                    )
-                }
-            })
-            .alpha(true)
-            .width(Length::Fixed(260.0));
+            let picker =
+                w::ColorPicker::new(Hsva::from_rgba(color.r, color.g, color.b, color.a), {
+                    let (s, k) = (s.clone(), k.clone());
+                    move |h: Hsva| {
+                        let (r, gr, b, a) = h.to_rgba();
+                        Msg::Gradient(
+                            s.clone(),
+                            k.clone(),
+                            GradEdit::Color(i, iad::color::to_hex(Color::from_rgba(r, gr, b, a))),
+                        )
+                    }
+                })
+                .alpha(true)
+                .width(Length::Fixed(260.0));
             let panel = w::popover_spaced([Element::from(picker)], 420.0, m.space_s, m.space_m);
             stops = stops.push(
                 row![
                     w::Popover::new(swatch(*color), panel),
                     text(hex).size(m.space_m + 1.0).width(Length::Fixed(80.0)),
-                    cmp::entry("", self.gtexts.get(&at(&format!("pos{i}"))).cloned().unwrap_or_default())
-                        .on_input({
-                            let (s, k) = (s.clone(), k.clone());
-                            move |v| edit(GradEdit::Pos(i, v), &s, &k)
-                        })
-                        .width(Length::Fixed(70.0)),
+                    cmp::entry(
+                        "",
+                        self.gtexts
+                            .get(&at(&format!("pos{i}")))
+                            .cloned()
+                            .unwrap_or_default()
+                    )
+                    .on_input({
+                        let (s, k) = (s.clone(), k.clone());
+                        move |v| edit(GradEdit::Pos(i, v), &s, &k)
+                    })
+                    .width(Length::Fixed(70.0)),
                     text("%").size(m.space_m + 1.0),
-                    cmp::flat_button(cmp::typography::label("Remove"))
-                        .on_press_maybe((g.stops.len() > 2).then(|| edit(GradEdit::Remove(i), &s, &k))),
+                    cmp::flat_button(cmp::typography::label("Remove")).on_press_maybe(
+                        (g.stops.len() > 2).then(|| edit(GradEdit::Remove(i), &s, &k))
+                    ),
                 ]
                 .spacing(m.space_xs)
                 .align_y(Alignment::Center),
@@ -412,7 +621,10 @@ fn swatch<'a>(color: Color) -> Element<'a, Msg> {
 
 /// The limits, digits and step a number control of `ty` has. Tokens are px unless the section
 /// says otherwise: typography ratios and the scale are small decimals.
-pub(crate) fn bounds(ty: &VariableType, section: &str) -> (Option<Decimal>, Option<Decimal>, u8, Decimal) {
+pub(crate) fn bounds(
+    ty: &VariableType,
+    section: &str,
+) -> (Option<Decimal>, Option<Decimal>, u8, Decimal) {
     let d = |s: &str| Decimal::parse(s);
     match ty {
         VariableType::Integer { min, max, step, .. } => (
@@ -421,11 +633,18 @@ pub(crate) fn bounds(ty: &VariableType, section: &str) -> (Option<Decimal>, Opti
             0,
             d(&step.to_string()).unwrap_or_else(|| Decimal::from(1)),
         ),
-        VariableType::Decimal { no_decimals, min, max, step, .. } => (
+        VariableType::Decimal {
+            no_decimals,
+            min,
+            max,
+            step,
+            ..
+        } => (
             min.and_then(|v| d(&v.to_string())),
             max.and_then(|v| d(&v.to_string())),
             *no_decimals,
-            step.and_then(|v| d(&v.to_string())).unwrap_or_else(|| Decimal::from(1)),
+            step.and_then(|v| d(&v.to_string()))
+                .unwrap_or_else(|| Decimal::from(1)),
         ),
         VariableType::Length { min, max } => (
             min.and_then(|v| d(&v.to_string())),

@@ -2,13 +2,46 @@
 //! `.navigation-sidebar`, and `AdwBreakpoint`.
 
 use crate::Element;
-use crate::styles::{button as sb, container as sc};
 use crate::primitives::drag::{DropHint, Place, Targets};
+use crate::styles::{button as sb, container as sc};
 use crate::widgets::{drag_source, drop_zone_at, header_bar, toolbar_view};
 use crate::{Icon, IconSource, Metrics, Theme};
 use iced::alignment::Vertical;
 use iced::widget::{button, column, container, mouse_area, opaque, row, space, stack};
 use iced::{Length, Size};
+
+fn geometry(number: impl Fn(&str) -> Option<f32>, key: &str, fallback: f32) -> f32 {
+    number(key)
+        .filter(|v| v.is_finite() && *v >= 0.0)
+        .unwrap_or(fallback)
+}
+
+fn navigation_geometry(key: &str, fallback: f32) -> f32 {
+    geometry(
+        |key| {
+            crate::theme_config::current()
+                .tokens()
+                .variant_number("navigation", "default", key)
+        },
+        key,
+        fallback,
+    )
+}
+
+// Absolute variant/base geometry wins over the legacy metric-relative density adjustment.
+fn density_geometry(
+    tokens: &crate::theme_config::Tokens,
+    variant: &str,
+    key: &str,
+    base: f32,
+    adjustment: f32,
+) -> f32 {
+    geometry(
+        |key| tokens.variant_number("navigation", variant, key),
+        key,
+        (base + adjustment).max(0.0),
+    )
+}
 
 /// `AdwBreakpoint` condition on window width.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -60,31 +93,203 @@ pub enum SidebarPadding {
     Lg,
 }
 
+/// Resolved logical geometry for a navigation density variant.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SidebarGeometry {
+    pub row_height: f32,
+    pub row_padding: f32,
+    pub gap: f32,
+    pub inset: f32,
+}
+
+/// Resolve a named navigation variant with local tokens. Unknown names inherit neutral
+/// base geometry; built-in density names retain their legacy metric-relative defaults.
+///
+/// ```ignore
+/// let tokens = config.tokens();
+/// let name = navigation_variant_with_tokens(&tokens, available_width, "md");
+/// let geometry = navigation_geometry_with_tokens(&metrics, &tokens, &name);
+/// let list = SidebarList::new(items).spacing(geometry.gap).inset(geometry.inset);
+/// ```
+pub fn navigation_geometry_with_tokens(
+    m: &Metrics,
+    tokens: &crate::theme_config::Tokens,
+    variant: &str,
+) -> SidebarGeometry {
+    let density = match variant {
+        "sm" => SidebarPadding::Sm,
+        "lg" => SidebarPadding::Lg,
+        _ => SidebarPadding::Md,
+    };
+    let fallback = density.geometry_with_tokens(m, tokens);
+    SidebarGeometry {
+        row_height: density_geometry(tokens, variant, "row-height", fallback.row_height, 0.0),
+        row_padding: density_geometry(tokens, variant, "row-padding", fallback.row_padding, 0.0),
+        gap: density_geometry(tokens, variant, "gap", fallback.gap, 0.0),
+        inset: density_geometry(tokens, variant, "inset", fallback.inset, 0.0),
+    }
+}
+
+/// Resolve local navigation breakpoint rules from the actual available container width.
+pub fn navigation_variant_with_tokens(
+    tokens: &crate::theme_config::Tokens,
+    width: f32,
+    fallback: &str,
+) -> String {
+    crate::breakpoints::variant_for_tokens(
+        tokens,
+        "navigation",
+        &crate::breakpoints::Breakpoints::default(),
+        width,
+        fallback,
+    )
+}
+
 impl SidebarPadding {
+    /// Resolve any declared local navigation variant; unknown names inherit base geometry.
+    pub fn variant_geometry_with_tokens(
+        m: &Metrics,
+        tokens: &crate::theme_config::Tokens,
+        variant: &str,
+    ) -> SidebarGeometry {
+        navigation_geometry_with_tokens(m, tokens, variant)
+    }
+
+    /// Select a local navigation variant from container width and logical breakpoint rules.
+    pub fn variant_for_width_with_tokens(
+        tokens: &crate::theme_config::Tokens,
+        width: f32,
+        fallback: &str,
+    ) -> String {
+        navigation_variant_with_tokens(tokens, width, fallback)
+    }
+
     pub const ALL: [SidebarPadding; 3] = [Self::Sm, Self::Md, Self::Lg];
 
-    /// Nominal row height. `Lg` uses the actual text height plus vertical padding when rendered.
-    pub fn row_height(self, m: &Metrics) -> f32 {
-        m.sidebar_row_height + self.step(-8.0, 8.0)
-    }
-    /// Padding at the row's sides.
-    pub fn row_padding(self, m: &Metrics) -> f32 {
-        m.sidebar_row_padding + self.step(-4.0, 2.0)
-    }
-    /// Gap between rows.
-    pub fn gap(self, m: &Metrics) -> f32 {
-        m.sidebar_spacing + self.step(-1.0, 0.0)
-    }
-    /// Horizontal inset between the list edges and its rows.
-    pub fn inset(self, m: &Metrics) -> f32 {
-        m.sidebar_padding + self.step(-2.0, 0.0)
-    }
-    fn step(self, sm: f32, lg: f32) -> f32 {
+    /// The registered navigation variant represented by this density primitive.
+    pub const fn variant_name(self) -> &'static str {
         match self {
-            Self::Sm => sm,
-            Self::Md => 0.0,
-            Self::Lg => lg,
+            Self::Sm => "sm",
+            Self::Md => "md",
+            Self::Lg => "lg",
         }
+    }
+
+    fn resolve(self, key: &str, base: f32, sm_key: &str, sm: f32, lg_key: &str, lg: f32) -> f32 {
+        self.resolve_with_tokens(
+            &crate::theme_config::current().tokens(),
+            key,
+            base,
+            sm_key,
+            sm,
+            lg_key,
+            lg,
+        )
+    }
+
+    fn resolve_with_tokens(
+        self,
+        tokens: &crate::theme_config::Tokens,
+        key: &str,
+        base: f32,
+        sm_key: &str,
+        sm: f32,
+        lg_key: &str,
+        lg: f32,
+    ) -> f32 {
+        density_geometry(
+            tokens,
+            self.variant_name(),
+            key,
+            base,
+            match self {
+                Self::Sm => -geometry(|key| tokens.number("navigation", key), sm_key, sm),
+                Self::Md => 0.0,
+                Self::Lg => geometry(|key| tokens.number("navigation", key), lg_key, lg),
+            },
+        )
+    }
+
+    /// Resolve density geometry using local tokens, without consulting global configuration.
+    /// Absolute variant/base keys win over the legacy metric-relative reduction tokens.
+    pub fn geometry_with_tokens(
+        self,
+        m: &Metrics,
+        tokens: &crate::theme_config::Tokens,
+    ) -> SidebarGeometry {
+        SidebarGeometry {
+            row_height: self.resolve_with_tokens(
+                tokens,
+                "row-height",
+                m.sidebar_row_height,
+                "sm-height-reduction",
+                8.0,
+                "lg-height-addition",
+                8.0,
+            ),
+            row_padding: self.resolve_with_tokens(
+                tokens,
+                "row-padding",
+                m.sidebar_row_padding,
+                "sm-padding-reduction",
+                4.0,
+                "lg-padding-addition",
+                2.0,
+            ),
+            gap: self.resolve_with_tokens(
+                tokens,
+                "gap",
+                m.sidebar_spacing,
+                "sm-gap-reduction",
+                1.0,
+                "",
+                0.0,
+            ),
+            inset: self.resolve_with_tokens(
+                tokens,
+                "inset",
+                m.sidebar_padding,
+                "sm-inset-reduction",
+                2.0,
+                "",
+                0.0,
+            ),
+        }
+    }
+
+    /// Nominal row height; unset variant keys preserve metric-relative density defaults.
+    pub fn row_height(self, m: &Metrics) -> f32 {
+        self.resolve(
+            "row-height",
+            m.sidebar_row_height,
+            "sm-height-reduction",
+            8.0,
+            "lg-height-addition",
+            8.0,
+        )
+    }
+    pub fn row_padding(self, m: &Metrics) -> f32 {
+        self.resolve(
+            "row-padding",
+            m.sidebar_row_padding,
+            "sm-padding-reduction",
+            4.0,
+            "lg-padding-addition",
+            2.0,
+        )
+    }
+    pub fn gap(self, m: &Metrics) -> f32 {
+        self.resolve("gap", m.sidebar_spacing, "sm-gap-reduction", 1.0, "", 0.0)
+    }
+    pub fn inset(self, m: &Metrics) -> f32 {
+        self.resolve(
+            "inset",
+            m.sidebar_padding,
+            "sm-inset-reduction",
+            2.0,
+            "",
+            0.0,
+        )
     }
 }
 
@@ -117,7 +322,13 @@ pub fn sidebar_row_padded<'a, M: Clone + 'a>(
     padding: SidebarPadding,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
-    sidebar_row_with(icon.map(|i| i.view(m.icon_size)), label, selected, on_press, padding)
+    sidebar_row_with(
+        icon.map(|i| i.view(m.icon_size)),
+        label,
+        selected,
+        on_press,
+        padding,
+    )
 }
 
 /// A sidebar entry with its icon already built: any [`IconSource`] (an app's own SVG), tinted
@@ -160,7 +371,20 @@ pub fn sidebar_row_opening<'a, M: Clone + 'a>(
     // Settings sizes its grid from the font, not a fixed ~20px line. Keep the
     // inherited font/size and allow larger interface fonts to grow the row.
     let content = if padding == SidebarPadding::Lg {
-        let vertical = (padding.row_height(&m) - 20.0) / 2.0;
+        let vertical = (padding.row_height(&m)
+            - geometry(
+                |key| {
+                    crate::theme_config::current().tokens().variant_number(
+                        "navigation",
+                        padding.variant_name(),
+                        key,
+                    )
+                },
+                "lg-content-height",
+                20.0,
+            ))
+        .max(0.0)
+            / 2.0;
         container(
             row![
                 r,
@@ -183,7 +407,11 @@ pub fn sidebar_row_opening<'a, M: Clone + 'a>(
         .width(Length::Fill)
         .style(sb::sidebar_row(false))
         .on_press(on_press);
-    crate::layouts::highlight(btn, selected, m.radius_m, 0.10).into()
+    let opacity = crate::theme_config::current()
+        .number("navigation", "selection-opacity")
+        .filter(|v| v.is_finite() && (0.0..=1.0).contains(v))
+        .unwrap_or(0.10);
+    crate::layouts::highlight(btn, selected, m.radius_m, opacity).into()
 }
 
 /// Like [`navigation_sidebar`] but rounds the bottom corners to match a
@@ -215,16 +443,16 @@ fn sidebar_surface<'a, M: 'a>(
     // CSS has top/bottom list padding as well as horizontal row margins. The
     // last row's 2px bottom margin compensates the list's bottom padding - 2px.
     container(column(rows).spacing(gap).padding(inset))
-    .width(Length::Fill)
-    .height(Length::Fill)
-    .style(move |_: &crate::Theme| iced::widget::container::Style {
-        // Transparent: the split view's pane supplies the color (sidebar or, as a first
-        // page, content). Both bottom corners: beside content the right one reveals the pane behind
-        // (same color); when the sidebar is the whole window it is a real window corner.
-        border: iced::Border::default().rounded(iced::border::bottom(window_radius)),
-        ..Default::default()
-    })
-    .into()
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(move |_: &crate::Theme| iced::widget::container::Style {
+            // Transparent: the split view's pane supplies the color (sidebar or, as a first
+            // page, content). Both bottom corners: beside content the right one reveals the pane behind
+            // (same color); when the sidebar is the whole window it is a real window corner.
+            border: iced::Border::default().rounded(iced::border::bottom(window_radius)),
+            ..Default::default()
+        })
+        .into()
 }
 
 /// Stacks sidebar rows with `.navigation-sidebar` spacing and horizontal inset.
@@ -328,7 +556,11 @@ impl<M> SidebarItem<M> {
     }
     /// A row that cannot be moved but takes what is dropped on it (always [`Place::Inside`]):
     /// `label` is what the copy says over it.
-    pub fn drop_target(mut self, label: impl Into<String>, on_drop: impl Fn(Place) -> M + 'static) -> Self {
+    pub fn drop_target(
+        mut self,
+        label: impl Into<String>,
+        on_drop: impl Fn(Place) -> M + 'static,
+    ) -> Self {
         self.drop_only = Some((label.into(), std::rc::Rc::new(on_drop)));
         self
     }
@@ -374,9 +606,9 @@ impl<M> SidebarItem<M> {
     fn icon_view<'a>(&self, size: f32) -> Option<crate::IconView<'a>> {
         let view = self.icon.as_ref()?.view(size);
         Some(match self.tint {
-            Some(color) => view.style(move |_: &Theme, _| iced::widget::svg::Style {
-                color: Some(color),
-            }),
+            Some(color) => {
+                view.style(move |_: &Theme, _| iced::widget::svg::Style { color: Some(color) })
+            }
             None => view,
         })
     }
@@ -485,8 +717,17 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
     /// name, so it follows whatever the app does: a row that opens a page, a back button, a link
     /// elsewhere. The items given to [`new`](Self::new) after `fixed_top` are then not used.
     /// [`SidebarStyle::List`] only.
-    pub fn pages(mut self, pages: Vec<Vec<SidebarItem<M>>>, current: usize, depths: Vec<u32>) -> Self {
-        self.pages = Some(Pages { pages, current, depths });
+    pub fn pages(
+        mut self,
+        pages: Vec<Vec<SidebarItem<M>>>,
+        current: usize,
+        depths: Vec<u32>,
+    ) -> Self {
+        self.pages = Some(Pages {
+            pages,
+            current,
+            depths,
+        });
         self
     }
     /// Whether a drag of one of the [`reorder`](SidebarItem::reorder)able rows is going on: they
@@ -525,7 +766,11 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
 }
 
 /// One item as its row (with its divider above, if it has one).
-fn item_rows<'a, M: Clone + 'a>(i: SidebarItem<M>, level: SidebarPadding, dragging: bool) -> Vec<Element<'a, M>> {
+fn item_rows<'a, M: Clone + 'a>(
+    i: SidebarItem<M>,
+    level: SidebarPadding,
+    dragging: bool,
+) -> Vec<Element<'a, M>> {
     let m = Metrics::desktop();
     let line = i.divider_above.then(|| {
         Element::from(
@@ -554,7 +799,7 @@ fn item_rows<'a, M: Clone + 'a>(i: SidebarItem<M>, level: SidebarPadding, draggi
     let row: Element<'a, M> = if i.indent > 0 {
         container(row)
             .padding(iced::Padding {
-                left: INDENT * f32::from(i.indent),
+                left: navigation_geometry("indent", INDENT) * f32::from(i.indent),
                 ..iced::Padding::ZERO
             })
             .into()
@@ -565,20 +810,23 @@ fn item_rows<'a, M: Clone + 'a>(i: SidebarItem<M>, level: SidebarPadding, draggi
         (Some(re), _) => {
             let on_drop = re.on_drop;
             let nest = re.inside.is_some();
-            let mut zone = drop_zone_at(drag_source(row, re.on_start), dragging, move |p| on_drop(p))
-                .targets(if nest { Targets::Edges } else { Targets::Between })
-                .reach(level.gap(&m) / 2.0)
-                .edge_hint(DropHint::new(re.label));
+            let mut zone =
+                drop_zone_at(drag_source(row, re.on_start), dragging, move |p| on_drop(p))
+                    .targets(if nest {
+                        Targets::Edges
+                    } else {
+                        Targets::Between
+                    })
+                    .reach(level.gap(&m) / 2.0)
+                    .edge_hint(DropHint::new(re.label));
             if let Some(inside) = re.inside {
                 zone = zone.hint(DropHint::new(inside).shrink());
             }
             zone.into()
         }
-        (None, Some((label, on_drop))) => {
-            drop_zone_at(row, dragging, move |p| on_drop(p))
-                .hint(DropHint::new(label))
-                .into()
-        }
+        (None, Some((label, on_drop))) => drop_zone_at(row, dragging, move |p| on_drop(p))
+            .hint(DropHint::new(label))
+            .into(),
         (None, None) => row,
     };
     line.into_iter().chain(std::iter::once(row)).collect()
@@ -597,21 +845,44 @@ fn list_view<'a, M: Clone + 'a>(
     let inset = inset_override.unwrap_or(level.inset(&m));
     let gap = gap_override.unwrap_or(level.gap(&m));
     let rows_of = |items: Vec<SidebarItem<M>>| -> Vec<Vec<Element<'a, M>>> {
-        items.into_iter().map(|i| item_rows(i, level, dragging)).collect()
+        items
+            .into_iter()
+            .map(|i| item_rows(i, level, dragging))
+            .collect()
     };
     let stack = |rows: Vec<Vec<Element<'a, M>>>, padding: iced::Padding| {
-        column(rows.into_iter().flatten()).spacing(gap).padding(padding)
+        column(rows.into_iter().flatten())
+            .spacing(gap)
+            .padding(padding)
     };
     // Pages: the items stay, and the pages slide beneath them.
-    if let Some(Pages { pages, current, depths }) = pages {
+    if let Some(Pages {
+        pages,
+        current,
+        depths,
+    }) = pages
+    {
         let top_rows = rows_of(items);
-        let top = stack(top_rows, iced::Padding { top: inset, right: inset, bottom: 0.0, left: inset });
+        let top = stack(
+            top_rows,
+            iced::Padding {
+                top: inset,
+                right: inset,
+                bottom: 0.0,
+                left: inset,
+            },
+        );
         let slides: Vec<Element<'a, M>> = pages
             .into_iter()
             .map(|page| {
                 crate::layouts::scrolled_window(stack(
                     rows_of(page),
-                    iced::Padding { top: gap, right: inset, bottom: inset, left: inset },
+                    iced::Padding {
+                        top: gap,
+                        right: inset,
+                        bottom: inset,
+                        left: inset,
+                    },
                 ))
                 .height(Length::Fill)
                 .into()
@@ -635,16 +906,35 @@ fn list_view<'a, M: Clone + 'a>(
     // The first items stay; the rest scroll beneath them.
     let mut rest = rows;
     let top: Vec<_> = rest.drain(..fixed_top).collect();
-    let top = stack(top, iced::Padding { top: inset, right: inset, bottom: 0.0, left: inset });
-    let rest = stack(rest, iced::Padding { top: gap, right: inset, bottom: inset, left: inset });
-    container(column![top, crate::layouts::scrolled_window(rest).height(Length::Fill)])
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(move |_: &crate::Theme| iced::widget::container::Style {
-            border: iced::Border::default().rounded(iced::border::bottom(radius)),
-            ..Default::default()
-        })
-        .into()
+    let top = stack(
+        top,
+        iced::Padding {
+            top: inset,
+            right: inset,
+            bottom: 0.0,
+            left: inset,
+        },
+    );
+    let rest = stack(
+        rest,
+        iced::Padding {
+            top: gap,
+            right: inset,
+            bottom: inset,
+            left: inset,
+        },
+    );
+    container(column![
+        top,
+        crate::layouts::scrolled_window(rest).height(Length::Fill)
+    ])
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .style(move |_: &crate::Theme| iced::widget::container::Style {
+        border: iced::Border::default().rounded(iced::border::bottom(radius)),
+        ..Default::default()
+    })
+    .into()
 }
 
 fn cards_view<'a, M: Clone + 'a>(items: Vec<SidebarItem<M>>) -> Element<'a, M> {
@@ -680,7 +970,15 @@ impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
             return MetaComponent::new()
                 .width(Length::Fill)
                 .variant(SidebarStyle::List, When::from_class(class), move |_| {
-                    list_view(items.clone(), level, radius, fixed, dragging, None, (gap, inset))
+                    list_view(
+                        items.clone(),
+                        level,
+                        radius,
+                        fixed,
+                        dragging,
+                        None,
+                        (gap, inset),
+                    )
                 })
                 .variant(SidebarStyle::Cards, When::always(), move |_| {
                     cards_view(cards.clone())
@@ -807,7 +1105,7 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
         Self {
             sidebar: sidebar.into(),
             content: content.into(),
-            sidebar_width: 240.0,
+            sidebar_width: navigation_geometry("initial-sidebar-width", 240.0),
             // The desktop config decides; the constants are the fallbacks.
             fraction: crate::config::current().sidebar_fraction,
             min_width: crate::config::current().sidebar_min_width,
@@ -820,7 +1118,7 @@ impl<'a, M: 'a> NavigationSplitView<'a, M> {
             drawer_open: false,
             on_close_drawer: None,
             min_content: min_content_width(),
-            drawer_width: 280.0,
+            drawer_width: navigation_geometry("initial-drawer-width", 280.0),
         }
     }
     /// What the sidebar becomes when collapsed: [`CollapsedSidebar::Drawer`]
@@ -1018,7 +1316,7 @@ impl<'a, M: Clone + 'a> From<OverlaySplitView<'a, M>> for Element<'a, M> {
         if !v.collapsed {
             return row![
                 side,
-                container(space().width(1))
+                container(space().width(navigation_geometry("separator-width", 1.0)))
                     .height(Length::Fill)
                     .style(sc::sidebar_separator),
                 content
@@ -1078,7 +1376,10 @@ mod tests {
         enum M {
             Pick(u8),
         }
-        let places = [SidebarItem::new("All", M::Pick(0)), SidebarItem::new("Trash", M::Pick(1))];
+        let places = [
+            SidebarItem::new("All", M::Pick(0)),
+            SidebarItem::new("Trash", M::Pick(1)),
+        ];
         let root = vec![
             SidebarItem::new("Work", M::Pick(2)).opens(true),
             SidebarItem::new("Home", M::Pick(3)),
@@ -1118,7 +1419,12 @@ mod tests {
         ];
         assert_eq!(items[1].indent, 0);
         assert_eq!(items[2].indent, 1);
-        assert!(items[1].reorder.as_ref().is_some_and(|r| r.inside.is_some()));
+        assert!(
+            items[1]
+                .reorder
+                .as_ref()
+                .is_some_and(|r| r.inside.is_some())
+        );
         assert!(items[3].drop_only.is_some());
         let _: Element<'_, M> = SidebarList::new(items).fixed_top(1).dragging(true).into();
     }
@@ -1286,8 +1592,62 @@ mod spacing_params {
 
     #[test]
     fn the_list_gap_and_inset_are_parameters() {
-        let l = SidebarList::<()>::new([SidebarItem::new("a", ())]).spacing(6.0).inset(3.0);
+        let l = SidebarList::<()>::new([SidebarItem::new("a", ())])
+            .spacing(6.0)
+            .inset(3.0);
         assert_eq!((l.spacing, l.inset), (Some(6.0), Some(3.0)));
         let _: Element<'_, ()> = l.into();
+    }
+}
+
+#[cfg(test)]
+mod token_resolver_tests {
+    use super::geometry;
+
+    #[test]
+    fn geometry_preserves_metric_defaults_and_accepts_zero() {
+        assert_eq!(geometry(|_| None, "indent", 14.0), 14.0);
+        assert_eq!(geometry(|_| Some(22.0), "indent", 14.0), 22.0);
+        assert_eq!(geometry(|_| Some(0.0), "separator-width", 1.0), 0.0);
+        for invalid in [-1.0, f32::NAN, f32::INFINITY] {
+            assert_eq!(geometry(|_| Some(invalid), "indent", 14.0), 14.0);
+        }
+    }
+}
+
+#[cfg(test)]
+mod local_variant_tests {
+    use super::*;
+    use crate::theme_config::{Schema, ThemeConfig};
+
+    #[test]
+    fn local_density_variants_inherit_per_key_and_keep_legacy_defaults() {
+        let schema = Schema::toolkit()
+            .number("navigation", "row-height", 36.0, "Local row height")
+            .number("navigation", "row-padding", 12.0, "Local side padding")
+            .variant("navigation", "sm", &[]);
+        let config = ThemeConfig::builder("local-navigation")
+            .files(false)
+            .schema(schema)
+            .toolkit_text("[navigation]\nrow-padding=17\n[navigation.sm]\nrow-height=31")
+            .app_text("")
+            .build();
+        let tokens = config.tokens();
+        let m = Metrics::default();
+        let g = SidebarPadding::Sm.geometry_with_tokens(&m, &tokens);
+        assert_eq!(SidebarPadding::Sm.variant_name(), "sm");
+        assert_eq!(SidebarPadding::Md.variant_name(), "md");
+        assert_eq!(SidebarPadding::Lg.variant_name(), "lg");
+        assert_eq!(g.row_height, 31.0);
+        assert_eq!(g.row_padding, 17.0);
+        assert_eq!(g.gap, (m.sidebar_spacing - 1.0).max(0.0));
+        assert_eq!(
+            density_geometry(&tokens, "undeclared", "row-padding", 12.0, 0.0),
+            17.0
+        );
+        assert_eq!(
+            density_geometry(&tokens, "undeclared", "missing", 12.0, 0.0),
+            12.0
+        );
     }
 }

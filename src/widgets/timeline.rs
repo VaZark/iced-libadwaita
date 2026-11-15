@@ -90,8 +90,8 @@ impl<'a, M> TimelineItem<'a, M> {
 pub struct Timeline<'a, M> {
     items: Vec<TimelineItem<'a, M>>,
     active: usize,
-    bullet_size: f32,
-    line_width: f32,
+    bullet_size: Option<f32>,
+    line_width: Option<f32>,
     align: TimelineAlign,
     reverse: bool,
     metrics: Metrics,
@@ -136,8 +136,8 @@ impl<'a, M: 'a> Timeline<'a, M> {
         Self {
             items: Vec::new(),
             active,
-            bullet_size: 24.0,
-            line_width: 2.0,
+            bullet_size: None,
+            line_width: None,
             align: TimelineAlign::Left,
             reverse: false,
             metrics: Metrics::desktop(),
@@ -150,14 +150,14 @@ impl<'a, M: 'a> Timeline<'a, M> {
         self.items.push(item);
         self
     }
-    /// The bullet's diameter (default 24).
+    /// The bullet's diameter (default `button_min_height`).
     pub fn bullet_size(mut self, px: f32) -> Self {
-        self.bullet_size = px.max(8.0);
+        self.bullet_size = Some(px.max(0.0));
         self
     }
-    /// The line's thickness (default 2).
+    /// The line's thickness (default `border_width`).
     pub fn line_width(mut self, px: f32) -> Self {
-        self.line_width = px.max(1.0);
+        self.line_width = Some(px.max(0.0));
         self
     }
     /// The gap between the line and the text (default: the theme's `space_m`).
@@ -198,7 +198,7 @@ fn bullet<'a, M: 'a>(
     custom: Option<Element<'a, M>>,
     m: &Metrics,
 ) -> Element<'a, M> {
-    let inner = size * 0.55;
+    let inner = m.icon_size.min(size);
     let mark: Element<'a, M> = match (custom, status) {
         (Some(c), _) => c,
         (None, Status::Completed) => Icon::Check.colored(inner, Color::WHITE).into(),
@@ -215,7 +215,6 @@ fn bullet<'a, M: 'a>(
         (None, Status::Loading) => ty::caption("…").into(),
         (None, Status::Upcoming) => space().into(),
     };
-    let _ = m;
     container(mark)
         .width(size)
         .height(size)
@@ -232,7 +231,7 @@ fn bullet<'a, M: 'a>(
                 background: fill.map(Background::Color),
                 border: Border {
                     color: line,
-                    width: 2.0,
+                    width: t.metrics.border_width,
                     radius: (size / 2.0).into(),
                 },
                 ..Default::default()
@@ -245,17 +244,19 @@ impl<'a, M: 'a> From<Timeline<'a, M>> for Element<'a, M> {
     fn from(t: Timeline<'a, M>) -> Self {
         let m = t.metrics;
         let n = t.items.len();
+        let bullet_size = t.bullet_size.unwrap_or(m.button_min_height);
+        let line_width = t.line_width.unwrap_or(m.border_width);
         let mut col = column![].width(Length::Fill);
         for (i, item) in t.items.into_iter().enumerate() {
             let status = item_status(i, n, t.active, t.reverse, item.invalid, item.loading);
             let fill = line_fill(i, n, t.active, t.reverse);
             let last = i + 1 == n;
             let rail = column![
-                bullet(status, t.bullet_size, item.bullet, &m),
+                bullet(status, bullet_size, item.bullet, &m),
                 // The line fills what is left of the item's height.
                 container(Element::from(Rule {
                     vertical: true,
-                    thickness: t.line_width,
+                    thickness: line_width,
                     variant: item.line,
                     color: if fill == Fill::Full {
                         RuleColor::Accent
@@ -266,9 +267,10 @@ impl<'a, M: 'a> From<Timeline<'a, M>> for Element<'a, M> {
                 .height(if last { Length::Shrink } else { Length::Fill }),
             ]
             .align_x(Horizontal::Center)
-            .width(t.bullet_size);
+            .width(bullet_size);
 
-            let mut text = column![ty::heading(item.title)].spacing(t.title_spacing.unwrap_or(m.space_xs));
+            let mut text =
+                column![ty::heading(item.title)].spacing(t.title_spacing.unwrap_or(m.space_xs));
             if let Some(body) = item.body {
                 text = text.push(body);
             }
@@ -311,7 +313,10 @@ mod tests {
             .spacing(4.0)
             .title_spacing(2.0)
             .item_spacing(30.0);
-        assert_eq!((t.spacing, t.title_spacing, t.item_spacing), (Some(4.0), Some(2.0), Some(30.0)));
+        assert_eq!(
+            (t.spacing, t.title_spacing, t.item_spacing),
+            (Some(4.0), Some(2.0), Some(30.0))
+        );
         let _: Element<'_, ()> = t.into();
     }
 
@@ -360,5 +365,21 @@ mod tests {
                 .item(TimelineItem::new("Three").loading(true));
             let _: Element<'_, ()> = t.into();
         }
+    }
+}
+
+#[cfg(test)]
+mod metric_regressions {
+    use super::*;
+
+    #[test]
+    fn geometry_defaults_inherit_and_explicit_zero_is_preserved() {
+        let t = Timeline::<()>::new(0).metrics(Metrics::compact());
+        assert_eq!((t.bullet_size, t.line_width), (None, None));
+        let t = t
+            .bullet_size(0.0)
+            .line_width(0.0)
+            .metrics(Metrics::default());
+        assert_eq!((t.bullet_size, t.line_width), (Some(0.0), Some(0.0)));
     }
 }

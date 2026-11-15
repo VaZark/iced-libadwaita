@@ -196,7 +196,9 @@ pub fn arrow(dir: &str) -> Option<PixelMap> {
 pub fn window_glyph(name: &str) -> Option<PixelMap> {
     let rows: &[&str] = match name {
         // A bar at the bottom of the cell.
-        "minimize" => &["......", "......", "......", "......", "......", "XXXXXX", "XXXXXX"],
+        "minimize" => &[
+            "......", "......", "......", "......", "......", "......", "XXXXXX", "XXXXXX",
+        ],
         // A box with a thick top edge.
         "maximize" => &[
             "XXXXXXXXX",
@@ -265,22 +267,56 @@ pub fn check_box(size: u32) -> PixelMap {
     PixelMap::new(rows)
 }
 
-/// A round radio box of `size` px (at least 8): the check box's two rings bent into a circle, so
-/// the top-left half is dark and the bottom-right half light, around a fill.
+/// A round radio box of `size` px (at least 8): two rings bent into a circle, the top-left half
+/// dark and the bottom-right half light, around a fill. 12 px is the classic hand-drawn bitmap
+/// (the ring is 1px wide, outer `d`/`L`, inner `D`/`l`); other sizes are drawn by the same rule
+/// from the distance to the middle.
 pub fn radio_box(size: u32) -> PixelMap {
+    if size == 12 {
+        // Where the outer and inner rings and the fill are, per row: `(outer, inner, fill)` spans.
+        const OUTER: [&[(u32, u32)]; 12] = [
+            &[(4, 7)], &[(2, 3), (8, 9)], &[(1, 1), (10, 10)], &[(0, 0), (11, 11)],
+            &[(0, 0), (11, 11)], &[(0, 0), (11, 11)], &[(0, 0), (11, 11)], &[(0, 0), (11, 11)],
+            &[(0, 0), (11, 11)], &[(1, 1), (10, 10)], &[(2, 3), (8, 9)], &[(4, 7)],
+        ];
+        const INNER: [&[(u32, u32)]; 12] = [
+            &[], &[(4, 7)], &[(2, 3), (8, 9)], &[(1, 1), (10, 10)],
+            &[(1, 1), (10, 10)], &[(1, 1), (10, 10)], &[(1, 1), (10, 10)], &[(1, 1), (10, 10)],
+            &[(1, 1), (10, 10)], &[(2, 3), (8, 9)], &[(4, 7)], &[],
+        ];
+        const FILL: [&[(u32, u32)]; 12] = [
+            &[], &[], &[(4, 7)], &[(2, 9)], &[(2, 9)], &[(2, 9)], &[(2, 9)], &[(2, 9)], &[(2, 9)],
+            &[(4, 7)], &[], &[],
+        ];
+        let mut rows = Vec::with_capacity(12);
+        for y in 0..12u32 {
+            let mut row = vec![' '; 12];
+            let put = |row: &mut Vec<char>, spans: &[(u32, u32)], f: &dyn Fn(u32) -> char| {
+                for (a, b) in spans {
+                    for x in *a..=*b {
+                        row[x as usize] = f(x);
+                    }
+                }
+            };
+            put(&mut row, FILL[y as usize], &|_| 'F');
+            put(&mut row, INNER[y as usize], &|x| if x + y <= 11 { 'D' } else { 'l' });
+            put(&mut row, OUTER[y as usize], &|x| if x + y <= 11 { 'd' } else { 'L' });
+            rows.push(row.into_iter().collect::<String>());
+        }
+        return PixelMap::new(rows);
+    }
     let size = size.max(8);
     let n = size as i32;
     let c = (n as f32 - 1.0) / 2.0;
-    // A pixel is on ring `k` (0 outer) when its distance from the middle rounds to the radius.
+    let r = n as f32 / 2.0;
     let ring = |x: i32, y: i32| -> Option<u8> {
         let (dx, dy) = (x as f32 - c, y as f32 - c);
         let d = (dx * dx + dy * dy).sqrt();
-        let r = n as f32 / 2.0;
-        if d <= r - 0.5 && d > r - 1.5 {
+        if d <= r && d > r - 1.0 {
             Some(0)
-        } else if d <= r - 1.5 && d > r - 2.5 {
+        } else if d <= r - 1.0 && d > r - 2.0 {
             Some(1)
-        } else if d <= r - 2.5 {
+        } else if d <= r - 2.0 {
             Some(2)
         } else {
             None
@@ -290,7 +326,6 @@ pub fn radio_box(size: u32) -> PixelMap {
     for y in 0..n {
         let mut row = String::new();
         for x in 0..n {
-            // The diagonal that splits light from dark runs from the bottom-left to the top-right.
             let dark_side = x + y <= n - 1;
             row.push(match ring(x, y) {
                 Some(0) => if dark_side { 'd' } else { 'L' },
@@ -395,7 +430,7 @@ mod tests {
         assert_eq!(size(window_glyph("maximize").unwrap()), (9, 8));
         assert_eq!(size(window_glyph("close").unwrap()), (8, 7));
         assert_eq!(size(window_glyph("restore").unwrap()), (8, 9));
-        assert_eq!(size(window_glyph("minimize").unwrap()), (6, 7));
+        assert_eq!(size(window_glyph("minimize").unwrap()), (6, 8));
         assert_eq!(size(arrow("up").unwrap()), (7, 4));
         assert_eq!(size(arrow("left").unwrap()), (4, 7));
         assert!(glyph("none").is_none() && arrow("sideways").is_none());
@@ -404,9 +439,9 @@ mod tests {
     #[test]
     fn the_minimize_glyph_is_a_two_pixel_bar_on_the_bottom_row() {
         let m = window_glyph("minimize").unwrap();
-        assert_eq!(m.at(0, 4), None);
-        assert_eq!(m.at(0, 5), Some(Pixel::Ink));
-        assert_eq!(m.at(5, 6), Some(Pixel::Ink));
+        assert_eq!(m.at(0, 5), None);
+        assert_eq!(m.at(0, 6), Some(Pixel::Ink));
+        assert_eq!(m.at(5, 7), Some(Pixel::Ink));
     }
 
     #[test]
@@ -514,13 +549,5 @@ mod tests {
         assert!(progress_blocks(100.0, 0.0, 8.0, 2.0).is_empty());
         assert_eq!(progress_blocks(100.0, 1.0, 8.0, 2.0).len(), 10);
         assert_eq!(progress_blocks(100.0, 2.0, 8.0, 2.0).len(), 10);
-    }
-}
-#[cfg(test)]
-mod tmp_print {
-    #[test]
-    fn print_radio() {
-        let m = super::radio_box(12);
-        for y in 0..12 { let r: String = (0..12).map(|x| match m.at(x,y) { None=>'.', Some(super::Pixel::DarkInner)=>'d', Some(super::Pixel::Dark)=>'D', Some(super::Pixel::Light)=>'L', Some(super::Pixel::LightInner)=>'l', Some(super::Pixel::Fill)=>'F', _=>'?' }).collect(); eprintln!("R {r}"); }
     }
 }

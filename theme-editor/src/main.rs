@@ -7,17 +7,17 @@
 
 mod files;
 mod preview;
-mod toys;
 mod tokens;
+mod toys;
 mod view;
 
 #[cfg(test)]
 mod tests;
 
 use files::*;
+use iad::theme_config::{Inheritance, Schema, Spec, Value, VariableType};
 use iced::{Subscription, Task};
 use iced_adaptive_design as iad;
-use iad::theme_config::{Inheritance, Schema, Spec, Value, VariableType};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use tokens::GradEdit;
@@ -120,6 +120,7 @@ struct Editor {
     drawer: bool,
     preview: preview::Preview,
     preview_dark: bool,
+    preview_width: f32,
     /// On a narrow window the preview replaces the tokens.
     show_preview: bool,
 }
@@ -160,6 +161,8 @@ enum Msg {
     DismissToast,
     Drawer(bool),
     PreviewDark(bool),
+    PreviewWidth(f32),
+    Rule(String, usize, Option<(Option<String>, Option<String>)>),
     ShowPreview(bool),
     /// A window button or edge of the chrome.
     Window(iad::windows::Action),
@@ -225,6 +228,7 @@ impl Editor {
             drawer: false,
             preview: preview::Preview::build("", false),
             preview_dark: false,
+            preview_width: iad::breakpoints::Breakpoints::default().md,
             show_preview: false,
         };
         if let Some(s) = e.state.section.clone().filter(|s| e.sections.contains(s)) {
@@ -237,7 +241,10 @@ impl Editor {
         if let Some(path) = open {
             e.load(path);
         }
-        if let Some(s) = std::env::var("THEME_EDITOR_SECTION").ok().filter(|s| e.sections.contains(s)) {
+        if let Some(s) = std::env::var("THEME_EDITOR_SECTION")
+            .ok()
+            .filter(|s| e.sections.contains(s))
+        {
             e.section = s;
         }
         if e.path.is_none() {
@@ -327,7 +334,10 @@ impl Editor {
         self.clean = self.generate();
         self.pending = None;
         self.clear_history();
-        self.notify("New theme. Nothing is set: every token is its default.", false);
+        self.notify(
+            "New theme. Nothing is set: every token is its default.",
+            false,
+        );
         self.persist();
     }
 
@@ -356,10 +366,10 @@ impl Editor {
 
     /// Switches to a file, or to a new theme. With unsaved changes the first click only warns.
     fn pick(&mut self, target: Target) {
-        if let (Target::File(p), Some(open)) = (&target, &self.path) {
-            if canon(p) == canon(open) {
-                return;
-            }
+        if let (Target::File(p), Some(open)) = (&target, &self.path)
+            && canon(p) == canon(open)
+        {
+            return;
         }
         if self.dirty() && self.pending.as_ref() != Some(&target) {
             self.notify("● unsaved changes: click again to discard", true);
@@ -410,7 +420,10 @@ impl Editor {
                 keys.sort_by(|a, b| rank(a).cmp(&rank(b)).then(a.cmp(b)));
                 out.push_str(&format!("\n[{section}]\n"));
                 for k in keys {
-                    out.push_str(&format!("{k}={}\n", self.values[&(section.clone(), k.clone())]));
+                    out.push_str(&format!(
+                        "{k}={}\n",
+                        self.values[&(section.clone(), k.clone())]
+                    ));
                 }
             }
         }
@@ -421,9 +434,18 @@ impl Editor {
     /// symlink to what it points at. This is the only place the editor writes a theme.
     fn save_to(&mut self, path: PathBuf) -> bool {
         let text = self.generate();
+        if self.values.iter().any(|((section, key), raw)| {
+            key == "breakpoint-rules"
+                && !tokens::valid_rules(section.rsplit(':').next().unwrap_or(section), raw)
+        }) {
+            self.notify("Cannot save invalid breakpoint rules", true);
+            return false;
+        }
         match std::fs::write(&path, &text) {
             Ok(()) => {
                 self.clean = text;
+                // Edits after saving must undo back to this saved version, even in the same field.
+                self.last_edit = None;
                 self.notify(format!("Saved {}", file_name(&path)), false);
                 self.remember(&path);
                 self.path = Some(path);
@@ -454,7 +476,10 @@ impl Editor {
         }
         match register(&dir, &path) {
             Ok(_) => self.notify(format!("Saved and registered as {name}"), false),
-            Err(e) => self.notify(format!("Saved {name}, but could not register it: {e}"), true),
+            Err(e) => self.notify(
+                format!("Saved {name}, but could not register it: {e}"),
+                true,
+            ),
         }
         self.rescan();
     }
@@ -474,7 +499,13 @@ impl Editor {
         if let Some(v) = self.values.get(&(spec.section.clone(), spec.key.clone())) {
             return (v.clone(), false);
         }
-        (spec.default.as_ref().map(Value::to_text).unwrap_or_default(), false)
+        (
+            spec.default
+                .as_ref()
+                .map(Value::to_text)
+                .unwrap_or_default(),
+            false,
+        )
     }
 
     /// What a number or text control shows for `raw`: the number without its unit.
@@ -584,7 +615,9 @@ impl Editor {
         let Some(spec) = self.spec(section, key) else {
             return false;
         };
-        if spec.ty.parse(&raw).is_none() {
+        if spec.ty.parse(&raw).is_none()
+            || (key == "breakpoint-rules" && !tokens::valid_rules(section, &raw))
+        {
             return false;
         }
         let at = (self.section_of(section), key.to_string());
@@ -696,14 +729,18 @@ impl Editor {
     // ----------------------------------------------------------- registering
 
     fn registry_op(&mut self, op: Registry) {
-        let (Some(dir), Some(file)) = (self.registry().map(PathBuf::from), self.path.clone()) else {
+        let (Some(dir), Some(file)) = (self.registry().map(PathBuf::from), self.path.clone())
+        else {
             self.notify("Save the theme to a file first", true);
             return;
         };
         let done = match op {
-            Registry::Register => register(&dir, &file).map(|l| format!("Registered {} -> {}", l.display(), file.display())),
-            Registry::Unregister => unregister(&dir, &file).map(|n| format!("Unregistered {} symlink(s) of {}", n, file.display())),
-            Registry::Default => set_default(&dir, &file).map(|l| format!("{} is the default theme ({})", file.display(), l.display())),
+            Registry::Register => register(&dir, &file)
+                .map(|l| format!("Registered {} -> {}", l.display(), file.display())),
+            Registry::Unregister => unregister(&dir, &file)
+                .map(|n| format!("Unregistered {} symlink(s) of {}", n, file.display())),
+            Registry::Default => set_default(&dir, &file)
+                .map(|l| format!("{} is the default theme ({})", file.display(), l.display())),
         };
         match done {
             Ok(s) => self.notify(s, false),
@@ -720,7 +757,11 @@ impl Editor {
         let text = self.generate();
         match self.runner.launch(kind, &text, &self.bins) {
             Ok(_) => {
-                let what = if kind == "gallery" { "the gallery".to_string() } else { format!("the {kind} window") };
+                let what = if kind == "gallery" {
+                    "the gallery".to_string()
+                } else {
+                    format!("the {kind} window")
+                };
                 self.notify(
                     format!("Tried it out: {what} runs with these values from a temp file (nothing saved). Press again to restart it with new ones."),
                     false,
@@ -741,6 +782,12 @@ impl Editor {
     fn apply(&mut self, msg: Msg) -> Task<Msg> {
         match msg {
             Msg::Noop => {}
+            Msg::PreviewWidth(width) => {
+                if width.is_finite() && width > 0.0 {
+                    self.preview_width = width;
+                }
+            }
+            Msg::Rule(section, index, edit) => self.edit_rule(section, index, edit),
             Msg::Section(s) => {
                 self.section = s;
                 self.drawer = false;
@@ -771,6 +818,7 @@ impl Editor {
                 return Task::perform(
                     async {
                         rfd::AsyncFileDialog::new()
+                            .set_title("Add a folder of theme files")
                             .pick_folder()
                             .await
                             .map(|f| f.path().to_path_buf())
@@ -787,7 +835,8 @@ impl Editor {
             }
             Msg::FolderAdded(None) => {}
             Msg::Input(section, key, shown) => {
-                self.texts.insert((section.clone(), key.clone()), shown.clone());
+                self.texts
+                    .insert((section.clone(), key.clone()), shown.clone());
                 if let Some(spec) = self.spec(&section, &key) {
                     let raw = Self::raw(spec, &shown);
                     if self.set_value(&section, &key, raw) {
@@ -833,7 +882,10 @@ impl Editor {
                 let message = if n == 0 {
                     "Nothing to copy: the variant sets everything the base sets".to_string()
                 } else {
-                    format!("Copied {n} value(s) from the base into the {} variant", self.variant.label().to_lowercase())
+                    format!(
+                        "Copied {n} value(s) from the base into the {} variant",
+                        self.variant.label().to_lowercase()
+                    )
                 };
                 self.notify(message, false);
             }
@@ -843,13 +895,20 @@ impl Editor {
             Msg::Undo => self.undo(),
             Msg::Redo => self.redo(),
             Msg::Open => {
+                let directory = self
+                    .path
+                    .as_ref()
+                    .and_then(|p| p.parent())
+                    .map(PathBuf::from);
                 return Task::perform(
-                    async {
-                        rfd::AsyncFileDialog::new()
-                            .add_filter("Theme", &["conf"])
-                            .pick_file()
-                            .await
-                            .map(|f| f.path().to_path_buf())
+                    async move {
+                        let mut dialog = rfd::AsyncFileDialog::new()
+                            .set_title("Open a theme")
+                            .add_filter("Theme", &["conf"]);
+                        if let Some(dir) = directory {
+                            dialog = dialog.set_directory(dir);
+                        }
+                        dialog.pick_file().await.map(|f| f.path().to_path_buf())
                     },
                     Msg::Opened,
                 );
@@ -863,12 +922,24 @@ impl Editor {
                 None => return self.apply(Msg::SaveAs),
             },
             Msg::SaveAs => {
-                let dir = self.registry().map(PathBuf::from);
+                let dir = self
+                    .path
+                    .as_ref()
+                    .and_then(|p| p.parent())
+                    .map(PathBuf::from)
+                    .or_else(|| self.registry().map(PathBuf::from));
+                let name = self
+                    .path
+                    .as_ref()
+                    .and_then(|p| p.file_name())
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "theme.conf".into());
                 return Task::perform(
                     async move {
                         let mut dialog = rfd::AsyncFileDialog::new()
+                            .set_title("Save theme as — registers it for apps")
                             .add_filter("Theme", &["conf"])
-                            .set_file_name("theme.conf");
+                            .set_file_name(name);
                         if let Some(d) = dir.filter(|d| d.is_dir()) {
                             dialog = dialog.set_directory(d);
                         }
@@ -877,7 +948,12 @@ impl Editor {
                     Msg::SavedAs,
                 );
             }
-            Msg::SavedAs(Some(path)) => self.save_as_to(path),
+            Msg::SavedAs(Some(mut path)) => {
+                if path.extension().is_none() {
+                    path.set_extension("conf");
+                }
+                self.save_as_to(path);
+            }
             Msg::TryOut(kind) => self.try_out(&kind),
             Msg::DismissToast => self.toast = None,
             Msg::Drawer(open) => self.drawer = open,
@@ -909,8 +985,10 @@ impl Editor {
 
 /// A file's name, for messages.
 fn file_name(path: &std::path::Path) -> String {
-    path.file_name()
-        .map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned())
+    path.file_name().map_or_else(
+        || path.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    )
 }
 
 /// A number as short as it reads: `90`, `12.5`.

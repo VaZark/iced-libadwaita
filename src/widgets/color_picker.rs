@@ -34,11 +34,6 @@ use iced::{
     Background, Border, Color, Event, Length, Point, Radians, Rectangle, Shadow, Size, mouse,
 };
 
-/// The thickness of a slider track.
-const TRACK: f32 = 12.0;
-/// The thumb's diameter.
-const THUMB: f32 = 16.0;
-
 fn to_color(c: Hsva) -> Color {
     let (r, g, b, a) = c.to_rgba();
     Color { r, g, b, a }
@@ -68,20 +63,20 @@ enum Part {
 }
 
 /// The rectangles of the three controls inside `bounds`, for a width and whether alpha shows.
-fn parts(bounds: Rectangle, with_alpha: bool, gap: f32) -> [Option<Rectangle>; 3] {
+fn parts(bounds: Rectangle, with_alpha: bool, gap: f32, track: f32) -> [Option<Rectangle>; 3] {
     let square_h = (bounds.height
-        - TRACK * (1.0 + with_alpha as u8 as f32)
+        - track * (1.0 + with_alpha as u8 as f32)
         - gap * (1.0 + with_alpha as u8 as f32))
-        .max(40.0);
+        .max(0.0);
     let square = Rectangle::new(bounds.position(), Size::new(bounds.width, square_h));
     let hue = Rectangle::new(
         Point::new(bounds.x, square.y + square_h + gap),
-        Size::new(bounds.width, TRACK),
+        Size::new(bounds.width, track),
     );
     let alpha = with_alpha.then(|| {
         Rectangle::new(
-            Point::new(bounds.x, hue.y + TRACK + gap),
-            Size::new(bounds.width, TRACK),
+            Point::new(bounds.x, hue.y + track + gap),
+            Size::new(bounds.width, track),
         )
     });
     [Some(square), Some(hue), alpha]
@@ -107,8 +102,14 @@ impl<M> Surface<'_, M> {
     }
     /// The color the pointer at `p` makes while it holds `part`.
     fn pick(&self, part: Part, p: Point, bounds: Rectangle) -> Hsva {
-        let rects = parts(bounds, self.with_alpha, self.gap());
-        let frac = |x: f32, from: f32, len: f32| ((x - from) / len.max(1.0)).clamp(0.0, 1.0);
+        let rects = parts(
+            bounds,
+            self.with_alpha,
+            self.gap(),
+            self.metrics.progress_height,
+        );
+        let frac =
+            |x: f32, from: f32, len: f32| ((x - from) / len.max(f32::EPSILON)).clamp(0.0, 1.0);
         match part {
             Part::Square => {
                 let r = rects[0].expect("a square");
@@ -126,9 +127,14 @@ impl<M> Surface<'_, M> {
         }
     }
     fn part_at(&self, p: Point, bounds: Rectangle) -> Option<Part> {
-        let rects = parts(bounds, self.with_alpha, self.gap());
+        let rects = parts(
+            bounds,
+            self.with_alpha,
+            self.gap(),
+            self.metrics.progress_height,
+        );
         // The sliders' grab areas are a little taller than their tracks.
-        let grab = |r: Rectangle| r.expand(4.0);
+        let grab = |r: Rectangle| r.expand(self.metrics.space_s);
         if rects[0]?.contains(p) {
             Some(Part::Square)
         } else if grab(rects[1]?).contains(p) {
@@ -160,12 +166,12 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Surface<'a, M> {
     ) -> layout::Node {
         let width = match self.width {
             Length::Fixed(w) => w,
-            _ => limits.max().width.min(320.0),
+            _ => limits.max().width.min(self.metrics.sidebar_width),
         };
-        // A square a bit wider than it is tall, then the sliders.
+        // The saturation/value square, then the sliders.
         let tracks = 1.0 + self.with_alpha as u8 as f32;
-        let square = (width * 0.62).clamp(110.0, 220.0);
-        let height = square + tracks * (TRACK + self.gap());
+        let square = width;
+        let height = square + tracks * (self.metrics.progress_height + self.gap());
         layout::Node::new(limits.resolve(
             Length::Fixed(width),
             Length::Fixed(height),
@@ -253,11 +259,16 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Surface<'a, M> {
         _: &Rectangle,
     ) {
         use iced::advanced::Renderer as _;
-        let [square, hue, alpha_r] = parts(layout.bounds(), self.with_alpha, self.gap());
+        let [square, hue, alpha_r] = parts(
+            layout.bounds(),
+            self.with_alpha,
+            self.gap(),
+            self.metrics.progress_height,
+        );
         let radius = theme.metrics.radius_s;
         let ring = Border {
             color: theme.semantic.border,
-            width: 1.0,
+            width: theme.metrics.border_width,
             radius: radius.into(),
         };
         let quad = |bounds: Rectangle, border: Border| Quad {
@@ -281,6 +292,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Surface<'a, M> {
             let (x, y) = self.value.position();
             self.thumb(
                 renderer,
+                theme,
                 Point::new(r.x + x * r.width, r.y + y * r.height),
                 to_color(Hsva {
                     a: 1.0,
@@ -301,13 +313,14 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Surface<'a, M> {
             renderer.fill_quad(quad(r, ring), gradient(false, &stops));
             self.thumb(
                 renderer,
+                theme,
                 Point::new(r.x + self.value.h / 360.0 * r.width, r.y + r.height / 2.0),
                 to_color(full),
             );
         }
         // The alpha slider: a checkerboard under the color fading in.
         if let Some(r) = alpha_r {
-            let cell = TRACK / 2.0;
+            let cell = self.metrics.progress_height.max(f32::EPSILON) / 2.0;
             let (light, dark) = (Color::WHITE, Color::from_rgb(0.8, 0.8, 0.8));
             let (cols, rows) = ((r.width / cell).ceil() as usize, 2);
             for row in 0..rows {
@@ -335,6 +348,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Surface<'a, M> {
             );
             self.thumb(
                 renderer,
+                theme,
                 Point::new(r.x + self.value.a * r.width, r.y + r.height / 2.0),
                 to_color(self.value),
             );
@@ -344,28 +358,22 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Surface<'a, M> {
 
 impl<M> Surface<'_, M> {
     /// A round thumb with a white ring, filled with the color under it.
-    fn thumb(&self, renderer: &mut iced::Renderer, at: Point, fill: Color) {
+    fn thumb(&self, renderer: &mut iced::Renderer, theme: &Theme, at: Point, fill: Color) {
         use iced::advanced::Renderer as _;
+        let thumb = self.metrics.icon_size;
         let bounds = Rectangle::new(
-            Point::new(at.x - THUMB / 2.0, at.y - THUMB / 2.0),
-            Size::new(THUMB, THUMB),
+            Point::new(at.x - thumb / 2.0, at.y - thumb / 2.0),
+            Size::new(thumb, thumb),
         );
         renderer.fill_quad(
             Quad {
                 bounds,
                 border: Border {
                     color: Color::WHITE,
-                    width: 2.0,
-                    radius: (THUMB / 2.0).into(),
+                    width: theme.metrics.focus_ring_width,
+                    radius: (thumb / 2.0).into(),
                 },
-                shadow: Shadow {
-                    color: Color {
-                        a: 0.35,
-                        ..Color::BLACK
-                    },
-                    offset: iced::Vector::new(0.0, 1.0),
-                    blur_radius: 3.0,
-                },
+                shadow: theme.shadows.popover().shadow,
                 snap: false,
             },
             fill,
@@ -387,7 +395,7 @@ pub struct ColorPicker<'a, M> {
     swatches: Vec<Hsva>,
     format: Format,
     readout: bool,
-    width: Length,
+    width: Option<Length>,
     spacing: Option<f32>,
     swatch_spacing: Option<f32>,
     metrics: Metrics,
@@ -402,7 +410,7 @@ impl<'a, M: Clone + 'a> ColorPicker<'a, M> {
             swatches: Vec::new(),
             format: Format::Hex,
             readout: true,
-            width: Length::Fixed(240.0),
+            width: None,
             spacing: None,
             swatch_spacing: None,
             metrics: Metrics::desktop(),
@@ -433,7 +441,7 @@ impl<'a, M: Clone + 'a> ColorPicker<'a, M> {
         self
     }
     pub fn width(mut self, w: impl Into<Length>) -> Self {
-        self.width = w.into();
+        self.width = Some(w.into());
         self
     }
     /// The gap between the square and sliders, the swatches and the readout (default `space_m`).
@@ -461,7 +469,7 @@ fn chip<'a, M: 'a>(c: Hsva, size: f32) -> Element<'a, M> {
             background: Some(Background::Color(to_color(c))),
             border: Border {
                 color: t.semantic.border,
-                width: 1.0,
+                width: t.metrics.border_width,
                 radius: t.metrics.radius_s.into(),
             },
             ..Default::default()
@@ -473,10 +481,17 @@ impl<'a, M: Clone + 'a> From<ColorPicker<'a, M>> for Element<'a, M> {
     fn from(p: ColorPicker<'a, M>) -> Self {
         let m = p.metrics;
         let change = p.on_change.clone();
+        let width = p.width.unwrap_or_else(|| {
+            Length::Fixed(
+                crate::theme_config::current()
+                    .number("color-picker", "width")
+                    .unwrap_or(m.sidebar_width),
+            )
+        });
         let surface = Surface {
             value: p.value,
             with_alpha: p.alpha,
-            width: p.width,
+            width,
             on_change: change
                 .clone()
                 .map(|f| Box::new(move |c| f(c)) as Box<dyn Fn(Hsva) -> M + 'a>),
@@ -489,7 +504,7 @@ impl<'a, M: Clone + 'a> From<ColorPicker<'a, M>> for Element<'a, M> {
                 .iter()
                 .map(|&c| {
                     let on_press = change.as_ref().map(|f| f(c));
-                    button(chip(c, 24.0))
+                    button(chip(c, m.button_min_height))
                         .padding(0)
                         .style(sb::flat)
                         .on_press_maybe(on_press)
@@ -511,12 +526,15 @@ impl<'a, M: Clone + 'a> From<ColorPicker<'a, M>> for Element<'a, M> {
                 p.format
             };
             col = col.push(
-                row![chip(p.value, 20.0), ty::monospace(p.value.format(format))]
-                    .spacing(m.space_s)
-                    .align_y(iced::Alignment::Center),
+                row![
+                    chip(p.value, m.icon_size),
+                    ty::monospace(p.value.format(format))
+                ]
+                .spacing(m.space_s)
+                .align_y(iced::Alignment::Center),
             );
         }
-        container(col).width(p.width).into()
+        container(col).width(width).into()
     }
 }
 
@@ -534,7 +552,7 @@ pub struct ColorInput<'a, M> {
     dialog: bool,
     scrim: bool,
     close_on_outside: bool,
-    window_radius: f32,
+    window_radius: Option<f32>,
     disabled: bool,
     open_initially: bool,
     spacing: Option<f32>,
@@ -563,7 +581,7 @@ impl<'a, M: Clone + 'a> ColorInput<'a, M> {
             dialog: false,
             scrim: true,
             close_on_outside: true,
-            window_radius: Metrics::desktop().radius_window,
+            window_radius: None,
             disabled: false,
             open_initially: false,
             spacing: None,
@@ -608,7 +626,7 @@ impl<'a, M: Clone + 'a> ColorInput<'a, M> {
     }
     /// Rounds the dialog's fade to the window's corners (`window::State::radius`).
     pub fn window_radius(mut self, r: f32) -> Self {
-        self.window_radius = r;
+        self.window_radius = Some(r);
         self
     }
     pub fn disabled(mut self, on: bool) -> Self {
@@ -627,9 +645,6 @@ impl<'a, M: Clone + 'a> ColorInput<'a, M> {
 
 /// The id of the color code entry in the picker, its initial focus.
 const ENTRY_ID: &str = "iced-adaptive-design.color-input.code";
-
-/// Width of the picker's popover, as the date input's calendar.
-const PICKER_WIDTH: f32 = crate::widgets::date_input::POPOVER_WIDTH;
 
 impl<'a, M: Clone + 'a> From<ColorInput<'a, M>> for Element<'a, M> {
     fn from(i: ColorInput<'a, M>) -> Self {
@@ -651,19 +666,26 @@ impl<'a, M: Clone + 'a> From<ColorInput<'a, M>> for Element<'a, M> {
         if invalid {
             entry = entry.state(crate::components::EntryState::Error);
         }
-        let content = popover([Element::from(picker), Element::from(entry)], 560.0);
-        let trigger = i.trigger.unwrap_or_else(|| color_box(i.value));
+        let content = popover(
+            [Element::from(picker), Element::from(entry)],
+            m.clamp_maximum,
+        );
+        let trigger = i.trigger.unwrap_or_else(|| color_box(i.value, m));
         let mut opener = Popover::new(trigger, content)
             .appearance(crate::widgets::PopoverAppearance::Flat)
             .padding(0)
-            .popover_width(PICKER_WIDTH)
+            .popover_width(
+                crate::theme_config::current()
+                    .number("color-input", "popover-width")
+                    .unwrap_or(m.sidebar_width),
+            )
             .keep_open(true)
             .disabled(i.disabled)
             .open_initially(i.open_initially)
             .initial_focus(ENTRY_ID)
             .scrim(i.scrim)
             .close_on_outside(i.close_on_outside)
-            .window_radius(i.window_radius);
+            .window_radius(i.window_radius.unwrap_or(m.radius_window));
         if i.dialog {
             opener = opener.presentation(crate::widgets::PopoverPresentation::Dialog);
         }
@@ -672,15 +694,15 @@ impl<'a, M: Clone + 'a> From<ColorInput<'a, M>> for Element<'a, M> {
 }
 
 /// The color in a box with a hairline: the closed state of a [`ColorInput`].
-fn color_box<'a, M: 'a>(c: Hsva) -> Element<'a, M> {
+fn color_box<'a, M: 'a>(c: Hsva, m: Metrics) -> Element<'a, M> {
     container(space())
-        .width(48.0)
-        .height(28.0)
+        .width(m.icon_size + m.entry_padding.left + m.entry_padding.right)
+        .height(m.entry_min_height)
         .style(move |t: &Theme| iced::widget::container::Style {
             background: Some(Background::Color(to_color(c))),
             border: Border {
                 color: t.semantic.border,
-                width: 1.0,
+                width: t.metrics.border_width,
                 radius: t.metrics.radius_s.into(),
             },
             ..Default::default()
@@ -707,7 +729,7 @@ mod tests {
         let m = Metrics::default();
         Rectangle::new(
             Point::new(10.0, 20.0),
-            Size::new(240.0, 150.0 + tracks * (TRACK + m.space_m)),
+            Size::new(240.0, 150.0 + tracks * (m.progress_height + m.space_m)),
         )
     }
 
@@ -715,7 +737,7 @@ mod tests {
     fn the_square_sets_saturation_and_value_and_keeps_hue_and_alpha() {
         let s = surface(true);
         let b = bounds(true);
-        let [sq, ..] = parts(b, true, s.gap());
+        let [sq, ..] = parts(b, true, s.gap(), s.metrics.progress_height);
         let r = sq.unwrap();
         let top_right = s.pick(Part::Square, Point::new(r.x + r.width, r.y), b);
         assert!((top_right.s - 1.0).abs() < 1e-3 && (top_right.v - 1.0).abs() < 1e-3);
@@ -728,7 +750,7 @@ mod tests {
     fn a_slider_changes_only_its_own_channel_and_clamps_past_its_ends() {
         let s = surface(true);
         let b = bounds(true);
-        let [_, hue, alpha_r] = parts(b, true, s.gap());
+        let [_, hue, alpha_r] = parts(b, true, s.gap(), s.metrics.progress_height);
         let (hue, alpha_r) = (hue.unwrap(), alpha_r.unwrap());
         let half = s.pick(Part::Hue, Point::new(hue.x + hue.width / 2.0, hue.y), b);
         assert!((half.h - 180.0).abs() < 0.5 && half.s == 0.5 && half.v == 0.5);
@@ -752,7 +774,7 @@ mod tests {
     fn the_pointer_finds_the_control_under_it() {
         let s = surface(true);
         let b = bounds(true);
-        let [sq, hue, alpha_r] = parts(b, true, s.gap());
+        let [sq, hue, alpha_r] = parts(b, true, s.gap(), s.metrics.progress_height);
         assert_eq!(s.part_at(sq.unwrap().center(), b), Some(Part::Square));
         assert_eq!(s.part_at(hue.unwrap().center(), b), Some(Part::Hue));
         assert_eq!(s.part_at(alpha_r.unwrap().center(), b), Some(Part::Alpha));
@@ -768,7 +790,12 @@ mod tests {
     #[test]
     fn the_controls_stack_without_overlapping() {
         let b = bounds(true);
-        let [sq, hue, alpha_r] = parts(b, true, Metrics::default().space_m);
+        let [sq, hue, alpha_r] = parts(
+            b,
+            true,
+            Metrics::default().space_m,
+            Metrics::default().progress_height,
+        );
         let (sq, hue, alpha_r) = (sq.unwrap(), hue.unwrap(), alpha_r.unwrap());
         assert!(sq.y + sq.height <= hue.y && hue.y + hue.height <= alpha_r.y);
         assert!(alpha_r.y + alpha_r.height <= b.y + b.height + 0.01);
@@ -797,8 +824,58 @@ mod spacing_params {
             .swatch_spacing(1.0);
         assert_eq!((p.spacing, p.swatch_spacing), (Some(3.0), Some(1.0)));
         let _: Element<'_, ()> = p.into();
-        let i = ColorInput::<()>::new(Hsva::new(10.0, 0.5, 0.5, 1.0), "", |_| (), |_| ()).spacing(4.0);
+        let i =
+            ColorInput::<()>::new(Hsva::new(10.0, 0.5, 0.5, 1.0), "", |_| (), |_| ()).spacing(4.0);
         assert_eq!(i.spacing, Some(4.0));
         let _: Element<'_, ()> = i.into();
+    }
+}
+
+#[cfg(test)]
+mod metric_regressions {
+    use super::*;
+
+    #[test]
+    fn track_geometry_and_hit_testing_share_custom_metrics() {
+        let m = Metrics {
+            progress_height: 19.0,
+            space_m: 7.0,
+            space_s: 0.0,
+            ..Metrics::default()
+        };
+        let surface = Surface::<()> {
+            value: Hsva::BLACK,
+            with_alpha: true,
+            width: Length::Fill,
+            on_change: None,
+            metrics: m,
+        };
+        let bounds = Rectangle::new(Point::ORIGIN, Size::new(200.0, 252.0));
+        let [square, hue, alpha] = parts(bounds, true, surface.gap(), m.progress_height);
+        assert_eq!(square.unwrap().height, 200.0);
+        assert_eq!(hue.unwrap().height, 19.0);
+        assert_eq!(alpha.unwrap().height, 19.0);
+        assert_eq!(
+            surface.part_at(alpha.unwrap().center(), bounds),
+            Some(Part::Alpha)
+        );
+    }
+
+    #[test]
+    fn geometry_defaults_remain_inherited_until_build_time() {
+        let m = Metrics {
+            radius_window: 7.0,
+            sidebar_width: 177.0,
+            ..Metrics::default()
+        };
+        let input = ColorInput::<()>::new(Hsva::BLACK, "", |_| (), |_| ()).metrics(m);
+        assert_eq!(input.window_radius, None);
+        assert_eq!(input.metrics.radius_window, 7.0);
+        let explicit = input.window_radius(0.0).metrics(Metrics::default());
+        assert_eq!(explicit.window_radius, Some(0.0));
+        let picker = ColorPicker::<()>::new(Hsva::BLACK, |_| ()).metrics(m);
+        assert_eq!(picker.width, None);
+        let explicit = picker.width(123.0).metrics(Metrics::default());
+        assert_eq!(explicit.width, Some(Length::Fixed(123.0)));
     }
 }

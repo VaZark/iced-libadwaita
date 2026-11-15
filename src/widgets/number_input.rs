@@ -66,7 +66,7 @@ pub struct NumberInput<'a, M> {
     drag: NumberDrag,
     disabled: bool,
     revealed: bool,
-    width: Length,
+    width: Option<Length>,
     metrics: Metrics,
     embedded: bool,
     flat: bool,
@@ -93,7 +93,7 @@ impl<'a, M> NumberInput<'a, M> {
             drag: NumberDrag::Vertical,
             disabled: false,
             revealed: true,
-            width: Length::Fixed(160.0),
+            width: None,
             metrics: Metrics::desktop(),
             embedded: false,
             flat: false,
@@ -150,7 +150,7 @@ impl<'a, M> NumberInput<'a, M> {
         self
     }
     pub fn width(mut self, w: impl Into<Length>) -> Self {
-        self.width = w.into();
+        self.width = Some(w.into());
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -171,16 +171,21 @@ impl<'a, M> NumberInput<'a, M> {
     }
 }
 
-/// Width of the handles' slot.
-const HANDLE_W: f32 = 22.0;
-
 impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
     fn from(n: NumberInput<'a, M>) -> Self {
         let m = n.metrics;
+        let handle_width = m.icon_size + m.space_s;
+        let handle_height = m.entry_min_height / 2.0;
         let mut field = entry::<M>(n.placeholder.clone(), n.text)
             .flat(n.flat)
             .state(n.text_state())
-            .width(n.width)
+            .width(n.width.unwrap_or_else(|| {
+                Length::Fixed(
+                    crate::theme_config::current()
+                        .number("number-input", "width")
+                        .unwrap_or(m.row_wrap_basis),
+                )
+            }))
             .metrics(m);
         if n.disabled {
             return field.into();
@@ -199,10 +204,10 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
             let up = value.is_none_or(|v| n.numeric.can_up(v));
             let down = value.is_none_or(|v| n.numeric.can_down(v));
             let handle = |icon: crate::EntryIcon, enabled: bool, text: String| {
-                let glyph = container(icon.view(12.0))
+                let glyph = container(icon.view(m.icon_size))
                     .center(Length::Fill)
-                    .width(Length::Fixed(HANDLE_W))
-                    .height(Length::Fixed(14.0));
+                    .width(Length::Fixed(handle_width))
+                    .height(Length::Fixed(handle_height));
                 let mut b = button(glyph).padding(0).style(sb::flat);
                 if enabled {
                     b = b.on_press(f(text));
@@ -219,8 +224,8 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
             ];
             field = field
                 .right_section(handles)
-                .right_section_width(HANDLE_W)
-                .section_height(28.0);
+                .right_section_width(handle_width)
+                .section_height(m.entry_min_height);
         }
         let field: Element<'a, M> = field.into();
         let axis = match n.drag {
@@ -239,7 +244,7 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
             on_input,
             // A press on the handles is theirs, not the start of a drag.
             guard: if n.handles {
-                HANDLE_W + m.space_xs
+                handle_width + m.space_xs
             } else {
                 0.0
             },

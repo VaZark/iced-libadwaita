@@ -331,18 +331,23 @@ fn toast_element<'a, M: Clone + 'a>(t: Toast<M>, position: ToastPosition) -> Ele
     if let Some(status) = t.status.filter(|s| *s != Role::Neutral) {
         // The vivid fill of the status color reads on both the dark surfaces.
         let color = move |th: &Theme| th.semantic.swatch(status).bg;
-        r = r.push(container(iced::widget::space().width(10).height(10)).style(
-            move |th: &Theme| iced::widget::container::Style {
+        r = r.push(
+            container(
+                iced::widget::space()
+                    .width(m.progress_height)
+                    .height(m.progress_height),
+            )
+            .style(move |th: &Theme| iced::widget::container::Style {
                 background: Some(iced::Background::Color(color(th))),
-                border: iced::Border::default().rounded(5.0),
+                border: iced::Border::default().rounded(th.metrics.radius_pill),
                 ..Default::default()
-            },
-        ));
+            }),
+        );
     }
-    r = r.push(text(t.title));
+    r = r.push(text(t.title).size(crate::Typography::desktop().body));
     if let Some((label, msg)) = t.action {
         r = r.push(
-            button(text(label))
+            button(text(label).size(crate::Typography::desktop().body))
                 .padding(m.button_padding)
                 .style(action_style)
                 .on_press(msg),
@@ -363,7 +368,10 @@ fn toast_element<'a, M: Clone + 'a>(t: Toast<M>, position: ToastPosition) -> Ele
         );
     }
     let toast = container(r)
-        .padding(t.padding.unwrap_or(iced::Padding::from([m.space_s, m.space_l])))
+        .padding(
+            t.padding
+                .unwrap_or(iced::Padding::from([m.space_s, m.space_l])),
+        )
         .style(move |th: &Theme| {
             let (bg, fg) = colors(th, background, text_color, role);
             iced::widget::container::Style {
@@ -378,9 +386,9 @@ fn toast_element<'a, M: Clone + 'a>(t: Toast<M>, position: ToastPosition) -> Ele
     // removes the toast.
     // It slides in from the edge it is anchored to.
     let slide = if position.vertical() == Vertical::Top {
-        -60.0
+        -(m.row_min_height + m.space_xl)
     } else {
-        60.0
+        m.row_min_height + m.space_xl
     };
     let toast = crate::layouts::entrance(toast, iced::Vector::new(0.0, slide))
         .trigger(crate::layouts::animation::Trigger::Toast)

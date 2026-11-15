@@ -101,11 +101,37 @@ pub fn tones(style: BevelStyle, ring: u8) -> (Tone, Tone) {
     }
 }
 
-/// The edges of a frame of `size`: per ring, a top and a left line in the top-left tone and a
-/// bottom and a right line in the bottom-right tone. The bottom and right lines run the full
-/// length, so the top-right and bottom-left corner pixels are the bottom-right tone, as in the
-/// classic frames.
-pub fn edges(style: BevelStyle, rings: u8, size: Size) -> Vec<Edge> {
+/// Which sides of a frame are drawn (`border-edges`): all of them, or all but one, as a tab drawn
+/// without its bottom edge so it opens into its page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Sides {
+    pub top: bool,
+    pub left: bool,
+    pub bottom: bool,
+    pub right: bool,
+}
+
+impl Sides {
+    pub const ALL: Sides = Sides { top: true, left: true, bottom: true, right: true };
+
+    /// The sides a `border-edges` value names (`all`, `no-bottom`, `no-top`, `no-left`,
+    /// `no-right`); all of them for anything else.
+    pub fn parse(s: &str) -> Self {
+        let mut sides = Self::ALL;
+        match s {
+            "no-bottom" => sides.bottom = false,
+            "no-top" => sides.top = false,
+            "no-left" => sides.left = false,
+            "no-right" => sides.right = false,
+            _ => {}
+        }
+        sides
+    }
+}
+
+/// [`edges`] with only the sides in `sides`. The remaining lines run on to where the missing
+/// one would have been, so the frame stays closed at its corners.
+pub fn edges_with(style: BevelStyle, rings: u8, size: Size, sides: Sides) -> Vec<Edge> {
     let (w, h) = (size.width, size.height);
     let mut out = Vec::new();
     for ring in 0..rings.min(2) {
@@ -116,12 +142,30 @@ pub fn edges(style: BevelStyle, rings: u8, size: Size) -> Vec<Edge> {
             break;
         }
         let rect = |x: f32, y: f32, w: f32, h: f32| Rectangle::new(iced::Point::new(x, y), Size::new(w, h));
-        out.push(Edge { rect: rect(k, k, iw - 1.0, 1.0), tone: tl });
-        out.push(Edge { rect: rect(k, k, 1.0, ih - 1.0), tone: tl });
-        out.push(Edge { rect: rect(k, h - k - 1.0, iw, 1.0), tone: br });
-        out.push(Edge { rect: rect(w - k - 1.0, k, 1.0, ih), tone: br });
+        if sides.top {
+            let width = if sides.right { iw - 1.0 } else { iw };
+            out.push(Edge { rect: rect(k, k, width, 1.0), tone: tl });
+        }
+        if sides.left {
+            let height = if sides.bottom { ih - 1.0 } else { ih };
+            out.push(Edge { rect: rect(k, k, 1.0, height), tone: tl });
+        }
+        if sides.bottom {
+            out.push(Edge { rect: rect(k, h - k - 1.0, iw, 1.0), tone: br });
+        }
+        if sides.right {
+            out.push(Edge { rect: rect(w - k - 1.0, k, 1.0, ih), tone: br });
+        }
     }
     out
+}
+
+/// The edges of a frame of `size`: per ring, a top and a left line in the top-left tone and a
+/// bottom and a right line in the bottom-right tone. The bottom and right lines run the full
+/// length, so the top-right and bottom-left corner pixels are the bottom-right tone, as in the
+/// classic frames.
+pub fn edges(style: BevelStyle, rings: u8, size: Size) -> Vec<Edge> {
+    edges_with(style, rings, size, Sides::ALL)
 }
 
 /// The tone of the pixel at `(x, y)` in a frame of `size`, or `None` inside the frame. For tests
@@ -198,6 +242,21 @@ mod tests {
         assert_eq!(BevelStyle::Sunken.pressed(), BevelStyle::Raised);
         assert_eq!(BevelStyle::Etched.pressed(), BevelStyle::Etched);
         assert_eq!((rings(0.5), rings(1.0), rings(2.0), rings(5.0)), (1, 1, 2, 2));
+    }
+
+    #[test]
+    fn a_frame_without_its_bottom_edge_keeps_its_sides_to_the_bottom() {
+        let s = Sides::parse("no-bottom");
+        assert!(!s.bottom && s.top && s.left && s.right);
+        let e = edges_with(BevelStyle::Raised, 1, Size::new(10.0, 8.0), s);
+        assert_eq!(e.len(), 3);
+        let left = e.iter().find(|e| e.rect.width == 1.0 && e.rect.x == 0.0).unwrap();
+        assert_eq!(left.rect.height, 8.0);
+        assert!(e.iter().all(|e| e.rect.y + e.rect.height <= 8.0));
+        // Nothing is drawn on the bottom row except the sides' last pixel.
+        assert!(e.iter().all(|e| !(e.rect.height == 1.0 && e.rect.y == 7.0)));
+        assert_eq!(Sides::parse("all"), Sides::ALL);
+        assert_eq!(Sides::parse("nonsense"), Sides::ALL);
     }
 
     #[test]

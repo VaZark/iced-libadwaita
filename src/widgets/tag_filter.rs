@@ -299,7 +299,7 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
             }
             if !group.is_empty() {
                 let cluster: Element<'a, M> = row(group.iter().map(|key| self.pill(index, key)))
-                    .spacing(self.pill_spacing.unwrap_or(crate::Metrics::desktop().space_xs))
+                    .spacing(self.pill_spacing.unwrap_or(self.metrics.space_xs))
                     .align_y(Alignment::Center)
                     .wrap()
                     .into();
@@ -324,9 +324,13 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
             } else {
                 // A bit of room after the pills that selects the last group when pressed.
                 items.push(
-                    mouse_area(space::horizontal().width(20).height(28))
-                        .on_press((self.on_change)(GroupEvent::Select(last)))
-                        .into(),
+                    mouse_area(
+                        space::horizontal()
+                            .width(self.metrics.icon_size)
+                            .height(self.metrics.entry_min_height),
+                    )
+                    .on_press((self.on_change)(GroupEvent::Select(last)))
+                    .into(),
                 );
             }
         }
@@ -346,11 +350,11 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
         let mut field = text_input(if items.is_empty() { &f.placeholder } else { "" }, f.query)
             .on_input(move |q| on_query(q))
             .style(crate::styles::text_input::embedded)
-            .padding(f.field_padding.unwrap_or(iced::Padding::from([
-                crate::Metrics::desktop().space_xs,
-                crate::Metrics::desktop().space_xxs,
-            ])))
-            .size(14)
+            .padding(
+                f.field_padding
+                    .unwrap_or(iced::Padding::from([m.space_xs, m.space_xxs])),
+            )
+            .size(crate::Typography::desktop().body)
             .width(Length::Fill);
         if let Some(id) = f.field_id.clone() {
             field = field.id(id);
@@ -361,7 +365,11 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
                 items,
                 caret,
                 // Empty, the field is just a slot for the caret between the pills; typing widens it.
-                if f.query.is_empty() { 16.0 } else { 120.0 },
+                if f.query.is_empty() {
+                    m.icon_size
+                } else {
+                    m.row_wrap_basis
+                },
                 between_groups(
                     f.query,
                     Some((f.on_change)(GroupEvent::Step(Step::Previous))),
@@ -372,7 +380,7 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
             token_flow(items)
         };
         let mut line = row![]
-            .spacing(f.spacing.unwrap_or(crate::Metrics::desktop().space_xs))
+            .spacing(f.spacing.unwrap_or(m.space_xs))
             .align_y(Alignment::Center);
         if let Some(leading) = f.leading.take() {
             line = line.push(leading);
@@ -422,7 +430,7 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
             }
         };
         column![Element::from(entry), chips]
-            .spacing(f.chips_spacing.unwrap_or(crate::Metrics::desktop().gap))
+            .spacing(f.chips_spacing.unwrap_or(m.gap))
             .width(Length::Fill)
             .into()
     }
@@ -464,7 +472,10 @@ mod tests {
             .pill_spacing(2.0)
             .field_padding([3.0, 4.0])
             .chips_spacing(5.0);
-        assert_eq!((f.spacing, f.pill_spacing, f.chips_spacing), (Some(1.0), Some(2.0), Some(5.0)));
+        assert_eq!(
+            (f.spacing, f.pill_spacing, f.chips_spacing),
+            (Some(1.0), Some(2.0), Some(5.0))
+        );
         let _: Element<'_, GroupEvent<&str>> = f.into();
     }
 

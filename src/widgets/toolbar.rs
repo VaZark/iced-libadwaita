@@ -20,12 +20,34 @@ pub enum BarStyle {
     RaisedBorder,
 }
 
+fn toolbar_metric_for(
+    tokens: &crate::theme_config::Tokens,
+    name: &str,
+    key: &str,
+    inherited: f32,
+) -> f32 {
+    tokens
+        .variant_number("toolbar", name, key)
+        .unwrap_or(inherited)
+        .max(0.0)
+}
+
+fn shadow_opacity(configured: Option<f32>) -> f32 {
+    configured.unwrap_or(0.5).clamp(0.0, 1.0)
+}
+
 /// The shadow cast by a raised bar onto the content, drawn as a fading strip
 /// (iced draws one shadow per quad and later siblings would paint over it).
-fn shade_strip<'a, M: 'a>(top: bool) -> Element<'a, M> {
+fn shade_strip<'a, M: 'a>(
+    top: bool,
+    name: &str,
+    tokens: &crate::theme_config::Tokens,
+) -> Element<'a, M> {
+    let height = toolbar_metric_for(tokens, name, "shadow-height", Metrics::desktop().space_s);
+    let opacity = shadow_opacity(tokens.variant_number("toolbar", name, "shadow-opacity"));
     container(space())
         .width(Length::Fill)
-        .height(Length::Fixed(6.0))
+        .height(Length::Fixed(height))
         .style(move |t: &Theme| {
             let s = &t.semantic;
             let k = if t.shadows.enabled {
@@ -34,7 +56,7 @@ fn shade_strip<'a, M: 'a>(top: bool) -> Element<'a, M> {
                 0.0
             };
             let c = Color {
-                a: (s.headerbar_shade.a * 0.5 * k).min(1.0),
+                a: (s.headerbar_shade.a * opacity * k).min(1.0),
                 ..s.headerbar_shade
             };
             let clear = Color { a: 0.0, ..c };
@@ -51,8 +73,14 @@ fn shade_strip<'a, M: 'a>(top: bool) -> Element<'a, M> {
         .into()
 }
 
-fn border_line<'a, M: 'a>() -> Element<'a, M> {
-    container(space().height(1))
+fn border_line<'a, M: 'a>(name: &str, tokens: &crate::theme_config::Tokens) -> Element<'a, M> {
+    let width = toolbar_metric_for(
+        tokens,
+        name,
+        "separator-width",
+        Metrics::desktop().border_width,
+    );
+    container(space().height(width))
         .width(Length::Fill)
         .style(|t: &Theme| iced::widget::container::Style {
             background: Some(Background::Color(t.semantic.headerbar_darker_shade)),
@@ -66,8 +94,10 @@ pub struct ToolbarView<'a, M> {
     top: Vec<Element<'a, M>>,
     bottom: Vec<Element<'a, M>>,
     content: Element<'a, M>,
-    top_style: BarStyle,
-    bottom_style: BarStyle,
+    top_style: Option<BarStyle>,
+    bottom_style: Option<BarStyle>,
+    named_variant: Option<String>,
+    tokens: Option<crate::theme_config::Tokens>,
     spacing: f32,
 }
 
@@ -81,11 +111,30 @@ impl<'a, M: 'a> ToolbarView<'a, M> {
             top: Vec::new(),
             bottom: Vec::new(),
             content: content.into(),
-            top_style: BarStyle::Flat,
-            bottom_style: BarStyle::Flat,
+            top_style: None,
+            bottom_style: None,
+            named_variant: None,
+            tokens: None,
             spacing: 0.0,
         }
     }
+    /// Uses local tokens for breakpoint rules and decoration geometry instead of global tokens.
+    pub fn tokens(mut self, tokens: crate::theme_config::Tokens) -> Self {
+        self.tokens = Some(tokens);
+        self
+    }
+
+    /// Uses this config's tokens locally without installing it globally.
+    pub fn theme_config(self, cfg: &crate::theme_config::ThemeConfig) -> Self {
+        self.tokens(cfg.tokens())
+    }
+
+    /// Select a logical variant for both sides; explicit per-side styles take priority.
+    pub fn named_variant(mut self, name: impl Into<String>) -> Self {
+        self.named_variant = Some(name.into());
+        self
+    }
+
     /// `add_top_bar`.
     pub fn top_bar(mut self, e: impl Into<Element<'a, M>>) -> Self {
         self.top.push(e.into());
@@ -98,7 +147,7 @@ impl<'a, M: 'a> ToolbarView<'a, M> {
     }
     /// `top-bar-style`.
     pub fn top_bar_style(mut self, s: BarStyle) -> Self {
-        self.top_style = s;
+        self.top_style = Some(s);
         self
     }
     /// The gap between the bars and the content (default: 0, bars sit flush).
@@ -108,7 +157,7 @@ impl<'a, M: 'a> ToolbarView<'a, M> {
     }
     /// `bottom-bar-style`.
     pub fn bottom_bar_style(mut self, s: BarStyle) -> Self {
-        self.bottom_style = s;
+        self.bottom_style = Some(s);
         self
     }
 }
@@ -118,11 +167,18 @@ impl<'a, M: 'a> From<ToolbarView<'a, M>> for Element<'a, M> {
         let mut col = column![].spacing(t.spacing);
         let has_top = !t.top.is_empty();
         let has_bottom = !t.bottom.is_empty();
-        for b in t.top {
-            col = col.push(b);
-        }
-        if has_top && t.top_style == BarStyle::RaisedBorder {
-            col = col.push(border_line());
+        if has_top {
+            col = col.push(column![
+                column(t.top).spacing(t.spacing),
+                toolbar_decoration(
+                    t.top_style,
+                    t.named_variant.clone(),
+                    true,
+                    true,
+                    t.spacing,
+                    t.tokens.clone()
+                ),
+            ]);
         }
 
         let mut layers = vec![
@@ -132,26 +188,121 @@ impl<'a, M: 'a> From<ToolbarView<'a, M>> for Element<'a, M> {
                 .height(Length::Fill)
                 .into(),
         ];
-        if has_top && t.top_style == BarStyle::Raised {
-            layers.push(container(shade_strip(true)).align_top(Length::Fill).into());
+        if has_top {
+            layers.push(toolbar_decoration(
+                t.top_style,
+                t.named_variant.clone(),
+                true,
+                false,
+                0.0,
+                t.tokens.clone(),
+            ));
         }
-        if has_bottom && t.bottom_style == BarStyle::Raised {
-            layers.push(
-                container(shade_strip(false))
-                    .align_bottom(Length::Fill)
-                    .into(),
-            );
+        if has_bottom {
+            layers.push(toolbar_decoration(
+                t.bottom_style,
+                t.named_variant.clone(),
+                false,
+                false,
+                0.0,
+                t.tokens.clone(),
+            ));
         }
         col = col.push(stack(layers).width(Length::Fill).height(Length::Fill));
 
-        if has_bottom && t.bottom_style == BarStyle::RaisedBorder {
-            col = col.push(border_line());
-        }
-        for b in t.bottom {
-            col = col.push(b);
+        if has_bottom {
+            col = col.push(column![
+                toolbar_decoration(
+                    t.bottom_style,
+                    t.named_variant.clone(),
+                    false,
+                    true,
+                    t.spacing,
+                    t.tokens.clone(),
+                ),
+                column(t.bottom).spacing(t.spacing),
+            ]);
         }
         col.width(Length::Fill).height(Length::Fill).into()
     }
+}
+
+fn bar_name(style: BarStyle) -> &'static str {
+    match style {
+        BarStyle::Flat => "flat",
+        BarStyle::Raised => "raised",
+        BarStyle::RaisedBorder => "raised-border",
+    }
+}
+
+fn bar_presentation(name: &str) -> BarStyle {
+    match name {
+        "raised" => BarStyle::Raised,
+        "raised-border" => BarStyle::RaisedBorder,
+        _ => BarStyle::Flat,
+    }
+}
+
+fn selected_toolbar(
+    tokens: &crate::theme_config::Tokens,
+    width: f32,
+    style: Option<BarStyle>,
+    named: Option<&str>,
+) -> String {
+    style
+        .map(bar_name)
+        .or(named)
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            crate::breakpoints::variant_for_tokens(
+                tokens,
+                "toolbar",
+                &crate::breakpoints::Breakpoints::current(),
+                width,
+                "flat",
+            )
+        })
+}
+
+// Only decorations rebuild at a breakpoint: bars, popovers and content retain their widgets.
+fn toolbar_decoration<'a, M: 'a>(
+    style: Option<BarStyle>,
+    named: Option<String>,
+    top: bool,
+    separator: bool,
+    spacing: f32,
+    tokens: Option<crate::theme_config::Tokens>,
+) -> Element<'a, M> {
+    crate::layouts::responsive(move |size| {
+        let tokens = tokens
+            .clone()
+            .unwrap_or_else(|| crate::theme_config::current().tokens());
+        let name = selected_toolbar(&tokens, size.width, style, named.as_deref());
+        match (bar_presentation(&name), separator) {
+            (BarStyle::RaisedBorder, true) => container(border_line(&name, &tokens))
+                .padding(if top {
+                    iced::Padding::ZERO.top(spacing)
+                } else {
+                    iced::Padding::ZERO.bottom(spacing)
+                })
+                .into(),
+            (BarStyle::Raised, false) => {
+                let strip = container(shade_strip(top, &name, &tokens));
+                if top {
+                    strip.align_top(Length::Fill).into()
+                } else {
+                    strip.align_bottom(Length::Fill).into()
+                }
+            }
+            _ => space().height(0).into(),
+        }
+    })
+    .height(if separator {
+        Length::Shrink
+    } else {
+        Length::Fill
+    })
+    .into()
 }
 
 /// `GtkActionBar`.
@@ -220,9 +371,13 @@ impl<'a, M: 'a> From<ActionBar<'a, M>> for Element<'a, M> {
     fn from(a: ActionBar<'a, M>) -> Self {
         let m = a.metrics;
         let side = |v: Vec<Element<'a, M>>, h| {
-            container(row(v).spacing(a.spacing.unwrap_or(m.space_s)).align_y(Vertical::Center))
-                .width(Length::FillPortion(1))
-                .align_x(h)
+            container(
+                row(v)
+                    .spacing(a.spacing.unwrap_or(m.space_s))
+                    .align_y(Vertical::Center),
+            )
+            .width(Length::FillPortion(1))
+            .align_x(h)
         };
         container(
             row![
@@ -244,9 +399,215 @@ impl<'a, M: 'a> From<ActionBar<'a, M>> for Element<'a, M> {
 mod tests {
     use super::*;
 
+    fn tokens(text: &str) -> crate::theme_config::Tokens {
+        let cfg = crate::theme_config::ThemeConfig::builder("toolbar-variant-tests")
+            .files(false)
+            .app_text(text)
+            .build();
+        assert!(cfg.warnings().is_empty(), "{:?}", cfg.warnings());
+        cfg.tokens()
+    }
+
+    #[test]
+    fn rules_select_toolbar_modes_but_explicit_side_styles_win() {
+        let tokens = tokens("[toolbar]\nbreakpoint-rules=xs:flat,md:raised,xl:raised-border\n");
+        for (width, expected) in [
+            (0.0, "flat"),
+            (800.0, "raised"),
+            (100_000.0, "raised-border"),
+        ] {
+            assert_eq!(selected_toolbar(&tokens, width, None, None), expected);
+            assert_eq!(
+                selected_toolbar(&tokens, width, None, Some("raised")),
+                "raised"
+            );
+            assert_eq!(
+                selected_toolbar(&tokens, width, Some(BarStyle::Flat), Some("raised")),
+                "flat"
+            );
+        }
+        assert_eq!(
+            selected_toolbar(&Default::default(), 800.0, None, None),
+            "flat"
+        );
+        assert_eq!(bar_presentation("unknown"), BarStyle::Flat);
+        for style in [BarStyle::Flat, BarStyle::Raised, BarStyle::RaisedBorder] {
+            assert_eq!(bar_presentation(bar_name(style)), style);
+        }
+        let t = ToolbarView::<()>::new(space())
+            .top_bar_style(BarStyle::Flat)
+            .named_variant("raised");
+        assert_eq!(t.top_style, Some(BarStyle::Flat));
+        assert_eq!(t.bottom_style, None);
+    }
+
+    #[test]
+    fn toolbar_variant_geometry_falls_back_to_base_then_metrics() {
+        let tokens = tokens(
+            "[toolbar]\nshadow-height=3px\n[toolbar.raised]\nshadow-height=7px\nshadow-opacity=0.2\nseparator-width=0px\n",
+        );
+        assert_eq!(
+            toolbar_metric_for(&tokens, "raised", "shadow-height", 9.0),
+            7.0
+        );
+        assert_eq!(
+            toolbar_metric_for(&tokens, "flat", "shadow-height", 9.0),
+            3.0
+        );
+        assert_eq!(
+            toolbar_metric_for(&tokens, "raised", "separator-width", 9.0),
+            0.0
+        );
+        assert_eq!(
+            toolbar_metric_for(&Default::default(), "raised", "shadow-height", 9.0),
+            9.0
+        );
+        assert_eq!(
+            shadow_opacity(tokens.variant_number("toolbar", "raised", "shadow-opacity")),
+            0.2
+        );
+    }
+
+    #[test]
+    fn toolbar_layout_keeps_fill_height_and_no_phantom_separator_gap() {
+        use iced::advanced::renderer::Headless;
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        for style in [BarStyle::Flat, BarStyle::Raised, BarStyle::RaisedBorder] {
+            let mut element: Element<'_, ()> = ToolbarView::new(space())
+                .top_bar(space().height(20))
+                .top_bar_style(style)
+                .spacing(4.0)
+                .into();
+            let mut tree = iced::advanced::widget::Tree::new(element.as_widget());
+            for width in [400.0, 1000.0] {
+                let limits = iced::advanced::layout::Limits::new(
+                    iced::Size::ZERO,
+                    iced::Size::new(width, 200.0),
+                );
+                let node = element
+                    .as_widget_mut()
+                    .layout(&mut tree, &renderer, &limits);
+                assert_eq!(node.size(), iced::Size::new(width, 200.0));
+                let expected = if style == BarStyle::RaisedBorder {
+                    24.0 + toolbar_metric_for(
+                        &crate::theme_config::current().tokens(),
+                        "raised-border",
+                        "separator-width",
+                        Metrics::desktop().border_width,
+                    )
+                } else {
+                    20.0
+                };
+                assert_eq!(node.children()[0].size().height, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn local_toolbar_rules_and_geometry_reach_layout_and_explicit_styles_win() {
+        use iced::advanced::renderer::Headless;
+        let cfg = crate::theme_config::ThemeConfig::builder("local-toolbar")
+            .files(false)
+            .app_text("[toolbar]\nbreakpoint-rules=xs:flat,md:raised-border\nseparator-width=5px\nshadow-height=9px\n[toolbar.raised-border]\nseparator-width=8px\n")
+            .build();
+        assert!(cfg.warnings().is_empty(), "{:?}", cfg.warnings());
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        for use_config in [false, true] {
+            for (named, explicit, expected_small, expected_large) in [
+                (None, None, 20.0, 32.0),
+                (Some("raised-border"), None, 32.0, 32.0),
+                (Some("raised-border"), Some(BarStyle::Flat), 20.0, 20.0),
+                (Some("flat"), Some(BarStyle::RaisedBorder), 32.0, 32.0),
+            ] {
+                let t = ToolbarView::<()>::new(space())
+                    .top_bar(space().height(20))
+                    .spacing(4.0);
+                let mut t = if use_config {
+                    t.theme_config(&cfg)
+                } else {
+                    t.tokens(cfg.tokens())
+                };
+                if let Some(name) = named {
+                    t = t.named_variant(name);
+                }
+                if let Some(style) = explicit {
+                    t = t.top_bar_style(style);
+                }
+                let mut element: Element<'_, ()> = t.into();
+                let mut tree = iced::advanced::widget::Tree::new(element.as_widget());
+                for (width, expected) in [(400.0, expected_small), (1000.0, expected_large)] {
+                    let limits = iced::advanced::layout::Limits::new(
+                        iced::Size::ZERO,
+                        iced::Size::new(width, 200.0),
+                    );
+                    let node = element
+                        .as_widget_mut()
+                        .layout(&mut tree, &renderer, &limits);
+                    assert_eq!(node.children()[0].size().height, expected);
+                    assert_eq!(node.size().height, 200.0);
+                }
+            }
+        }
+        let tokens = cfg.tokens();
+        let mut line: Element<'_, ()> = border_line("flat", &tokens);
+        let mut tree = iced::advanced::widget::Tree::new(line.as_widget());
+        let limits =
+            iced::advanced::layout::Limits::new(iced::Size::ZERO, iced::Size::new(400.0, 200.0));
+        assert_eq!(
+            line.as_widget_mut()
+                .layout(&mut tree, &renderer, &limits)
+                .size()
+                .height,
+            5.0
+        );
+        let mut shadow: Element<'_, ()> = shade_strip(true, "raised", &tokens);
+        let mut tree = iced::advanced::widget::Tree::new(shadow.as_widget());
+        assert_eq!(
+            shadow
+                .as_widget_mut()
+                .layout(&mut tree, &renderer, &limits)
+                .size()
+                .height,
+            9.0
+        );
+        assert!(ToolbarView::<()>::new(space()).tokens.is_none());
+    }
+
+    #[test]
+    fn shadow_opacity_is_optional_and_bounded() {
+        assert_eq!(shadow_opacity(None), 0.5);
+        assert_eq!(shadow_opacity(Some(0.2)), 0.2);
+        assert_eq!(shadow_opacity(Some(-1.0)), 0.0);
+        assert_eq!(shadow_opacity(Some(2.0)), 1.0);
+    }
+
+    #[test]
+    fn raised_bars_build_with_inherited_geometry() {
+        for style in [BarStyle::Raised, BarStyle::RaisedBorder] {
+            let _: Element<'_, ()> = ToolbarView::new(space())
+                .top_bar(space())
+                .bottom_bar(space())
+                .top_bar_style(style)
+                .bottom_bar_style(style)
+                .into();
+        }
+    }
+
     #[test]
     fn the_bars_take_their_own_spacing_and_padding() {
-        let t = ToolbarView::<()>::new(space()).top_bar(space()).spacing(4.0);
+        let t = ToolbarView::<()>::new(space())
+            .top_bar(space())
+            .spacing(4.0);
         assert_eq!(t.spacing, 4.0);
         let _: Element<'_, ()> = t.into();
         let a = ActionBar::<()>::new()

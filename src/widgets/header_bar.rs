@@ -296,25 +296,85 @@ impl<'a, M: Clone + 'a> Default for HeaderBar<'a, M> {
     }
 }
 
+/// Overlay only explicitly configured action colors on the underlying button style.
+fn control_style(
+    mut style: iced::widget::button::Style,
+    theme: &Theme,
+    status: iced::widget::button::Status,
+    action: &str,
+) -> iced::widget::button::Style {
+    use iced::widget::button::Status;
+    let color = |part| crate::theme_config::window_control_color(&theme.tokens, action, part);
+    let disabled = |c| crate::color::fade(c, theme.semantic.opacity.disabled);
+    if let Some(bg) = color("bg") {
+        let bg = match status {
+            Status::Hovered => theme.semantic.hover_fill(bg),
+            Status::Pressed => theme.semantic.active_fill(bg),
+            Status::Disabled => disabled(bg),
+            Status::Active => bg,
+        };
+        style.background = Some(iced::Background::Color(bg));
+    }
+    if let Some(fg) = color("fg") {
+        style.text_color = if status == Status::Disabled {
+            disabled(fg)
+        } else {
+            fg
+        };
+    }
+    if let Some(border) = color("border") {
+        style.border.color = if status == Status::Disabled {
+            disabled(border)
+        } else {
+            border
+        };
+        style.border.width = style.border.width.max(1.0);
+    }
+    style
+}
+
 /// A window button with the chosen artwork, sized and rounded by the theme's `[windows]` tokens.
-fn ctl<'a, M: Clone + 'a>(icon: IconSource, msg: M, flat: Option<bool>) -> Element<'a, M> {
+fn ctl<'a, M: Clone + 'a>(
+    icon: IconSource,
+    kind: &'static str,
+    msg: M,
+    flat: Option<bool>,
+) -> Element<'a, M> {
     let size = crate::theme_config::window_button_size();
     let radius = crate::theme_config::window_button_radius();
     let icon_size = crate::theme_config::window_button_icon_size();
     // A theme that names a button variant for the window buttons (`[windows] button-style`) styles
     // them as that variant, bevel and gradient included; its radius and size are the variant's.
     if let Some(name) = crate::theme_config::window_button_style() {
-        let face = container(icon.view(icon_size)).center(Length::Fixed(size));
         let section = format!("button.{name}");
+        let face: Element<'a, M> = if crate::theme_config::classic_window_glyphs()
+            && let Some(glyph) = crate::primitives::pixmap::window_glyph(kind)
+        {
+            // Classic buttons: the theme gives the outer size, the face is what the bevel leaves,
+            // and the glyph is a pixel pattern in the button's text color.
+            let (w, h) = crate::theme_config::window_button_dims();
+            let rings = crate::components::bevel_of(&section).map_or(0.0, |(_, width)| {
+                crate::primitives::bevel::rings(width) as f32
+            });
+            container(crate::components::Pixels::new(glyph, section.clone()))
+                .center_x(Length::Fixed((w - 2.0 * rings).max(1.0)))
+                .center_y(Length::Fixed((h - 2.0 * rings).max(1.0)))
+                .into()
+        } else {
+            container(icon.view(icon_size))
+                .center(Length::Fixed(size))
+                .into()
+        };
         let content: Element<'a, M> = match crate::components::bevel_of(&section) {
             Some((style, width)) => crate::components::Bevel::new(face, section, style, width)
                 .pressable(true)
                 .into(),
             None => face.into(),
         };
+        let variant = crate::styles::button::variant(&name);
         return iced::widget::button(content)
             .padding(0)
-            .style(crate::styles::button::variant(&name))
+            .style(move |theme, status| control_style(variant(theme, status), theme, status, kind))
             .on_press(msg)
             .into();
     }
@@ -327,7 +387,7 @@ fn ctl<'a, M: Clone + 'a>(icon: IconSource, msg: M, flat: Option<bool>) -> Eleme
                 crate::styles::button::headerbar(t, status)
             };
             style.border.radius = radius.into();
-            style
+            control_style(style, t, status, kind)
         })
         .on_press(msg)
         .into()
@@ -348,7 +408,7 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
                     WindowButton::Minimize => c
                         .on_minimize
                         .clone()
-                        .map(|m| ctl(h.control_icons.minimize.clone(), m, flat)),
+                        .map(|m| ctl(h.control_icons.minimize.clone(), "minimize", m, flat)),
                     WindowButton::Maximize => c.on_maximize.clone().map(|m| {
                         ctl(
                             if c.maximized {
@@ -356,6 +416,7 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
                             } else {
                                 h.control_icons.maximize.clone()
                             },
+                            if c.maximized { "restore" } else { "maximize" },
                             m,
                             flat,
                         )
@@ -363,25 +424,41 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
                     WindowButton::Close => c
                         .on_close
                         .clone()
-                        .map(|m| ctl(h.control_icons.close.clone(), m, flat)),
+                        .map(|m| ctl(h.control_icons.close.clone(), "close", m, flat)),
                 }
             };
             // The window buttons sit together, `[windows] button-gap` apart.
-            let group = |buttons: Vec<Element<'a, M>>| -> Option<Element<'a, M>> {
-                (!buttons.is_empty()).then(|| {
-                    row(buttons)
-                        .spacing(crate::theme_config::window_button_gap())
-                        .align_y(Vertical::Center)
-                        .into()
-                })
+            let gap = crate::theme_config::window_button_gap();
+            let close_gap = crate::theme_config::window_close_gap();
+            let group = |buttons: Vec<(WindowButton, Element<'a, M>)>| -> Option<Element<'a, M>> {
+                if buttons.is_empty() {
+                    return None;
+                }
+                let mut r = row![].spacing(0.0).align_y(Vertical::Center);
+                for (i, (which, el)) in buttons.into_iter().enumerate() {
+                    if i > 0 {
+                        let g = if which == WindowButton::Close {
+                            close_gap.unwrap_or(gap)
+                        } else {
+                            gap
+                        };
+                        r = r.push(space().width(g));
+                    }
+                    r = r.push(el);
+                }
+                Some(r.into())
+            };
+            let made = |list: &[WindowButton]| -> Vec<(WindowButton, Element<'a, M>)> {
+                list.iter()
+                    .copied()
+                    .filter_map(|b| make(b).map(|el| (b, el)))
+                    .collect()
             };
             if h.show_start_buttons {
-                let buttons: Vec<_> = layout.start.iter().copied().filter_map(&make).collect();
-                start.splice(0..0, group(buttons));
+                start.splice(0..0, group(made(&layout.start)));
             }
             if h.show_end_buttons {
-                let buttons: Vec<_> = layout.end.iter().copied().filter_map(&make).collect();
-                end.extend(group(buttons));
+                end.extend(group(made(&layout.end)));
             }
         }
         let mut title: Element<'a, M> = match (h.title_widget, h.title) {
@@ -467,6 +544,49 @@ mod tests {
     use super::*;
 
     #[test]
+    fn action_colors_overlay_both_control_styles_and_derive_states() {
+        use iced::widget::button::Status;
+        let cfg = crate::theme_config::ThemeConfig::builder("test")
+            .files(false)
+            .toolkit_text("[windows]\nclose-bg=#ff0000\nclose-fg=#ffffff\nclose-border=#000000\n")
+            .build();
+        let theme = Theme::light().with_theme_config(&cfg);
+        for base in [
+            crate::styles::button::headerbar(&theme, Status::Active),
+            crate::styles::button::variant("default")(&theme, Status::Active),
+        ] {
+            let unchanged = control_style(base, &theme, Status::Active, "minimize");
+            assert_eq!(unchanged.background, base.background);
+            assert_eq!(unchanged.text_color, base.text_color);
+            assert_eq!(unchanged.border, base.border);
+            for status in [
+                Status::Active,
+                Status::Hovered,
+                Status::Pressed,
+                Status::Disabled,
+            ] {
+                let styled = control_style(base, &theme, status, "close");
+                let red = iced::Color::from_rgb(1.0, 0.0, 0.0);
+                let bg = match status {
+                    Status::Active => red,
+                    Status::Hovered => theme.semantic.hover_fill(red),
+                    Status::Pressed => theme.semantic.active_fill(red),
+                    Status::Disabled => crate::color::fade(red, theme.semantic.opacity.disabled),
+                };
+                assert_eq!(styled.background, Some(iced::Background::Color(bg)));
+                assert_eq!(styled.border.width, base.border.width.max(1.0));
+                assert_eq!(styled.border.radius, base.border.radius);
+                let fg = if status == Status::Disabled {
+                    crate::color::fade(iced::Color::WHITE, theme.semantic.opacity.disabled)
+                } else {
+                    iced::Color::WHITE
+                };
+                assert_eq!(styled.text_color, fg);
+            }
+        }
+    }
+
+    #[test]
     fn a_header_bar_takes_spacing_padding_and_height() {
         let bar = HeaderBar::<u8>::new()
             .title("T")
@@ -474,7 +594,10 @@ mod tests {
             .padding([1.0, 3.0])
             .height(40.0)
             .title_gap(5.0);
-        assert_eq!((bar.spacing, bar.height, bar.title_gap), (Some(2.0), Some(40.0), Some(5.0)));
+        assert_eq!(
+            (bar.spacing, bar.height, bar.title_gap),
+            (Some(2.0), Some(40.0), Some(5.0))
+        );
         let _: Element<'_, u8> = bar.into();
     }
     use crate::windows::{Action, Chrome, State};

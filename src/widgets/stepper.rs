@@ -70,21 +70,27 @@ pub enum StepperSize {
 impl StepperSize {
     /// The circle's diameter, logical px.
     pub fn diameter(self) -> f32 {
+        self.diameter_with_metrics(Metrics::desktop())
+    }
+
+    fn diameter_with_metrics(self, m: Metrics) -> f32 {
         match self {
-            Self::Xs => 20.0,
-            Self::Sm => 24.0,
-            Self::Md => 26.0,
-            Self::Lg => 32.0,
-            Self::Xl => 40.0,
+            Self::Xs => m.icon_size,
+            Self::Sm => m.button_min_height,
+            Self::Md => m.entry_min_height,
+            Self::Lg => m.row_min_height,
+            Self::Xl => m.headerbar_height,
         }
     }
     fn text_scale(self) -> f32 {
-        match self {
-            Self::Xs | Self::Sm => 0.92,
-            Self::Md => 1.0,
-            Self::Lg => 1.1,
-            Self::Xl => 1.2,
-        }
+        let t = crate::Typography::desktop();
+        let size = match self {
+            Self::Xs | Self::Sm => t.caption,
+            Self::Md => t.small,
+            Self::Lg => t.body,
+            Self::Xl => t.title_3,
+        };
+        size / t.small.max(f32::EPSILON)
     }
 }
 
@@ -381,7 +387,7 @@ impl<M: Clone> Look<M> {
             .unwrap_or(Padding::from([self.m.space_xs, self.m.space_s]))
     }
     fn glyph(&self) -> f32 {
-        (self.m.space_m + 2.0) * self.diameter / 26.0
+        self.m.icon_size.min(self.diameter)
     }
 
     /// The circle of step `n`.
@@ -403,7 +409,7 @@ impl<M: Clone> Look<M> {
                 solid(t, t.semantic.accent.color, d)
             }),
             Status::Invalid => text("!")
-                .size(size + 2.0)
+                .size(crate::Typography::desktop().heading * self.scale)
                 .font(bold())
                 .style(|t: &Theme| text::Style {
                     color: Some(t.semantic.error.color),
@@ -480,7 +486,7 @@ impl<M: Clone> Look<M> {
                     background: bg.map(|c| crate::color::fade(c, k).into()),
                     border: Border {
                         color: crate::color::fade(border, k),
-                        width: 1.5,
+                        width: t.metrics.border_width,
                         radius: (d / 2.0).into(),
                     },
                     ..Default::default()
@@ -525,15 +531,21 @@ impl<M: Clone> Look<M> {
             });
         let mut col = column![title].spacing(self.text_gap());
         if let Some(d) = &it.description {
-            col = col.push(text(d.clone()).size(size - 2.0).wrapping(wrap).style(
-                move |t: &Theme| text::Style {
-                    color: Some(if dis {
-                        crate::color::fade(t.semantic.window.fg, 0.4 * t.semantic.opacity.disabled)
-                    } else {
-                        crate::color::fade(t.semantic.window.fg, t.semantic.opacity.dim + 0.1)
+            col = col.push(
+                text(d.clone())
+                    .size(crate::Typography::desktop().caption * self.scale)
+                    .wrapping(wrap)
+                    .style(move |t: &Theme| text::Style {
+                        color: Some(if dis {
+                            crate::color::fade(
+                                t.semantic.window.fg,
+                                0.4 * t.semantic.opacity.disabled,
+                            )
+                        } else {
+                            crate::color::fade(t.semantic.window.fg, t.semantic.opacity.dim + 0.1)
+                        }),
                     }),
-                },
-            ));
+            );
         }
         col.into()
     }
@@ -595,7 +607,7 @@ impl<M: Clone> Look<M> {
                     }
                     .into(),
                 ),
-                border: Border::default().rounded(1.0),
+                border: Border::default().rounded(t.metrics.radius_s),
                 ..Default::default()
             });
             if horizontal {
@@ -618,7 +630,7 @@ impl<M: Clone> Look<M> {
             }
         };
         if horizontal {
-            let c = container(inner).height(Length::Fixed(2.0));
+            let c = container(inner).height(Length::Fixed(self.m.border_width));
             match fixed {
                 Some(w) => c.width(Length::Fixed(w)),
                 None => c.width(Length::Fill),
@@ -626,7 +638,7 @@ impl<M: Clone> Look<M> {
             .into()
         } else {
             container(inner)
-                .width(Length::Fixed(2.0))
+                .width(Length::Fixed(self.m.border_width))
                 .height(Length::Fill)
                 .into()
         }
@@ -637,10 +649,9 @@ impl<M: Clone> Look<M> {
         let it = &self.items[i];
         let size = crate::Typography::desktop().small * self.scale;
         let label = it.label.chars().count() as f32 * size * 0.58;
-        let desc = it
-            .description
-            .as_ref()
-            .map_or(0.0, |d| d.chars().count() as f32 * (size - 2.0) * 0.55);
+        let desc = it.description.as_ref().map_or(0.0, |d| {
+            d.chars().count() as f32 * (crate::Typography::desktop().caption * self.scale) * 0.55
+        });
         self.diameter + self.m.space_s * 3.0 + label.max(desc)
     }
 
@@ -678,7 +689,7 @@ impl<M: Clone> Look<M> {
         let has_desc = self.items.iter().any(|i| i.description.is_some());
         let text_h = size * 1.4
             + if has_desc {
-                (size - 2.0) * 1.4 + self.text_gap()
+                (crate::Typography::desktop().caption * self.scale) * 1.4 + self.text_gap()
             } else {
                 0.0
             };
@@ -744,7 +755,9 @@ impl<'a, M: Clone + 'a> From<Stepper<'a, M>> for Element<'a, M> {
         let m = s.metrics;
         let count = s.steps.len();
         let active = prim::clamp(s.active, count);
-        let diameter = s.icon_size.unwrap_or_else(|| s.size.diameter());
+        let diameter = s
+            .icon_size
+            .unwrap_or_else(|| s.size.diameter_with_metrics(m));
         let click_enabled = s.on_step_click.is_some();
 
         let items: Vec<Item<M>> = s
@@ -887,8 +900,37 @@ mod spacing_tests {
                 .icon_spacing(3.0)
                 .text_spacing(4.0)
                 .step_padding([1.0, 5.0]);
-            assert_eq!((s.spacing, s.icon_spacing, s.text_spacing), (Some(2.0), Some(3.0), Some(4.0)));
+            assert_eq!(
+                (s.spacing, s.icon_spacing, s.text_spacing),
+                (Some(2.0), Some(3.0), Some(4.0))
+            );
             let _: Element<'_, u8> = s.into();
+        }
+    }
+}
+
+#[cfg(test)]
+mod metric_regressions {
+    use super::*;
+
+    #[test]
+    fn every_size_uses_the_supplied_control_metrics() {
+        let m = Metrics {
+            icon_size: 11.0,
+            button_min_height: 22.0,
+            entry_min_height: 33.0,
+            row_min_height: 44.0,
+            headerbar_height: 55.0,
+            ..Metrics::default()
+        };
+        for (size, expected) in [
+            (StepperSize::Xs, 11.0),
+            (StepperSize::Sm, 22.0),
+            (StepperSize::Md, 33.0),
+            (StepperSize::Lg, 44.0),
+            (StepperSize::Xl, 55.0),
+        ] {
+            assert_eq!(size.diameter_with_metrics(m), expected);
         }
     }
 }

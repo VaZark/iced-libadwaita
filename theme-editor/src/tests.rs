@@ -1,5 +1,234 @@
 use super::*;
+
+#[path = "regression_tests.rs"]
+mod regressions;
 use std::os::unix::fs::symlink;
+
+#[test]
+fn geometry_sections_have_searchable_friendly_labels() {
+    let mut e = editor();
+    // Use the same schema path as toolkit additions, without duplicating their defaults.
+    let schema = Schema::new()
+        .number("tree", "level-offset", 20.0, "Indentation per level")
+        .number("tree-row", "indent", 20.0, "Nested child indentation")
+        .number("navigation", "sidebar-fraction", 0.25, "Sidebar share");
+    e.specs.extend(schema.specs().iter().cloned());
+    for (section, query) in [
+        ("tree", "hierarchy"),
+        ("tree-row", "nested settings"),
+        ("navigation", "drawers"),
+    ] {
+        e.search = query.into();
+        let specs: Vec<_> = e.specs.iter().filter(|s| s.section == section).collect();
+        assert!(!specs.is_empty());
+        assert!(specs.iter().all(|s| e.visible(s)));
+        let grouped: usize = e
+            .groups_of(section)
+            .iter()
+            .map(|(_, specs)| specs.len())
+            .sum();
+        assert_eq!(grouped, specs.len());
+        e.modified_only = true;
+        assert!(specs.iter().all(|s| !e.visible(s)));
+        e.modified_only = false;
+    }
+}
+
+#[test]
+fn preview_geometry_uses_scheme_tokens_without_changing_editor_chrome() {
+    let text = "[metrics]\nradius-m=7\n[dark:metrics]\nradius-m=9\n";
+    let light = preview::Preview::build(text, false);
+    let dark = preview::Preview::build(text, true);
+    assert_eq!(light.metrics.radius_m, 7.0);
+    assert_eq!(dark.metrics.radius_m, 9.0);
+    let _ = light.view();
+    let _ = dark.view();
+}
+
+#[test]
+fn named_widget_variants_are_discoverable_separately_from_schemes() {
+    let mut e = editor();
+    for (widget, variant) in Schema::toolkit().variants_declared() {
+        if !["tree", "tree-row", "navigation", "tabs", "toolbar"].contains(&widget.as_str()) {
+            continue;
+        }
+        let section = format!("{widget}.{variant}");
+        assert!(e.sections.contains(&section), "{section}");
+        assert!(tokens::section_label(&section).contains("widget variant"));
+        e.search = "widget variant".into();
+        assert!(
+            e.specs
+                .iter()
+                .filter(|s| s.section == section)
+                .all(|s| e.visible(s))
+        );
+    }
+}
+
+#[test]
+fn breakpoint_helper_adds_edits_removes_and_undoes_rules() {
+    let mut e = editor();
+    let _ = e.update(Msg::Rule("tabs".into(), 0, Some((None, None))));
+    assert!(e.generate().contains("breakpoint-rules=xs:"));
+    let _ = e.update(Msg::Rule(
+        "tabs".into(),
+        0,
+        Some((Some("md".into()), Some("outline".into()))),
+    ));
+    assert!(e.generate().contains("breakpoint-rules=md:outline"));
+    let _ = e.update(Msg::Rule("tabs".into(), 0, None));
+    assert!(!e.generate().contains("md:outline"));
+    let _ = e.update(Msg::Undo);
+    assert!(e.generate().contains("md:outline"));
+    let _ = e.view();
+}
+
+#[test]
+fn invalid_breakpoint_rules_never_enter_values_or_save_from_loaded_files() {
+    let mut e = editor();
+    for rules in ["md:missing", "bad:default", "xs:default,xs:outline"] {
+        let _ = e.update(Msg::Input(
+            "tabs".into(),
+            "breakpoint-rules".into(),
+            rules.into(),
+        ));
+        assert!(!e.generate().contains(rules));
+    }
+    let dir = temp_dir("invalid-rules");
+    let path = dir.join("theme.conf");
+    e.values.insert(
+        ("tabs".into(), "breakpoint-rules".into()),
+        "md:missing".into(),
+    );
+    assert!(!e.save_to(path.clone()));
+    assert!(!path.exists());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn preview_width_rules_use_local_tokens_and_inclusive_breakpoints() {
+    let p = preview::Preview::build(
+        "[tabs]\nbreakpoint-rules=xs:pills,md:outline\n[breakpoints]\nmd=800\n",
+        false,
+    );
+    let boundary = p.scale().md;
+    assert_eq!(p.selected("tabs", boundary - 1.0), "pills");
+    assert_eq!(p.selected("tabs", boundary), "outline");
+    let _ = p.view_at(boundary - 1.0);
+    let _ = p.view_at(boundary);
+    let mut e = editor();
+    let _ = e.update(Msg::PreviewWidth(boundary));
+    assert_eq!(e.preview_width, boundary);
+    let _ = e.update(Msg::PreviewWidth(f32::NAN));
+    assert_eq!(e.preview_width, boundary);
+}
+
+#[test]
+fn preview_tree_layout_uses_local_geometry_and_scheme_overrides() {
+    use iced::advanced::{layout, renderer::Headless, widget::Tree};
+    let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+        iced::Font::DEFAULT,
+        iced::Pixels(14.0),
+        Some("tiny-skia"),
+    ))
+    .unwrap();
+    let source = "[tree.default]\nrow-height=47px\nlevel-offset=31px\n[dark:tree.default]\nrow-height=61px\n";
+    for (dark, expected) in [(false, 47.0), (true, 61.0)] {
+        let preview = preview::Preview::build(source, dark);
+        let mut element = preview.tree_sample(800.0);
+        let mut state = Tree::new(&element);
+        let node = element.as_widget_mut().layout(
+            &mut state,
+            &renderer,
+            &layout::Limits::new(iced::Size::ZERO, iced::Size::new(800.0, 1000.0)),
+        );
+        // Project, Sources, main.rs, theme.conf: all expanded in the actual sample.
+        assert_eq!(node.size().height, expected * 4.0);
+    }
+}
+
+#[test]
+fn preview_navigation_resolves_all_density_dimensions_locally() {
+    let source = "[navigation]\nbreakpoint-rules=xs:sm,md:lg\n[navigation.sm]\nrow-height=33px\nrow-padding=7px\ngap=3px\ninset=5px\n[navigation.lg]\nrow-height=63px\nrow-padding=17px\ngap=13px\ninset=15px\n[dark:navigation.lg]\nrow-height=71px\n";
+    let light = preview::Preview::build(source, false);
+    let dark = preview::Preview::build(source, true);
+    let boundary = light.scale().md;
+    assert_eq!(
+        light.navigation_geometry(boundary - 1.0),
+        preview::NavigationGeometry {
+            row_height: 33.0,
+            row_padding: 7.0,
+            gap: 3.0,
+            inset: 5.0,
+        }
+    );
+    assert_eq!(
+        light.navigation_geometry(boundary),
+        preview::NavigationGeometry {
+            row_height: 63.0,
+            row_padding: 17.0,
+            gap: 13.0,
+            inset: 15.0,
+        }
+    );
+    assert_eq!(dark.navigation_geometry(boundary).row_height, 71.0);
+    // A second preview must not mutate the first one's tokens or geometry.
+    assert_eq!(light.navigation_geometry(boundary).row_height, 63.0);
+}
+
+#[test]
+fn tabs_and_toolbar_preview_use_local_rules_and_geometry_without_global_writes() {
+    use iced::advanced::{layout, renderer::Headless, widget::Tree};
+    let global_theme = iad::theme_config::current();
+    let global_config = iad::config::current();
+    let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+        iced::Font::DEFAULT,
+        iced::Pixels(14.0),
+        Some("tiny-skia"),
+    ))
+    .unwrap();
+    let layout = |mut element: iad::Element<'_, Msg>| {
+        let mut state = Tree::new(&element);
+        element.as_widget_mut().layout(
+            &mut state,
+            &renderer,
+            &layout::Limits::new(iced::Size::ZERO, iced::Size::new(800.0, 600.0)),
+        )
+    };
+    fn has_height(node: &layout::Node, height: f32) -> bool {
+        (node.size().height - height).abs() < 0.01
+            || node.children().iter().any(|n| has_height(n, height))
+    }
+    let a = preview::Preview::build(
+        "[tabs]\nbreakpoint-rules=xs:default,md:pills\n[tabs.default]\nindicator-height=17px\n[toolbar]\nbreakpoint-rules=xs:raised,md:flat\n[toolbar.raised]\nshadow-height=23px\n",
+        false,
+    );
+    let b = preview::Preview::build(
+        "[tabs.default]\nindicator-height=3px\n[toolbar]\nbreakpoint-rules=xs:raised\n[toolbar.raised]\nshadow-height=7px\n",
+        false,
+    );
+    let narrow = a.scale().md - 1.0;
+    let wide = a.scale().md;
+    assert_eq!(a.selected("tabs", narrow), "default");
+    assert_eq!(a.selected("tabs", wide), "pills");
+    assert_eq!(a.selected("toolbar", narrow), "raised");
+    assert_eq!(a.selected("toolbar", wide), "flat");
+    let tabs_a = layout(a.tabs_sample(narrow));
+    let tabs_b = layout(b.tabs_sample(narrow));
+    assert!((tabs_a.size().height - tabs_b.size().height - 14.0).abs() < 0.01);
+    assert!(has_height(&layout(a.toolbar_sample(narrow)), 23.0));
+    assert!(has_height(&layout(b.toolbar_sample(narrow)), 7.0));
+    assert!(!has_height(&layout(a.toolbar_sample(wide)), 23.0));
+    assert!(!has_height(&layout(a.tabs_sample(wide)), 17.0));
+    assert!(std::sync::Arc::ptr_eq(
+        &global_theme,
+        &iad::theme_config::current()
+    ));
+    assert!(std::sync::Arc::ptr_eq(
+        &global_config,
+        &iad::config::current()
+    ));
+}
 
 fn editor() -> Editor {
     let mut e = Editor::with(None, None).0;
@@ -46,7 +275,11 @@ fn the_shipped_themes_round_trip_through_the_editor() {
         let b: BTreeMap<_, _> = iad::config::parse_keyfile(&out).into_iter().collect();
         assert_eq!(a, b, "{}", f.display());
         let report = Schema::toolkit().validate(&out);
-        assert!(report.errors.is_empty() && report.unknown.is_empty(), "{}", f.display());
+        assert!(
+            report.errors.is_empty() && report.unknown.is_empty(),
+            "{}",
+            f.display()
+        );
     }
 }
 
@@ -56,7 +289,11 @@ fn only_what_is_set_is_written_and_a_variant_goes_in_its_own_section() {
     assert!(!e.generate().lines().any(|l| l.starts_with('[')));
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
     let _ = e.update(Msg::Variant(Variant::Dark));
-    let _ = e.update(Msg::Input("colors".into(), "window-bg".into(), "#101010".into()));
+    let _ = e.update(Msg::Input(
+        "colors".into(),
+        "window-bg".into(),
+        "#101010".into(),
+    ));
     let out = e.generate();
     assert!(out.contains("[metrics]\nradius-m=7\n"));
     assert!(out.contains("[dark:colors]\nwindow-bg=#101010\n"));
@@ -69,9 +306,17 @@ fn only_what_is_set_is_written_and_a_variant_goes_in_its_own_section() {
 #[test]
 fn a_value_that_is_not_valid_yet_is_not_written() {
     let mut e = editor();
-    let _ = e.update(Msg::Input("colors".into(), "window-bg".into(), "#12".into()));
+    let _ = e.update(Msg::Input(
+        "colors".into(),
+        "window-bg".into(),
+        "#12".into(),
+    ));
     assert!(!e.generate().contains("window-bg"));
-    let _ = e.update(Msg::Input("windows".into(), "button-size".into(), "30".into()));
+    let _ = e.update(Msg::Input(
+        "windows".into(),
+        "button-size".into(),
+        "30".into(),
+    ));
     assert!(e.generate().contains("button-size=30px"));
 }
 
@@ -189,13 +434,20 @@ fn try_it_out_runs_the_gallery_on_a_temp_file_and_leaves_the_original_alone() {
     e.bins.gallery = Some(script(
         &d,
         "gallery.sh",
-        &format!("echo \"$IAD_THEME\" > {o}.tmp; cat \"$IAD_THEME\" >> {o}.tmp; mv {o}.tmp {o}", o = out.display()),
+        &format!(
+            "echo \"$IAD_THEME\" > {o}.tmp; cat \"$IAD_THEME\" >> {o}.tmp; mv {o}.tmp {o}",
+            o = out.display()
+        ),
     ));
     e.try_out("gallery");
     let seen = wait_for(&out);
     assert!(seen.contains("radius-m=7"), "the unsaved value: {seen}");
     assert!(seen.contains("iad-theme-editor-"), "a temp file of its own");
-    assert_eq!(read(&f), "[metrics]\nradius-m=1\n", "the original is untouched");
+    assert_eq!(
+        read(&f),
+        "[metrics]\nradius-m=1\n",
+        "the original is untouched"
+    );
     assert!(e.dirty() && e.path == Some(f));
     assert!(e.status.starts_with("Tried it out"), "{}", e.status);
     let _ = std::fs::remove_dir_all(d);
@@ -210,7 +462,10 @@ fn a_toy_window_starts_with_its_name_and_the_unsaved_values() {
     e.bins.toys = Some(script(
         &d,
         "theme-toys.sh",
-        &format!("echo \"$@\" > {o}.tmp; cat \"$IAD_THEME\" >> {o}.tmp; mv {o}.tmp {o}", o = out.display()),
+        &format!(
+            "echo \"$@\" > {o}.tmp; cat \"$IAD_THEME\" >> {o}.tmp; mv {o}.tmp {o}",
+            o = out.display()
+        ),
     ));
     let _ = e.update(Msg::TryOut("win95".into()));
     let seen = wait_for(&out);
@@ -230,7 +485,9 @@ fn starting_a_toy_again_replaces_the_old_window() {
     };
     runner.launch("again", "", &bins).unwrap();
     assert!(runner.running("again"));
-    runner.launch("again", "[metrics]\nradius-m=1\n", &bins).unwrap();
+    runner
+        .launch("again", "[metrics]\nradius-m=1\n", &bins)
+        .unwrap();
     assert!(runner.running("again"), "the new one runs");
     assert!(!runner.running("other"), "other kinds are not started");
     drop(runner);
@@ -242,16 +499,32 @@ fn the_toy_list_is_what_the_program_says_or_the_fixed_five() {
     let d = temp_dir("list");
     let bins = toys::Bins {
         gallery: None,
-        toys: Some(script(&d, "t.sh", "printf 'win95  Windows 95\\nmac: Mac OS\\n# a comment\\ngnome2\\n'")),
+        toys: Some(script(
+            &d,
+            "t.sh",
+            "printf 'win95  Windows 95\\nmac: Mac OS\\n# a comment\\ngnome2\\n'",
+        )),
     };
     let toys = toys::list_toys(&bins);
     assert_eq!(
-        toys.iter().map(|t| (t.name.as_str(), t.label.as_str())).collect::<Vec<_>>(),
-        [("win95", "Windows 95"), ("mac", "Mac OS"), ("gnome2", "gnome2")]
+        toys.iter()
+            .map(|t| (t.name.as_str(), t.label.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("win95", "Windows 95"),
+            ("mac", "Mac OS"),
+            ("gnome2", "gnome2")
+        ]
     );
     let fixed = toys::list_toys(&toys::Bins::default());
-    assert_eq!(fixed.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["win95", "winxp", "win7", "mac", "gnome2"]);
-    let broken = toys::Bins { gallery: None, toys: Some(script(&d, "bad.sh", "exit 3")) };
+    assert_eq!(
+        fixed.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(),
+        ["win95", "winxp", "win7", "mac", "gnome2"]
+    );
+    let broken = toys::Bins {
+        gallery: None,
+        toys: Some(script(&d, "bad.sh", "exit 3")),
+    };
     assert_eq!(toys::list_toys(&broken), toys::fallback());
     let _ = std::fs::remove_dir_all(d);
 }
@@ -329,16 +602,30 @@ fn set_as_default_points_default_conf_at_the_file_and_the_list_tags_it() {
     assert_eq!(default_target(&data), Some(canon(&a)));
     let list = list_presets(&[data.clone()], &[], &[]);
     assert_eq!(list.len(), 2, "default.conf is not a third entry");
-    let tagged: Vec<_> = list.iter().filter(|p| p.is_default).map(|p| p.name.as_str()).collect();
+    let tagged: Vec<_> = list
+        .iter()
+        .filter(|p| p.is_default)
+        .map(|p| p.name.as_str())
+        .collect();
     assert_eq!(tagged, ["Alpha"]);
     // Replaced by another file.
     set_default(&data, &b).unwrap();
     let list = list_presets(&[data.clone()], &[], &[]);
-    assert_eq!(list.iter().filter(|p| p.is_default).map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Beta"]);
+    assert_eq!(
+        list.iter()
+            .filter(|p| p.is_default)
+            .map(|p| p.name.as_str())
+            .collect::<Vec<_>>(),
+        ["Beta"]
+    );
     // A regular default.conf is not overwritten.
     let other = temp_dir("default2");
     std::fs::write(other.join("default.conf"), "mine").unwrap();
-    assert!(set_default(&other, &a).unwrap_err().contains("regular file"));
+    assert!(
+        set_default(&other, &a)
+            .unwrap_err()
+            .contains("regular file")
+    );
     assert_eq!(read(&other.join("default.conf")), "mine");
     let _ = std::fs::remove_dir_all(d);
     let _ = std::fs::remove_dir_all(other);
@@ -371,7 +658,11 @@ fn the_registry_buttons_report_in_the_status_line_and_rescan() {
     e.load(f.clone());
     let _ = e.update(Msg::Register);
     assert!(e.status.starts_with("Registered"), "{}", e.status);
-    assert!(e.presets.iter().any(|p| p.group == "Registered" && p.name == "T"));
+    assert!(
+        e.presets
+            .iter()
+            .any(|p| p.group == "Registered" && p.name == "T")
+    );
     let _ = e.update(Msg::SetDefault);
     assert!(e.presets.iter().any(|p| p.is_default));
     let _ = e.update(Msg::Unregister);
@@ -409,17 +700,27 @@ fn the_list_has_the_registered_files_the_folders_and_the_recent_ones() {
     );
     let group = |n: &str| list.iter().find(|p| p.name == n).map(|p| p.group);
     assert_eq!(group("Own"), Some("Registered"));
-    assert_eq!(group("plain"), Some("Registered"), "registered, so not repeated under Folders");
+    assert_eq!(
+        group("plain"),
+        Some("Registered"),
+        "registered, so not repeated under Folders"
+    );
     assert_eq!(group("Mine"), Some("Folders"));
     assert_eq!(group("far"), Some("Recent"));
     assert_eq!(list.iter().filter(|p| p.name == "Mine").count(), 1);
-    assert!(list.iter().all(|p| p.path.is_file()), "only real files, none missing");
+    assert!(
+        list.iter().all(|p| p.path.is_file()),
+        "only real files, none missing"
+    );
     // The symlink entry shows where it points.
     let plain = list.iter().find(|p| p.name == "plain").unwrap();
     assert_eq!(plain.target, Some(canon(&folder.join("plain.conf"))));
     assert_eq!(list.iter().find(|p| p.name == "Own").unwrap().target, None);
     // No embedded, shipped or repository group exists.
-    assert!(list.iter().all(|p| ["Registered", "Folders", "Recent"].contains(&p.group)));
+    assert!(
+        list.iter()
+            .all(|p| ["Registered", "Folders", "Recent"].contains(&p.group))
+    );
     let _ = std::fs::remove_dir_all(d);
 }
 
@@ -483,7 +784,11 @@ fn the_state_round_trips() {
     };
     assert_eq!(State::parse(&state.to_text()), state);
     assert_eq!(State::parse(""), State::default());
-    assert!(state.to_text().starts_with("[state]\nlast-file=/a/one.conf\n"));
+    assert!(
+        state
+            .to_text()
+            .starts_with("[state]\nlast-file=/a/one.conf\n")
+    );
 }
 
 #[test]
@@ -495,7 +800,13 @@ fn the_recent_list_has_no_duplicates_and_a_limit() {
     s.remember(std::path::Path::new("/t/5.conf"));
     assert_eq!(s.recent.len(), RECENT_MAX);
     assert_eq!(s.recent[0], PathBuf::from("/t/5.conf"));
-    assert_eq!(s.recent.iter().filter(|p| **p == PathBuf::from("/t/5.conf")).count(), 1);
+    assert_eq!(
+        s.recent
+            .iter()
+            .filter(|p| **p == PathBuf::from("/t/5.conf"))
+            .count(),
+        1
+    );
 }
 
 #[test]
@@ -552,12 +863,28 @@ fn save_as_writes_a_new_file_and_registers_it() {
     e.theme_dirs = vec![data.clone()];
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
     let _ = e.update(Msg::SavedAs(Some(file.clone())));
-    assert!(read(&file).contains("radius-m=7"), "the new file is written");
-    assert!(!e.dirty() && e.path == Some(file.clone()), "the editor edits the new file");
+    assert!(
+        read(&file).contains("radius-m=7"),
+        "the new file is written"
+    );
+    assert!(
+        !e.dirty() && e.path == Some(file.clone()),
+        "the editor edits the new file"
+    );
     let link = data.join("mine.conf");
-    assert!(is_link(&link) && canon(&link) == canon(&file), "registered by a symlink");
-    assert!(e.status.starts_with("Saved and registered as"), "{}", e.status);
-    assert!(e.presets.iter().any(|p| p.path == link), "the list shows it");
+    assert!(
+        is_link(&link) && canon(&link) == canon(&file),
+        "registered by a symlink"
+    );
+    assert!(
+        e.status.starts_with("Saved and registered as"),
+        "{}",
+        e.status
+    );
+    assert!(
+        e.presets.iter().any(|p| p.path == link),
+        "the list shows it"
+    );
     let _ = std::fs::remove_dir_all(d);
 }
 
@@ -640,7 +967,11 @@ fn undo_and_redo_walk_the_edits_and_typing_in_one_token_is_one_step() {
 fn undo_has_a_limit_and_opening_a_file_starts_it_over() {
     let mut e = editor();
     for i in 0..(UNDO_MAX + 20) {
-        let _ = e.update(Msg::Toggle("colors".into(), "auto-contrast".into(), i % 2 == 0));
+        let _ = e.update(Msg::Toggle(
+            "colors".into(),
+            "auto-contrast".into(),
+            i % 2 == 0,
+        ));
     }
     assert_eq!(e.undo.len(), UNDO_MAX);
     let d = temp_dir("undo-open");
@@ -659,7 +990,9 @@ fn the_search_looks_at_names_descriptions_and_sections() {
     e.search = "radius".into();
     let found: Vec<&Spec> = e.specs.iter().filter(|s| e.visible(s)).collect();
     assert!(found.iter().any(|s| s.key == "radius-m"));
-    assert!(found.iter().all(|s| s.key.contains("radius") || s.doc.to_lowercase().contains("radius") || s.section.contains("radius")));
+    assert!(found.iter().all(|s| s.key.contains("radius")
+        || s.doc.to_lowercase().contains("radius")
+        || s.section.contains("radius")));
     e.search = "NO SUCH TOKEN ANYWHERE".into();
     assert!(e.specs.iter().all(|s| !e.visible(s)));
     e.search.clear();
@@ -684,24 +1017,39 @@ fn modified_only_shows_what_any_variant_sets_and_the_counts_follow() {
 
 #[test]
 fn resetting_a_group_removes_only_what_the_current_variant_sets() {
-    let mut e = with_text("[metrics]\nradius-m=4\nradius-l=5\nspace-m=9\n[dark:metrics]\nradius-m=2\n");
+    let mut e =
+        with_text("[metrics]\nradius-m=4\nradius-l=5\nspace-m=9\n[dark:metrics]\nradius-m=2\n");
     let _ = e.update(Msg::ResetGroup("metrics".into(), "radius".into()));
     let out = e.generate();
-    assert!(!out.contains("radius-m=4") && !out.contains("radius-l"), "{out}");
-    assert!(out.contains("space-m=9") && out.contains("[dark:metrics]"), "{out}");
+    assert!(
+        !out.contains("radius-m=4") && !out.contains("radius-l"),
+        "{out}"
+    );
+    assert!(
+        out.contains("space-m=9") && out.contains("[dark:metrics]"),
+        "{out}"
+    );
     let _ = e.update(Msg::Undo);
-    assert!(e.generate().contains("radius-l=5"), "reset is one undo step");
+    assert!(
+        e.generate().contains("radius-l=5"),
+        "reset is one undo step"
+    );
 }
 
 #[test]
 fn copy_from_base_fills_only_what_the_variant_does_not_set() {
-    let mut e = with_text("[theme]\nname=X\n[colors]\nwindow-bg=#111111\nview-bg=#222222\n[dark:colors]\nview-bg=#999999\n");
+    let mut e = with_text(
+        "[theme]\nname=X\n[colors]\nwindow-bg=#111111\nview-bg=#222222\n[dark:colors]\nview-bg=#999999\n",
+    );
     let _ = e.update(Msg::Variant(Variant::Base));
     assert_eq!(e.copy_from_base(), 0, "nothing to copy into the base");
     let _ = e.update(Msg::Variant(Variant::Dark));
     let _ = e.update(Msg::CopyFromBase);
     let out = e.generate();
-    assert!(out.contains("[dark:colors]\nwindow-bg=#111111\nview-bg=#999999\n"), "{out}");
+    assert!(
+        out.contains("[dark:colors]\nwindow-bg=#111111\nview-bg=#999999\n"),
+        "{out}"
+    );
     assert!(!out.contains("[dark:theme]"), "the identity is not copied");
     assert!(e.status.contains("Copied 1"), "{}", e.status);
 }
@@ -718,21 +1066,47 @@ fn a_gradient_is_edited_by_angle_stops_and_colors() {
         .cloned()
         .expect("the schema has gradient tokens");
     let (s, k) = (spec.section.clone(), spec.key.clone());
-    assert!(!e.values.contains_key(&(s.clone(), k.clone())), "unset to begin with");
+    assert!(
+        !e.values.contains_key(&(s.clone(), k.clone())),
+        "unset to begin with"
+    );
     let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Start));
-    assert!(e.generate().contains(&format!("{k}=linear-gradient(90deg")), "{}", e.generate());
-    let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Angle("45".into())));
-    assert!(e.generate().contains(&format!("{k}=linear-gradient(45deg")), "{}", e.generate());
+    assert!(
+        e.generate().contains(&format!("{k}=linear-gradient(90deg")),
+        "{}",
+        e.generate()
+    );
+    let _ = e.update(Msg::Gradient(
+        s.clone(),
+        k.clone(),
+        GradEdit::Angle("45".into()),
+    ));
+    assert!(
+        e.generate().contains(&format!("{k}=linear-gradient(45deg")),
+        "{}",
+        e.generate()
+    );
     let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Add));
     let g = iad::theme_config::Gradient::parse(&e.values[&(s.clone(), k.clone())]).unwrap();
     assert_eq!(g.stops.len(), 3);
-    let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Color(0, "#ff0000".into())));
+    let _ = e.update(Msg::Gradient(
+        s.clone(),
+        k.clone(),
+        GradEdit::Color(0, "#ff0000".into()),
+    ));
     let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Remove(1)));
     let g = iad::theme_config::Gradient::parse(&e.values[&(s.clone(), k.clone())]).unwrap();
     assert_eq!(g.stops.len(), 2);
     assert_eq!(g.stops[0].1, iced::Color::from_rgb(1.0, 0.0, 0.0));
     let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Remove(0)));
-    assert_eq!(iad::theme_config::Gradient::parse(&e.values[&(s, k)]).unwrap().stops.len(), 2, "two stops stay");
+    assert_eq!(
+        iad::theme_config::Gradient::parse(&e.values[&(s, k)])
+            .unwrap()
+            .stops
+            .len(),
+        2,
+        "two stops stay"
+    );
 }
 
 // ------------------------------------------------------------------- preview
@@ -753,9 +1127,16 @@ fn editing_a_scheme_variant_previews_that_scheme() {
 fn the_preview_follows_the_values_and_the_scheme() {
     let mut e = editor();
     let before = e.preview.theme.semantic.window.bg;
-    let _ = e.update(Msg::Input("colors".into(), "window-bg".into(), "#336699".into()));
+    let _ = e.update(Msg::Input(
+        "colors".into(),
+        "window-bg".into(),
+        "#336699".into(),
+    ));
     assert_ne!(e.preview.theme.semantic.window.bg, before);
-    assert_eq!(iad::color::to_hex(e.preview.theme.semantic.window.bg), "#336699");
+    assert_eq!(
+        iad::color::to_hex(e.preview.theme.semantic.window.bg),
+        "#336699"
+    );
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "13".into()));
     assert_eq!(e.preview.metrics.radius_m, 13.0);
     let _ = e.update(Msg::PreviewDark(true));
@@ -772,10 +1153,18 @@ fn the_main_menu_has_the_shortcuts_and_disables_what_does_not_apply() {
     for a in ["Ctrl+N", "Ctrl+O", "Ctrl+S", "Ctrl+Shift+S"] {
         assert!(accels.iter().any(|x| x == a), "{a} missing from {accels:?}");
     }
-    assert!(!accels.iter().any(|x| x == "Ctrl+Z"), "undo is disabled with nothing to undo");
+    assert!(
+        !accels.iter().any(|x| x == "Ctrl+Z"),
+        "undo is disabled with nothing to undo"
+    );
     let mut e = editor();
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
-    assert!(e.main_menu().accelerators().iter().any(|(a, _)| a == "Ctrl+Z"));
+    assert!(
+        e.main_menu()
+            .accelerators()
+            .iter()
+            .any(|(a, _)| a == "Ctrl+Z")
+    );
 }
 
 #[test]
@@ -788,6 +1177,9 @@ fn the_views_build_in_every_mode() {
     e.show_preview = true;
     e.variant = Variant::Dark;
     let _ = e.view();
-    e.toast = Some(Notice { text: "x".into(), error: true });
+    e.toast = Some(Notice {
+        text: "x".into(),
+        error: true,
+    });
     let _ = e.view();
 }

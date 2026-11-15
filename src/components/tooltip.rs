@@ -18,7 +18,20 @@ pub fn tooltip<'a, M: 'a>(
 ) -> Element<'a, M> {
     iced_tooltip(content, text(label.into()).size(12), position)
         .gap(GAP)
-        .style(crate::styles::container::osd)
+        .style(|t: &crate::Theme| match t.token_color("tooltip", "bg") {
+            // A theme with its own tooltip: a fill, its text color and a 1px solid border.
+            Some(bg) => iced::widget::container::Style {
+                background: Some(iced::Background::Color(bg)),
+                text_color: Some(t.token_color("tooltip", "fg").unwrap_or(t.semantic.window.fg)),
+                border: iced::Border {
+                    color: t.token_color("frame.tooltip", "border").unwrap_or(iced::Color::BLACK),
+                    width: 1.0,
+                    radius: 0.0.into(),
+                },
+                ..Default::default()
+            },
+            None => crate::styles::container::osd(t),
+        })
         .into()
 }
 

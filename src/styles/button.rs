@@ -85,6 +85,20 @@ fn apply(
     if let Some(fg) = v.color("fg") {
         style.text_color = if status == Status::Disabled { disabled(fg) } else { fg };
     }
+    // A menu bar item turns white on the navy highlight: its own text color while hovered/pressed.
+    match status {
+        Status::Hovered => {
+            if let Some(fg) = v.color("hover-fg") {
+                style.text_color = fg;
+            }
+        }
+        Status::Pressed => {
+            if let Some(fg) = v.color("active-fg").or_else(|| v.color("hover-fg")) {
+                style.text_color = fg;
+            }
+        }
+        _ => {}
+    }
     // A drawn bevel (`border-style` raised, sunken, …) is the border: no solid one under it.
     let bevelled = v.text("border-style").is_some_and(|s| s != "solid");
     if !bevelled {

@@ -59,13 +59,23 @@ pub(crate) fn parse_list(text: &str) -> Vec<Toy> {
                 return None;
             }
             let (name, label) = line
-                .split_once(|c: char| c.is_whitespace() || c == ':' || c == '-')
-                .map_or((line, ""), |(n, l)| (n, l.trim_start_matches([' ', '\t', ':', '-'])));
+                .split_once(|c: char| c.is_whitespace() || c == ':')
+                .map_or((line, ""), |(n, l)| {
+                    (n, l.trim_start_matches([' ', '\t', ':', '-']))
+                });
             let name = name.trim();
-            if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            if name.is_empty()
+                || !name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            {
                 return None;
             }
-            let label = if label.trim().is_empty() { name } else { label.trim() };
+            let label = if label.trim().is_empty() {
+                name
+            } else {
+                label.trim()
+            };
             Some(Toy {
                 name: name.to_string(),
                 label: label.to_string(),
@@ -121,8 +131,15 @@ fn command(kind: &str, bins: &Bins) -> Command {
         }
         None => {
             let mut c = Command::new("cargo");
-            c.args(["run", "-q", "-p", "iced-adaptive-design-theme-toys", "--", kind])
-                .current_dir(workspace);
+            c.args([
+                "run",
+                "-q",
+                "-p",
+                "iced-adaptive-design-theme-toys",
+                "--",
+                kind,
+            ])
+            .current_dir(workspace);
             c
         }
     }
@@ -137,7 +154,12 @@ pub(crate) struct Runner {
 impl Runner {
     /// Writes `theme_text` to a temp file of its own and starts `kind` with `IAD_THEME` pointing
     /// at it. Returns the temp file's path.
-    pub(crate) fn launch(&mut self, kind: &str, theme_text: &str, bins: &Bins) -> Result<PathBuf, String> {
+    pub(crate) fn launch(
+        &mut self,
+        kind: &str,
+        theme_text: &str,
+        bins: &Bins,
+    ) -> Result<PathBuf, String> {
         if let Some(mut old) = self.children.remove(kind) {
             let _ = old.kill();
             let _ = old.wait();
@@ -146,7 +168,8 @@ impl Runner {
             "iad-theme-editor-{}-{kind}.conf",
             std::process::id()
         ));
-        std::fs::write(&file, theme_text).map_err(|e| format!("Could not write {}: {e}", file.display()))?;
+        std::fs::write(&file, theme_text)
+            .map_err(|e| format!("Could not write {}: {e}", file.display()))?;
         let child = command(kind, bins)
             .env("IAD_THEME", &file)
             .spawn()

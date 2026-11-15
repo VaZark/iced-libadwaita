@@ -77,7 +77,12 @@ impl Editor {
             ])
             .section([
                 item("Undo", Msg::Undo, Some("Ctrl+Z"), !self.undo.is_empty()),
-                item("Redo", Msg::Redo, Some("Ctrl+Shift+Z"), !self.redo.is_empty()),
+                item(
+                    "Redo",
+                    Msg::Redo,
+                    Some("Ctrl+Shift+Z"),
+                    !self.redo.is_empty(),
+                ),
             ])
             .section([
                 item(
@@ -86,7 +91,12 @@ impl Editor {
                     None,
                     registered.is_some_and(|(is, _, _)| !is),
                 ),
-                item("Unregister", Msg::Unregister, None, registered.is_some_and(|(_, l, _)| l)),
+                item(
+                    "Unregister",
+                    Msg::Unregister,
+                    None,
+                    registered.is_some_and(|(_, l, _)| l),
+                ),
                 item(
                     "Use as the default theme",
                     Msg::SetDefault,
@@ -102,11 +112,17 @@ impl Editor {
 
     /// "Try it out": the gallery, then a toy window per design language.
     fn try_menu(&self, m: iad::Metrics) -> Element<'_, Msg> {
-        let mut items: Vec<Element<'_, Msg>> = vec![
-            w::menu_item("Gallery (every component)", false, Msg::TryOut("gallery".into())),
-        ];
+        let mut items: Vec<Element<'_, Msg>> = vec![w::menu_item(
+            "Gallery (every component)",
+            false,
+            Msg::TryOut("gallery".into()),
+        )];
         items.extend(self.toys.iter().map(|t| {
-            w::menu_item(format!("{} window", t.label), false, Msg::TryOut(t.name.clone()))
+            w::menu_item(
+                format!("{} window", t.label),
+                false,
+                Msg::TryOut(t.name.clone()),
+            )
         }));
         let trigger = container(
             row![
@@ -119,7 +135,9 @@ impl Editor {
         .padding(m.button_padding)
         .center_y(Length::Fixed(m.button_min_height))
         .style(|t: &iad::Theme| iced::widget::container::Style {
-            background: Some(iad::color::alpha(t.semantic.window.fg, t.semantic.opacity.control).into()),
+            background: Some(
+                iad::color::alpha(t.semantic.window.fg, t.semantic.opacity.control).into(),
+            ),
             border: iced::Border {
                 radius: t.metrics.radius_m.into(),
                 ..Default::default()
@@ -162,7 +180,8 @@ impl Editor {
             );
 
         let content_width = if collapsed { width } else { width * 0.74 };
-        let content = w::toolbar_view(self.main_pane(content_width, m)).top_bar(self.header(collapsed, &chrome, m));
+        let content = w::toolbar_view(self.main_pane(content_width, m))
+            .top_bar(self.header(collapsed, &chrome, m));
 
         w::NavigationSplitView::new(side, content)
             .adapt(width)
@@ -174,7 +193,12 @@ impl Editor {
     }
 
     /// The header: the file, undo, the actions and the menus.
-    fn header(&self, collapsed: bool, chrome: &iad::windows::Chrome, m: iad::Metrics) -> Element<'_, Msg> {
+    fn header(
+        &self,
+        collapsed: bool,
+        chrome: &iad::windows::Chrome,
+        m: iad::Metrics,
+    ) -> Element<'_, Msg> {
         let name = self
             .path
             .as_ref()
@@ -202,9 +226,7 @@ impl Editor {
                     .window_radius(chrome.radius()),
             )
             .pack_end(self.try_menu(m))
-            .pack_end(
-                cmp::raised_button(cmp::typography::label("Save as")).on_press(Msg::SaveAs),
-            )
+            .pack_end(cmp::raised_button(cmp::typography::label("Save as")).on_press(Msg::SaveAs))
             .pack_end(
                 cmp::raised_button(cmp::typography::label("Save"))
                     .on_press_maybe((self.dirty() || self.path.is_none()).then_some(Msg::Save)),
@@ -228,7 +250,12 @@ impl Editor {
         for preset in &self.presets {
             if !q.is_empty()
                 && !preset.name.to_lowercase().contains(&q)
-                && !preset.path.display().to_string().to_lowercase().contains(&q)
+                && !preset
+                    .path
+                    .display()
+                    .to_string()
+                    .to_lowercase()
+                    .contains(&q)
             {
                 continue;
             }
@@ -242,8 +269,12 @@ impl Editor {
                 );
             }
             let active = open.as_deref() == Some(crate::files::canon(&preset.path).as_path());
-            let mut title = row![text(format!("{}{}", if active { dot } else { "" }, preset.name))]
-                .spacing(m.space_xs);
+            let mut title = row![text(format!(
+                "{}{}",
+                if active { dot } else { "" },
+                preset.name
+            ))]
+            .spacing(m.space_xs);
             if preset.is_default {
                 title = title.push(space().width(Length::Fill)).push(
                     text("default")
@@ -265,7 +296,9 @@ impl Editor {
                 cmp::flat_button(label)
             };
             list = list.push(cmp::tooltip(
-                button.on_press(Msg::Pick(preset.path.clone())).width(Length::Fill),
+                button
+                    .on_press(Msg::Pick(preset.path.clone()))
+                    .width(Length::Fill),
                 preset.path.display().to_string(),
                 TooltipPosition::Right,
             ));
@@ -273,7 +306,11 @@ impl Editor {
         let body: Element<'_, Msg> = if shown == 0 {
             w::status_page()
                 .icon(Icon::Folder.view(48.0))
-                .title(if self.presets.is_empty() { "No themes yet" } else { "Nothing matches" })
+                .title(if self.presets.is_empty() {
+                    "No themes yet"
+                } else {
+                    "Nothing matches"
+                })
                 .description(if self.presets.is_empty() {
                     "Open a theme file or start a new one. Save as registers it for every app."
                 } else {
@@ -281,7 +318,9 @@ impl Editor {
                 })
                 .into()
         } else {
-            scrollable(container(list).padding([0.0, m.space_s])).height(Length::Fill).into()
+            scrollable(container(list).padding([0.0, m.space_s]))
+                .height(Length::Fill)
+                .into()
         };
         column![container(filter).padding([m.space_xs, m.space_s]), body]
             .spacing(m.space_xs)
@@ -344,7 +383,8 @@ impl Editor {
         .align_y(Alignment::Center);
         if self.variant != Variant::Base {
             bar = bar.push(cmp::tooltip(
-                cmp::flat_button(cmp::typography::label("Copy from Base")).on_press(Msg::CopyFromBase),
+                cmp::flat_button(cmp::typography::label("Copy from Base"))
+                    .on_press(Msg::CopyFromBase),
                 "Copy what the base sets into this variant, where it sets nothing",
                 TooltipPosition::Bottom,
             ));
@@ -372,25 +412,46 @@ impl Editor {
         .width(Length::Fill)
         .height(Length::Fill);
         if width < SECTIONS_BESIDE {
-            let dropdown = w::dropdown(&self.sections, Some(self.section.clone()), Msg::Section);
+            let labels: Vec<String> = self
+                .sections
+                .iter()
+                .map(|s| crate::tokens::section_label(s))
+                .collect();
+            let dropdown = iced::widget::pick_list(
+                labels,
+                Some(crate::tokens::section_label(&self.section)),
+                |label| {
+                    self.sections
+                        .iter()
+                        .find(|s| crate::tokens::section_label(s) == label)
+                        .map_or(Msg::Noop, |s| Msg::Section(s.clone()))
+                },
+            );
             return column![container(dropdown).padding([0.0, m.space_s]), page]
                 .spacing(m.space_xs)
                 .into();
         }
         let list = column(self.sections.iter().map(|s| {
             let n = self.set_count(s);
-            let mut label = row![text(s.as_str())].spacing(m.space_xs).width(Length::Fill);
+            let mut label = row![text(crate::tokens::section_label(s))]
+                .spacing(m.space_xs)
+                .width(Length::Fill);
             if n > 0 {
-                label = label
-                    .push(space().width(Length::Fill))
-                    .push(text(n.to_string()).size(m.space_m).style(iad::styles::text::dim));
+                label = label.push(space().width(Length::Fill)).push(
+                    text(n.to_string())
+                        .size(m.space_m)
+                        .style(iad::styles::text::dim),
+                );
             }
             let button = if *s == self.section && self.search.trim().is_empty() {
                 cmp::raised_button(label)
             } else {
                 cmp::flat_button(label)
             };
-            button.on_press(Msg::Section(s.clone())).width(Length::Fill).into()
+            button
+                .on_press(Msg::Section(s.clone()))
+                .width(Length::Fill)
+                .into()
         }))
         .spacing(m.space_xxs)
         .width(Length::Fixed(172.0));
@@ -411,18 +472,35 @@ impl Editor {
             Some(self.preview_dark),
             Msg::PreviewDark,
         );
-        let frame = container(self.preview.view())
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .clip(true)
-            .style(|t: &iad::Theme| iced::widget::container::Style {
-                border: iced::Border {
-                    color: t.semantic.window.fg.scale_alpha(0.2),
-                    width: 1.0,
-                    radius: 8.0.into(),
-                },
-                ..Default::default()
-            });
+        let scale = self.preview.scale();
+        let widths = row![
+            text(format!("Layout width: {:.0} px", self.preview_width)),
+            iced::widget::slider(
+                m.icon_size..=scale.xxl,
+                self.preview_width,
+                Msg::PreviewWidth
+            ),
+        ]
+        .spacing(m.space_s)
+        .align_y(Alignment::Center);
+        let frame = container(
+            iced::widget::scrollable(self.preview.view_at(self.preview_width)).direction(
+                iced::widget::scrollable::Direction::Horizontal(
+                    iced::widget::scrollable::Scrollbar::default(),
+                ),
+            ),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .clip(true)
+        .style(|t: &iad::Theme| iced::widget::container::Style {
+            border: iced::Border {
+                color: t.semantic.window.fg.scale_alpha(0.2),
+                width: 1.0,
+                radius: 8.0.into(),
+            },
+            ..Default::default()
+        });
         column![
             row![
                 text("Live preview").size(m.space_m + 2.0),
@@ -430,6 +508,8 @@ impl Editor {
                 schemes,
             ]
             .align_y(Alignment::Center),
+            widths,
+            text("Named widget variants are independent of Light / Dark scheme overrides."),
             frame,
         ]
         .spacing(m.space_xs)

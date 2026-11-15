@@ -13,7 +13,8 @@
 //! `solid` or unset is built exactly as before. Use it yourself with [`Bevel::new`] and
 //! [`bevel_of`].
 
-use crate::primitives::bevel::{self, BevelStyle};
+use crate::primitives::bevel::{self, BevelStyle, Sides};
+use crate::primitives::pixmap;
 use crate::{Element, Theme};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::overlay;
@@ -51,6 +52,11 @@ pub struct Bevel<'a, M> {
     rings: u8,
     pressable: bool,
     padding: Padding,
+    sides: Sides,
+    default_ring: bool,
+    press_offset: f32,
+    focused: bool,
+    focus_inset: f32,
 }
 
 struct State {
@@ -66,14 +72,36 @@ impl<'a, M: 'a> Bevel<'a, M> {
         style: BevelStyle,
         border_width: f32,
     ) -> Self {
+        let section = section.into();
+        // What else the theme says of this section, read once when the widget is built.
+        let cfg = crate::theme_config::current();
+        let sides = cfg.text(&section, "border-edges").map_or(Sides::ALL, Sides::parse);
+        let default_ring = cfg.color(&section, "border-default").is_some();
+        let press_offset = cfg.number(&section, "press-offset").unwrap_or(0.0);
         Self {
             content: content.into(),
-            section: section.into(),
+            section,
             style,
             rings: bevel::rings(border_width),
             pressable: false,
             padding: Padding::ZERO,
+            sides,
+            default_ring,
+            press_offset,
+            focused: false,
+            focus_inset: 3.0,
         }
+    }
+    /// Draws the focus indicator over the frame while the theme's `[metrics] focus-style` is
+    /// `dotted`: a 1px dotted rectangle [`focus_inset`](Self::focus_inset) px inside the frame.
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+    /// How far inside the frame the dotted focus rectangle sits (default 3).
+    pub fn focus_inset(mut self, px: f32) -> Self {
+        self.focus_inset = px.max(0.0);
+        self
     }
     /// Space between the frame and the content (default none).
     pub fn padding(mut self, p: impl Into<Padding>) -> Self {
@@ -86,9 +114,9 @@ impl<'a, M: 'a> Bevel<'a, M> {
         self.pressable = pressable;
         self
     }
-    /// The space the rings take on each side.
+    /// The space the rings take on each side (plus the default-button ring, when there is one).
     pub fn inset(&self) -> f32 {
-        self.rings as f32
+        self.rings as f32 + if self.default_ring { 1.0 } else { 0.0 }
     }
     fn total_padding(&self) -> Padding {
         let i = self.inset();
@@ -216,36 +244,67 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Bevel<'a, M> {
         cursor: mouse::Cursor,
         viewport: &Rectangle,
     ) {
-        self.content.as_widget().draw(
-            &tree.children[0],
-            renderer,
-            theme,
-            style,
-            layout.children().next().expect("a content layout"),
-            cursor,
-            viewport,
-        );
         let bounds = layout.bounds();
         let state = tree.state.downcast_ref::<State>();
-        let style = if self.pressable && state.pressed && cursor.is_over(bounds) {
-            self.style.pressed()
-        } else {
-            self.style
+        let held = self.pressable && state.pressed && cursor.is_over(bounds);
+        let content_layout = layout.children().next().expect("a content layout");
+        let draw_content = |renderer: &mut iced::Renderer| {
+            self.content.as_widget().draw(
+                &tree.children[0],
+                renderer,
+                theme,
+                style,
+                content_layout,
+                cursor,
+                viewport,
+            );
         };
+        if held && self.press_offset > 0.0 {
+            // A pressed classic button moves its content one pixel right and down.
+            renderer.with_translation(Vector::new(self.press_offset, self.press_offset), draw_content);
+        } else {
+            draw_content(renderer);
+        }
+        let bevel_style = if held { self.style.pressed() } else { self.style };
         let colors = theme.bevel_colors(&self.section);
-        for edge in bevel::edges(style, self.rings, bounds.size()) {
+        let quad = |renderer: &mut iced::Renderer, r: Rectangle, color: iced::Color| {
             renderer.fill_quad(
                 Quad {
-                    bounds: Rectangle::new(
-                        Point::new(bounds.x + edge.rect.x, bounds.y + edge.rect.y),
-                        edge.rect.size(),
-                    ),
+                    bounds: Rectangle::new(Point::new(bounds.x + r.x, bounds.y + r.y), r.size()),
                     border: iced::Border::default(),
                     shadow: iced::Shadow::default(),
                     snap: true,
                 },
-                colors.tone(edge.tone),
+                color,
             );
+        };
+        // The default-button ring: 1px, outside the bevel.
+        let ring = if self.default_ring { 1.0 } else { 0.0 };
+        if let Some(color) = theme.token_color(&self.section, "border-default").filter(|_| self.default_ring) {
+            let (w, h) = (bounds.width, bounds.height);
+            for r in [
+                Rectangle::new(Point::ORIGIN, Size::new(w, 1.0)),
+                Rectangle::new(Point::new(0.0, h - 1.0), Size::new(w, 1.0)),
+                Rectangle::new(Point::new(0.0, 1.0), Size::new(1.0, h - 2.0)),
+                Rectangle::new(Point::new(w - 1.0, 1.0), Size::new(1.0, h - 2.0)),
+            ] {
+                quad(renderer, r, color);
+            }
+        }
+        let inner = Size::new(bounds.width - 2.0 * ring, bounds.height - 2.0 * ring);
+        for edge in bevel::edges_with(bevel_style, self.rings, inner, self.sides) {
+            let r = Rectangle::new(Point::new(edge.rect.x + ring, edge.rect.y + ring), edge.rect.size());
+            quad(renderer, r, colors.tone(edge.tone));
+        }
+        if self.focused && theme.token_text("metrics", "focus-style") == Some("dotted") {
+            let inset = self.focus_inset;
+            let size = Size::new(bounds.width - 2.0 * inset, bounds.height - 2.0 * inset);
+            let color = theme
+                .token_color("colors", "focus-ring")
+                .unwrap_or(theme.semantic.window.fg);
+            for dot in pixmap::dotted_rect(size) {
+                quad(renderer, Rectangle::new(Point::new(dot.x + inset, dot.y + inset), dot.size()), color);
+            }
         }
     }
 

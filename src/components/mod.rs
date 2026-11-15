@@ -7,6 +7,10 @@
 pub(crate) mod avatar;
 pub(crate) mod badge;
 pub(crate) mod bevel;
+pub(crate) mod blocks;
+pub(crate) mod classic;
+pub(crate) mod classic_scroll;
+pub(crate) mod pixels;
 pub(crate) mod button;
 pub(crate) mod controls;
 pub(crate) mod divider;
@@ -26,6 +30,10 @@ pub use crate::widgets::{ThemeMode, ThemeToggle};
 pub use avatar::{Avatar, AvatarShape, avatar};
 pub use badge::{Badge, Chip, ChipSize, RoundBadge};
 pub use bevel::{Bevel, bevel_of, framed};
+pub use blocks::{ProgressBlocks, blocks_style, themed_progress};
+pub use classic_scroll::{ClassicScroll, classic_scrollbar, themed_scrolled};
+pub use classic::{check_map, disabled_label, drawn_marks, radio_map, themed_check, themed_radio};
+pub use pixels::Pixels;
 pub use button::{
     ButtonContent, ButtonVariant, CircularButton, SuggestedCircularButton, ToggleGroup, ToggleItem, circular_button,
     destructive_button, flat_button, icon_button, pill_button, progress_bar, raised_button,

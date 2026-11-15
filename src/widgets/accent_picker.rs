@@ -76,19 +76,19 @@ impl<'a, M: Clone + 'a> AccentPicker<'a, M> {
 }
 
 /// A round swatch of `color`, with a check when `on`.
-fn round_swatch<'a, M: 'a>(color: iced::Color, on: bool) -> Element<'a, M> {
+fn round_swatch<'a, M: 'a>(color: iced::Color, on: bool, m: Metrics) -> Element<'a, M> {
     let content: Element<'a, M> = if on {
         Icon::Check
-            .colored(14.0, crate::color::readable_on(color))
+            .colored(m.icon_size, crate::color::readable_on(color))
             .into()
     } else {
         iced::widget::space().into()
     };
     container(content)
-        .center(Length::Fixed(26.0))
-        .style(move |_: &Theme| iced::widget::container::Style {
+        .center(Length::Fixed(m.button_min_height))
+        .style(move |t: &Theme| iced::widget::container::Style {
             background: Some(iced::Background::Color(color)),
-            border: iced::Border::default().rounded(999.0),
+            border: iced::Border::default().rounded(t.metrics.radius_pill),
             ..Default::default()
         })
         .into()
@@ -100,7 +100,7 @@ impl<'a, M: Clone + 'a> From<AccentPicker<'a, M>> for Element<'a, M> {
         let mut swatches: Vec<Element<'a, M>> = AccentColor::ALL
             .iter()
             .map(|a| {
-                button(round_swatch(a.to_color(), *a == p.selected))
+                button(round_swatch(a.to_color(), *a == p.selected, m))
                     .padding(0)
                     .style(|_: &Theme, _| iced::widget::button::Style::default())
                     .on_press((p.on_select)(*a))
@@ -114,15 +114,15 @@ impl<'a, M: Clone + 'a> From<AccentPicker<'a, M>> for Element<'a, M> {
             let custom = matches!(p.selected, AccentColor::Custom(_));
             // A custom accent shows its color; otherwise a plus invites choosing one.
             let trigger: Element<'a, M> = if custom {
-                round_swatch(current, true)
+                round_swatch(current, true, m)
             } else {
-                container(Icon::ListAdd.view(14.0))
-                    .center(Length::Fixed(26.0))
+                container(Icon::ListAdd.view(m.icon_size))
+                    .center(Length::Fixed(m.button_min_height))
                     .style(|t: &Theme| iced::widget::container::Style {
                         border: iced::Border {
                             color: t.semantic.border,
-                            width: 1.5,
-                            radius: 999.0.into(),
+                            width: t.metrics.border_width,
+                            radius: t.metrics.radius_pill.into(),
                         },
                         ..Default::default()
                     })

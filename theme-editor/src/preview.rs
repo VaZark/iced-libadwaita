@@ -7,13 +7,13 @@
 //! internal gaps keep the editor's own values: the gallery and the toy windows show those.
 
 use crate::Msg;
-use iced::widget::{column, container, row, space, text};
-use iced::{Alignment, Length};
-use iced_adaptive_design as iad;
 use iad::components as cmp;
 use iad::theme_config::ThemeConfig;
 use iad::widgets as w;
 use iad::{Icon, Metrics, Role, Scheme};
+use iced::widget::{column, container, row, space, text};
+use iced::{Alignment, Length};
+use iced_adaptive_design as iad;
 
 /// What the preview is built from: the theme and the layout metrics the values imply.
 #[derive(Clone)]
@@ -23,6 +23,16 @@ pub(crate) struct Preview {
     /// The text of the file this was built from.
     pub(crate) source: String,
     pub(crate) dark: bool,
+    tree: Vec<iad::primitives::tree::TreeNode>,
+    tree_state: iad::primitives::tree::TreeState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct NavigationGeometry {
+    pub(crate) row_height: f32,
+    pub(crate) row_padding: f32,
+    pub(crate) gap: f32,
+    pub(crate) inset: f32,
 }
 
 impl Preview {
@@ -33,11 +43,24 @@ impl Preview {
             .toolkit_text(text)
             .app_text("")
             .build();
-        let mut metrics = Metrics::default();
-        cfg.apply_to_metrics(&mut metrics);
+        use iad::primitives::tree::{TreeNode, TreeState};
+        let tree = vec![TreeNode::branch(
+            "project",
+            "Project",
+            vec![
+                TreeNode::branch("src", "Sources", vec![TreeNode::new("main", "main.rs")]),
+                TreeNode::new("theme", "theme.conf"),
+            ],
+        )];
+        let mut tree_state = TreeState::default();
+        tree_state.expand_all(&tree);
         let scheme = if dark { Scheme::Dark } else { Scheme::Light };
+        let theme = iad::Theme::new(scheme).with_theme_config(&cfg);
+        let metrics = theme.metrics;
         Self {
-            theme: iad::Theme::new(scheme).with_theme_config(&cfg),
+            theme,
+            tree,
+            tree_state,
             metrics,
             source: text.to_string(),
             dark,
@@ -46,11 +69,90 @@ impl Preview {
 
     /// The sample UI, wrapped so it is drawn with the preview's theme.
     pub(crate) fn view(&self) -> iad::Element<'_, Msg> {
-        let sample = self.sample();
+        self.view_at(iad::breakpoints::Breakpoints::default().md)
+    }
+
+    pub(crate) fn scale(&self) -> iad::breakpoints::Breakpoints {
+        let mut b = iad::breakpoints::Breakpoints::default();
+        for (key, value) in [
+            ("sm", &mut b.sm),
+            ("md", &mut b.md),
+            ("lg", &mut b.lg),
+            ("xl", &mut b.xl),
+            ("xxl", &mut b.xxl),
+        ] {
+            if let Some(n) = self.theme.token_number("breakpoints", key) {
+                *value = n;
+            }
+        }
+        if b.is_ordered() {
+            b
+        } else {
+            Default::default()
+        }
+    }
+
+    pub(crate) fn selected(&self, widget: &str, width: f32) -> String {
+        iad::breakpoints::variant_for_tokens(
+            &self.theme.tokens,
+            widget,
+            &self.scale(),
+            width,
+            "default",
+        )
+    }
+
+    pub(crate) fn view_at(&self, width: f32) -> iad::Element<'_, Msg> {
+        let sample = container(self.sample(width))
+            .width(Length::Fixed(width))
+            .height(Length::Fill);
         iced::widget::Themer::new(Some(self.theme.clone()), sample).into()
     }
 
-    fn sample(&self) -> iad::Element<'_, Msg> {
+    pub(crate) fn tree_sample(&self, width: f32) -> iad::Element<'_, Msg> {
+        w::Tree::new(&self.tree, &self.tree_state)
+            .tokens(self.theme.tokens.as_ref().clone())
+            .metrics(self.metrics)
+            .variant(self.selected("tree", width))
+            .lines(true)
+            .checkboxes(true)
+            .on_event(|_| Msg::Noop)
+            .into()
+    }
+
+    pub(crate) fn navigation_geometry(&self, width: f32) -> NavigationGeometry {
+        let g = w::SidebarPadding::variant_geometry_with_tokens(
+            &self.metrics,
+            &self.theme.tokens,
+            &self.selected("navigation", width),
+        );
+        NavigationGeometry {
+            row_height: g.row_height,
+            row_padding: g.row_padding,
+            gap: g.gap,
+            inset: g.inset,
+        }
+    }
+
+    pub(crate) fn tabs_sample(&self, width: f32) -> iad::Element<'_, Msg> {
+        w::Tabs::new(Some(0), |_| Msg::Noop)
+            .tokens(self.theme.tokens.as_ref().clone())
+            .tab(w::TabItem::new(0, "Overview"))
+            .tab(w::TabItem::new(1, "Settings"))
+            .named_variant(self.selected("tabs", width))
+            .metrics(self.metrics)
+            .into()
+    }
+
+    pub(crate) fn toolbar_sample(&self, width: f32) -> iad::Element<'_, Msg> {
+        w::toolbar_view(text("Toolbar content"))
+            .tokens(self.theme.tokens.as_ref().clone())
+            .top_bar(text("Toolbar"))
+            .named_variant(self.selected("toolbar", width))
+            .into()
+    }
+
+    fn sample(&self, width: f32) -> iad::Element<'_, Msg> {
         let m = self.metrics;
         let ty = iad::Typography::desktop();
         let noop = || Msg::Noop;
@@ -153,9 +255,84 @@ impl Preview {
             .spacing(m.space_s),
         );
 
-        let page = column![buttons, rows, card, surfaces]
-            .spacing(m.group_spacing)
-            .padding(m.page_padding);
+        let number = |section: &str, key: &str, fallback: f32| {
+            self.theme.token_number(section, key).unwrap_or(fallback)
+        };
+        let tree_variant = self.selected("tree", width);
+        let row_variant = self.selected("tree-row", width);
+        let tree = self.tree_sample(width);
+        let nested = w::TreeRow::new("Nested settings")
+            .tokens(self.theme.tokens.as_ref().clone())
+            .metrics(m)
+            .variant(row_variant.clone())
+            .available_width(width)
+            .expanded(true)
+            .on_toggle(|_| Msg::Noop)
+            .push(
+                w::TreeRow::new("Child row")
+                    .tokens(self.theme.tokens.as_ref().clone())
+                    .metrics(m)
+                    .variant(row_variant.clone())
+                    .available_width(width)
+                    .on_activate(Msg::Noop),
+            );
+        let hierarchy = w::preferences_group()
+            .title("Tree & nested rows")
+            .description("Expanded levels show indentation and row geometry as you edit.")
+            .push(tree)
+            .push(nested)
+            .metrics(m);
+
+        let navigation = {
+            let geometry = self.navigation_geometry(width);
+            let defaults = iad::config::Config::default();
+            let min = number(
+                "navigation",
+                "sidebar-min-width",
+                defaults.sidebar_min_width,
+            );
+            let max = number(
+                "navigation",
+                "sidebar-max-width",
+                defaults.sidebar_max_width,
+            )
+            .max(min);
+            let fraction = number("navigation", "sidebar-fraction", defaults.sidebar_fraction);
+            let sidebar_width = (width * fraction).clamp(min, max).min(width);
+            // SidebarList's row renderer still reads global density geometry. Build the
+            // same flat destinations with explicitly resolved local dimensions instead.
+            let destination = |label| {
+                iced::widget::button(
+                    container(text(label)).center_y(Length::Fixed(geometry.row_height)),
+                )
+                .padding([0.0, geometry.row_padding])
+                .width(Length::Fill)
+                .style(iad::styles::button::flat)
+                .on_press(Msg::Noop)
+            };
+            let sidebar = container(
+                column![destination("Overview"), destination("Settings")].spacing(geometry.gap),
+            )
+            .padding(geometry.inset);
+            w::NavigationSplitView::new(sidebar, container(text("Content")).padding(m.card_padding))
+                .sidebar_width(sidebar_width)
+                .collapsed(false)
+        };
+        let navigation = column![text("Navigation · sidebar width"), navigation].spacing(m.space_s);
+
+        let tabs_variant = self.selected("tabs", width);
+        let toolbar_variant = self.selected("toolbar", width);
+        let tabs = self.tabs_sample(width);
+        let toolbar = self.toolbar_sample(width);
+        let selected = text(format!(
+            "Widget variants: tree={tree_variant}, tree-row={row_variant}, navigation={}, tabs={tabs_variant}, toolbar={toolbar_variant}",
+            self.selected("navigation", width)
+        ));
+        let page = column![
+            selected, tabs, toolbar, hierarchy, navigation, buttons, rows, card, surfaces
+        ]
+        .spacing(m.group_spacing)
+        .padding(m.page_padding);
 
         let body = container(iad::layouts::scrolled_window(page))
             .width(Length::Fill)

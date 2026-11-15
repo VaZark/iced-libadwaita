@@ -78,11 +78,18 @@ impl State {
         let get = |k: &str| kv.get(&("state".to_string(), k.to_string()));
         let paths = |k: &str| {
             get(k)
-                .map(|v| v.split(':').filter(|p| !p.is_empty()).map(PathBuf::from).collect())
+                .map(|v| {
+                    v.split(':')
+                        .filter(|p| !p.is_empty())
+                        .map(PathBuf::from)
+                        .collect()
+                })
                 .unwrap_or_default()
         };
         Self {
-            last_file: get("last-file").filter(|v| !v.is_empty()).map(PathBuf::from),
+            last_file: get("last-file")
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from),
             folders: paths("folders"),
             recent: paths("recent"),
             section: get("section").filter(|v| !v.is_empty()).cloned(),
@@ -99,7 +106,9 @@ impl State {
         };
         format!(
             "[state]\nlast-file={}\nfolders={}\nrecent={}\nsection={}\nvariant={}\n",
-            self.last_file.as_ref().map_or(String::new(), |p| p.display().to_string()),
+            self.last_file
+                .as_ref()
+                .map_or(String::new(), |p| p.display().to_string()),
             join(&self.folders),
             join(&self.recent),
             self.section.clone().unwrap_or_default(),
@@ -193,6 +202,14 @@ pub(crate) fn is_registered(dir: &std::path::Path, file: &std::path::Path) -> bo
 /// Registers `file` for every app: a symlink `<stem>.conf` in `dir` pointing at it. An old symlink
 /// of that name is replaced; a regular file of that name is never overwritten.
 pub(crate) fn register(dir: &std::path::Path, file: &std::path::Path) -> Result<PathBuf, String> {
+    if is_default_name(file) {
+        return Err(
+            "default.conf is reserved; choose another file name to register a theme".into(),
+        );
+    }
+    if !file.is_file() {
+        return Err(format!("{} is not a theme file", file.display()));
+    }
     if is_registered(dir, file) {
         return Err("already registered".into());
     }
@@ -205,11 +222,15 @@ pub(crate) fn register(dir: &std::path::Path, file: &std::path::Path) -> Result<
     let link = dir.join(format!("{stem}.conf"));
     if std::fs::symlink_metadata(&link).is_ok() {
         if !is_link(&link) {
-            return Err(format!("{} is a regular file: not overwritten", link.display()));
+            return Err(format!(
+                "{} is a regular file: not overwritten",
+                link.display()
+            ));
         }
         std::fs::remove_file(&link).map_err(|e| format!("{}: {e}", link.display()))?;
     }
-    std::os::unix::fs::symlink(canon(file), &link).map_err(|e| format!("{}: {e}", link.display()))?;
+    std::os::unix::fs::symlink(canon(file), &link)
+        .map_err(|e| format!("{}: {e}", link.display()))?;
     Ok(link)
 }
 
@@ -226,22 +247,33 @@ pub(crate) fn unregister(dir: &std::path::Path, file: &std::path::Path) -> Resul
 }
 
 /// Makes `file` the one apps use without `IAD_THEME`: `default.conf` in `dir` points at it.
-pub(crate) fn set_default(dir: &std::path::Path, file: &std::path::Path) -> Result<PathBuf, String> {
+pub(crate) fn set_default(
+    dir: &std::path::Path,
+    file: &std::path::Path,
+) -> Result<PathBuf, String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let link = dir.join("default.conf");
     if std::fs::symlink_metadata(&link).is_ok() {
         if !is_link(&link) {
-            return Err(format!("{} is a regular file: not overwritten", link.display()));
+            return Err(format!(
+                "{} is a regular file: not overwritten",
+                link.display()
+            ));
         }
         std::fs::remove_file(&link).map_err(|e| format!("{}: {e}", link.display()))?;
     }
-    std::os::unix::fs::symlink(canon(file), &link).map_err(|e| format!("{}: {e}", link.display()))?;
+    std::os::unix::fs::symlink(canon(file), &link)
+        .map_err(|e| format!("{}: {e}", link.display()))?;
     Ok(link)
 }
 
 /// The theme files available, each once: the registered ones (the files and symlinks in the data
 /// dirs `dirs`), then those in the folders the user added, then the recently opened ones.
-pub(crate) fn list_presets(dirs: &[PathBuf], folders: &[PathBuf], recent: &[PathBuf]) -> Vec<Preset> {
+pub(crate) fn list_presets(
+    dirs: &[PathBuf],
+    folders: &[PathBuf],
+    recent: &[PathBuf],
+) -> Vec<Preset> {
     let default = dirs.iter().find_map(|d| default_target(d));
     let mut out: Vec<Preset> = Vec::new();
     let mut seen: Vec<PathBuf> = Vec::new();
@@ -274,7 +306,10 @@ pub(crate) fn list_presets(dirs: &[PathBuf], folders: &[PathBuf], recent: &[Path
     for folder in folders {
         add("Folders", scan_folder(folder));
     }
-    add("Recent", recent.iter().filter(|p| p.is_file()).cloned().collect());
+    add(
+        "Recent",
+        recent.iter().filter(|p| p.is_file()).cloned().collect(),
+    );
     out
 }
 
@@ -285,4 +320,3 @@ pub(crate) enum Registry {
     Unregister,
     Default,
 }
-
