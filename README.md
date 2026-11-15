@@ -30,14 +30,14 @@ Use `iad::Theme` as the application theme: `iad::Theme::from_config(&iad::config
 
 ## What is where
 
-| Path                | Holds                                                                           |
-| ------------------- | ------------------------------------------------------------------------------- |
-| `src/`              | the library: `layouts/`, `primitives/` (headless rules), `binds/`, `components/`, `metas/`, `widgets/`, `styles/`, `windows/`, theme, config |
-| `docs/man/`         | handwritten man sources; built pages go in `target/man/`                          |
-| `docs/lib/`         | the user guide (published with the crate)                                       |
-| `docs/hig-inferences/` | design rationale for contributors (not published)                            |
-| `gallery/`          | the gallery: a separate crate that depends on the library                       |
-| `xtask/`            | repository tasks (`cargo xtask man`)                                            |
+| Path                   | Holds                                                                                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/`                 | the library: `layouts/`, `primitives/` (headless rules), `binds/`, `components/`, `metas/`, `widgets/`, `styles/`, `windows/`, theme, config |
+| `docs/man/`            | handwritten man sources; built pages go in `target/man/`                                                                                     |
+| `docs/lib/`            | the user guide (published with the crate)                                                                                                    |
+| `docs/hig-inferences/` | design rationale for contributors (not published)                                                                                            |
+| `gallery/`             | the gallery: a separate crate that depends on the library                                                                                    |
+| `xtask/`               | repository tasks (`cargo xtask man`)                                                                                                         |
 
 `cargo build` builds only the library.
 
@@ -46,6 +46,9 @@ Use `iad::Theme` as the application theme: `iad::Theme::from_config(&iad::config
 - API: run `cargo xtask man` to build the man pages in `target/man/`. `man -l target/man/iad.7` (overview), `man -l target/man/iad-dock.3` (one component), `man -l target/man/iad-desktop.conf.5` (config).
 - Usage: [docs/lib/](docs/lib/README.md).
 - Gallery: `cargo run -p iced-adaptive-design-gallery`.
+- [Theme editor](theme-editor/README.md): `cargo run -p iced-adaptive-design-theme-editor -- [FILE]`. Section-first editing, a theme picker, and external gallery/toy launches with independent launch appearance.
+- [Theme toys](theme-toys/README.md): `cargo run -p iced-adaptive-design-theme-toys -- <win95|winxp|win7|mate>`. Four reference targets: Windows Classic/95, XP, Windows 7 and modern MATE; `gnome2` is a compatibility alias only. Each toy has a validated opt-out base; `IAD_THEME` supplies an optional overlay.
+- Public [text-trigger and context menus](docs/lib/windows-and-menus.md#menus), and [typed child presentation](docs/lib/child-props.md#contract-and-usage).
 
 ## Parameters belong to the library
 
@@ -56,4 +59,4 @@ Every new property goes into the library first: the component, its doc comment, 
 - [DESIGN.md](DESIGN.md): structure and targets.
 - [CONTRIBUTING.md](CONTRIBUTING.md): build, test, work on it.
 
-Icons come from installed XDG themes; no icon artwork is bundled. Configure `[icons] theme` to select a theme (`system` follows shared desktop toolkit settings, then falls back to `hicolor`). See [system icons and migration](docs/lib/icons.md).
+Icons support installed XDG themes and bundled `iad-icons` artwork, including the editor's Save / Save As actions. Configure `[icons] theme` to select an XDG theme (`system` follows shared desktop toolkit settings, then falls back to `hicolor`). See [system icons and bundled defaults](docs/lib/icons.md).

@@ -28,15 +28,15 @@ A token is a typed value in the key-file format of the desktop config: a color (
 
 **Toolkit tokens**
 
-| Section                                       | Keys                                                                                                                                                                                                                                                                                |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `[colors]`, `[light:colors]`, `[dark:colors]` | `accent`, `window-bg`, `window-fg`, `view-*`, `card-*`, `headerbar-*`, `sidebar-*`, `popover-*`, `dialog-*`, `success`, `warning`, `destructive`, `error`, and their `-fg`/`-text`/`-shade` companions. The variant of the active scheme wins over `[colors]`                       |
+| Section                                       | Keys                                                                                                                                                                                                                                                                                                        |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[colors]`, `[light:colors]`, `[dark:colors]` | `accent`, `window-bg`, `window-fg`, `view-*`, `card-*`, `headerbar-*`, `sidebar-*`, `popover-*`, `dialog-*`, `success`, `warning`, `destructive`, `error`, and their `-fg`/`-text`/`-shade` companions. The variant of the active scheme wins over `[colors]`                                               |
 | `[metrics]`                                   | `space-*`, `radius-*`, `circular-button-size`, `button-padding-y/x`, `entry-padding-y/x`, `row-padding-y/x`, `page-padding-y/x`, `card-padding`, `dialog-padding`, `popover-padding`, `*-min-height`, `border-width`, `icon-size`, `group-spacing`, `clamp-maximum`, `headerbar-height`, `sidebar-width`, … |
-| `[typography]`                                | `text-scale` (multiplies every size), `base-size`, `title-1`…`monospace` (ratios of the base)                                                                                                                                                                                       |
-| `[shadows]`                                   | `card`, `popover`, `dialog`, `osd`: CSS box-shadow lists (`0 1px 3px 1px rgba(0, 0, 6, 0.07), …`)                                                                                                                                                                                   |
-| `[button.<variant>]`                          | `bg`, `fg`, `border`, `border-width`, `radius`, `hover-bg`, `active-bg`: see *Widget variants* |
-| `[windows]`                                   | `button-layout` (`start:end`, e.g. `:minimize,maximize,close`), `button-size` (px), `button-radius` (% of the size, 50% is a circle), `titlebar-double-click`/`-middle-click`/`-right-click` (`toggle-maximize`, `menu`, `minimize`, `lower`, `none`)                               |
-| `[theme]`                                     | `name`, `key`, `mode`, `default-variants` (`all`/`none`)                                                                                                                                                                                                                                                                       |
+| `[typography]`                                | `text-scale` (multiplies every size), `base-size`, `title-1`…`monospace` (ratios of the base)                                                                                                                                                                                                               |
+| `[shadows]`                                   | `card`, `popover`, `dialog`, `osd`: CSS box-shadow lists (`0 1px 3px 1px rgba(0, 0, 6, 0.07), …`)                                                                                                                                                                                                           |
+| `[button.<variant>]`                          | `bg`, `fg`, `border`, `border-width`, `radius`, `hover-bg`, `active-bg`: see _Widget variants_                                                                                                                                                                                                              |
+| `[windows]`                                   | `button-layout` (`start:end`, e.g. `:minimize,maximize,close`), `button-size` (px), `button-radius` (% of the size, 50% is a circle), `titlebar-double-click`/`-middle-click`/`-right-click` (`toggle-maximize`, `menu`, `minimize`, `lower`, `none`)                                                       |
+| `[theme]`                                     | `name`, `key`, `mode`, `default-variants` (`all`/`none`)                                                                                                                                                                                                                                                    |
 
 Prefer typed numbers (`button-radius=50%`, `button-size=24px`) and enum strings over new switches: a value is validated against its declared type and range, and an invalid one falls back with a warning.
 
@@ -67,19 +67,29 @@ let size = theme.token_number("cover", "size");
 
 - **Metric tokens** reach every widget through `Config::with_theme_config`, over the desktop density.
 - **Palette and typography tokens** apply to the theme: `Theme::with_theme_config`.
-- `cfg.source("cover", "size")` says which layer a value came from (`Source::Hardcoded`, `App`, `Toolkit`, `Default`), and `cfg.entries()` lists every token with it.
+- `cfg.source("cover", "size")` says which layer a value came from (`Source::Hardcoded`, `App`, `Theme`, `Default`), and `cfg.entries()` lists every token with it.
 - Invalid values are warnings (`cfg.warnings()`): the lower layer is used. Unknown tokens are listed (`cfg.unknown()`), ignored and never deleted: a newer toolkit or app may have written them.
 - `.files(false)` with `.app_text(..)` and `.toolkit_text(..)` reads and writes nothing (tests, a settings preview). `.regenerate(false)` reads files but writes none.
 
-Edit a theme file in the theme editor (`theme-editor/`), and see it in the gallery with `IAD_THEME=path.conf`.
+### Independent bases and explicit overlays
+
+`Inheritance::OptOut` skips automatic desktop theme discovery. It does not discard explicitly supplied `.toolkit_text(base)` and `.app_text(overlay)`: both are validated against the combined toolkit/app schema, and valid app entries take precedence over the base. `.files(false)` disables automatic file access; the caller can still read and supply overlay text explicitly.
+
+The [theme toys](../../theme-toys/README.md#theme-resolution) use this pattern for four canonical targets: `win95`, `winxp`, `win7`, `mate` (modern MATE). `gnome2` is a compatibility alias only. Each embeds its own complete `theme-toys/themes/<target>.conf` base, including native styling and app-owned scene geometry. An optional `IAD_THEME` file is read as an overlay, not a replacement base. Without one the bundled base applies; installed `default.conf` files are not consulted. Invalid entries fall back through the validated cascade. Scene-fit checks can reject overlay geometry while retaining native theme edits; see the toy guide for limits and the special handling of `IAD_THEME=none`.
+
+### Editing and trying a theme
+
+Run `cargo run -p iced-adaptive-design-theme-editor -- [FILE]`. Sections are the primary sidebar; the selected theme opens a picker for registered files, folders and recents. **All** groups every token on one searchable page. **Modified only** filters unsaved changes; **Overrides only** filters explicit active Light/Dark entries, excluding inherited Base values, and is unavailable for Base.
+
+**Save** updates the current file, following symlinks. **Save as** writes a copy, switches subsequent saves to it and auto-registers it for other apps. Registration failure is reported independently of a successful save. There is no embedded live preview: the split **Try it out** action launches Gallery or one of the four toys with current values in a temporary `IAD_THEME` file. Launch appearance **System / Light / Dark** is independent of the scheme being edited; System clears inherited `TOYS_SCHEME` / `GALLERY_SCHEME` overrides. See the [editor guide](../../theme-editor/README.md) for the workflow.
+
+For a standalone gallery launch, use `IAD_THEME=path.conf cargo run -p iced-adaptive-design-gallery`.
 
 ## Widget variants
 
-Responsive selection uses [breakpoint rules and logical variants](breakpoint-rules.md):
-`breakpoint-rules=xs:pills,md:outline` selects declared widget variants at the
-configured width thresholds, independently of light/dark scheme variations.
+Responsive selection uses [breakpoint rules and logical variants](breakpoint-rules.md): `breakpoint-rules=xs:pills,md:outline` selects declared widget variants at the configured width thresholds, independently of light/dark scheme variations.
 
-A **variant** is a named set of typed style tokens that belongs to one widget. In a theme file it is the section `[<widget>.<variant>]`; every key is optional, and a key left unset is what the widget's built-in look computes from the palette, so a theme only writes what it changes.
+A **variant** is a named set of typed style tokens that belongs to one widget. In a theme file it is the section `[<widget>.<variant>]`; every key is optional and inherits per key from the widget's base values and resolved theme metrics. Named size/density presets, including `sm`, `md` and `lg`, are config-loaded values, not renderer arithmetic. Custom names use the same resolution path; missing or undeclared names inherit neutral/base values. See [breakpoint rules and logical variants](breakpoint-rules.md).
 
 ```ini
 [button.suggested]        # restyle a default variant
@@ -100,7 +110,7 @@ Button keys: `bg`, `fg`, `border` (colors), `border-width`, `radius` (lengths in
 
 Use one with `button(label).variant("brand")` (the `ButtonVariant` trait), `variant_button(label, "brand")`, or `styles::button::variant("brand")` in a `.style(..)`. `suggested_button`, `flat_button`, `raised_button`, `destructive_button`, `pill_button` and `suggested_pill_button` are the default variants of those names. A variant the theme does not declare draws the **neutral** button, never a panic.
 
-**Add or replace in code.** Declare the variant in the app's schema; the tokens given are its declared defaults and a theme file can still change them. A name the toolkit already provides is *replaced*:
+**Add or replace in code.** Declare the variant in the app's schema; the tokens given are its declared defaults and a theme file can still change them. A name the toolkit already provides is _replaced_:
 
 ```rust
 let schema = Schema::new()
@@ -111,16 +121,13 @@ let cfg = ThemeConfig::builder("org.example.App").schema(schema).build();
 
 **Opt out of the defaults.** `Builder::default_variants(DefaultVariants::None)`, or `[theme] default-variants=none` in the app file, drops every default variant: the app declares all it uses, and the helper constructors above draw the neutral button for the names it left out. `DefaultVariants::Only(&["button"])` keeps the defaults of those widgets only, `Without(&[..])` of all but those. A theme file that names a dropped variant gets it reported in `unknown()`.
 
-**Unique features are their own widgets.** A variant styles *colors, borders and corners*; it cannot promise a *shape*. A circle needs equal width and height, which a border radius on a button of any size cannot guarantee (a wider button becomes a pill, an oversized radius an ellipse). `CircularButton` is a widget of its own: a square of `[metrics] circular-button-size` px (the button height when unset), content centered and clipped to that square, radius forced to half the size. It takes `.variant(name)` for its colors (default `flat`); `circular_button(icon)` and `suggested_circular_button(content)` are built from it.
+**Unique features are their own widgets.** A variant styles _colors, borders and corners_; it cannot promise a _shape_. A circle needs equal width and height, which a border radius on a button of any size cannot guarantee (a wider button becomes a pill, an oversized radius an ellipse). `CircularButton` is a widget of its own: a square of `[metrics] circular-button-size` px (the button height when unset), content centered and clipped to that square, radius forced to half the size. It takes `.variant(name)` for its colors (default `flat`); `circular_button(icon)` and `suggested_circular_button(content)` are built from it.
 
 The same convention will carry to the other widgets that take a hardcoded style per look: banners and toasts (roles), chips, badges and tags (roles), cards, rows, entries and switches. Each gets a key set of its own and a `.variant(name)`; nothing about a theme file changes.
 
 ## Other design languages: gradients, bevels, window frame, font, focus
 
-A theme can take on a look that is not libadwaita's: a classic grey desktop with raised and sunken
-frames, a glossy 2000s one with gradient buttons and a thick coloured window frame. Nothing is
-hardcoded for those looks; they are tokens, typed and validated like the rest, and **a theme that
-sets none of them is drawn exactly as before.**
+A theme can take on a look that is not libadwaita's: a classic grey desktop with raised and sunken frames, a glossy 2000s one with gradient buttons and a thick coloured window frame. Nothing is hardcoded for those looks; they are tokens, typed and validated like the rest. Unset optional effects leave the underlying surface styling unchanged.
 
 **Gradients.** A gradient token is `linear-gradient(<angle>deg, <color> <pos>%, ...)`.
 
@@ -130,16 +137,9 @@ titlebar=linear-gradient(90deg, #0a246a 0%, #a6caf0 100%)   # navy to light blue
 progress=linear-gradient(180deg, #5dd05d, #1e9a1e)           # positions spread evenly
 ```
 
-The angle is CSS's (`0deg` up, `90deg` right, `180deg` down). Two to eight stops; a color is any
-form a color token takes; a given position is in `0..=100` and does not decrease, a missing one is
-spread evenly between its neighbours. Anything else is refused with a warning. Surfaces:
-`[gradients] window`, `view`, `headerbar`, `titlebar` (the title bar of a client-side decorated
-window, over `headerbar`), `sidebar`, `card`, `popover`, `dialog`, `progress`. A button variant takes
-`bg-gradient`, `hover-bg-gradient` and `active-bg-gradient`; without the last two the hover and
-pressed gradients are the base one with each stop lightened or darkened like a flat fill.
+The angle is CSS's (`0deg` up, `90deg` right, `180deg` down). Two to eight stops; a color is any form a color token takes; a given position is in `0..=100` and does not decrease, a missing one is spread evenly between its neighbours. Anything else is refused with a warning. Surfaces: `[gradients] window`, `view`, `headerbar`, `titlebar` (the title bar of a client-side decorated window, over `headerbar`), `sidebar`, `card`, `popover`, `dialog`, `progress`. A button variant takes `bg-gradient`, `hover-bg-gradient` and `active-bg-gradient`; without the last two the hover and pressed gradients are the base one with each stop lightened or darkened like a flat fill.
 
-**Bevels.** iced draws one border color per quad, so a two-tone frame is drawn by
-`components::Bevel`. A variant or a frame asks for one with `border-style`:
+**Bevels.** iced draws one border color per quad, so a two-tone frame is drawn by `components::Bevel`. A variant or a frame asks for one with `border-style`:
 
 ```ini
 [button.default]
@@ -164,34 +164,17 @@ L l d d d d d D       d D l l l l l L
 D D D D D D D D       L L L L L L L L
 ```
 
-`etched` is a groove and `bump` a ridge (a dark and a light line); `window` is the frame of a
-window. Unset colors are the classic gray-frame ones (white, black, `#dfdfdf`, `#808080`). A
-button drawn with a bevel sinks while it is held down. The frames the toolkit's builders use are
-`[frame.<name>]` for `window`, `card`, `field`, `well`, `panel`, `popover` and `dialog`; a
-button's is its variant's own section. A `solid` or unset style is built exactly as it was.
-Limits: the toolkit's own `check_button`, `radio_button` and `progress_bar` are iced widgets that
-a theme can only restyle, not wrap, so they take colors and gradients but not a bevel.
+`etched` is a groove and `bump` a ridge (a dark and a light line); `window` is the frame of a window. Unset colors are the classic gray-frame ones (white, black, `#dfdfdf`, `#808080`). A button drawn with a bevel sinks while it is held down. The frames the toolkit's builders use are `[frame.<name>]` for `window`, `card`, `field`, `well`, `panel`, `popover` and `dialog`; a button's is its variant's own section. A `solid` or unset style uses the surface's ordinary border. Limits: the toolkit's own `check_button`, `radio_button` and `progress_bar` are iced widgets that a theme can only restyle, not wrap, so they take colors and gradients but not a bevel.
 
-**Window frame and title bar** (`[windows]`): `frame-border-width` (px), `frame-border` (a solid
-frame color), `frame-border-style` (`solid` or a bevel, colored by `[frame.window]`),
-`titlebar-align` (`start`, `center`, `end`), `titlebar-font-weight` (`normal`, `bold`),
-`titlebar-icon` (the application icon at the start of the title) and `button-style` (the button
-variant of the window buttons: any `[button.<name>]`, bevel and gradient included).
+**Window frame and title bar** (`[windows]`): `frame-border-width` (px), `frame-border` (a solid frame color), `frame-border-style` (`solid` or a bevel, colored by `[frame.window]`), `titlebar-align` (`start`, `center`, `end`), `titlebar-font-weight` (`normal`, `bold`), `titlebar-icon` (the application icon at the start of the title) and `button-style` (the button variant of the window buttons: any `[button.<name>]`, bevel and gradient included).
 
-**Font.** `[typography] font-family` and `monospace-font-family` (1 to 64 characters, no control
-characters). The toolkit's text helpers apply them; for the text it does not style, set the
-application's default font: `iced::application(..).default_font(theme_config::default_font())`
-(iced needs a `&'static str` for a family name, so each distinct name is leaked once).
-`Theme::font()` and `Theme::monospace_font()` give the fonts to an app's own text.
+**Font.** `[typography] font-family` and `monospace-font-family` (1 to 64 characters, no control characters). The toolkit's text helpers apply them; for the text it does not style, set the application's default font: `iced::application(..).default_font(theme_config::default_font())` (iced needs a `&'static str` for a family name, so each distinct name is leaked once). `Theme::font()` and `Theme::monospace_font()` give the fonts to an app's own text.
 
-**Focus.** `[colors] focus-ring` is the color of the indicator (unset: the accent) and
-`[metrics] focus-style` is `ring` (the default, `focus-ring-width` wide), `dotted` or `none`.
-iced styles draw a solid line, so `dotted` is a 1px ring; `none` draws no indicator.
+**Focus.** `[colors] focus-ring` is the color of the indicator (unset: the accent) and `[metrics] focus-style` is `ring` (the default, `focus-ring-width` wide), `dotted` or `none`. iced styles draw a solid line, so `dotted` is a 1px ring; `none` draws no indicator.
 
 ## Typed variables and variations
 
-Declare explicit constraints with `Schema::variable`. Its fallback is optional:
-`None` intentionally leaves a property unset when no valid value is available.
+Declare explicit constraints with `Schema::variable`. Its fallback is optional: `None` intentionally leaves a property unset when no valid value is available.
 
 ```rust
 use iced_adaptive_design::theme_config::{Schema, ThemeConfig, VariableType, Value};
@@ -221,28 +204,10 @@ assert_eq!(cfg.get("panel", "badge"), None);
 | `Percentage` | Optional `min`/`max` (default 0–100), optional rounding; `42%` or `42`                                                                    |
 | `String`     | Enumerated `values`; `accepts_random` additionally permits arbitrary single-line text                                                     |
 
-Without rounding, integers and decimals must match their declared precision and
-step. Rounding snaps in the chosen direction; bounds are checked afterwards.
-Steps are anchored at `min`, or zero if no minimum is declared. A numeric value
-outside the range is invalid, never silently clamped. Invalid declarations and
-fallbacks are author errors and rejected when creating the schema.
+Without rounding, integers and decimals must match their declared precision and step. Rounding snaps in the chosen direction; bounds are checked afterwards. Steps are anchored at `min`, or zero if no minimum is declared. A numeric value outside the range is invalid, never silently clamped. Invalid declarations and fallbacks are author errors and rejected when creating the schema.
 
-Variations use `[variation-key:property-section]`, for example `[dark:panel]` or
-`[high-contrast:metrics]`. `light` and `dark` are built in; declare custom keys with
-`Schema::variations`. Resolve each section's values through App → Toolkit →
-fallback, then cascade the resolved active variation over the base section.
-An invalid variation value falls through to the next valid variation layer,
-then the base value. A missing or invalid optional property with no valid lower
-layer and no fallback resolves to `None`.
+Variations use `[variation-key:property-section]`, for example `[dark:panel]` or `[high-contrast:metrics]`. `light` and `dark` are built in; declare custom keys with `Schema::variations`. Resolve each section's values through App → Toolkit → fallback, then cascade the resolved active variation over the base section. An invalid variation value falls through to the next valid variation layer, then the base value. A missing or invalid optional property with no valid lower layer and no fallback resolves to `None`.
 
-`Builder::variation` and `ThemeConfig::with_variation` select a variation.
-`Theme::with_theme_config` automatically selects `light`/`dark` from the theme
-scheme unless a variation was explicitly selected. Variations apply to custom
-tokens, colors, metrics and typography.
+`Builder::variation` and `ThemeConfig::with_variation` select a variation. `Theme::with_theme_config` automatically selects `light`/`dark` from the theme scheme unless a variation was explicitly selected. Variations apply to custom tokens, colors, metrics and typography.
 
-`Schema::template` generates a valid, commented `.conf`, including constraints,
-optional fallbacks and variation sections. The existing theme loader regenerates
-missing files from that template. `Schema::validate` validates text without file
-access and returns syntax/value errors plus unknown properties/variation keys.
-The loader reports invalid values through `warnings()` and keeps the cascade;
-unknown values remain ignored and are never rewritten.
+`Schema::template` generates a valid, commented `.conf`, including constraints, optional fallbacks and variation sections. The existing theme loader regenerates missing files from that template. `Schema::validate` validates text without file access and returns syntax/value errors plus unknown properties/variation keys. The loader reports invalid values through `warnings()` and keeps the cascade; unknown values remain ignored and are never rewritten.

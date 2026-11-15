@@ -2,6 +2,8 @@
 
 Use `iad::Theme` as the application theme. Stock iced widgets are restyled too. Build it from the desktop config unless you have a reason not to: `Theme::from_config(&config::current())`.
 
+Theme files and validation are described in [app theme config](theme-config.md). The [four reference toys](../../theme-toys/README.md#theme-resolution) (`win95`, `winxp`, `win7`, `mate`; `gnome2` compatibility alias only) use independent opt-out bases with optional editor overlays, not the installed desktop theme. The [theme editor](../../theme-editor/README.md) launches the gallery or toys externally; launch appearance is independent of the scheme being edited.
+
 ## Layers
 
 ```mermaid
@@ -13,11 +15,11 @@ flowchart LR
     Shadows --> Theme
 ```
 
-| Layer        | Type                    | Holds                                                          |
-| ------------ | ----------------------- | -------------------------------------------------------------- |
+| Layer        | Type                    | Holds                                                            |
+| ------------ | ----------------------- | ---------------------------------------------------------------- |
 | Named colors | `Palette`               | libadwaita variable names (`accent_bg_color`, …), light and dark |
-| Semantic     | `Semantic`              | what components ask for: surfaces, status swatches, opacities  |
-| Metrics      | `Metrics`, `Typography` | spacing, radii, sizes, text scale                              |
+| Semantic     | `Semantic`              | what components ask for: surfaces, status swatches, opacities    |
+| Metrics      | `Metrics`, `Typography` | spacing, radii, sizes, text scale                                |
 
 ```rust
 let theme = iad::Theme::dark()
@@ -32,7 +34,7 @@ let theme = iad::Theme::dark()
 - Use roles, not colors. `Role::{Accent, Success, Warning, Error, Destructive}` for status. Never a fixed hue for meaning.
 - Text on colored fills is what the theme defines (`accent-fg`, `primary-fg`, `success-fg`, …), as in Bootstrap and Mantine. A theme can opt in to picking light or dark text by contrast with `[colors] auto-contrast=true` (`Theme::with_auto_contrast`). A component's `text_color` or `Theme::with_semantic` overrides either.
 - Primary actions (suggested buttons) use the `primary` color, not the accent. The accent is for selection, focus and links, and may follow the desktop; the primary color is the theme's own.
-- Radii are capped at the HIG values (controls 9, cards 12, popovers and windows 15). Lower them (`radius_m`, `radius_l`, `radius_toast`). Do not raise them.
+- Use the selected theme's geometry tokens. The libadwaita preset follows HIG radii; validated [theme-file overrides](theme-config.md#tokens) can use different geometry for other design languages.
 - Shadows are settings: `Shadows::none()`, `.with_scale`, `.with_intensity`. A card draws each layer as its own rounded shape, so the shadow follows the border.
 - Density: `Metrics::compact()` or `[appearance] density=compact`.
 - Dimmed text is for secondary information and the disabled state. Not for chosen values.

@@ -6,7 +6,7 @@ Stable Rust (edition 2024) and the system libraries iced needs on Linux (Wayland
 
 ```text
 cargo build                       # the library only
-cargo build --workspace           # library, gallery, theme editor, xtask
+cargo build --workspace           # library, gallery, theme editor, toys, workspace tools
 cargo test
 cargo clippy --all-targets --workspace
 cargo xtask man                   # build man pages in target/man/
@@ -20,17 +20,17 @@ Local pre-commit hooks: dprint formats JSON, Markdown and TOML; `cargo fmt --all
 
 ## Repo layout
 
-| Path                   | Holds                                                                                          |
-| ---------------------- | ---------------------------------------------------------------------------------------------- |
+| Path                   | Holds                                                                                                                                                                   |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/`                 | the library, in layers (see DESIGN.md): `layouts/`, `primitives/` (headless rules), `binds/`, `components/`, `metas/`, `widgets/`, `styles/`, `windows/`, theme, config |
-| `gallery/`             | the gallery, a separate crate                                                                  |
-| `theme-editor/`        | the theme editor: edits theme files with a live preview, registers them, tries them out        |
-| `theme-toys/`          | one toy window per design language (win95, winxp, win7, mac, gnome2), styled only by the theme |
-| `themes/`              | theme files: `libadwaita.conf`, `cosmic.conf`, the design-language ones (`win95`, `winxp`, `win7`, `mac`, `gnome2`) and a few fun ones |
-| `xtask/`               | repository tasks                                                                               |
-| `docs/man/`            | handwritten overview and config man sources; all built pages go in `target/man/` |
-| `docs/lib/`            | user guide. Published with the crate and `docs/man/`                                                |
-| `docs/hig-inferences/` | design rationale. Not published (`include` in `Cargo.toml`)                                    |
+| `gallery/`             | the gallery, a separate crate                                                                                                                                           |
+| `theme-editor/`        | section-first theme editor, theme picker, registration and external gallery/toy launches                                                                                |
+| `theme-toys/`          | four reference scenes: `win95`, `winxp`, `win7`, `mate`; independent validated bases and optional overlays                                                              |
+| `themes/`              | toolkit theme files: libadwaita, COSMIC, `win95`, `winxp`, `win7`, `mate` (`gnome2` compatibility alias) and additional palettes                                        |
+| `xtask/`               | repository tasks                                                                                                                                                        |
+| `docs/man/`            | handwritten overview and config man sources; all built pages go in `target/man/`                                                                                        |
+| `docs/lib/`            | user guide. Published with the crate and `docs/man/`                                                                                                                    |
+| `docs/hig-inferences/` | design rationale. Not published (`include` in `Cargo.toml`)                                                                                                             |
 
 ## Man pages
 
@@ -62,9 +62,20 @@ mkdir -p ~/.local/share/iad/themes
 ln -s "$PWD/themes/cosmic.conf" ~/.local/share/iad/themes/default.conf
 ```
 
-An unreadable `IAD_THEME` path prints a warning and falls through to those directories. An app that opts out of inheriting (`Inheritance::OptOut`) ignores all of this and uses only its own look.
+For the standard theme loader, an unreadable `IAD_THEME` path prints a warning and falls through to those directories. `Inheritance::OptOut` skips automatic theme discovery; apps can still supply explicit validated theme layers. The toys use this for their own bundled bases plus an optional `IAD_THEME` overlay; see [theme toys](theme-toys/README.md#theme-resolution).
 
-Edit theme files in the theme editor: `cargo run -p iced-adaptive-design-theme-editor [FILE]`. It is three panes: the **themes list** (a filter, then the *registered* files, the folders you add and the recent ones; each by its `[theme] name`, with the target of a symlink and a `default` tag; click one to load it), the **tokens** (a section list with how many tokens each sets, groups of rows that fold and reset, a search over names, descriptions and sections, and a "Modified only" switch), and a **live preview** that draws a sample UI with the values as you type, in the light or dark scheme (it follows the variant you edit; its colors, radii, shadows and gradients are live, text sizes and some inner gaps follow the editor's own look: the gallery and the toy windows show those). Each token has a control by its type: a switch, a dropdown for enum strings, a number input with its unit, a color swatch that opens a color picker beside the hex entry, and a gradient editor (angle, stops with a color and a position, a preview strip). A filled dot before a token means this file sets it; **Reset** removes it. Editing the Light or Dark variant writes `[light:*]`/`[dark:*]` sections, and **Copy from Base** fills the variant from the base. **Ctrl+Z** and **Ctrl+Shift+Z** undo and redo (typing in one token is one step). **Save** updates the open file (written through a symlink if it is one). **Save as** creates a new file and registers it for every app: a symlink `<name>.conf` in `$XDG_DATA_HOME/iad/themes/` (none if the file is saved there already); the editor then edits the new file. Nothing else is ever written. **Register**, **Unregister** and **Use as the default theme** (`default.conf`, the file apps use without `IAD_THEME`) are in the main menu, where the shortcuts are shown. A ● before a name in the list, the window title and the header means unsaved changes. **Try it out** starts the gallery or a toy window of a design language (`theme-toys <win95|winxp|win7|mac|gnome2>`, from `IAD_TOYS`, the `theme-toys` next to the editor, or `cargo run`) with the current values, saved or not, from a separate temp file in `IAD_THEME`; press it again to restart that window. The editor remembers the open file, folders, recent files, section and variant in `~/.config/iad-theme-editor/state.conf`. A new token goes in `Schema::toolkit()` (`src/theme_config.rs`) with a type and range: prefer typed numbers (`Length`, `Percentage`) and enum strings over new Rust enums or switches. Add its value to `themes/libadwaita.conf` so that look stays complete, and check that the gallery with `IAD_THEME=themes/libadwaita.conf` is pixel-identical to before.
+### Theme editor
+
+Run `cargo run -p iced-adaptive-design-theme-editor -- [FILE]`.
+
+- The **primary sidebar selects token sections**. **All** groups every token on one searchable page. The selected theme in the header opens a **picker dialog** with registered files, added folders and recent files; long names and paths wrap within bounded widths.
+- **Modified only** filters unsaved changes. **Overrides only** shows explicit entries in the active Light/Dark scheme, not inherited Base values; it is unavailable for Base. Typed controls edit values, **Reset** removes an explicit entry, and Light/Dark edits write `[light:*]` / `[dark:*]` sections. **Copy from Base** fills the active scheme from Base. **Ctrl+Z** and **Ctrl+Shift+Z** undo and redo.
+- **Save** updates the current file, following symlinks; an untitled file opens Save as. **Save as** writes a copy, makes it the current file for subsequent saves, and auto-registers it in `$XDG_DATA_HOME/iad/themes/` (normally with a `<name>.conf` symlink, unnecessary if already registered or saved there). A registration failure is reported separately: the saved copy remains current. **Register**, **Unregister** and **Use as the default theme** are available in the main menu.
+- There is **no embedded live preview**. **Try it out** uses a split launch action: run the selected target or choose Gallery, `win95`, `winxp`, `win7` or `mate`. Launch appearance **System / Light / Dark** is independent of the scheme being edited; System removes inherited `TOYS_SCHEME` and `GALLERY_SCHEME` overrides. Current values, including unsaved edits, go to a separate temporary file through `IAD_THEME`; relaunching a target replaces its previous process without saving the open theme. `IAD_GALLERY` / `IAD_TOYS` select executables, otherwise the editor uses sibling binaries or workspace `cargo run`.
+
+The editor remembers the open file, folders, recents, section and variant in `~/.config/iad-theme-editor/state.conf`. See the [editor guide](theme-editor/README.md) and [toy resolution and validation limits](theme-toys/README.md).
+
+A new toolkit token goes in `Schema::toolkit()` (`src/theme_config.rs`) with a type and bounds. Prefer typed numbers (`Length`, `Percentage`) and enum strings. Add its intended libadwaita value to `themes/libadwaita.conf`, run schema tests, then inspect relevant gallery states; compilation alone does not establish visual acceptance.
 
 ## The gallery
 

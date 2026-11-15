@@ -85,20 +85,20 @@ Nested layers: `overlay_stack`. Rules: `layouts::overlay::rule` (`Stack` routes 
 
 A surface on an edge: footer, drawer, bottom sheet.
 
-| Param        | Values                                                         | Default      |
-| ------------ | -------------------------------------------------------------- | ------------ |
-| `side`       | `Bottom`, `Top`, `Left`, `Right`                               | `Bottom`     |
-| `size`       | across the edge: `Auto`, `Fixed(px)`, `Fraction(f)`, `FullScreen` | `Auto`   |
-| `length`     | along the edge: same values                                    | `FullScreen` |
-| `align`      | where a shorter dock sits: `Start`, `Center`, `End`            | `Start`      |
-| `margin`     | px off the docked edge, that edge only                         | `0` (flush)  |
-| `mode`       | `Push` (makes room), `Overlay` (over a faded base)             | `Push`       |
-| `scope`      | `Content` (the base as given), `Window` (corners take the window radius) | `Content` |
-| `radius`     | explicit uniform or per-corner surface radii                   | adaptive corners |
-| `border`     | hairline on the sides that are not flush                       | on           |
-| `scrim`      | fade the base (`Overlay`)                                      | on           |
-| `open`       | show it                                                        | `true`       |
-| `on_outside` | message for a press outside (`Overlay`)                        | none         |
+| Param        | Values                                                                   | Default          |
+| ------------ | ------------------------------------------------------------------------ | ---------------- |
+| `side`       | `Bottom`, `Top`, `Left`, `Right`                                         | `Bottom`         |
+| `size`       | across the edge: `Auto`, `Fixed(px)`, `Fraction(f)`, `FullScreen`        | `Auto`           |
+| `length`     | along the edge: same values                                              | `FullScreen`     |
+| `align`      | where a shorter dock sits: `Start`, `Center`, `End`                      | `Start`          |
+| `margin`     | px off the docked edge, that edge only                                   | `0` (flush)      |
+| `mode`       | `Push` (makes room), `Overlay` (over a faded base)                       | `Push`           |
+| `scope`      | `Content` (the base as given), `Window` (corners take the window radius) | `Content`        |
+| `radius`     | explicit uniform or per-corner surface radii                             | adaptive corners |
+| `border`     | hairline on the sides that are not flush                                 | on               |
+| `scrim`      | fade the base (`Overlay`)                                                | on               |
+| `open`       | show it                                                                  | `true`           |
+| `on_outside` | message for a press outside (`Overlay`)                                  | none             |
 
 `Dock::radius(0.0)` makes the surface square; a uniform value or `iced::border::Radius` overrides generated corners, including edge corners. Surface and outline share the override. Omit it to preserve the adaptive sheet geometry.
 
@@ -130,12 +130,12 @@ Dock::new(content, pane).side(Side::Right).size(DockSize::Fixed(280.0))
 
 `FocusScope` and `focus_return` apply `primitives::focus`.
 
-| Behavior       | Param                  | Default |
-| -------------- | ---------------------- | ------- |
-| Tab wraps inside | `trap(bool)`         | on      |
-| Take focus on appearing | `auto_focus(bool)` | on    |
-| Which child    | `initial_focus(id)`    | first   |
-| Focus in/out   | `on_focus_change(f)`   | none    |
+| Behavior                | Param                | Default |
+| ----------------------- | -------------------- | ------- |
+| Tab wraps inside        | `trap(bool)`         | on      |
+| Take focus on appearing | `auto_focus(bool)`   | on      |
+| Which child             | `initial_focus(id)`  | first   |
+| Focus in/out            | `on_focus_change(f)` | none    |
 
 Give the child the same id: `entry(..).id("name")`. An id that is not found falls back to the first focusable widget. `Overlay`, `Dock` and `Popover` take `initial_focus` and pass it on. `ColorInput` focuses its code entry.
 
@@ -173,6 +173,10 @@ Continuous: no color of their own. They take the pane behind. A header holds the
 - `primary_menu(Menu::new(..).section([..]))` is the app menu. Order: setting toggles, Preferences, Keyboard Shortcuts, Help, About. 3–12 items.
 - A popover on desktop, a full page when narrow (`MenuPresentation::resolve`).
 - Disable unavailable items: `MenuItem::disabled()`.
+- `MenuButton::text_trigger("File")` provides a flat text-only trigger for a conventional menubar. `label_props(TextProps)` controls its text locally.
+- `widgets::context_menu(target, menu)` / `ContextMenu::new(target, menu)` attach the same native `Menu` model to arbitrary content without replacing its normal left-click behavior. Right-click opens at the pointer; Menu or Shift+F10 invokes it for the focused target or descendant. Escape and outside presses dismiss; arrows/Home/End navigate enabled rows, Enter/Space activate, and Right/Left enter or leave submenus.
+
+`MenuProps`, `ContextMenuProps` and the menu's native child setters customize presentation, not command ownership. See [typed child props](child-props.md#contract-and-usage) and the generated `iad-menu(3)`, `iad-menu-button(3)` and `iad-context-menu(3)` references for API details.
 
 ## Shortcuts
 
