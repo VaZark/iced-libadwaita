@@ -589,6 +589,7 @@ fn theme_picker_bounds_and_wraps_long_names_and_paths_at_narrow_widths() {
             assert_horizontal_bounds(child, x, width);
         }
     }
+    e.path = Some(e.presets[0].path.clone());
     let short = Preset {
         group: "Folders",
         name: "Theme".into(),
@@ -611,6 +612,16 @@ fn theme_picker_bounds_and_wraps_long_names_and_paths_at_narrow_widths() {
                 &layout::Limits::new(iced::Size::ZERO, iced::Size::new(width, f32::INFINITY)),
             )
         };
+        let selected_long = measure(e.theme_selector(width));
+        let mut short_editor = editor();
+        short_editor.path = Some(short.path.clone());
+        short_editor.presets = vec![short.clone()];
+        let selected_short = measure(short_editor.theme_selector(width));
+        assert_horizontal_bounds(&selected_long, 0.0, width);
+        assert!(
+            selected_long.size().height > selected_short.size().height,
+            "selected multilingual theme must wrap, not truncate or overflow"
+        );
         let long_layout = measure(e.theme_option(&e.presets[0], width));
         let short_layout = measure(e.theme_option(&short, width));
         assert_horizontal_bounds(&long_layout, 0.0, width);
@@ -810,14 +821,14 @@ fn starting_a_toy_again_replaces_the_old_window() {
 }
 
 #[test]
-fn the_toy_list_is_what_the_program_says_or_the_fixed_five() {
+fn the_toy_list_normalizes_stale_installs_or_uses_the_canonical_four() {
     let d = temp_dir("list");
     let bins = toys::Bins {
         gallery: None,
         toys: Some(script(
             &d,
             "t.sh",
-            "printf 'win95  Windows 95\\nmac: Mac OS\\n# a comment\\ngnome2\\n'",
+            "printf 'win95  Windows 95\\nmac: Mac OS\\n# a comment\\ngnome2\\nmate: Stale label\\nunknown: Unknown\\nwin95: Duplicate\\n'",
         )),
     };
     let toys = toys::list_toys(&bins);
@@ -825,22 +836,35 @@ fn the_toy_list_is_what_the_program_says_or_the_fixed_five() {
         toys.iter()
             .map(|t| (t.name.as_str(), t.label.as_str()))
             .collect::<Vec<_>>(),
-        [
-            ("win95", "Windows 95"),
-            ("mac", "Mac OS"),
-            ("gnome2", "gnome2")
-        ]
+        [("win95", "Windows 95"), ("mate", "MATE")]
     );
     let fixed = toys::list_toys(&toys::Bins::default());
     assert_eq!(
         fixed.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(),
-        ["win95", "winxp", "win7", "mac", "gnome2"]
+        ["win95", "winxp", "win7", "mate"]
     );
     let broken = toys::Bins {
         gallery: None,
         toys: Some(script(&d, "bad.sh", "exit 3")),
     };
     assert_eq!(toys::list_toys(&broken), toys::fallback());
+    for (name, output) in [
+        ("removed", "mac: Mac OS"),
+        ("empty", ""),
+        ("invalid", "not/a/target"),
+    ] {
+        let bins = toys::Bins {
+            gallery: None,
+            toys: Some(script(&d, name, &format!("printf '%s' '{output}'"))),
+        };
+        assert_eq!(toys::list_toys(&bins), toys::fallback());
+    }
+    let alias = toys::Bins {
+        gallery: None,
+        toys: Some(script(&d, "alias", "printf 'gnome2: GNOME 2'")),
+    };
+    assert_eq!(toys::list_toys(&alias)[0].name, "mate");
+    assert_eq!(toys::list_toys(&alias)[0].label, "MATE");
     let _ = std::fs::remove_dir_all(d);
 }
 

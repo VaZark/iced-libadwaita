@@ -47,12 +47,11 @@ impl LaunchScheme {
 }
 
 /// The design languages a `theme-toys` build is asked about when it cannot be run for its list.
-pub(crate) const FALLBACK: [(&str, &str); 5] = [
+pub(crate) const FALLBACK: [(&str, &str); 4] = [
     ("win95", "Windows 95"),
     ("winxp", "Windows XP"),
     ("win7", "Windows 7"),
-    ("mac", "Mac"),
-    ("gnome2", "GNOME 2"),
+    ("mate", "MATE"),
 ];
 
 /// What can be tried out besides the gallery.
@@ -124,6 +123,20 @@ pub(crate) fn parse_list(text: &str) -> Vec<Toy> {
         .collect()
 }
 
+/// Restrict installed lists to canonical targets. Legacy `gnome2` is accepted only
+/// as a discovery alias; it never becomes a second launcher or an old GNOME label.
+fn canonical_list(text: &str) -> Vec<Toy> {
+    let installed = parse_list(text);
+    fallback()
+        .into_iter()
+        .filter(|toy| {
+            installed.iter().any(|entry| {
+                entry.name == toy.name || (toy.name == "mate" && entry.name == "gnome2")
+            })
+        })
+        .collect()
+}
+
 /// The fixed list, used when the toys program cannot say.
 pub(crate) fn fallback() -> Vec<Toy> {
     FALLBACK
@@ -135,14 +148,15 @@ pub(crate) fn fallback() -> Vec<Toy> {
         .collect()
 }
 
-/// What `theme-toys --list` says, or the fixed five when there is no program to ask.
+/// Canonical installed targets, or the fixed four when discovery fails.
+/// Stale labels, removed targets, unknown targets and duplicate aliases are not exposed.
 pub(crate) fn list_toys(bins: &Bins) -> Vec<Toy> {
     let Some(bin) = &bins.toys else {
         return fallback();
     };
     match Command::new(bin).arg("--list").output() {
         Ok(out) if out.status.success() => {
-            let toys = parse_list(&String::from_utf8_lossy(&out.stdout));
+            let toys = canonical_list(&String::from_utf8_lossy(&out.stdout));
             if toys.is_empty() { fallback() } else { toys }
         }
         _ => fallback(),

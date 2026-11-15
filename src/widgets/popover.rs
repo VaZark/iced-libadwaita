@@ -245,6 +245,7 @@ impl PopoverSurfaceProps {
 
 pub struct Popover<'a, M> {
     context_trigger: bool,
+    menu_navigation: bool,
     style: Option<crate::components::props::ButtonStyle>,
     trigger: Element<'a, M>,
     popover: Element<'a, M>,
@@ -276,7 +277,67 @@ fn context_key(event: &Event) -> bool {
     ) || matches!(event, Event::Keyboard(keyboard::Event::KeyPressed { key: keyboard::Key::Named(Named::F10), modifiers, .. }) if modifiers.shift() && !modifiers.control() && !modifiers.alt() && !modifiers.logo())
 }
 
-struct TargetFocus(bool);
+#[derive(Default)]
+struct MenuRows(Vec<(Rectangle, bool, bool)>, iced::Vector);
+impl iced::advanced::widget::Operation for MenuRows {
+    fn scrollable(
+        &mut self,
+        _: Option<&iced::advanced::widget::Id>,
+        _: Rectangle,
+        _: Rectangle,
+        translation: iced::Vector,
+        _: &mut dyn iced::advanced::widget::operation::Scrollable,
+    ) {
+        self.1 = translation;
+    }
+    fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn iced::advanced::widget::Operation)) {
+        operate(self);
+    }
+    fn container(&mut self, id: Option<&iced::advanced::widget::Id>, bounds: Rectangle) {
+        let is = |name| id == Some(&iced::advanced::widget::Id::new(name));
+        let submenu = is("iad-menu-submenu");
+        let back = is("iad-menu-back");
+        if is("iad-menu-row") || submenu || back {
+            self.0.push((
+                Rectangle::new(bounds.position() - self.1, bounds.size()),
+                submenu,
+                back,
+            ));
+        }
+    }
+}
+
+struct RevealMenuRow(Rectangle);
+impl iced::advanced::widget::Operation for RevealMenuRow {
+    fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn iced::advanced::widget::Operation)) {
+        operate(self);
+    }
+    fn scrollable(
+        &mut self,
+        _: Option<&iced::advanced::widget::Id>,
+        bounds: Rectangle,
+        content: Rectangle,
+        _: iced::Vector,
+        state: &mut dyn iced::advanced::widget::operation::Scrollable,
+    ) {
+        let dy = if self.0.y < bounds.y {
+            self.0.y - bounds.y
+        } else {
+            (self.0.y + self.0.height - bounds.y - bounds.height).max(0.0)
+        };
+        state.scroll_by(
+            iced::advanced::widget::operation::scrollable::AbsoluteOffset { x: 0.0, y: dy },
+            bounds,
+            content,
+        );
+    }
+}
+
+#[derive(Default)]
+struct TargetFocus {
+    focused: bool,
+    count: usize,
+}
 impl iced::advanced::widget::Operation for TargetFocus {
     fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn iced::advanced::widget::Operation)) {
         operate(self);
@@ -287,7 +348,8 @@ impl iced::advanced::widget::Operation for TargetFocus {
         _: Rectangle,
         state: &mut dyn iced::advanced::widget::operation::Focusable,
     ) {
-        self.0 |= state.is_focused();
+        self.focused |= state.is_focused();
+        self.count += 1;
     }
 }
 impl iced::advanced::widget::operation::Focusable for State {
@@ -304,6 +366,8 @@ impl iced::advanced::widget::operation::Focusable for State {
 
 struct State {
     focused: bool,
+    selected: Option<usize>,
+    keyboard_pointer: Option<Point>,
     pointer: Option<Point>,
     open: bool,
     /// The content was on screen since it was last reset: closing it puts it back as new, so a
@@ -322,6 +386,8 @@ impl State {
         };
         Self {
             focused: false,
+            selected: None,
+            keyboard_pointer: None,
             pointer: None,
             open,
             shown: open,
@@ -331,6 +397,8 @@ impl State {
     fn toggle(&mut self) {
         self.open = !self.open;
         if self.open {
+            self.selected = None;
+            self.keyboard_pointer = None;
             let start = if crate::layouts::animation::Trigger::Popover.animated() {
                 0.0
             } else {
@@ -347,6 +415,7 @@ impl<'a, M: 'a> Popover<'a, M> {
         let m = Metrics::desktop();
         Self {
             context_trigger: false,
+            menu_navigation: false,
             style: None,
             trigger: trigger.into(),
             popover: content.into(),
@@ -371,6 +440,12 @@ impl<'a, M: 'a> Popover<'a, M> {
     }
     pub(crate) fn context_trigger(mut self) -> Self {
         self.context_trigger = true;
+        self.menu_navigation = true;
+        self
+    }
+
+    pub(crate) fn menu_navigation(mut self) -> Self {
+        self.menu_navigation = true;
         self
     }
 
@@ -559,8 +634,17 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
         renderer: &iced::Renderer,
         operation: &mut dyn iced::advanced::widget::Operation,
     ) {
-        if self.context_trigger {
-            operation.focusable(None, layout.bounds(), tree.state.downcast_mut::<State>());
+        if self.context_trigger || self.menu_navigation {
+            let mut target = TargetFocus::default();
+            self.trigger.as_widget_mut().operate(
+                &mut tree.children[0],
+                layout.children().next().unwrap(),
+                renderer,
+                &mut target,
+            );
+            if target.count == 0 {
+                operation.focusable(None, layout.bounds(), tree.state.downcast_mut::<State>());
+            }
         }
         self.trigger.as_widget_mut().operate(
             &mut tree.children[0],
@@ -603,7 +687,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
         viewport: &Rectangle,
     ) {
         if self.context_trigger {
-            let mut focus = TargetFocus(false);
+            let mut focus = TargetFocus::default();
             self.trigger.as_widget_mut().operate(
                 &mut tree.children[0],
                 layout.children().next().unwrap(),
@@ -622,17 +706,9 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
                 event,
                 Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right))
             ) && inside;
-            let keyboard = (state.focused || focus.0) && context_key(event);
-            if !self.disabled && (pointer || keyboard) {
-                state.pointer = if pointer { cursor.position() } else { None };
-                if !state.open {
-                    state.toggle();
-                }
-                shell.capture_event();
-                shell.invalidate_layout();
-                shell.request_redraw();
-                return;
-            }
+            let keyboard =
+                ((state.focused && focus.count == 0) || focus.focused) && context_key(event);
+            // Descendant context targets own their gestures before an enclosing target.
             self.trigger.as_widget_mut().update(
                 &mut tree.children[0],
                 event,
@@ -643,6 +719,23 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
                 shell,
                 viewport,
             );
+            if shell.is_event_captured() {
+                return;
+            }
+            if self.disabled {
+                state.open = false;
+            }
+            if !self.disabled && (pointer || keyboard) {
+                state.focused = true;
+                state.pointer = if pointer { cursor.position() } else { None };
+                if !state.open {
+                    state.toggle();
+                }
+                shell.capture_event();
+                shell.invalidate_layout();
+                shell.request_redraw();
+                return;
+            }
             return;
         }
         let state = tree.state.downcast_mut::<State>();
@@ -650,8 +743,34 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
             state.open = false;
             return;
         }
+        if self.menu_navigation {
+            if matches!(
+                event,
+                Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
+            ) {
+                state.focused = cursor.is_over(layout.bounds()) && cursor.is_over(*viewport);
+            }
+            if state.focused
+                && matches!(
+                    event,
+                    Event::Keyboard(keyboard::Event::KeyPressed {
+                        key: keyboard::Key::Named(Named::Enter | Named::Space | Named::ArrowDown),
+                        ..
+                    })
+                )
+            {
+                if !state.open {
+                    state.toggle();
+                }
+                shell.capture_event();
+                shell.invalidate_layout();
+                shell.request_redraw();
+                return;
+            }
+        }
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event
             && cursor.is_over(layout.bounds())
+            && cursor.is_over(*viewport)
         {
             state.toggle();
             shell.capture_event();
@@ -662,12 +781,21 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
 
     fn mouse_interaction(
         &self,
-        _: &Tree,
+        tree: &Tree,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
-        _: &Rectangle,
-        _: &iced::Renderer,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
     ) -> mouse::Interaction {
+        if self.context_trigger {
+            return self.trigger.as_widget().mouse_interaction(
+                &tree.children[0],
+                layout.children().next().unwrap(),
+                cursor,
+                viewport,
+                renderer,
+            );
+        }
         if !self.disabled && cursor.is_over(layout.bounds()) {
             mouse::Interaction::Pointer
         } else {
@@ -744,8 +872,8 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
         &'b mut self,
         tree: &'b mut Tree,
         layout: Layout<'b>,
-        _: &iced::Renderer,
-        _: &Rectangle,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
         translation: iced::Vector,
     ) -> Option<overlay::Element<'b, M, Theme, iced::Renderer>> {
         let Tree {
@@ -759,7 +887,13 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
                 state.shown = false;
                 children[1] = Tree::new(self.popover.as_widget());
             }
-            return None;
+            return self.trigger.as_widget_mut().overlay(
+                &mut children[0],
+                layout.children().next().unwrap(),
+                renderer,
+                viewport,
+                translation,
+            );
         }
         state.shown = true;
         let b = layout.bounds();
@@ -782,6 +916,9 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
             content: &mut self.popover,
             tree: &mut children[1],
             open: &mut state.open,
+            selected: &mut state.selected,
+            keyboard_pointer: &mut state.keyboard_pointer,
+            menu_navigation: self.menu_navigation,
             appear: &mut state.appear,
             anchor,
             align: self.align,
@@ -808,6 +945,9 @@ struct PopoverOverlay<'a, 'b, M> {
     content: &'b mut Element<'a, M>,
     tree: &'b mut Tree,
     open: &'b mut bool,
+    selected: &'b mut Option<usize>,
+    keyboard_pointer: &'b mut Option<Point>,
+    menu_navigation: bool,
     appear: &'b mut crate::layouts::animation::Progress,
     anchor: Rectangle,
     align: Align,
@@ -901,7 +1041,7 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
         );
         let sideways = matches!(self.side, Side::Left | Side::Right);
         let max_h = if sideways {
-            region.height - 2.0 * MARGIN
+            (region.height - 2.0 * MARGIN).max(0.0)
         } else {
             below
                 .max(above)
@@ -916,12 +1056,12 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
             .max(0.0)
             .min((region.width - 2.0 * MARGIN).max(0.0));
         let w = if sideways {
-            w.min(left.max(right).max(120.0))
+            w.min(left.max(right).max(0.0))
         } else {
             w
         };
         let limits = if self.fit_content {
-            let max_w = (region.width - 2.0 * MARGIN).max(40.0);
+            let max_w = (region.width - 2.0 * MARGIN).max(0.0);
             layout::Limits::new(Size::ZERO, Size::new(max_w, max_h))
         } else {
             layout::Limits::new(Size::new(w, 0.0), Size::new(w, max_h))
@@ -968,6 +1108,10 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
                 )),
             );
         }
+        let cursor = self
+            .keyboard_pointer
+            .map(mouse::Cursor::Available)
+            .unwrap_or(cursor);
         renderer.with_translation(d, |renderer| {
             self.content.as_widget().draw(
                 self.tree,
@@ -976,7 +1120,7 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
                 style,
                 layout.children().next().unwrap(),
                 cursor,
-                &Rectangle::with_size(Size::INFINITE),
+                &layout.bounds(),
             );
         });
     }
@@ -1000,6 +1144,100 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
             false,
         );
         let bounds = layout.bounds();
+        if matches!(event, Event::Mouse(mouse::Event::CursorMoved { .. })) {
+            *self.keyboard_pointer = None;
+            *self.selected = None;
+        }
+        if self.menu_navigation {
+            if let Event::Keyboard(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(key),
+                ..
+            }) = event
+            {
+                let mut rows = MenuRows::default();
+                self.content.as_widget_mut().operate(
+                    self.tree,
+                    layout.children().next().unwrap(),
+                    renderer,
+                    &mut rows,
+                );
+                if !rows.0.is_empty() {
+                    let n = rows.0.len();
+                    let next = match key {
+                        Named::ArrowDown => Some(self.selected.map_or(0, |i| (i + 1) % n)),
+                        Named::ArrowUp => Some(self.selected.map_or(n - 1, |i| (i + n - 1) % n)),
+                        Named::Home => Some(0),
+                        Named::End => Some(n - 1),
+                        _ => None,
+                    };
+                    if let Some(i) = next {
+                        *self.selected = Some(i);
+                        self.content.as_widget_mut().operate(
+                            self.tree,
+                            layout.children().next().unwrap(),
+                            renderer,
+                            &mut RevealMenuRow(rows.0[i].0),
+                        );
+                        rows = MenuRows::default();
+                        self.content.as_widget_mut().operate(
+                            self.tree,
+                            layout.children().next().unwrap(),
+                            renderer,
+                            &mut rows,
+                        );
+                        let at = rows.0[i].0.center();
+                        *self.keyboard_pointer = Some(at);
+                        self.content.as_widget_mut().update(
+                            self.tree,
+                            &Event::Mouse(mouse::Event::CursorMoved { position: at }),
+                            layout.children().next().unwrap(),
+                            mouse::Cursor::Available(at),
+                            renderer,
+                            clipboard,
+                            shell,
+                            &bounds,
+                        );
+                        shell.capture_event();
+                        shell.request_redraw();
+                        return;
+                    }
+                    if matches!(
+                        key,
+                        Named::Enter | Named::Space | Named::ArrowRight | Named::ArrowLeft
+                    ) {
+                        let index = match key {
+                            Named::ArrowLeft => rows.0.iter().position(|row| row.2),
+                            Named::ArrowRight => self.selected.filter(|i| *i < n && rows.0[*i].1),
+                            _ => Some(self.selected.unwrap_or(0)),
+                        };
+                        if let Some(i) = index.filter(|i| *i < n) {
+                            let at = rows.0[i].0.center();
+                            for event in [
+                                mouse::Event::ButtonPressed(mouse::Button::Left),
+                                mouse::Event::ButtonReleased(mouse::Button::Left),
+                            ] {
+                                // Keep each synthetic pointer event's capture status separate:
+                                // a submenu captures the press, but deliberately not the release.
+                                let mut messages = Vec::new();
+                                let mut input_shell = Shell::new(&mut messages);
+                                self.update(
+                                    &Event::Mouse(event),
+                                    layout,
+                                    mouse::Cursor::Available(at),
+                                    renderer,
+                                    clipboard,
+                                    &mut input_shell,
+                                );
+                                shell.merge(input_shell, |message| message);
+                            }
+                            *self.selected = None;
+                            shell.capture_event();
+                            return;
+                        }
+                    }
+                }
+            }
+        }
         let close = |open: &mut bool, shell: &mut Shell<'_, M>| {
             *open = false;
             shell.capture_event();
@@ -1013,7 +1251,7 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
                 key: keyboard::Key::Named(Named::Escape),
                 ..
             }) => Some(Input::Escape),
-            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => Some(Input::Press {
+            Event::Mouse(mouse::Event::ButtonPressed(_)) => Some(Input::Press {
                 inside: cursor.is_over(bounds),
             }),
             _ => None,
@@ -1060,7 +1298,7 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
             renderer,
             clipboard,
             shell,
-            &Rectangle::with_size(Size::INFINITE),
+            &bounds,
         );
         // An item that asked to stay (see `stay_open`) keeps the menu up for this click.
         let stay = STAY_OPEN.with(|c| c.replace(false));
@@ -1072,6 +1310,7 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
             )
             && cursor.is_over(bounds)
             && shell.is_event_captured()
+            && (!self.menu_navigation || !shell.is_empty())
             && !self.keep_open
         {
             close(self.open, shell);
@@ -1128,7 +1367,508 @@ fn place_within(
         ..anchor
     };
     let at = crate::layouts::anchor::place(rel, size, region.size(), placement).position;
-    Point::new(at.x + region.x, at.y + region.y)
+    // An anchor may be outside the current viewport after a resize or scroll.
+    // The anchor primitive flips against it; clamp both axes to the final region.
+    Point::new(
+        (at.x + region.x).clamp(region.x, region.x + (region.width - size.width).max(0.0)),
+        (at.y + region.y).clamp(region.y, region.y + (region.height - size.height).max(0.0)),
+    )
+}
+
+#[cfg(test)]
+mod context_event_tests {
+    use super::*;
+    use crate::widgets::menu::{Menu, MenuItem, pages_content, popover_content};
+    use iced::advanced::renderer::Headless;
+
+    fn renderer() -> iced::Renderer {
+        iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap()
+    }
+    fn key(key: Named, modifiers: keyboard::Modifiers) -> Event {
+        Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(key),
+            modified_key: keyboard::Key::Named(key),
+            physical_key: keyboard::key::Physical::Unidentified(
+                keyboard::key::NativeCode::Unidentified,
+            ),
+            location: keyboard::Location::Standard,
+            modifiers,
+            text: None,
+            repeat: false,
+        })
+    }
+    fn send(
+        p: &mut Popover<'_, u8>,
+        tree: &mut Tree,
+        node: &layout::Node,
+        renderer: &iced::Renderer,
+        event: Event,
+        at: Point,
+    ) -> (bool, Vec<u8>) {
+        let mut messages = Vec::new();
+        let mut shell = Shell::new(&mut messages);
+        p.update(
+            tree,
+            &event,
+            Layout::new(node),
+            mouse::Cursor::Available(at),
+            renderer,
+            &mut iced::advanced::clipboard::Null,
+            &mut shell,
+            &Rectangle::with_size(Size::new(500.0, 300.0)),
+        );
+        let captured = shell.is_event_captured();
+        (captured, messages)
+    }
+    fn overlay_event(
+        p: &mut Popover<'_, u8>,
+        tree: &mut Tree,
+        node: &layout::Node,
+        renderer: &iced::Renderer,
+        event: Event,
+    ) -> Vec<u8> {
+        let viewport = Rectangle::with_size(Size::new(500.0, 300.0));
+        let mut overlay = p
+            .overlay(
+                tree,
+                Layout::new(node),
+                renderer,
+                &viewport,
+                iced::Vector::ZERO,
+            )
+            .unwrap();
+        let node = overlay.as_overlay_mut().layout(renderer, viewport.size());
+        let mut messages = Vec::new();
+        overlay.as_overlay_mut().update(
+            &event,
+            Layout::new(&node),
+            mouse::Cursor::Unavailable,
+            renderer,
+            &mut iced::advanced::clipboard::Null,
+            &mut Shell::new(&mut messages),
+        );
+        messages
+    }
+    fn settle(
+        p: &mut Popover<'_, u8>,
+        tree: &mut Tree,
+        node: &layout::Node,
+        renderer: &iced::Renderer,
+    ) {
+        let now = std::time::Instant::now();
+        for time in [now, now + std::time::Duration::from_secs(1)] {
+            overlay_event(
+                p,
+                tree,
+                node,
+                renderer,
+                Event::Window(iced::window::Event::RedrawRequested(time)),
+            );
+        }
+    }
+
+    #[test]
+    fn context_target_passes_left_click_and_requires_keyboard_focus() {
+        let renderer = renderer();
+        let mut p = Popover::new(button("Target").on_press(9), iced::widget::space())
+            .padding(0)
+            .context_trigger();
+        let mut tree = Tree::new(&p as &dyn Widget<u8, Theme, iced::Renderer>);
+        let node = p.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(500.0, 300.0)),
+        );
+        let at = node.bounds().center();
+        assert!(
+            !send(
+                &mut p,
+                &mut tree,
+                &node,
+                &renderer,
+                key(Named::ContextMenu, keyboard::Modifiers::empty()),
+                at
+            )
+            .0
+        );
+        send(
+            &mut p,
+            &mut tree,
+            &node,
+            &renderer,
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            at,
+        );
+        assert_eq!(
+            send(
+                &mut p,
+                &mut tree,
+                &node,
+                &renderer,
+                Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+                at
+            )
+            .1,
+            vec![9]
+        );
+        assert!(!tree.state.downcast_ref::<State>().open);
+        assert!(
+            send(
+                &mut p,
+                &mut tree,
+                &node,
+                &renderer,
+                key(Named::F10, keyboard::Modifiers::SHIFT),
+                at
+            )
+            .0
+        );
+        assert!(tree.state.downcast_ref::<State>().open);
+        assert!(tree.state.downcast_ref::<State>().pointer.is_none());
+        overlay_event(
+            &mut p,
+            &mut tree,
+            &node,
+            &renderer,
+            key(Named::Escape, keyboard::Modifiers::empty()),
+        );
+        assert!(!tree.state.downcast_ref::<State>().open);
+    }
+    #[test]
+    fn focused_text_input_owns_keyboard_invocation_and_nested_target_owns_right_click() {
+        let renderer = renderer();
+        let input = iced::widget::text_input("", "text").on_input(|_| 0);
+        let mut p = Popover::new(input, iced::widget::space())
+            .padding(0)
+            .context_trigger();
+        let mut tree = Tree::new(&p as &dyn Widget<u8, Theme, iced::Renderer>);
+        let node = p.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(500.0, 300.0)),
+        );
+        struct Focus;
+        impl iced::advanced::widget::Operation for Focus {
+            fn traverse(&mut self, f: &mut dyn FnMut(&mut dyn iced::advanced::widget::Operation)) {
+                f(self);
+            }
+            fn focusable(
+                &mut self,
+                _: Option<&iced::advanced::widget::Id>,
+                _: Rectangle,
+                state: &mut dyn iced::advanced::widget::operation::Focusable,
+            ) {
+                state.focus();
+            }
+        }
+        p.operate(&mut tree, Layout::new(&node), &renderer, &mut Focus);
+        assert!(
+            !tree.state.downcast_ref::<State>().focused,
+            "focus belongs to the input, not the wrapper"
+        );
+        assert!(
+            send(
+                &mut p,
+                &mut tree,
+                &node,
+                &renderer,
+                key(Named::ContextMenu, keyboard::Modifiers::empty()),
+                Point::ORIGIN
+            )
+            .0
+        );
+        assert!(tree.state.downcast_ref::<State>().open);
+
+        let inner = Popover::new(
+            iced::widget::space().width(100).height(40),
+            iced::widget::space(),
+        )
+        .padding(0)
+        .context_trigger();
+        let mut outer = Popover::new(inner, iced::widget::space())
+            .padding(0)
+            .context_trigger();
+        let mut tree = Tree::new(&outer as &dyn Widget<u8, Theme, iced::Renderer>);
+        let node = outer.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(500.0, 300.0)),
+        );
+        assert!(
+            send(
+                &mut outer,
+                &mut tree,
+                &node,
+                &renderer,
+                Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)),
+                Point::new(20.0, 20.0)
+            )
+            .0
+        );
+        assert!(!tree.state.downcast_ref::<State>().open);
+        assert!(tree.children[0].state.downcast_ref::<State>().open);
+    }
+
+    #[test]
+    fn keyboard_end_reveals_and_activates_a_scrolled_row() {
+        let renderer = renderer();
+        let menu =
+            Menu::new("Long").section((0..30).map(|i| MenuItem::action(format!("Command {i}"), i)));
+        let mut p = Popover::new(
+            iced::widget::space().width(100).height(30),
+            popover_content(&menu, 100.0),
+        )
+        .padding(0)
+        .popover_width(260.0)
+        .context_trigger()
+        .open_initially(true);
+        let mut tree = Tree::new(&p as &dyn Widget<u8, Theme, iced::Renderer>);
+        let node = p.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(500.0, 300.0)),
+        );
+        overlay_event(
+            &mut p,
+            &mut tree,
+            &node,
+            &renderer,
+            key(Named::End, keyboard::Modifiers::empty()),
+        );
+        let pointer = tree.state.downcast_ref::<State>().keyboard_pointer.unwrap();
+        assert!(
+            pointer.y < 150.0,
+            "selected row should scroll into view: {pointer:?}"
+        );
+        assert_eq!(
+            overlay_event(
+                &mut p,
+                &mut tree,
+                &node,
+                &renderer,
+                key(Named::Enter, keyboard::Modifiers::empty())
+            ),
+            vec![29]
+        );
+        assert!(!tree.state.downcast_ref::<State>().open);
+    }
+
+    #[test]
+    fn text_trigger_builds_a_real_menu_overlay() {
+        let renderer = renderer();
+        let menu = Menu::new("File").section([MenuItem::action("Open", 2_u8)]);
+        let mut element: Element<'_, u8> =
+            crate::widgets::menu::menu_button(crate::Icon::OpenMenu, menu)
+                .text_trigger("File")
+                .props(crate::widgets::menu::MenuProps {
+                    label: crate::components::TextProps::default().width(80),
+                    ..Default::default()
+                })
+                .into();
+        let mut tree = Tree::new(&element);
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(500.0, 300.0)),
+        );
+        assert_eq!(
+            node.size().width,
+            80.0,
+            "typed trigger label props reach the native text"
+        );
+        let viewport = Rectangle::with_size(Size::new(500.0, 300.0));
+        element.as_widget_mut().update(
+            &mut tree,
+            &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            Layout::new(&node),
+            mouse::Cursor::Available(node.bounds().center()),
+            &renderer,
+            &mut iced::advanced::clipboard::Null,
+            &mut Shell::new(&mut vec![]),
+            &viewport,
+        );
+        let mut overlay = element
+            .as_widget_mut()
+            .overlay(
+                &mut tree,
+                Layout::new(&node),
+                &renderer,
+                &viewport,
+                iced::Vector::ZERO,
+            )
+            .expect("text trigger opens a native menu, not a dialog");
+        let node = overlay.as_overlay_mut().layout(&renderer, viewport.size());
+        let mut rows = MenuRows::default();
+        overlay
+            .as_overlay_mut()
+            .operate(Layout::new(&node), &renderer, &mut rows);
+        assert_eq!(rows.0.len(), 1);
+    }
+
+    #[test]
+    fn keyboard_check_item_publishes_without_dismissing() {
+        let renderer = renderer();
+        let menu = Menu::new("Context").section([MenuItem::check("Toggle", false, 4)]);
+        let mut p = Popover::new(
+            iced::widget::space().width(100).height(30),
+            popover_content(&menu, 360.0),
+        )
+        .padding(0)
+        .popover_width(260.0)
+        .context_trigger()
+        .open_initially(true);
+        let mut tree = Tree::new(&p as &dyn Widget<u8, Theme, iced::Renderer>);
+        let node = p.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(500.0, 300.0)),
+        );
+        overlay_event(
+            &mut p,
+            &mut tree,
+            &node,
+            &renderer,
+            key(Named::Home, keyboard::Modifiers::empty()),
+        );
+        assert_eq!(
+            overlay_event(
+                &mut p,
+                &mut tree,
+                &node,
+                &renderer,
+                key(Named::Space, keyboard::Modifiers::empty())
+            ),
+            vec![4]
+        );
+        assert!(tree.state.downcast_ref::<State>().open);
+    }
+
+    #[test]
+    fn right_click_anchors_to_pointer_and_layout_fits_viewport() {
+        let renderer = renderer();
+        let menu = Menu::new("Context").section([MenuItem::action("Run", 1)]);
+        let mut p = Popover::new(
+            iced::widget::space().width(500).height(300),
+            popover_content(&menu, 360.0),
+        )
+        .padding(0)
+        .popover_width(260.0)
+        .context_trigger();
+        let mut tree = Tree::new(&p as &dyn Widget<u8, Theme, iced::Renderer>);
+        let node = p.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(500.0, 300.0)),
+        );
+        let at = Point::new(490.0, 290.0);
+        assert!(
+            send(
+                &mut p,
+                &mut tree,
+                &node,
+                &renderer,
+                Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)),
+                at
+            )
+            .0
+        );
+        assert_eq!(tree.state.downcast_ref::<State>().pointer, Some(at));
+        let viewport = Rectangle::with_size(Size::new(500.0, 300.0));
+        {
+            let mut overlay = p
+                .overlay(
+                    &mut tree,
+                    Layout::new(&node),
+                    &renderer,
+                    &viewport,
+                    iced::Vector::ZERO,
+                )
+                .unwrap();
+            for size in [Size::new(500.0, 300.0), Size::new(80.0, 60.0)] {
+                let bounds = overlay.as_overlay_mut().layout(&renderer, size).bounds();
+                assert!(bounds.x >= 0.0 && bounds.y >= 0.0, "{bounds:?}");
+                assert!(
+                    bounds.x + bounds.width <= size.width
+                        && bounds.y + bounds.height <= size.height,
+                    "{bounds:?}"
+                );
+            }
+        }
+        overlay_event(
+            &mut p,
+            &mut tree,
+            &node,
+            &renderer,
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)),
+        );
+        assert!(!tree.state.downcast_ref::<State>().open);
+    }
+    #[test]
+    fn keyboard_skips_disabled_rows_activates_commands_and_traverses_submenus() {
+        let renderer = renderer();
+        let submenu = Menu::new("Child").section([MenuItem::action("Child command", 7)]);
+        let menu = Menu::new("Context").section([
+            MenuItem::action("Disabled", 1).disabled(),
+            MenuItem::submenu("Child", submenu),
+        ]);
+        let mut p = Popover::new(
+            iced::widget::space().width(100).height(30),
+            pages_content(&menu, 260.0, 0),
+        )
+        .padding(0)
+        .popover_width(260.0)
+        .context_trigger()
+        .open_initially(true);
+        let mut tree = Tree::new(&p as &dyn Widget<u8, Theme, iced::Renderer>);
+        let node = p.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(500.0, 300.0)),
+        );
+        let none = keyboard::Modifiers::empty();
+        overlay_event(
+            &mut p,
+            &mut tree,
+            &node,
+            &renderer,
+            key(Named::ArrowDown, none),
+        );
+        assert_eq!(tree.state.downcast_ref::<State>().selected, Some(0));
+        assert!(
+            overlay_event(&mut p, &mut tree, &node, &renderer, key(Named::Enter, none)).is_empty()
+        );
+        assert!(tree.state.downcast_ref::<State>().open);
+        settle(&mut p, &mut tree, &node, &renderer);
+        overlay_event(
+            &mut p,
+            &mut tree,
+            &node,
+            &renderer,
+            key(Named::ArrowLeft, none),
+        );
+        assert!(tree.state.downcast_ref::<State>().open);
+        settle(&mut p, &mut tree, &node, &renderer);
+        overlay_event(&mut p, &mut tree, &node, &renderer, key(Named::Home, none));
+        overlay_event(
+            &mut p,
+            &mut tree,
+            &node,
+            &renderer,
+            key(Named::ArrowRight, none),
+        );
+        settle(&mut p, &mut tree, &node, &renderer);
+        overlay_event(&mut p, &mut tree, &node, &renderer, key(Named::End, none));
+        assert_eq!(
+            overlay_event(&mut p, &mut tree, &node, &renderer, key(Named::Enter, none)),
+            vec![7]
+        );
+        assert!(!tree.state.downcast_ref::<State>().open);
+    }
 }
 
 #[cfg(test)]

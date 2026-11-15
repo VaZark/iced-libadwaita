@@ -224,6 +224,34 @@ impl Editor {
             .into()
     }
 
+    /// Closed theme picker uses the same local overflow policy as its options.
+    pub(crate) fn theme_selector(&self, width: f32) -> Element<'_, Msg> {
+        let name = self.path.as_ref().map_or_else(
+            || "Untitled".to_string(),
+            |path| {
+                self.presets
+                    .iter()
+                    .find(|preset| crate::files::canon(&preset.path) == crate::files::canon(path))
+                    .map_or_else(
+                        || {
+                            path.file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .into_owned()
+                        },
+                        |preset| preset.name.clone(),
+                    )
+            },
+        );
+        let label = theme_item_props(width)
+            .label
+            .apply(cmp::typography::label(format!("{}{}", self.dot(), name)));
+        container(cmp::flat_button(label).on_press(Msg::ThemePicker(true)))
+            .width(Length::Fixed(width))
+            .max_width(width)
+            .into()
+    }
+
     /// The header: the file, undo, the actions and the menus.
     fn header(
         &self,
@@ -260,10 +288,7 @@ impl Editor {
                     .tooltip("Menu")
                     .window_radius(chrome.radius()),
             )
-            .pack_end(
-                cmp::flat_button(cmp::typography::label("Themes…"))
-                    .on_press(Msg::ThemePicker(true)),
-            )
+            .pack_end(self.theme_selector(m.sidebar_width))
             .pack_end(
                 cmp::raised_button(
                     row![

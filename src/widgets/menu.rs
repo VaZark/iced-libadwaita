@@ -89,6 +89,7 @@ pub enum MenuCheckStyle {
     Mark,
 }
 
+#[derive(Clone)]
 enum Kind<M> {
     Action {
         on_press: M,
@@ -114,6 +115,7 @@ enum Kind<M> {
 }
 
 /// One menu entry: an action, a check item or a submenu.
+#[derive(Clone)]
 pub struct MenuItem<M> {
     label_props: TextProps,
     accelerator_props: TextProps,
@@ -259,6 +261,7 @@ impl<M> MenuItem<M> {
 
 /// A menu: a title (shown in the full-page header) and sections of items.
 /// Sections are separated by hairlines; don't mix action and check items in one.
+#[derive(Clone)]
 pub struct Menu<M> {
     title_props: TextProps,
     subtitle_props: TextProps,
@@ -416,7 +419,7 @@ impl<M> Menu<M> {
             })
             .collect()
     }
-    fn has_submenu(&self) -> bool {
+    pub(crate) fn has_submenu(&self) -> bool {
         !self.subs().is_empty()
     }
     /// Total number of items (the HIG recommends 3–12).
@@ -429,19 +432,32 @@ impl<M> Menu<M> {
 }
 
 /// How wide a menu's popover is.
-const POPOVER_WIDTH: f32 = 260.0;
+pub(crate) fn popover_width() -> f32 {
+    crate::theme_config::current()
+        .number("menu", "popover-width")
+        .unwrap_or(260.0)
+}
+
+pub(crate) fn popover_max_height() -> f32 {
+    crate::theme_config::current()
+        .number("menu", "popover-max-height")
+        .unwrap_or(360.0)
+}
 
 /// Native menu trigger presentation, without event or open-state policy.
 #[derive(Clone, Default)]
 pub struct MenuProps {
     pub popover: PopoverProps,
     pub trigger: ContainerProps,
+    /// Presentation of a text trigger; never its label value or input policy.
+    pub label: TextProps,
 }
 
 /// `GtkMenuButton`: an icon button that opens a [`Menu`].
 pub struct MenuButton<M> {
     combobox_props: PopoverProps,
     trigger_props: ContainerProps,
+    label_props: TextProps,
     icon: IconSource,
     text_trigger: Option<String>,
     menu: Menu<M>,
@@ -458,6 +474,7 @@ pub fn menu_button<M>(icon: impl Into<IconSource>, menu: Menu<M>) -> MenuButton<
     MenuButton {
         combobox_props: Default::default(),
         trigger_props: Default::default(),
+        label_props: Default::default(),
         icon: icon.into(),
         text_trigger: None,
         menu,
@@ -484,6 +501,7 @@ impl<M> MenuButton<M> {
     pub fn props(mut self, props: MenuProps) -> Self {
         self.combobox_props = props.popover;
         self.trigger_props = props.trigger;
+        self.label_props = props.label;
         self
     }
     pub fn combobox_props(mut self, props: PopoverProps) -> Self {
@@ -492,6 +510,12 @@ impl<M> MenuButton<M> {
     }
     pub fn trigger_props(mut self, props: ContainerProps) -> Self {
         self.trigger_props = props;
+        self
+    }
+
+    /// Presentation of the caller-supplied text trigger label.
+    pub fn label_props(mut self, props: TextProps) -> Self {
+        self.label_props = props;
         self
     }
 
@@ -773,6 +797,11 @@ fn dropdown_items<'a, M: Clone + 'a>(
                     content.padding([0.0, pad_x]).center_y(Length::Fixed(32.0))
                 };
             let content = item.container_props.apply(content);
+            let content = if item.disabled {
+                content
+            } else {
+                content.id("iad-menu-row")
+            };
             if let Kind::Submenu { .. } = &item.kind {
                 let target = pages.and_then(|(children, _)| children.get(next_submenu).copied());
                 next_submenu += 1;
@@ -791,9 +820,13 @@ fn dropdown_items<'a, M: Clone + 'a>(
                         if let Some(v) = item.button_props.clip {
                             content = content.clip(v);
                         }
-                        NavRow::new(content, t, request)
-                            .style(item.button_props.style.clone())
-                            .into()
+                        container(
+                            NavRow::new(content, t, request).style(item.button_props.style.clone()),
+                        )
+                        .id("iad-menu-submenu")
+                        .width(item.button_props.width.unwrap_or(Length::Fill))
+                        .height(item.button_props.height.unwrap_or(Length::Shrink))
+                        .into()
                     }
                     // Nowhere to go (or switched off): a row that does nothing.
                     _ => item
@@ -828,7 +861,7 @@ fn dropdown_items<'a, M: Clone + 'a>(
 fn back_row<'a, M: Clone + 'a>(menu: &Menu<M>, parent: usize, request: &Request) -> Element<'a, M> {
     let m = Metrics::desktop();
     let t = Typography::desktop();
-    NavRow::new(
+    container(NavRow::new(
         container(
             row![
                 Icon::GoPrevious.view(m.icon_size),
@@ -840,15 +873,32 @@ fn back_row<'a, M: Clone + 'a>(menu: &Menu<M>, parent: usize, request: &Request)
         )
         .padding([0.0, m.space_m])
         .width(Length::Fill)
+        .id("iad-menu-row")
         .center_y(Length::Fixed(32.0)),
         parent,
         request,
-    )
+    ))
+    .id("iad-menu-back")
+    .width(Length::Fill)
     .into()
 }
 
 /// The content of a dropdown whose menu has submenus: one page per menu, sliding as rows ask.
 pub(crate) fn pages_content<'a, M: Clone + 'a>(
+    menu: &Menu<M>,
+    width: f32,
+    initial: usize,
+) -> Element<'a, M> {
+    let menu = menu.clone();
+    iced::widget::responsive(move |available| {
+        pages_content_at_width(&menu, width.min(available.width), initial)
+    })
+    .width(Length::Shrink)
+    .height(Length::Shrink)
+    .into()
+}
+
+fn pages_content_at_width<'a, M: Clone + 'a>(
     menu: &Menu<M>,
     width: f32,
     initial: usize,
@@ -891,12 +941,12 @@ pub(crate) fn pages_content<'a, M: Clone + 'a>(
         .collect();
     let m = Metrics::desktop();
     let pad = iced::Padding::from(m.popover_padding);
-    let inner = width - pad.left - pad.right;
+    let inner = (width - pad.left - pad.right).max(0.0);
     crate::components::framed(
         menu.dropdown_props.container.apply(
             container(MenuPages::new(pages, &request, inner, initial))
                 .padding(m.popover_padding)
-                .max_height(360.0)
+                .max_height(popover_max_height())
                 .style(sc::popover),
         ),
         "popover",
@@ -1013,18 +1063,21 @@ impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
     fn from(b: MenuButton<M>) -> Self {
         let m = Metrics::desktop();
         let trigger_content: Element<'a, M> = match b.text_trigger {
-            Some(label) => text(label).into(),
-            None => b.icon.view(m.icon_size),
+            Some(label) => b.label_props.apply(text(label)).into(),
+            None => b.icon.view(m.icon_size).into(),
         };
         let trigger = b
             .trigger_props
             .apply(container(trigger_content).center_y(Length::Fixed(m.button_min_height)));
         let (content, presentation) = match b.presentation {
             MenuPresentation::Dropdown if b.menu.has_submenu() => (
-                pages_content(&b.menu, POPOVER_WIDTH, b.open_page),
+                pages_content(&b.menu, popover_width(), b.open_page),
                 Presentation::Popover,
             ),
-            MenuPresentation::Dropdown => (popover_content(&b.menu, 360.0), Presentation::Popover),
+            MenuPresentation::Dropdown => (
+                popover_content(&b.menu, popover_max_height()),
+                Presentation::Popover,
+            ),
             MenuPresentation::FullPage => (page(&b.menu, b.window_radius), Presentation::Page),
         };
         let mut dd = Popover::new(trigger, content)
@@ -1032,8 +1085,9 @@ impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
             .padding(0)
             .presentation(presentation)
             .align(Align::End)
-            .popover_width(POPOVER_WIDTH)
-            .open_initially(b.open_initially);
+            .popover_width(popover_width())
+            .open_initially(b.open_initially)
+            .menu_navigation();
         if let Some(bounds) = b.bounds {
             dd = dd.bounds(bounds);
         }
