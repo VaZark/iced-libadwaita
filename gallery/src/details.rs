@@ -772,9 +772,12 @@ impl Gallery {
                     )
                     .push(
                         w::ChoiceRow::new("Row padding", &w::SidebarPadding::ALL, Some(self.sidebar_padding), Message::SidebarPadding)
-                        .subtitle("Small like Mantine, medium like Nautilus, large like GNOME Settings")
+                        .subtitle("Compatibility IDs sm / md / lg; geometry comes from the active theme's navigation variants")
                         .metrics(m),
                     ),
+                g("Config-driven navigation densities")
+                    .description("Custom named variants and local container-width rules, without changing the installed theme or the sidebar controls above.")
+                    .push(w::card(crate::navigation_demo::view(m))),
                 g("Header").push(
                     w::SwitchRow::new("Path bar title", self.path_bar_title, Message::PathBarTitle)
                         .subtitle("A title_widget replaces the title; window buttons stay")

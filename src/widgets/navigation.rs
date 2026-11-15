@@ -29,19 +29,41 @@ fn navigation_geometry(key: &str, fallback: f32) -> f32 {
     )
 }
 
-// Absolute variant/base geometry wins over the legacy metric-relative density adjustment.
-fn density_geometry(
-    tokens: &crate::theme_config::Tokens,
-    variant: &str,
-    key: &str,
-    base: f32,
-    adjustment: f32,
-) -> f32 {
-    geometry(
-        |key| tokens.variant_number("navigation", variant, key),
-        key,
-        (base + adjustment).max(0.0),
-    )
+#[derive(Clone)]
+struct NavigationDensity {
+    metrics: Metrics,
+    tokens: std::sync::Arc<crate::theme_config::Tokens>,
+    variant: String,
+}
+
+impl NavigationDensity {
+    fn current(padding: SidebarPadding) -> Self {
+        Self {
+            metrics: Metrics::desktop(),
+            tokens: std::sync::Arc::new(crate::theme_config::current().tokens()),
+            variant: padding.variant_name().into(),
+        }
+    }
+
+    fn geometry(&self) -> SidebarGeometry {
+        navigation_geometry_with_tokens(&self.metrics, &self.tokens, &self.variant)
+    }
+
+    fn number(&self, key: &str, fallback: f32) -> f32 {
+        geometry(
+            |key| self.tokens.variant_number("navigation", &self.variant, key),
+            key,
+            fallback,
+        )
+    }
+
+    fn for_item(&self, padding: Option<SidebarPadding>) -> Self {
+        let mut density = self.clone();
+        if let Some(padding) = padding {
+            density.variant = padding.variant_name().into();
+        }
+        density
+    }
 }
 
 /// `AdwBreakpoint` condition on window width.
@@ -74,18 +96,10 @@ impl Breakpoint {
     }
 }
 
-/// How roomy a sidebar row is. The levels are named after the sidebars they resemble, and each
-/// is a step from the density's base metrics (so a compact density shrinks all three):
-///
-/// | Level | Resembles | Row height | Row side padding | Row gap | Horizontal inset |
-/// |---|---|---|---|---|---|
-/// | `Sm` | Mantine `NavLink` (dense) | -8 | -4 | -1 | -2 |
-/// | `Md` (default) | Nautilus | base (36 / 12 / 2 / 6) | | | |
-/// | `Lg` | GNOME Settings | content + 24 (≈44) | +2 (14) | base | base |
-///
-/// `Lg` is gnome-control-center's `cc-panel-list` row on libadwaita's `.navigation-sidebar`: a
-/// grid with 12 above and below, 6 at the sides and 12 between icon and label, inside a row with
-/// 8 of side padding and a 36 minimum. Rows sit 6px from the list edges and 2px apart.
+/// Compatibility IDs for the `sm`, `md`, and `lg` navigation config variants.
+/// The enum defines no geometry: each key inherits from the variant, base navigation
+/// tokens, then metrics, exactly like a custom [`SidebarList::variant`] name.
+/// The shipped libadwaita config supplies the named density defaults.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum SidebarPadding {
     Sm,
@@ -103,31 +117,28 @@ pub struct SidebarGeometry {
     pub inset: f32,
 }
 
-/// Resolve a named navigation variant with local tokens. Unknown names inherit neutral
-/// base geometry; built-in density names retain their legacy metric-relative defaults.
+/// Resolve each geometry key from a declared variant, base navigation tokens, then
+/// metrics. Familiar, custom, missing and undeclared names use the same path.
 ///
-/// ```ignore
-/// let tokens = config.tokens();
-/// let name = navigation_variant_with_tokens(&tokens, available_width, "md");
-/// let geometry = navigation_geometry_with_tokens(&metrics, &tokens, &name);
-/// let list = SidebarList::new(items).spacing(geometry.gap).inset(geometry.inset);
-/// ```
+/// [`SidebarList::theme_config`] and [`SidebarList::available_width`] apply these
+/// values to the actual rows, including pinned rows and pages.
 pub fn navigation_geometry_with_tokens(
     m: &Metrics,
     tokens: &crate::theme_config::Tokens,
     variant: &str,
 ) -> SidebarGeometry {
-    let density = match variant {
-        "sm" => SidebarPadding::Sm,
-        "lg" => SidebarPadding::Lg,
-        _ => SidebarPadding::Md,
+    let resolve = |key, fallback| {
+        geometry(
+            |key| tokens.variant_number("navigation", variant, key),
+            key,
+            fallback,
+        )
     };
-    let fallback = density.geometry_with_tokens(m, tokens);
     SidebarGeometry {
-        row_height: density_geometry(tokens, variant, "row-height", fallback.row_height, 0.0),
-        row_padding: density_geometry(tokens, variant, "row-padding", fallback.row_padding, 0.0),
-        gap: density_geometry(tokens, variant, "gap", fallback.gap, 0.0),
-        inset: density_geometry(tokens, variant, "inset", fallback.inset, 0.0),
+        row_height: resolve("row-height", m.sidebar_row_height),
+        row_padding: resolve("row-padding", m.sidebar_row_padding),
+        gap: resolve("gap", m.sidebar_spacing),
+        inset: resolve("inset", m.sidebar_padding),
     }
 }
 
@@ -167,7 +178,7 @@ impl SidebarPadding {
 
     pub const ALL: [SidebarPadding; 3] = [Self::Sm, Self::Md, Self::Lg];
 
-    /// The registered navigation variant represented by this density primitive.
+    /// The config variant ID represented by this compatibility enum.
     pub const fn variant_name(self) -> &'static str {
         match self {
             Self::Sm => "sm",
@@ -176,121 +187,31 @@ impl SidebarPadding {
         }
     }
 
-    fn resolve(self, key: &str, base: f32, sm_key: &str, sm: f32, lg_key: &str, lg: f32) -> f32 {
-        self.resolve_with_tokens(
-            &crate::theme_config::current().tokens(),
-            key,
-            base,
-            sm_key,
-            sm,
-            lg_key,
-            lg,
-        )
-    }
-
-    fn resolve_with_tokens(
-        self,
-        tokens: &crate::theme_config::Tokens,
-        key: &str,
-        base: f32,
-        sm_key: &str,
-        sm: f32,
-        lg_key: &str,
-        lg: f32,
-    ) -> f32 {
-        density_geometry(
-            tokens,
-            self.variant_name(),
-            key,
-            base,
-            match self {
-                Self::Sm => -geometry(|key| tokens.number("navigation", key), sm_key, sm),
-                Self::Md => 0.0,
-                Self::Lg => geometry(|key| tokens.number("navigation", key), lg_key, lg),
-            },
-        )
-    }
-
-    /// Resolve density geometry using local tokens, without consulting global configuration.
-    /// Absolute variant/base keys win over the legacy metric-relative reduction tokens.
+    /// Resolve this config variant using local tokens and generic per-key inheritance.
     pub fn geometry_with_tokens(
         self,
         m: &Metrics,
         tokens: &crate::theme_config::Tokens,
     ) -> SidebarGeometry {
-        SidebarGeometry {
-            row_height: self.resolve_with_tokens(
-                tokens,
-                "row-height",
-                m.sidebar_row_height,
-                "sm-height-reduction",
-                8.0,
-                "lg-height-addition",
-                8.0,
-            ),
-            row_padding: self.resolve_with_tokens(
-                tokens,
-                "row-padding",
-                m.sidebar_row_padding,
-                "sm-padding-reduction",
-                4.0,
-                "lg-padding-addition",
-                2.0,
-            ),
-            gap: self.resolve_with_tokens(
-                tokens,
-                "gap",
-                m.sidebar_spacing,
-                "sm-gap-reduction",
-                1.0,
-                "",
-                0.0,
-            ),
-            inset: self.resolve_with_tokens(
-                tokens,
-                "inset",
-                m.sidebar_padding,
-                "sm-inset-reduction",
-                2.0,
-                "",
-                0.0,
-            ),
-        }
+        navigation_geometry_with_tokens(m, tokens, self.variant_name())
     }
 
-    /// Nominal row height; unset variant keys preserve metric-relative density defaults.
+    /// Minimum row height resolved from installed tokens, then the supplied metrics.
     pub fn row_height(self, m: &Metrics) -> f32 {
-        self.resolve(
-            "row-height",
-            m.sidebar_row_height,
-            "sm-height-reduction",
-            8.0,
-            "lg-height-addition",
-            8.0,
-        )
+        self.geometry_with_tokens(m, &crate::theme_config::current().tokens())
+            .row_height
     }
     pub fn row_padding(self, m: &Metrics) -> f32 {
-        self.resolve(
-            "row-padding",
-            m.sidebar_row_padding,
-            "sm-padding-reduction",
-            4.0,
-            "lg-padding-addition",
-            2.0,
-        )
+        self.geometry_with_tokens(m, &crate::theme_config::current().tokens())
+            .row_padding
     }
     pub fn gap(self, m: &Metrics) -> f32 {
-        self.resolve("gap", m.sidebar_spacing, "sm-gap-reduction", 1.0, "", 0.0)
+        self.geometry_with_tokens(m, &crate::theme_config::current().tokens())
+            .gap
     }
     pub fn inset(self, m: &Metrics) -> f32 {
-        self.resolve(
-            "inset",
-            m.sidebar_padding,
-            "sm-inset-reduction",
-            2.0,
-            "",
-            0.0,
-        )
+        self.geometry_with_tokens(m, &crate::theme_config::current().tokens())
+            .inset
     }
 }
 
@@ -402,7 +323,28 @@ pub fn sidebar_row_opening_with_props<'a, M: Clone + 'a>(
     opens: bool,
     props: SidebarRowProps,
 ) -> Element<'a, M> {
-    let m = Metrics::desktop();
+    sidebar_row_resolved(
+        icon,
+        label.into(),
+        selected,
+        on_press,
+        opens,
+        props,
+        &NavigationDensity::current(padding),
+    )
+}
+
+fn sidebar_row_resolved<'a, M: Clone + 'a>(
+    icon: Option<crate::IconView<'a>>,
+    label: String,
+    selected: bool,
+    on_press: M,
+    opens: bool,
+    props: SidebarRowProps,
+    density: &NavigationDensity,
+) -> Element<'a, M> {
+    let m = density.metrics;
+    let g = density.geometry();
     let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
     if let Some(i) = icon {
         r = r.push(i);
@@ -414,7 +356,7 @@ pub fn sidebar_row_opening_with_props<'a, M: Clone + 'a>(
             container(
                 props
                     .label_props
-                    .apply(crate::components::typography::label(label.into())),
+                    .apply(crate::components::typography::label(label)),
             )
             .width(Length::Fill)
             .clip(true),
@@ -423,39 +365,13 @@ pub fn sidebar_row_opening_with_props<'a, M: Clone + 'a>(
     if opens {
         r = r.push(Icon::GoNext.view(m.icon_size));
     }
-    // Settings sizes its grid from the font, not a fixed ~20px line. Keep the
-    // inherited font/size and allow larger interface fonts to grow the row.
-    let content = if padding == SidebarPadding::Lg {
-        let vertical = (padding.row_height(&m)
-            - geometry(
-                |key| {
-                    crate::theme_config::current().tokens().variant_number(
-                        "navigation",
-                        padding.variant_name(),
-                        key,
-                    )
-                },
-                "lg-content-height",
-                20.0,
-            ))
-        .max(0.0)
-            / 2.0;
-        container(
-            row![
-                r,
-                space()
-                    .width(0)
-                    .height((m.sidebar_row_height - 2.0 * vertical).max(0.0))
-            ]
-            .align_y(Vertical::Center),
-        )
-        .padding([vertical, padding.row_padding(&m)])
-        .align_y(Vertical::Center)
-    } else {
-        container(r)
-            .padding([0.0, padding.row_padding(&m)])
-            .center_y(Length::Fixed(padding.row_height(&m)))
-    };
+    // Every variant uses a minimum-height strut so larger fonts can grow the row.
+    // Shrink occupies zero width without being discarded by iced's Row::push.
+    let content = container(
+        row![r, space().width(Length::Shrink).height(g.row_height)].align_y(Vertical::Center),
+    )
+    .padding([0.0, g.row_padding])
+    .align_y(Vertical::Center);
     // The selected background fades in and out (`Highlight`); the button keeps hover/press.
     let btn = props.button_props.apply(
         button(props.content_props.apply(content.width(Length::Fill)))
@@ -464,8 +380,9 @@ pub fn sidebar_row_opening_with_props<'a, M: Clone + 'a>(
             .style(sb::sidebar_row(false))
             .on_press(on_press),
     );
-    let opacity = crate::theme_config::current()
-        .number("navigation", "selection-opacity")
+    let opacity = density
+        .tokens
+        .variant_number("navigation", &density.variant, "selection-opacity")
         .filter(|v| v.is_finite() && (0.0..=1.0).contains(v))
         .unwrap_or(0.10);
     crate::layouts::highlight(btn, selected, m.radius_m, opacity).into()
@@ -486,8 +403,8 @@ pub fn navigation_sidebar_rounded_padded<'a, M: 'a>(
     window_radius: f32,
     padding: SidebarPadding,
 ) -> Element<'a, M> {
-    let m = Metrics::desktop();
-    sidebar_surface(rows, window_radius, padding.gap(&m), padding.inset(&m))
+    let g = NavigationDensity::current(padding).geometry();
+    sidebar_surface(rows, window_radius, g.gap, g.inset)
 }
 
 /// The rounded sidebar surface with the rows `gap` apart and `inset` around them.
@@ -516,16 +433,12 @@ fn sidebar_surface<'a, M: 'a>(
 pub fn navigation_sidebar<'a, M: 'a>(
     rows: impl IntoIterator<Item = Element<'a, M>>,
 ) -> Element<'a, M> {
-    let m = Metrics::desktop();
-    container(
-        column(rows)
-            .spacing(m.sidebar_spacing)
-            .padding(m.sidebar_padding),
-    )
-    .width(Length::Fill)
-    .height(Length::Fill)
-    .style(sc::sidebar)
-    .into()
+    let g = NavigationDensity::current(SidebarPadding::Md).geometry();
+    container(column(rows).spacing(g.gap).padding(g.inset))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(sc::sidebar)
+        .into()
 }
 
 /// One entry of a [`SidebarList`]: one description with two forms, a compact row
@@ -706,6 +619,7 @@ pub enum SidebarStyle {
 }
 
 /// The pages of a paged [`SidebarList`].
+#[derive(Clone)]
 struct Pages<M> {
     pages: Vec<Vec<SidebarItem<M>>>,
     current: usize,
@@ -714,11 +628,16 @@ struct Pages<M> {
 
 /// The navigation entries of a sidebar, in either [`SidebarStyle`]. One component, so an
 /// app describes its destinations once and the presentation follows the layout.
+#[derive(Clone)]
 pub struct SidebarList<'a, M> {
     items: Vec<SidebarItem<M>>,
     style: SidebarStyle,
     window_radius: f32,
     padding: SidebarPadding,
+    variant: Option<String>,
+    tokens: Option<crate::theme_config::Tokens>,
+    metrics: Metrics,
+    available_width: Option<f32>,
     spacing: Option<f32>,
     inset: Option<f32>,
     cards_below: Option<crate::breakpoints::WidthClass>,
@@ -735,6 +654,10 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
             style: SidebarStyle::List,
             window_radius: 0.0,
             padding: SidebarPadding::Md,
+            variant: None,
+            tokens: None,
+            metrics: Metrics::desktop(),
+            available_width: None,
             spacing: None,
             inset: None,
             cards_below: None,
@@ -744,14 +667,60 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
             _p: Default::default(),
         }
     }
+    /// Use local tokens without changing the installed configuration or inherited metrics.
+    pub fn tokens(mut self, tokens: crate::theme_config::Tokens) -> Self {
+        self.tokens = Some(tokens);
+        self
+    }
+
+    /// Use this configuration's tokens locally; draw-time colors still come from the theme.
+    pub fn theme_config(self, config: &crate::theme_config::ThemeConfig) -> Self {
+        self.tokens(config.tokens())
+    }
+
+    /// Inherited layout metrics; unset variant keys keep these values.
+    pub fn metrics(mut self, metrics: Metrics) -> Self {
+        self.metrics = metrics;
+        self
+    }
+
+    /// A named density variant, overriding breakpoint rules. This and `padding` are
+    /// equivalent explicit selections: the last call wins. Item padding wins over both.
+    pub fn variant(mut self, name: impl Into<String>) -> Self {
+        self.variant = Some(name.into());
+        self
+    }
+
+    /// Resolve rules using this container width, without adding a responsive wrapper.
+    /// Stored until rendering so builder order with `tokens` does not matter.
+    pub fn available_width(mut self, width: f32) -> Self {
+        self.available_width = Some(width);
+        self
+    }
+
+    fn density(&self, tokens: crate::theme_config::Tokens) -> NavigationDensity {
+        let variant = self.variant.clone().unwrap_or_else(|| {
+            self.available_width.map_or_else(
+                || self.padding.variant_name().into(),
+                |width| navigation_variant_with_tokens(&tokens, width, self.padding.variant_name()),
+            )
+        });
+        NavigationDensity {
+            metrics: self.metrics,
+            tokens: std::sync::Arc::new(tokens),
+            variant,
+        }
+    }
+
     pub fn style(mut self, style: SidebarStyle) -> Self {
         self.style = style;
         self
     }
-    /// How roomy the rows are ([`SidebarPadding`]): `Sm` dense like Mantine, `Md` like Nautilus
-    /// (default), `Lg` like GNOME Settings. An item's own [`SidebarItem::padding`] wins.
+    /// Select the config density ID represented by [`SidebarPadding`]. Geometry is
+    /// config-loaded, not defined by the enum. An item's [`SidebarItem::padding`] wins.
     pub fn padding(mut self, padding: SidebarPadding) -> Self {
         self.padding = padding;
+        self.variant = Some(padding.variant_name().into());
         self
     }
     /// The gap between rows in px, over the one the [`padding`](Self::padding) level gives.
@@ -829,6 +798,7 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
     ) -> Self {
         if let Some(layout) = state.shown().last() {
             (self.style, self.padding) = present(layout);
+            self.variant = Some(self.padding.variant_name().into());
         }
         self
     }
@@ -837,23 +807,24 @@ impl<'a, M: Clone + 'a> SidebarList<'a, M> {
 /// One item as its row (with its divider above, if it has one).
 fn item_rows<'a, M: Clone + 'a>(
     i: SidebarItem<M>,
-    level: SidebarPadding,
+    density: &NavigationDensity,
+    gap: f32,
+    inset: f32,
     dragging: bool,
 ) -> Vec<Element<'a, M>> {
-    let m = Metrics::desktop();
-    let line = i.divider_above.then(|| {
-        Element::from(
-            crate::components::divider().spacing((level.inset(&m) - level.gap(&m)).max(0.0)),
-        )
-    });
-    let row = sidebar_row_opening_with_props(
+    let m = density.metrics;
+    let item_density = density.for_item(i.padding);
+    let line = i
+        .divider_above
+        .then(|| Element::from(crate::components::divider().spacing((inset - gap).max(0.0))));
+    let row = sidebar_row_resolved(
         i.icon_view(m.icon_size),
         i.title,
         i.selected,
         i.on_press,
-        i.padding.unwrap_or(level),
         i.opens,
         i.row_props,
+        &item_density,
     );
     // A chevron to fold what is under the row, and the indent of a nested one.
     let row: Element<'a, M> = match i.expander {
@@ -869,7 +840,7 @@ fn item_rows<'a, M: Clone + 'a>(
     let row: Element<'a, M> = if i.indent > 0 {
         container(row)
             .padding(iced::Padding {
-                left: navigation_geometry("indent", INDENT) * f32::from(i.indent),
+                left: item_density.number("indent", INDENT) * f32::from(i.indent),
                 ..iced::Padding::ZERO
             })
             .into()
@@ -887,7 +858,7 @@ fn item_rows<'a, M: Clone + 'a>(
                     } else {
                         Targets::Between
                     })
-                    .reach(level.gap(&m) / 2.0)
+                    .reach(gap / 2.0)
                     .edge_hint(DropHint::new(re.label));
             if let Some(inside) = re.inside {
                 zone = zone.hint(DropHint::new(inside).shrink());
@@ -904,20 +875,20 @@ fn item_rows<'a, M: Clone + 'a>(
 
 fn list_view<'a, M: Clone + 'a>(
     items: Vec<SidebarItem<M>>,
-    level: SidebarPadding,
+    density: &NavigationDensity,
     radius: f32,
     fixed_top: usize,
     dragging: bool,
     pages: Option<Pages<M>>,
     (gap_override, inset_override): (Option<f32>, Option<f32>),
 ) -> Element<'a, M> {
-    let m = Metrics::desktop();
-    let inset = inset_override.unwrap_or(level.inset(&m));
-    let gap = gap_override.unwrap_or(level.gap(&m));
+    let g = density.geometry();
+    let inset = inset_override.unwrap_or(g.inset);
+    let gap = gap_override.unwrap_or(g.gap);
     let rows_of = |items: Vec<SidebarItem<M>>| -> Vec<Vec<Element<'a, M>>> {
         items
             .into_iter()
-            .map(|i| item_rows(i, level, dragging))
+            .map(|i| item_rows(i, density, gap, inset, dragging))
             .collect()
     };
     let stack = |rows: Vec<Vec<Element<'a, M>>>, padding: iced::Padding| {
@@ -932,7 +903,7 @@ fn list_view<'a, M: Clone + 'a>(
         depths,
     }) = pages
     {
-        let top_rows = rows_of(items);
+        let top_rows = rows_of(items.into_iter().take(fixed_top).collect());
         let top = stack(
             top_rows,
             iced::Padding {
@@ -1007,65 +978,81 @@ fn list_view<'a, M: Clone + 'a>(
     .into()
 }
 
-fn cards_view<'a, M: Clone + 'a>(items: Vec<SidebarItem<M>>) -> Element<'a, M> {
-    let m = Metrics::desktop();
+fn cards_view<'a, M: Clone + 'a>(
+    items: Vec<SidebarItem<M>>,
+    density: &NavigationDensity,
+    (gap_override, inset_override): (Option<f32>, Option<f32>),
+) -> Element<'a, M> {
+    let m = density.metrics;
+    let g = density.geometry();
+    let gap = gap_override.unwrap_or(g.gap);
+    let inset = inset_override.unwrap_or(g.inset);
     let rows = items.into_iter().map(|i| {
+        let item_geometry = density.for_item(i.padding).geometry();
+        let mut row_metrics = m;
+        row_metrics.row_min_height = item_geometry.row_height;
+        row_metrics.row_padding.left = item_geometry.row_padding;
+        row_metrics.row_padding.right = item_geometry.row_padding;
         let icon = i.icon_view(m.icon_size);
         let mut r = crate::widgets::ActionRow::new(i.title)
             .chevron(true)
             .on_activate(i.on_press)
-            .metrics(m);
+            .metrics(row_metrics);
         if let Some(icon) = icon {
             r = r.prefix(icon);
         }
         if let Some(s) = i.subtitle {
             r = r.subtitle(s);
         }
-        Element::from(i.card_props.apply(r))
+        // Keep a single boxed surface and its separators; the density gap sits
+        // outside the row's hit target, not between independent card surfaces.
+        Element::from(container(i.card_props.apply(r)).padding([gap / 2.0, 0.0]))
     });
     crate::widgets::page(crate::widgets::boxed_list(rows))
         .metrics(m)
+        .padding(inset)
         .into()
 }
 
 impl<'a, M: Clone + 'a> From<SidebarList<'a, M>> for Element<'a, M> {
     fn from(l: SidebarList<'a, M>) -> Self {
-        use crate::metas::meta_component::MetaComponent;
-        use crate::primitives::When;
-        if let Some(class) = l.cards_below {
-            let (items, level, radius, fixed, dragging) =
-                (l.items, l.padding, l.window_radius, l.fixed_top, l.dragging);
-            let (gap, inset) = (l.spacing, l.inset);
-            let cards = items.clone();
-            return MetaComponent::new()
-                .width(Length::Fill)
-                .variant(SidebarStyle::List, When::from_class(class), move |_| {
-                    list_view(
-                        items.clone(),
-                        level,
-                        radius,
-                        fixed,
-                        dragging,
-                        None,
-                        (gap, inset),
-                    )
-                })
-                .variant(SidebarStyle::Cards, When::always(), move |_| {
-                    cards_view(cards.clone())
-                })
-                .into();
+        let tokens = l
+            .tokens
+            .clone()
+            .unwrap_or_else(|| crate::theme_config::current().tokens());
+        let needs_width = l.cards_below.is_some()
+            || (l.variant.is_none() && tokens.text("navigation", "breakpoint-rules").is_some());
+        if l.available_width.is_none() && needs_width {
+            let mut l = l;
+            l.tokens = Some(tokens);
+            return crate::layouts::responsive(move |size| {
+                Element::from(l.clone().available_width(size.width))
+            })
+            .into();
         }
-        match l.style {
+        let density = l.density(tokens);
+        let style = match (l.cards_below, l.available_width) {
+            (Some(class), Some(width)) => {
+                let scale = crate::breakpoints::Breakpoints::default().with_tokens(&density.tokens);
+                if width < class.min_width_with(&scale) {
+                    SidebarStyle::Cards
+                } else {
+                    SidebarStyle::List
+                }
+            }
+            _ => l.style,
+        };
+        match style {
             SidebarStyle::List => list_view(
                 l.items,
-                l.padding,
+                &density,
                 l.window_radius,
                 l.fixed_top,
                 l.dragging,
                 l.pages,
                 (l.spacing, l.inset),
             ),
-            SidebarStyle::Cards => cards_view(l.items),
+            SidebarStyle::Cards => cards_view(l.items, &density, (l.spacing, l.inset)),
         }
     }
 }
@@ -1696,26 +1683,22 @@ mod tests {
     }
 
     #[test]
-    fn sidebar_padding_levels_grow_in_every_measure() {
-        let m = crate::theme_config::libadwaita_metrics();
-        let [sm, md, lg] = SidebarPadding::ALL;
-        for f in [SidebarPadding::row_height, SidebarPadding::row_padding] {
-            assert!(f(sm, &m) < f(md, &m) && f(md, &m) < f(lg, &m));
+    fn sidebar_padding_enums_are_only_variant_ids() {
+        let tokens = crate::theme_config::Tokens::default();
+        for m in [Metrics::default(), Metrics::compact()] {
+            for (padding, name) in SidebarPadding::ALL.into_iter().zip(["sm", "md", "lg"]) {
+                assert_eq!(padding.variant_name(), name);
+                assert_eq!(
+                    padding.geometry_with_tokens(&m, &tokens),
+                    SidebarGeometry {
+                        row_height: m.sidebar_row_height,
+                        row_padding: m.sidebar_row_padding,
+                        gap: m.sidebar_spacing,
+                        inset: m.sidebar_padding,
+                    }
+                );
+            }
         }
-        // Settings keeps Nautilus's row gap and horizontal inset.
-        assert!(sm.gap(&m) < md.gap(&m) && sm.inset(&m) < md.inset(&m));
-        assert_eq!((lg.gap(&m), lg.inset(&m)), (md.gap(&m), md.inset(&m)));
-        // GNOME Settings: 12 above and below one ~20px line of text.
-        assert_eq!(lg.row_height(&m), 2.0 * 12.0 + 20.0);
-        // Medium is the base metrics, so existing sidebars do not change.
-        assert_eq!(md.row_height(&m), m.sidebar_row_height);
-        assert_eq!(md.gap(&m), m.sidebar_spacing);
-        // A compact density keeps the ordering and the same steps.
-        let c = Metrics::compact();
-        assert_eq!(
-            lg.row_height(&c) - md.row_height(&c),
-            lg.row_height(&m) - md.row_height(&m)
-        );
     }
 
     #[test]
@@ -1763,33 +1746,425 @@ mod local_variant_tests {
     use crate::theme_config::{Schema, ThemeConfig};
 
     #[test]
-    fn local_density_variants_inherit_per_key_and_keep_legacy_defaults() {
-        let schema = Schema::toolkit()
-            .number("navigation", "row-height", 36.0, "Local row height")
-            .number("navigation", "row-padding", 12.0, "Local side padding")
-            .variant("navigation", "sm", &[]);
-        let config = ThemeConfig::builder("local-navigation")
+    fn familiar_and_custom_variants_share_per_key_inheritance() {
+        let config = config(
+            "[navigation]\nrow-padding=17px\ninset=0px\n[navigation.sm]\nrow-height=51px\n[navigation.md]\nrow-height=51px\n[navigation.lg]\nrow-height=51px\n[navigation.custom]\nrow-height=51px",
+        );
+        let mut m = Metrics::default();
+        m.sidebar_spacing = 9.0;
+        let expected = SidebarGeometry {
+            row_height: 51.0,
+            row_padding: 17.0,
+            gap: 9.0,
+            inset: 0.0,
+        };
+        for name in ["sm", "md", "lg", "custom"] {
+            assert_eq!(
+                navigation_geometry_with_tokens(&m, &config.tokens(), name),
+                expected
+            );
+        }
+        for padding in SidebarPadding::ALL {
+            assert_eq!(padding.geometry_with_tokens(&m, &config.tokens()), expected);
+        }
+    }
+
+    #[test]
+    fn absent_and_opted_out_variants_are_neutral() {
+        use crate::theme_config::DefaultVariants;
+        let m = Metrics::default();
+        for text in ["", "[navigation]\nrow-height=63px\nrow-padding=19px"] {
+            for opted_out in [false, true] {
+                let mut builder = ThemeConfig::builder("neutral-navigation")
+                    .files(false)
+                    .toolkit_text(text)
+                    .app_text("");
+                if opted_out {
+                    builder = builder.default_variants(DefaultVariants::None);
+                }
+                let tokens = builder.build().tokens();
+                let expected = SidebarGeometry {
+                    row_height: if text.is_empty() {
+                        m.sidebar_row_height
+                    } else {
+                        63.0
+                    },
+                    row_padding: if text.is_empty() {
+                        m.sidebar_row_padding
+                    } else {
+                        19.0
+                    },
+                    gap: m.sidebar_spacing,
+                    inset: m.sidebar_padding,
+                };
+                for name in ["sm", "md", "lg", "custom", "undeclared"] {
+                    assert_eq!(navigation_geometry_with_tokens(&m, &tokens, name), expected);
+                    if opted_out {
+                        assert!(!tokens.variant("navigation", name).exists());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn libadwaita_density_defaults_are_loaded_from_config() {
+        let config = config(include_str!("../../themes/libadwaita.conf"));
+        let tokens = config.tokens();
+        // The theme's absolute geometry is independent of unrelated inherited metrics.
+        for m in [Metrics::default(), Metrics::compact()] {
+            for (padding, row_height, row_padding, gap, inset) in [
+                (SidebarPadding::Sm, 28.0, 8.0, 1.0, 4.0),
+                (SidebarPadding::Md, 36.0, 12.0, 2.0, 6.0),
+                (SidebarPadding::Lg, 44.0, 14.0, 2.0, 6.0),
+            ] {
+                assert_eq!(
+                    padding.geometry_with_tokens(&m, &tokens),
+                    SidebarGeometry {
+                        row_height,
+                        row_padding,
+                        gap,
+                        inset,
+                    }
+                );
+            }
+        }
+    }
+
+    use iced::advanced::{layout, renderer::Headless, widget::Tree};
+    use iced::{Point, Rectangle};
+
+    fn renderer() -> iced::Renderer {
+        iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer")
+    }
+
+    fn config(text: &str) -> ThemeConfig {
+        let schema = Schema::toolkit().variant("navigation", "custom", &[]);
+        assert!(
+            schema.validate(text).is_valid(),
+            "invalid navigation fixture: {text}"
+        );
+        ThemeConfig::builder("navigation-layout")
             .files(false)
             .schema(schema)
-            .toolkit_text("[navigation]\nrow-padding=17\n[navigation.sm]\nrow-height=31")
+            .toolkit_text(text)
+            .app_text("")
+            .build()
+    }
+
+    const RULES: &str = "[breakpoints]\nsm=300px\nmd=420px\n[navigation]\nbreakpoint-rules=xs:sm,md:lg\nrow-padding=17px\ngap=5px\ninset=7px\n[navigation.sm]\nrow-height=48px\n[navigation.lg]\nrow-height=80px\nrow-padding=23px";
+
+    fn list() -> SidebarList<'static, ()> {
+        SidebarList::new([
+            SidebarItem::new("First", ()),
+            SidebarItem::new("Second", ()),
+        ])
+        .metrics(Metrics::default())
+    }
+
+    fn rectangles(
+        element: &mut Element<'_, ()>,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        width: f32,
+    ) -> Vec<Rectangle> {
+        let node = element.as_widget_mut().layout(
+            tree,
+            renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(width, 500.0)),
+        );
+        fn collect(layout: layout::Layout<'_>, out: &mut Vec<Rectangle>) {
+            out.push(layout.bounds());
+            for child in layout.children() {
+                collect(child, out);
+            }
+        }
+        let mut out = vec![];
+        collect(layout::Layout::new(&node), &mut out);
+        out
+    }
+
+    fn assert_rect(rects: &[Rectangle], x: f32, y: f32, width: f32, height: f32) {
+        assert!(
+            rects.iter().any(|r| {
+                (r.x - x).abs() < 0.01
+                    && (r.y - y).abs() < 0.01
+                    && (r.width - width).abs() < 0.01
+                    && (r.height - height).abs() < 0.01
+            }),
+            "missing ({x}, {y}, {width}, {height}) in {rects:?}"
+        );
+    }
+
+    #[test]
+    fn every_density_name_uses_the_same_actual_layout_and_font_growth() {
+        let renderer = renderer();
+        let configured = config(
+            "[navigation]\nrow-height=48px\ngap=3px\ninset=4px\n[navigation.sm]\nrow-padding=17px\n[navigation.md]\nrow-padding=17px\n[navigation.lg]\nrow-padding=17px\n[navigation.custom]\nrow-padding=17px",
+        );
+        for font_size in [14.0, 80.0] {
+            let mut reference = None;
+            for name in ["sm", "md", "lg", "custom"] {
+                let mut element: Element<'_, ()> = SidebarList::new([SidebarItem::new("Row", ())
+                    .row_props(
+                        SidebarRowProps::default()
+                            .label_props(TextProps::default().size(font_size)),
+                    )])
+                .theme_config(&configured)
+                .variant(name)
+                .into();
+                let mut tree = Tree::new(element.as_widget());
+                let rects = rectangles(&mut element, &mut tree, &renderer, 360.0);
+                if font_size == 14.0 {
+                    assert_rect(&rects, 4.0, 4.0, 352.0, 48.0);
+                } else {
+                    assert!(
+                        rects.iter().any(|r| r.x == 4.0
+                            && r.y == 4.0
+                            && r.width == 352.0
+                            && r.height > 48.0)
+                    );
+                }
+                if let Some(reference) = &reference {
+                    assert_eq!(&rects, reference, "{name}");
+                } else {
+                    reference = Some(rects);
+                }
+            }
+        }
+
+        let opted_out = ThemeConfig::builder("neutral-layout")
+            .files(false)
+            .default_variants(crate::theme_config::DefaultVariants::None)
+            .toolkit_text("")
             .app_text("")
             .build();
-        let tokens = config.tokens();
-        let m = Metrics::default();
-        let g = SidebarPadding::Sm.geometry_with_tokens(&m, &tokens);
-        assert_eq!(SidebarPadding::Sm.variant_name(), "sm");
-        assert_eq!(SidebarPadding::Md.variant_name(), "md");
-        assert_eq!(SidebarPadding::Lg.variant_name(), "lg");
-        assert_eq!(g.row_height, 31.0);
-        assert_eq!(g.row_padding, 17.0);
-        assert_eq!(g.gap, (m.sidebar_spacing - 1.0).max(0.0));
-        assert_eq!(
-            density_geometry(&tokens, "undeclared", "row-padding", 12.0, 0.0),
-            17.0
+        for config in [config(""), opted_out] {
+            let mut m = Metrics::default();
+            m.sidebar_row_height = 64.0;
+            for name in ["sm", "md", "lg", "custom", "undeclared"] {
+                let mut element: Element<'_, ()> =
+                    list().metrics(m).theme_config(&config).variant(name).into();
+                let mut tree = Tree::new(element.as_widget());
+                let rects = rectangles(&mut element, &mut tree, &renderer, 360.0);
+                assert_rect(&rects, 4.0, 4.0, 352.0, 64.0);
+            }
+        }
+    }
+
+    #[test]
+    fn actual_layout_reacts_at_local_thresholds_and_resizes_back() {
+        let renderer = renderer();
+        let config = config(RULES);
+        let mut element: Element<'_, ()> = list().theme_config(&config).into();
+        let mut tree = Tree::new(element.as_widget());
+        for (width, height, padding) in [
+            (419.0, 48.0, 17.0),
+            (420.0, 80.0, 23.0),
+            (419.0, 48.0, 17.0),
+        ] {
+            let rects = rectangles(&mut element, &mut tree, &renderer, width);
+            assert_rect(&rects, 7.0, 7.0, width - 14.0, height);
+            assert_rect(&rects, 7.0, 7.0 + height + 5.0, width - 14.0, height);
+            assert!(rects.iter().any(|r| (r.x - 7.0 - padding).abs() < 0.01
+                && (r.width - (width - 14.0 - 2.0 * padding)).abs() < 0.01));
+        }
+    }
+
+    #[test]
+    fn explicit_density_item_and_geometry_overrides_win_in_actual_layout() {
+        let renderer = renderer();
+        let config = config(RULES);
+        // Last explicit density selection wins, independent of width/token builder order.
+        let mut element: Element<'_, ()> = SidebarList::new([
+            SidebarItem::new("First", ()),
+            SidebarItem::new("Second", ()).padding(SidebarPadding::Lg),
+        ])
+        .available_width(900.0)
+        .variant("lg")
+        .padding(SidebarPadding::Sm)
+        .theme_config(&config)
+        .spacing(11.0)
+        .inset(3.0)
+        .into();
+        let mut tree = Tree::new(element.as_widget());
+        let rects = rectangles(&mut element, &mut tree, &renderer, 500.0);
+        assert_rect(&rects, 3.0, 3.0, 494.0, 48.0);
+        assert_rect(&rects, 3.0, 62.0, 494.0, 80.0);
+
+        let mut element: Element<'_, ()> = list()
+            .theme_config(&config)
+            .padding(SidebarPadding::Lg)
+            .variant("sm")
+            .available_width(900.0)
+            .into();
+        let mut tree = Tree::new(element.as_widget());
+        let rects = rectangles(&mut element, &mut tree, &renderer, 500.0);
+        assert_rect(&rects, 7.0, 7.0, 486.0, 48.0);
+    }
+
+    #[test]
+    fn actual_layout_inherits_each_key_and_keeps_local_snapshots_isolated() {
+        let renderer = renderer();
+        let a = config(
+            "[navigation]\nrow-padding=19px\ninset=4px\n[navigation.custom]\nrow-height=60px\n[navigation.md]\ngap=99px",
         );
+        let b = config("[navigation]\nrow-height=72px\nrow-padding=9px\ngap=8px\ninset=6px");
+        let mut m = Metrics::default();
+        m.sidebar_spacing = 3.0;
+        m.sidebar_row_height = 90.0;
+        let installed = crate::theme_config::current().tokens();
+        for (config, height, inset, gap, padding) in [
+            (&a, 60.0, 4.0, 3.0, 19.0),
+            (&b, 72.0, 6.0, 8.0, 9.0),
+            (&a, 60.0, 4.0, 3.0, 19.0),
+        ] {
+            let mut element: Element<'_, ()> = list()
+                .metrics(m)
+                .theme_config(config)
+                .variant("custom")
+                .into();
+            let mut tree = Tree::new(element.as_widget());
+            let rects = rectangles(&mut element, &mut tree, &renderer, 360.0);
+            assert_rect(&rects, inset, inset, 360.0 - 2.0 * inset, height);
+            assert_rect(
+                &rects,
+                inset,
+                inset + height + gap,
+                360.0 - 2.0 * inset,
+                height,
+            );
+            assert!(rects.iter().any(|r| (r.x - inset - padding).abs() < 0.01
+                && (r.width - (360.0 - 2.0 * inset - 2.0 * padding)).abs() < 0.01));
+        }
         assert_eq!(
-            density_geometry(&tokens, "undeclared", "missing", 12.0, 0.0),
-            12.0
+            crate::theme_config::current()
+                .tokens()
+                .number("navigation", "inset"),
+            installed.number("navigation", "inset")
         );
+        let mut element: Element<'_, ()> = list()
+            .metrics(m)
+            .theme_config(&a)
+            .variant("undeclared")
+            .into();
+        let mut tree = Tree::new(element.as_widget());
+        let rects = rectangles(&mut element, &mut tree, &renderer, 360.0);
+        assert_rect(&rects, 4.0, 4.0, 352.0, 90.0);
+    }
+
+    #[test]
+    fn pinned_rows_and_paged_rows_use_the_same_local_density() {
+        let renderer = renderer();
+        let config = config(RULES);
+        for paged in [false, true] {
+            let mut list = list()
+                .theme_config(&config)
+                .available_width(420.0)
+                .cards_below(crate::breakpoints::WidthClass::Sm)
+                .fixed_top(1);
+            if paged {
+                list = list.pages(vec![vec![SidebarItem::new("Page", ())]], 0, vec![0]);
+            }
+            let mut element: Element<'_, ()> = list.into();
+            let mut tree = Tree::new(element.as_widget());
+            let rects = rectangles(&mut element, &mut tree, &renderer, 420.0);
+            assert_rect(&rects, 7.0, 7.0, 406.0, 80.0);
+            assert_rect(&rects, 7.0, 92.0, 406.0, 80.0);
+        }
+    }
+
+    #[test]
+    fn indentation_and_typed_child_overrides_use_the_resolved_layout() {
+        let renderer = renderer();
+        let config = config(&format!("{RULES}\nindent=29px"));
+        let mut element: Element<'_, ()> =
+            SidebarList::new([SidebarItem::new("Nested", ()).indent(2)])
+                .theme_config(&config)
+                .available_width(420.0)
+                .into();
+        let mut tree = Tree::new(element.as_widget());
+        let rects = rectangles(&mut element, &mut tree, &renderer, 420.0);
+        assert_rect(&rects, 65.0, 7.0, 348.0, 80.0);
+
+        for style in [SidebarStyle::List, SidebarStyle::Cards] {
+            let item = SidebarItem::new("Explicit", ())
+                .row_props(
+                    SidebarRowProps::default()
+                        .content_props(ContainerProps::default().padding([0, 31])),
+                )
+                .card_props(super::super::rows::ActionRowProps::default().padding([4, 31]));
+            let mut element: Element<'_, ()> = SidebarList::new([item])
+                .theme_config(&config)
+                .available_width(420.0)
+                .style(style)
+                .into();
+            let mut tree = Tree::new(element.as_widget());
+            let rects = rectangles(&mut element, &mut tree, &renderer, 420.0);
+            assert!(
+                rects.iter().any(|r| r.x == 38.0 && r.width == 344.0),
+                "typed padding must override variant padding for {style:?}: {rects:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn local_density_cards_keep_subtitles_and_activation() {
+        use iced::advanced::{Shell, clipboard};
+        use iced::{Event, mouse};
+        let renderer = renderer();
+        let config = config(RULES);
+        let mut element: Element<'_, ()> = SidebarList::new([
+            SidebarItem::new("First", ()).subtitle("Description"),
+            SidebarItem::new("Second", ()),
+        ])
+        .metrics(Metrics::default())
+        .theme_config(&config)
+        .cards_below(crate::breakpoints::WidthClass::Md)
+        .into();
+        let mut tree = Tree::new(element.as_widget());
+        let rects = rectangles(&mut element, &mut tree, &renderer, 419.0);
+        // Card row retains its subtitle and minimum height inside one boxed surface.
+        assert!(
+            rects
+                .iter()
+                .any(|r| r.x == 7.0 && r.y == 9.5 && r.width == 405.0 && r.height >= 48.0)
+        );
+        assert!(
+            rects
+                .iter()
+                .any(|r| r.x == 7.0 && r.y > 9.5 && r.width == 405.0 && r.height == 48.0)
+        );
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(419.0, 500.0)),
+        );
+        let layout = layout::Layout::new(&node);
+        let mut messages = vec![];
+        for event in [
+            mouse::Event::ButtonPressed(mouse::Button::Left),
+            mouse::Event::ButtonReleased(mouse::Button::Left),
+        ] {
+            element.as_widget_mut().update(
+                &mut tree,
+                &Event::Mouse(event),
+                layout,
+                mouse::Cursor::Available(Point::new(40.0, 30.0)),
+                &renderer,
+                &mut clipboard::Null,
+                &mut Shell::new(&mut messages),
+                &Rectangle::with_size(Size::new(419.0, 500.0)),
+            );
+        }
+        assert_eq!(messages, vec![()]);
+        // At the same local structural threshold the same descriptions become list rows.
+        let rects = rectangles(&mut element, &mut tree, &renderer, 420.0);
+        assert_rect(&rects, 7.0, 7.0, 406.0, 80.0);
     }
 }

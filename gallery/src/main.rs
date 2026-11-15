@@ -27,6 +27,7 @@ mod details;
 mod entries_demo;
 mod form_demo;
 mod nav;
+mod navigation_demo;
 mod playground;
 mod plays;
 mod range_demo;
