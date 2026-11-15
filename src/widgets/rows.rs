@@ -1136,13 +1136,13 @@ impl ActionRowProps {
 
     pub fn apply<'a, M>(&self, mut row: ActionRow<'a, M>) -> ActionRow<'a, M> {
         if let Some(props) = &self.label_props {
-            row.label_props = props.clone();
+            row.label_props.merge(props);
         }
         if let Some(props) = &self.subtitle_props {
-            row.subtitle_props = props.clone();
+            row.subtitle_props.merge(props);
         }
         if let Some(props) = &self.button_props {
-            row.button_props = props.clone();
+            row.button_props.merge(props);
         }
         if let Some(v) = self.spacing {
             row = row.spacing(v);
@@ -1202,13 +1202,13 @@ impl ComboRowProps {
             row.row = props.apply(row.row);
         }
         if let Some(props) = &self.label_props {
-            row.row = row.row.label_props(props.clone());
+            row.row.label_props.merge(props);
         }
         if let Some(v) = self.value_spacing {
             row = row.value_spacing(v);
         }
         if let Some(props) = &self.dropdown_props {
-            row.dropdown_props = props.clone();
+            row.dropdown_props.merge(props);
         }
         row
     }
@@ -1265,6 +1265,40 @@ impl ToggleGroupRowProps {
 mod nested_props_tests {
     use super::*;
     use crate::components::{ButtonProps, TextProps};
+
+    #[test]
+    fn optional_combo_overrides_merge_without_changing_selection_or_disabled_policy() {
+        let options = [1, 2];
+        let row = ComboRow::new("Choice", &options, Some(2), |value| value)
+            .disabled(true)
+            .disabled_when(|value| *value == 1)
+            .label_props(TextProps::default().width(137).height(29))
+            .dropdown_props(
+                super::super::dropdown::DropdownItemProps::default()
+                    .label_props(TextProps::default().width(151).height(31))
+                    .button_props(ButtonProps::default().clip(true)),
+            );
+        let row = ComboRowProps::default().apply(row);
+        let row = ComboRowProps::default()
+            .row_props(ActionRowProps::default().label_props(TextProps::default().height(37)))
+            .label_props(TextProps::default())
+            .dropdown_props(
+                super::super::dropdown::DropdownItemProps::default()
+                    .label_props(TextProps::default().height(41))
+                    .button_props(ButtonProps::default().clip(false)),
+            )
+            .apply(row);
+        assert_eq!(row.row.label_props.width, Some(137.into()));
+        assert_eq!(row.row.label_props.height, Some(37.into()));
+        assert_eq!(row.dropdown_props.label.width, Some(151.into()));
+        assert_eq!(row.dropdown_props.label.height, Some(41.into()));
+        assert_eq!(row.dropdown_props.button.clip, Some(false));
+        assert_eq!(row.selected, Some(2));
+        assert_eq!((row.on_select)(1), 1);
+        assert!(row.insensitive);
+        assert!(row.disabled.as_ref().unwrap()(&1));
+        assert!(!row.disabled.as_ref().unwrap()(&2));
+    }
     use iced::Size;
     use iced::advanced::{layout, renderer::Headless, widget::Tree};
 

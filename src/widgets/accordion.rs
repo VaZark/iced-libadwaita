@@ -158,21 +158,7 @@ impl AccordionItemProps {
     }
     pub fn apply<'a, K, M>(&self, widget: AccordionItem<'a, K, M>) -> AccordionItem<'a, K, M> {
         let mut widget = widget;
-        if let Some(props) = &self.title_props {
-            widget = widget.title_props(props.clone());
-        }
-        if let Some(props) = &self.subtitle_props {
-            widget = widget.subtitle_props(props.clone());
-        }
-        if let Some(props) = &self.header_props {
-            widget = widget.header_props(props.clone());
-        }
-        if let Some(props) = &self.body_props {
-            widget = widget.body_props(props.clone());
-        }
-        if let Some(props) = &self.action_props {
-            widget = widget.action_props(props.clone());
-        }
+        widget.props.merge(self);
         widget
     }
 }
@@ -189,10 +175,11 @@ impl AccordionProps {
         &self,
         widget: Accordion<'a, K, M>,
     ) -> Accordion<'a, K, M> {
-        match &self.card_props {
-            Some(props) => widget.card_props(props.clone()),
-            None => widget,
+        let mut widget = widget;
+        if let Some(props) = &self.card_props {
+            widget.card_props.merge(props);
         }
+        widget
     }
 }
 
@@ -247,3 +234,8 @@ mod typed_presentation_tests {
         same_tree(&Tree::new(&baseline), &Tree::new(&configured));
     }
 }
+
+crate::components::props::impl_merge!(AccordionItemProps;
+    fields: [];
+    optional: [title_props, subtitle_props, header_props, body_props, action_props];
+    nested: []);

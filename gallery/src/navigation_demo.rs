@@ -15,6 +15,7 @@ fn schema() -> Schema {
     Schema::toolkit()
         .variant("navigation", "reading", &[])
         .variant("navigation", "scan", &[])
+        .variant("button", "gallery-navigation", &[])
 }
 
 fn config() -> &'static ThemeConfig {
@@ -47,6 +48,22 @@ fn config() -> &'static ThemeConfig {
     &CONFIG
 }
 
+fn target_style(
+    config: &ThemeConfig,
+    theme: &iad::Theme,
+    status: iced::widget::button::Status,
+) -> iced::widget::button::Style {
+    let mut target = iad::styles::button::flat(theme, status);
+    if let Some(radius) = config
+        .tokens()
+        .variant("button", "gallery-navigation")
+        .length("radius")
+    {
+        target.border.radius = radius.into();
+    }
+    target
+}
+
 fn preview(config: &ThemeConfig, metrics: Metrics, explicit: Option<&str>) -> Element<'static> {
     let config = config.clone();
     let explicit = explicit.map(str::to_owned);
@@ -65,10 +82,17 @@ fn preview(config: &ThemeConfig, metrics: Metrics, explicit: Option<&str>) -> El
         let rows = DESTINATIONS.len() as f32;
         let height =
             rows * geometry.row_height + (rows - 1.0) * geometry.gap + 2.0 * geometry.inset;
-        let mut list = w::SidebarList::new(
-            DESTINATIONS
-                .map(|(name, result)| w::SidebarItem::new(name, Message::ShowToast(result))),
-        )
+        let mut list = w::SidebarList::new(DESTINATIONS.map(|(name, result)| {
+            let config = config.clone();
+            w::SidebarItem::new(name, Message::ShowToast(result))
+                .selected(name == DESTINATIONS[0].0)
+                .row_props(
+                    w::SidebarRowProps::default().button_props(
+                        iad::components::ButtonProps::default()
+                            .style(move |theme, status| target_style(&config, theme, status)),
+                    ),
+                )
+        }))
         .metrics(metrics)
         .theme_config(&config)
         .available_width(size.width);
@@ -83,7 +107,7 @@ fn preview(config: &ThemeConfig, metrics: Metrics, explicit: Option<&str>) -> El
 
 pub fn view(metrics: Metrics) -> Element<'static> {
     column![
-        ty::caption("Explicit .variant(\"reading\"): a custom name, not an enum preset."),
+        ty::caption("Explicit .variant(\"reading\"): a custom name, not an enum preset. Inbox is selected; hover either row to compare effects on the config-owned target shape."),
         preview(config(), metrics, Some("reading")),
         ty::caption("Local xs:reading,md:scan rules: resize the gallery. Thresholds and densities come from navigation_demo.conf; scan inherits base padding, gap and inset."),
         preview(config(), metrics, None),
@@ -108,6 +132,28 @@ mod tests {
         let mut out = Vec::new();
         collect(layout::Layout::new(node), &mut out);
         out
+    }
+
+    #[test]
+    fn selected_and_hoverable_demo_rows_use_the_config_owned_target_shape() {
+        let config = config();
+        let radius = config
+            .number("button.gallery-navigation", "radius")
+            .unwrap();
+        let theme = iad::Theme::light();
+        for status in [
+            iced::widget::button::Status::Active,
+            iced::widget::button::Status::Hovered,
+            iced::widget::button::Status::Pressed,
+            iced::widget::button::Status::Disabled,
+        ] {
+            let target = target_style(config, &theme, status);
+            assert_eq!(target.border.radius, iced::border::Radius::from(radius));
+            let inherited = iad::styles::button::flat(&theme, status);
+            assert_eq!(target.background, inherited.background);
+            assert_eq!(target.text_color, inherited.text_color);
+        }
+        let _ = view(Metrics::default());
     }
 
     #[test]

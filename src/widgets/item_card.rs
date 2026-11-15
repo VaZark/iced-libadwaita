@@ -300,36 +300,25 @@ impl ItemCardProps {
         self
     }
     pub fn apply<'a, M: Clone + 'a>(&self, widget: ItemCard<'a, M>) -> ItemCard<'a, M> {
-        let widget = if let Some(props) = &self.row_props {
-            widget.row_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.title_props {
-            widget.title_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.subtitle_props {
-            widget.subtitle_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.picture_props {
-            widget.picture_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.action_props {
-            widget.action_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.container_props {
-            widget.container_props(props.clone())
-        } else {
-            widget
-        };
+        let mut widget = widget;
+        if let Some(props) = &self.row_props {
+            widget.row_props.merge(props);
+        }
+        if let Some(props) = &self.title_props {
+            widget.title_props.merge(props);
+        }
+        if let Some(props) = &self.subtitle_props {
+            widget.subtitle_props.merge(props);
+        }
+        if let Some(props) = &self.picture_props {
+            widget.picture_props.merge(props);
+        }
+        if let Some(props) = &self.action_props {
+            widget.action_props.merge(props);
+        }
+        if let Some(props) = &self.container_props {
+            widget.container_props.merge(props);
+        }
         widget
     }
 }

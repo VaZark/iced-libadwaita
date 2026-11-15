@@ -427,7 +427,9 @@ impl InfiniteListWidgetProps {
     where
         M: Clone + 'a,
     {
-        widget.props(self.clone())
+        let mut widget = widget;
+        widget.props.merge(self);
+        widget
     }
 }
 
@@ -453,3 +455,5 @@ mod native_props_tests {
         );
     }
 }
+
+crate::components::props::impl_merge!(InfiniteListWidgetProps; fields: []; optional: []; nested: [status, failure_title, retry_button, retry_label, load_button, load_label, footer]);

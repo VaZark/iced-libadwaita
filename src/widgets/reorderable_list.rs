@@ -1097,7 +1097,9 @@ impl ReorderableListWidgetProps {
     where
         M: Clone + 'a,
     {
-        widget.props(self.clone())
+        let mut widget = widget;
+        widget.props.merge(self);
+        widget
     }
 }
 
@@ -1124,3 +1126,5 @@ mod native_props_tests {
         }
     }
 }
+
+crate::components::props::impl_merge!(ReorderableListWidgetProps; fields: []; optional: []; nested: [preview_card, title, edit_button, edit_label, cancel_button, cancel_label, submit_button, submit_label, grip, row, surface]);

@@ -21,6 +21,42 @@ fn document_menu(notifications: bool) -> w::Menu<Message> {
         )])
 }
 
+fn document_trigger(notifications: bool, m: Metrics) -> w::MenuButton<Message> {
+    w::menu_button(Icon::OpenMenu, document_menu(notifications))
+        .text_trigger("Document")
+        .props(w::MenuProps {
+            label: cmp::TextProps::default().size(iad::Typography::desktop().body),
+            trigger: cmp::ContainerProps::default()
+                .height(Length::Fixed(m.button_min_height))
+                .padding(iced::Padding::from([0.0, m.space_s])),
+            popover: w::PopoverProps::default().offset(m.space_xxs),
+        })
+}
+
+fn aggregate_entry<'a>(
+    value: &'a str,
+    m: Metrics,
+    overrides: Option<cmp::EntryInputProps>,
+) -> cmp::Entry<'a, Message> {
+    let entry = cmp::entry("Name", value)
+        .on_input(Message::Name)
+        .metrics(m)
+        .input_props(
+            cmp::TextInputProps::default()
+                .size(iad::Typography::desktop().title_3)
+                .padding(m.space_m),
+        );
+    match overrides {
+        Some(props) => props.apply(entry),
+        None => entry,
+    }
+}
+
+fn partial_entry_props() -> cmp::EntryInputProps {
+    cmp::EntryInputProps::default()
+        .input_props(cmp::TextInputProps::default().align_x(iced::alignment::Horizontal::Right))
+}
+
 fn document_target<'a>() -> Element<'a> {
     cmp::flat_button(ty::label("Demo document — left-click to open"))
         .on_press(Message::ShowToast("Opened the demo document"))
@@ -30,7 +66,11 @@ fn document_target<'a>() -> Element<'a> {
 #[cfg(test)]
 mod menu_tests {
     use super::*;
-    use iced::advanced::{Shell, layout, renderer::Headless, widget::Tree};
+    use iced::advanced::{
+        Shell, layout,
+        renderer::{Headless, Renderer},
+        widget::Tree,
+    };
     use iced::{Event, Rectangle, Size, keyboard, mouse};
 
     fn key(named: keyboard::key::Named) -> Event {
@@ -48,6 +88,110 @@ mod menu_tests {
     }
 
     #[test]
+    fn entry_aggregate_default_and_partial_preserve_child_geometry_and_input_events() {
+        let mut renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(iad::Typography::desktop().body),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        let m = Metrics::desktop();
+        let viewport = Rectangle::with_size(Size::new(m.clamp_maximum, m.clamp_maximum));
+        let mut baseline = None;
+        let mut baseline_pixels = None;
+        for (index, props) in [
+            None,
+            Some(cmp::EntryInputProps::default()),
+            Some(partial_entry_props()),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut entry: Element<'_> = aggregate_entry("Ada", m, props).into();
+            let mut tree = Tree::new(&entry);
+            let node = entry.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport.size()),
+            );
+            if let Some(size) = baseline {
+                assert_eq!(
+                    node.size(),
+                    size,
+                    "aggregate must keep configured child size/padding"
+                );
+            } else {
+                baseline = Some(node.size());
+            }
+            let theme = Theme::light();
+            let bounds = Rectangle::with_size(node.size());
+            renderer.reset(bounds);
+            entry.as_widget().draw(
+                &tree,
+                &mut renderer,
+                &theme,
+                &iced::advanced::renderer::Style {
+                    text_color: theme.semantic.window.fg,
+                },
+                layout::Layout::new(&node),
+                mouse::Cursor::Unavailable,
+                &bounds,
+            );
+            let pixels = renderer.screenshot(
+                Size::new(bounds.width.ceil() as u32, bounds.height.ceil() as u32),
+                1.0,
+                theme.semantic.window.bg,
+            );
+            if index == 0 {
+                baseline_pixels = Some(pixels);
+            } else if index == 1 {
+                assert_eq!(
+                    Some(pixels),
+                    baseline_pixels,
+                    "default aggregate must preserve appearance"
+                );
+            } else {
+                assert_ne!(
+                    Some(pixels),
+                    baseline_pixels,
+                    "partial alignment override must reach the native input"
+                );
+            }
+            let mut messages = Vec::new();
+            let character = keyboard::Key::Character("X".into());
+            for event in [
+                Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: character.clone(),
+                    modified_key: character,
+                    physical_key: keyboard::key::Physical::Unidentified(
+                        keyboard::key::NativeCode::Unidentified,
+                    ),
+                    location: keyboard::Location::Standard,
+                    modifiers: keyboard::Modifiers::empty(),
+                    text: Some("X".into()),
+                    repeat: false,
+                }),
+            ] {
+                entry.as_widget_mut().update(
+                    &mut tree,
+                    &event,
+                    layout::Layout::new(&node),
+                    mouse::Cursor::Available(node.bounds().center()),
+                    &renderer,
+                    &mut iced::advanced::clipboard::Null,
+                    &mut Shell::new(&mut messages),
+                    &viewport,
+                );
+            }
+            assert!(
+                matches!(messages.as_slice(), [Message::Name(value)] if value.len() == 4 && value.contains('X')),
+                "aggregate must preserve the caller's input handler: {messages:?}"
+            );
+        }
+    }
+
+    #[test]
     fn document_text_and_context_menus_activate_live_state_and_preserve_left_click() {
         let renderer = iced::futures::executor::block_on(iced::Renderer::new(
             iced::Font::DEFAULT,
@@ -61,9 +205,7 @@ mod menu_tests {
             let mut element: Element<'_> = if context {
                 w::context_menu(document_target(), document_menu(false)).into()
             } else {
-                w::menu_button(Icon::OpenMenu, document_menu(false))
-                    .text_trigger("Document")
-                    .into()
+                document_trigger(false, m).into()
             };
             let mut tree = Tree::new(&element);
             let node = element.as_widget_mut().layout(
@@ -71,6 +213,13 @@ mod menu_tests {
                 &renderer,
                 &layout::Limits::new(Size::ZERO, viewport.size()),
             );
+            if !context {
+                assert_eq!(
+                    node.size().height,
+                    m.button_min_height,
+                    "MenuProps trigger height reaches the real widget"
+                );
+            }
             let mut messages = Vec::new();
             if context {
                 for event in [
@@ -463,6 +612,16 @@ impl Gallery {
                     g("Password").push(w::card(password)),
                     g("Color override").push(w::card(color)),
                     g("Width").push(w::card(width)),
+                    g("Aggregate child props")
+                        .description("All three edit Name. The child starts with theme-sized text and padding. Default EntryInputProps is a no-op; a partial aggregate changes only alignment, preserving size, padding and the input handler.")
+                        .push(w::card(column![
+                            ty::caption("Configured child"),
+                            aggregate_entry(&self.name, m, None),
+                            ty::caption("Default aggregate — unchanged"),
+                            aggregate_entry(&self.name, m, Some(cmp::EntryInputProps::default())),
+                            ty::caption("Partial aggregate — right aligned"),
+                            aggregate_entry(&self.name, m, Some(partial_entry_props())),
+                        ].spacing(m.space_s))),
                     self.sections.view(m).map(Message::Sections),
                 ]
                 .spacing(m.group_spacing)
@@ -1011,15 +1170,13 @@ impl Gallery {
                     .presentation(presentation)
                 };
                 let commands = || document_menu(self.notifications);
-                let text_menu = w::menu_button(Icon::OpenMenu, commands())
-                    .text_trigger("Document")
-                    .presentation(presentation);
+                let text_menu = document_trigger(self.notifications, m).presentation(presentation);
                 let context_target = w::context_menu(
                     document_target(),
                     commands(),
                 );
                 column![
-                    g("Text trigger").description("Open Document with a click or the keyboard. Commands report their result; Notifications changes the check state.").push(w::card(text_menu)),
+                    g("Text trigger").description("MenuProps configures the trigger, label and popover using theme metrics. Open Document with a click or the keyboard; Notifications changes the check state.").push(w::card(text_menu)),
                     g("Context menu").description("Right-click the document, or focus it and press Menu / Shift+F10. Left-click still opens it. Escape or an outside click dismisses the menu.").push(w::card(context_target)),
                     g("Menu button").description("The menu includes a disabled item.").push(w::card(row![menu])),
                     g("Check items").description("A check item shows its state as text after the label, as in GNOME's quick settings: On or Off, or words of your own with state_labels. MenuCheckStyle::Mark opts in to a check mark.").push(w::card(

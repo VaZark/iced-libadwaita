@@ -192,18 +192,19 @@ impl TagGroupListProps {
         self.chip_props = Some(value.into());
         self
     }
-    pub fn apply<'a, M: Clone + 'a>(&self, mut widget: TagGroupList<'a, M>) -> TagGroupList<'a, M> {
-        if let Some(value) = self.spacing.clone() {
-            widget = widget.spacing(value);
+    pub fn apply<'a, M: Clone + 'a>(&self, widget: TagGroupList<'a, M>) -> TagGroupList<'a, M> {
+        let mut widget = widget;
+        if let Some(value) = &self.spacing {
+            widget = widget.spacing(value.clone());
         }
-        if let Some(value) = self.metrics.clone() {
-            widget = widget.metrics(value);
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
         }
-        if let Some(value) = self.label_props.clone() {
-            widget = widget.label_props(value);
+        if let Some(props) = &self.label_props {
+            widget.label_props.merge(props);
         }
-        if let Some(value) = self.chip_props.clone() {
-            widget = widget.chip_props(value);
+        if let Some(props) = &self.chip_props {
+            widget.chip_props.merge(props);
         }
         widget
     }

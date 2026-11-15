@@ -331,26 +331,17 @@ impl PreferencesGroupProps {
         self
     }
     pub fn apply<'a, M>(&self, widget: PreferencesGroup<'a, M>) -> PreferencesGroup<'a, M> {
-        let widget = if let Some(props) = &self.container_props {
-            widget.container_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.card_props {
-            widget.card_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.title_props {
-            widget.title_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.description_props {
-            widget.description_props(props.clone())
-        } else {
-            widget
-        };
+        let mut widget = widget;
+        if let Some(props) = &self.card_props {
+            widget.card_props.merge(props);
+        }
+        crate::components::props::merge_optional!(widget, self; container_props);
+        if let Some(props) = &self.title_props {
+            widget.title_props.merge(props);
+        }
+        if let Some(props) = &self.description_props {
+            widget.description_props.merge(props);
+        }
         widget
     }
 }
@@ -366,11 +357,10 @@ impl PreferencesPageProps {
         self
     }
     pub fn apply<'a, M>(&self, widget: PreferencesPage<'a, M>) -> PreferencesPage<'a, M> {
-        let widget = if let Some(props) = &self.container_props {
-            widget.container_props(props.clone())
-        } else {
-            widget
-        };
+        let mut widget = widget;
+        if let Some(props) = &self.container_props {
+            widget.container_props.merge(props);
+        }
         widget
     }
 }

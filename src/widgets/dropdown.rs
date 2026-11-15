@@ -749,3 +749,8 @@ mod typed_props_tests {
         assert!(!DropdownOptions::<String, ()>::default().wrap);
     }
 }
+
+crate::components::props::impl_merge!(DropdownItemProps;
+    fields: [];
+    optional: [];
+    nested: [label, container, button]);

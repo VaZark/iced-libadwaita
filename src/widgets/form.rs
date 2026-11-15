@@ -565,7 +565,9 @@ impl FormWidgetProps {
     where
         M: Clone + 'a,
     {
-        widget.props(self.clone())
+        let mut widget = widget;
+        widget.props.merge(self);
+        widget
     }
 }
 
@@ -573,6 +575,43 @@ impl FormWidgetProps {
 mod native_props_tests {
     use super::*;
     use crate::widgets::synced_text::native_props_tests::{assert_override, text_props};
+
+    #[test]
+    fn aggregate_apply_recurses_into_indicator_and_preserves_siblings_and_policy() {
+        use crate::components::{ButtonProps, TextProps};
+        let original = FormWidgetProps::default()
+            .indicator(
+                super::super::stepper::StepperWidgetProps::default()
+                    .label(TextProps::default().width(137).height(29))
+                    .step_button(ButtonProps::default().width(151).clip(true)),
+            )
+            .description(TextProps::default().width(173));
+        let form = Form::new()
+            .on_submit(7u8)
+            .submitting(true)
+            .props(original.clone());
+        let form = FormWidgetProps::default().apply(form);
+        let form = FormWidgetProps::default()
+            .indicator(
+                super::super::stepper::StepperWidgetProps::default()
+                    .label(TextProps::default().height(37))
+                    .step_button(ButtonProps::default().clip(false)),
+            )
+            .apply(form);
+        assert_eq!(
+            form.props.indicator.label.width,
+            original.indicator.label.width
+        );
+        assert_eq!(form.props.indicator.label.height, Some(37.into()));
+        assert_eq!(
+            form.props.indicator.step_button.width,
+            original.indicator.step_button.width
+        );
+        assert_eq!(form.props.indicator.step_button.clip, Some(false));
+        assert_eq!(form.props.description.width, original.description.width);
+        assert!(form.submitting);
+        assert_eq!(form.on_submit, Some(7));
+    }
     #[test]
     fn defaults_preserve_layout_and_overrides_reach_native_children() {
         let make = || {
@@ -607,3 +646,5 @@ mod native_behavior_tests {
         assert!(click_sized(make().submitting(true).into()).is_empty());
     }
 }
+
+crate::components::props::impl_merge!(FormWidgetProps; fields: []; optional: []; nested: [indicator, title, description, content, reset_button, reset_label, back_button, back_label, primary_button, primary_label, surface]);

@@ -218,31 +218,20 @@ impl SectionHeadingProps {
         self
     }
     pub fn apply<M>(&self, widget: SectionHeading<M>) -> SectionHeading<M> {
-        let widget = if let Some(props) = &self.container_props {
-            widget.container_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.title_props {
-            widget.title_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.subtitle_props {
-            widget.subtitle_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.action_label_props {
-            widget.action_label_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.action_props {
-            widget.action_props(props.clone())
-        } else {
-            widget
-        };
+        let mut widget = widget;
+        crate::components::props::merge_optional!(widget, self; container_props);
+        if let Some(props) = &self.title_props {
+            widget.title_props.merge(props);
+        }
+        if let Some(props) = &self.subtitle_props {
+            widget.subtitle_props.merge(props);
+        }
+        if let Some(props) = &self.action_label_props {
+            widget.action_label_props.merge(props);
+        }
+        if let Some(props) = &self.action_props {
+            widget.action_props.merge(props);
+        }
         widget
     }
 }

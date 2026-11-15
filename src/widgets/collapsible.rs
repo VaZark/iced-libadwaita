@@ -84,16 +84,9 @@ impl CollapsibleProps {
         self.container_props = Some(props);
         self
     }
-    pub fn apply<'a, M: 'a>(&self, mut widget: Collapsible<'a, M>) -> Collapsible<'a, M> {
-        if let Some(props) = &self.header_props {
-            widget = widget.header_props(props.clone());
-        }
-        if let Some(props) = &self.body_props {
-            widget = widget.body_props(props.clone());
-        }
-        if let Some(props) = &self.container_props {
-            widget = widget.container_props(props.clone());
-        }
+    pub fn apply<'a, M: 'a>(&self, widget: Collapsible<'a, M>) -> Collapsible<'a, M> {
+        let mut widget = widget;
+        widget.props.merge(self);
         widget
     }
 }
@@ -139,3 +132,8 @@ mod typed_presentation_tests {
         same_tree(&Tree::new(&baseline), &Tree::new(&configured));
     }
 }
+
+crate::components::props::impl_merge!(CollapsibleProps;
+    fields: [];
+    optional: [header_props, body_props, container_props];
+    nested: []);

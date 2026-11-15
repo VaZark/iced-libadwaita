@@ -448,7 +448,9 @@ impl TimelineWidgetProps {
     where
         M: 'a,
     {
-        widget.props(self.clone())
+        let mut widget = widget;
+        widget.props.merge(self);
+        widget
     }
 }
 
@@ -474,3 +476,5 @@ mod native_props_tests {
         }
     }
 }
+
+crate::components::props::impl_merge!(TimelineWidgetProps; fields: []; optional: []; nested: [current_mark, loading_mark, bullet, connector, title, body]);

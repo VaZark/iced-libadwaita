@@ -592,34 +592,39 @@ impl TagFilterProps {
     }
     pub fn apply<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a>(
         &self,
-        mut widget: TagFilter<'a, K, M>,
+        widget: TagFilter<'a, K, M>,
     ) -> TagFilter<'a, K, M> {
-        if let Some(value) = self.spacing.clone() {
-            widget = widget.spacing(value);
+        let mut widget = widget;
+        if let Some(value) = &self.spacing {
+            widget = widget.spacing(value.clone());
         }
-        if let Some(value) = self.pill_spacing.clone() {
-            widget = widget.pill_spacing(value);
+        if let Some(value) = &self.pill_spacing {
+            widget = widget.pill_spacing(value.clone());
         }
-        if let Some(value) = self.field_padding.clone() {
-            widget = widget.field_padding(value);
+        if let Some(value) = &self.field_padding {
+            widget = widget.field_padding(value.clone());
         }
-        if let Some(value) = self.chips_spacing.clone() {
-            widget = widget.chips_spacing(value);
+        if let Some(value) = &self.chips_spacing {
+            widget = widget.chips_spacing(value.clone());
         }
-        if let Some(value) = self.metrics.clone() {
-            widget = widget.metrics(value);
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
         }
-        if let Some(value) = self.entry_props.clone() {
-            widget = widget.entry_props(value);
+        if let Some(props) = &self.entry_props {
+            widget.entry_props.merge(props);
         }
-        if let Some(value) = self.label_props.clone() {
-            widget = widget.label_props(value);
+        if let Some(props) = &self.label_props {
+            widget.label_props.merge(props);
         }
-        if let Some(value) = self.chip_props.clone() {
-            widget = widget.chip_props(value);
+        if let Some(props) = &self.chip_props {
+            widget.chip_props.merge(props);
         }
-        if let Some(value) = self.row_props.clone() {
-            widget = widget.row_props(value);
+        if let Some(value) = &self.row_props {
+            let existing = &mut widget.row_props;
+            crate::components::props::merge_optional!(existing, value;
+                        dropdown_props, button_props, label_props, entry_props);
+            crate::components::props::merge_fields!(existing, value;
+                        spacing, padding, value_spacing);
         }
         widget
     }

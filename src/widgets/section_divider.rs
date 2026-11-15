@@ -286,31 +286,20 @@ impl SectionDividerProps {
         self
     }
     pub fn apply<'a, M>(&self, widget: SectionDivider<'a, M>) -> SectionDivider<'a, M> {
-        let widget = if let Some(props) = &self.container_props {
-            widget.container_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.title_props {
-            widget.title_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.detail_props {
-            widget.detail_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.line_props {
-            widget.line_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.toggle_props {
-            widget.toggle_props(props.clone())
-        } else {
-            widget
-        };
+        let mut widget = widget;
+        crate::components::props::merge_optional!(widget, self; container_props);
+        if let Some(props) = &self.title_props {
+            widget.title_props.merge(props);
+        }
+        if let Some(props) = &self.detail_props {
+            widget.detail_props.merge(props);
+        }
+        if let Some(props) = &self.line_props {
+            widget.line_props.merge(props);
+        }
+        if let Some(props) = &self.toggle_props {
+            widget.toggle_props.merge(props);
+        }
         widget
     }
 }

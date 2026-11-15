@@ -987,7 +987,9 @@ impl ResponsiveTableWidgetProps {
         T: 'a,
         M: 'a,
     {
-        widget.props(self.clone())
+        let mut widget = widget;
+        widget.props.merge(self);
+        widget
     }
 }
 
@@ -995,6 +997,77 @@ impl ResponsiveTableWidgetProps {
 mod native_props_tests {
     use super::*;
     use crate::widgets::synced_text::native_props_tests::{assert_override, text_props};
+
+    #[test]
+    fn aggregate_apply_recurses_into_card_dropdown_and_popover_fields() {
+        use crate::components::{ButtonProps, ContainerProps, TextProps};
+        use crate::widgets::{CardProps, DropdownItemProps, PopoverProps, PopoverSurfaceProps};
+        let rows = [()];
+        let original = ResponsiveTableWidgetProps {
+            sort_item: DropdownItemProps::default()
+                .label_props(TextProps::default().width(137).height(29))
+                .button_props(ButtonProps::default().width(151).clip(true)),
+            sort_picker: PopoverProps::default()
+                .width(173)
+                .offset(11.0)
+                .style(|_, _| iced::widget::button::Style::default()),
+            sort_popover: PopoverSurfaceProps::default()
+                .spacing(7.0)
+                .container_props(ContainerProps::default().width(191).clip(true)),
+            card: CardProps::default()
+                .child_props(ContainerProps::default().width(211).height(31))
+                .separator_props(ContainerProps::default().height(3)),
+            ..Default::default()
+        };
+        let table = ResponsiveTable::<(), ()>::new(&rows).props(original.clone());
+        let needed = table.needed_width();
+        let table = ResponsiveTableWidgetProps::default().apply(table);
+        let overrides = ResponsiveTableWidgetProps {
+            sort_item: DropdownItemProps::default()
+                .label_props(TextProps::default().height(37))
+                .button_props(ButtonProps::default().clip(false)),
+            sort_picker: PopoverProps::default().offset(0.0),
+            sort_popover: PopoverSurfaceProps::default()
+                .spacing(0.0)
+                .container_props(ContainerProps::default().clip(false)),
+            card: CardProps::default().child_props(ContainerProps::default().height(41)),
+            ..Default::default()
+        };
+        let table = overrides.apply(table);
+        let props = &table.props;
+        assert_eq!(props.sort_item.label.width, original.sort_item.label.width);
+        assert_eq!(props.sort_item.label.height, Some(37.into()));
+        assert_eq!(
+            props.sort_item.button.width,
+            original.sort_item.button.width
+        );
+        assert_eq!(props.sort_item.button.clip, Some(false));
+        assert_eq!(props.sort_picker.width, original.sort_picker.width);
+        assert_eq!(props.sort_picker.offset, Some(0.0));
+        assert!(std::sync::Arc::ptr_eq(
+            props.sort_picker.style.as_ref().unwrap(),
+            original.sort_picker.style.as_ref().unwrap()
+        ));
+        assert_eq!(props.sort_popover.spacing, Some(0.0));
+        assert_eq!(
+            props.sort_popover.container.width,
+            original.sort_popover.container.width
+        );
+        assert_eq!(props.sort_popover.container.clip, Some(false));
+        assert_eq!(
+            props.card.child_props.as_ref().unwrap().width,
+            Some(211.into())
+        );
+        assert_eq!(
+            props.card.child_props.as_ref().unwrap().height,
+            Some(41.into())
+        );
+        assert_eq!(
+            props.card.separator_props.as_ref().unwrap().height,
+            Some(3.into())
+        );
+        assert_eq!(table.needed_width(), needed);
+    }
     #[test]
     fn defaults_preserve_layout_and_overrides_reach_native_children() {
         let rows = [()];
@@ -1017,3 +1090,5 @@ mod native_props_tests {
         );
     }
 }
+
+crate::components::props::impl_merge!(ResponsiveTableWidgetProps; fields: []; optional: []; nested: [sort_item, sort_picker, sort_popover, card, caption, cell, header, surface, virtual_cell, virtual_row, separator, virtual_surface, header_label, sort_priority, header_button, sort_trigger, sort_selection, direction_button, direction_container, sort_label, card_label, card_value]);

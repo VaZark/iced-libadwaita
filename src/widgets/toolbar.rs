@@ -663,12 +663,13 @@ impl ToolbarProps {
         self.spacing = Some(value.into());
         self
     }
-    pub fn apply<'a, M: 'a>(&self, mut widget: ToolbarView<'a, M>) -> ToolbarView<'a, M> {
-        if let Some(value) = self.content_props.clone() {
-            widget = widget.content_props(value);
+    pub fn apply<'a, M: 'a>(&self, widget: ToolbarView<'a, M>) -> ToolbarView<'a, M> {
+        let mut widget = widget;
+        if let Some(props) = &self.content_props {
+            widget.content_props.merge(props);
         }
-        if let Some(value) = self.spacing.clone() {
-            widget = widget.spacing(value);
+        if let Some(value) = &self.spacing {
+            widget = widget.spacing(value.clone());
         }
         widget
     }

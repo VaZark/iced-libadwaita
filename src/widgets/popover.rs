@@ -2022,3 +2022,7 @@ mod typed_props_tests {
         );
     }
 }
+
+crate::components::props::impl_merge!(PopoverProps; fields: [side, offset, bounds, appearance, align, padding, width, popover_width, fit_content, window_radius, style]; optional: []; nested: []);
+
+crate::components::props::impl_merge!(PopoverSurfaceProps; fields: [spacing]; optional: []; nested: [container]);

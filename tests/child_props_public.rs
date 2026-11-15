@@ -35,6 +35,238 @@ fn contains_size(node: &layout::Node, size: Size) -> bool {
             .any(|child| contains_size(child, size))
 }
 
+fn sizes(node: &layout::Node) -> Vec<Size> {
+    let mut result = vec![node.size()];
+    for child in node.children() {
+        result.extend(sizes(child));
+    }
+    result
+}
+
+#[test]
+fn nine_widget_aggregates_preserve_custom_defaults_and_merge_partial_text_fields() {
+    let renderer = renderer();
+    macro_rules! check {
+        ($make:expr, $props:path, $field:ident) => {{
+            let make = $make;
+            let baseline = || {
+                make().props(<$props>::default().$field(TextProps::default().width(137).height(29)))
+            };
+            let mut base: Element<'_, ()> = baseline().into();
+            let mut default: Element<'_, ()> = <$props>::default().apply(baseline()).into();
+            let mut empty: Element<'_, ()> = <$props>::default()
+                .$field(TextProps::default())
+                .apply(baseline())
+                .into();
+            let mut partial: Element<'_, ()> = <$props>::default()
+                .$field(TextProps::default().height(37))
+                .apply(baseline())
+                .into();
+            let (_, a) = layout(&mut base, &renderer);
+            let (_, b) = layout(&mut default, &renderer);
+            let (_, c) = layout(&mut empty, &renderer);
+            let (_, d) = layout(&mut partial, &renderer);
+            assert!(
+                contains_size(&a, Size::new(137.0, 29.0)),
+                "{} baseline",
+                stringify!($props)
+            );
+            assert_eq!(sizes(&a), sizes(&b), "{} default", stringify!($props));
+            assert_eq!(
+                sizes(&a),
+                sizes(&c),
+                "{} explicit empty child",
+                stringify!($props)
+            );
+            assert!(
+                contains_size(&d, Size::new(137.0, 37.0)),
+                "{} partial overlay",
+                stringify!($props)
+            );
+        }};
+    }
+    check!(
+        || w::Form::<()>::new().title("Form"),
+        w::FormWidgetProps,
+        title
+    );
+    let state = iad::primitives::infinite::Infinite::<(), ()>::new(());
+    check!(
+        || w::InfiniteList::<()>::new(space(), &state)
+            .trigger(w::LoadTrigger::LoadMore)
+            .on_load_more(())
+            .scrolled(false),
+        w::InfiniteListWidgetProps,
+        load_label
+    );
+    let items = [1];
+    check!(
+        || w::ReorderableList::<_, ()>::new(&items, |_| space().height(40).into()).title("Items"),
+        w::ReorderableListWidgetProps,
+        title
+    );
+    check!(
+        || w::Spoiler::<()>::new(space().height(300)).max_height(80.0),
+        w::SpoilerWidgetProps,
+        toggle_label
+    );
+    check!(
+        || w::SyncedText::new("empty", &[], |_| ()),
+        w::SyncedTextWidgetProps,
+        placeholder
+    );
+    check!(
+        || w::Timeline::<()>::new(0).item(w::TimelineItem::new("Created")),
+        w::TimelineWidgetProps,
+        title
+    );
+    check!(
+        || w::Stepper::<()>::new()
+            .collapse(false)
+            .step(w::StepperStep::new("Account")),
+        w::StepperWidgetProps,
+        label
+    );
+    let rows = [()];
+    check!(
+        || w::ResponsiveTable::<(), ()>::new(&rows)
+            .column(w::Column::new("Name", |_| space().into())),
+        w::ResponsiveTableWidgetProps,
+        caption
+    );
+    let theme = Theme::light();
+    let blocks = [iad::primitives::rich_text::Block::CodeBlock {
+        lang: Some("Rust".into()),
+        code: "let x = 1;".into(),
+    }];
+    check!(
+        || w::RichText::<()>::new(&theme, &blocks),
+        w::RichTextWidgetProps,
+        code
+    );
+}
+
+#[test]
+fn optional_row_and_card_overlays_preserve_omitted_child_dimensions() {
+    let renderer = renderer();
+    let make = || {
+        w::ActionRow::<()>::new("Title")
+            .subtitle("Subtitle")
+            .label_props(TextProps::default().width(137).height(29))
+            .subtitle_props(TextProps::default().width(151).height(31))
+    };
+    for props in [
+        w::ActionRowProps::default(),
+        w::ActionRowProps::default().label_props(TextProps::default()),
+    ] {
+        let mut before: Element<'_, ()> = make().into();
+        let mut after: Element<'_, ()> = props.apply(make()).into();
+        assert_eq!(
+            sizes(&layout(&mut before, &renderer).1),
+            sizes(&layout(&mut after, &renderer).1)
+        );
+    }
+    let mut changed: Element<'_, ()> = w::ActionRowProps::default()
+        .label_props(TextProps::default().height(37))
+        .apply(make())
+        .into();
+    let (_, node) = layout(&mut changed, &renderer);
+    assert!(contains_size(&node, Size::new(137.0, 37.0)));
+    assert!(
+        contains_size(&node, Size::new(151.0, 31.0)),
+        "sibling subtitle is retained"
+    );
+
+    let card = w::Card::new(space().width(10).height(10))
+        .child_props(ContainerProps::default().width(137).height(29));
+    let card = w::CardProps::default().apply(card);
+    let mut changed: Element<'_, ()> = w::CardProps::default()
+        .child_props(ContainerProps::default().height(37))
+        .apply(card)
+        .into();
+    let (_, node) = layout(&mut changed, &renderer);
+    assert!(contains_size(&node, Size::new(137.0, 37.0)));
+}
+
+#[test]
+fn empty_optional_presentation_does_not_add_page_wrappers() {
+    let renderer = renderer();
+    let make = || w::Page::<()>::new(space().width(137).height(29));
+    let mut before: Element<'_, ()> = make().into();
+    let mut default: Element<'_, ()> = w::PageProps::default().apply(make()).into();
+    let mut explicit_empty: Element<'_, ()> = w::PageProps::default()
+        .content_props(ContainerProps::default())
+        .apply(make())
+        .into();
+    let a = sizes(&layout(&mut before, &renderer).1);
+    assert_eq!(a, sizes(&layout(&mut default, &renderer).1));
+    assert_eq!(
+        a,
+        sizes(&layout(&mut explicit_empty, &renderer).1),
+        "empty optional props must preserve wrapper absence"
+    );
+}
+
+fn click_sized<M>(mut element: Element<'_, M>, size: Size) -> Vec<M> {
+    let renderer = renderer();
+    let (mut tree, node) = layout(&mut element, &renderer);
+    fn find(layout: layout::Layout<'_>, size: Size) -> Option<Rectangle> {
+        if layout.bounds().size() == size {
+            Some(layout.bounds())
+        } else {
+            layout.children().find_map(|child| find(child, size))
+        }
+    }
+    let target = find(layout::Layout::new(&node), size).expect("retained native button geometry");
+    let mut messages = Vec::new();
+    for event in [
+        mouse::Event::ButtonPressed(mouse::Button::Left),
+        mouse::Event::ButtonReleased(mouse::Button::Left),
+    ] {
+        element.as_widget_mut().update(
+            &mut tree,
+            &Event::Mouse(event),
+            layout::Layout::new(&node),
+            mouse::Cursor::Available(target.center()),
+            &renderer,
+            &mut clipboard::Null,
+            &mut Shell::new(&mut messages),
+            &Rectangle::with_size(Size::new(600.0, 400.0)),
+        );
+    }
+    messages
+}
+
+#[test]
+fn aggregate_overlays_preserve_submit_busy_policy_and_row_actions() {
+    for busy in [false, true] {
+        let form = w::Form::new()
+            .on_submit(7u8)
+            .submitting(busy)
+            .enter_submits(false)
+            .props(
+                w::FormWidgetProps::default()
+                    .primary_button(ButtonProps::default().width(137).height(43)),
+            );
+        let form = w::FormWidgetProps::default().apply(form);
+        let form = w::FormWidgetProps::default()
+            .title(TextProps::default().size(21))
+            .apply(form);
+        assert_eq!(
+            click_sized(form.into(), Size::new(137.0, 43.0)),
+            if busy { vec![] } else { vec![7] }
+        );
+    }
+    let row = w::ActionRow::new("Retained action")
+        .on_activate(9u8)
+        .button_props(ButtonProps::default().width(137).height(43));
+    let row = w::ActionRowProps::default().apply(row);
+    let row = w::ActionRowProps::default()
+        .button_props(ButtonProps::default().height(47))
+        .apply(row);
+    assert_eq!(click_sized(row.into(), Size::new(137.0, 47.0)), vec![9]);
+}
+
 #[test]
 fn exported_owned_props_are_default_and_clone_from_downstream() {
     // An export smoke test, not evidence that every field reaches every branch.
@@ -79,6 +311,7 @@ fn exported_owned_props_are_default_and_clone_from_downstream() {
         w::ColorInputProps,
         w::ColorPickerProps,
         w::ContextMenuProps,
+        w::MenuProps,
         w::DateInputProps,
         w::DateRangeInputProps,
         w::AboutDialogProps,
@@ -542,7 +775,14 @@ fn menu_text_trigger_and_item_presentation_build_publicly() {
         .trigger_props(ContainerProps::default().width(133))
         .combobox_props(w::PopoverProps::default().popover_width(240.0))
         .into();
-    // MenuProps itself is not re-exported; direct setters are the reachable API.
+    let _: Element<'_, ()> = w::menu_button(iad::Icon::Search, w::Menu::new("Public aggregate"))
+        .text_trigger("Commands")
+        .props(w::MenuProps {
+            label: TextProps::default().overflow(c::TextOverflow::Wrap),
+            trigger: ContainerProps::default().width(133),
+            popover: w::PopoverProps::default().popover_width(240.0),
+        })
+        .into();
 }
 
 #[test]

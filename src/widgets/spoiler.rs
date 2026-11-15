@@ -592,7 +592,9 @@ impl SpoilerWidgetProps {
     where
         M: Clone + 'a,
     {
-        widget.props(self.clone())
+        let mut widget = widget;
+        widget.props.merge(self);
+        widget
     }
 }
 
@@ -621,3 +623,5 @@ mod native_props_tests {
         );
     }
 }
+
+crate::components::props::impl_merge!(SpoilerWidgetProps; fields: []; optional: []; nested: [toggle_button, toggle_label, more_button, more_label, less_button, less_label]);

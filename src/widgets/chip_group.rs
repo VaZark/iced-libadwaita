@@ -756,25 +756,26 @@ impl ChipGroupProps {
     }
     pub fn apply<'a, K: PartialEq + Clone + 'a, M: Clone + 'a>(
         &self,
-        mut widget: ChipGroup<'a, K, M>,
+        widget: ChipGroup<'a, K, M>,
     ) -> ChipGroup<'a, K, M> {
-        if let Some(value) = self.spacing.clone() {
-            widget = widget.spacing(value);
+        let mut widget = widget;
+        if let Some(value) = &self.spacing {
+            widget = widget.spacing(value.clone());
         }
-        if let Some(value) = self.search_spacing.clone() {
-            widget = widget.search_spacing(value);
+        if let Some(value) = &self.search_spacing {
+            widget = widget.search_spacing(value.clone());
         }
-        if let Some(value) = self.metrics.clone() {
-            widget = widget.metrics(value);
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
         }
-        if let Some(value) = self.entry_props.clone() {
-            widget = widget.entry_props(value);
+        if let Some(props) = &self.entry_props {
+            widget.entry_props.merge(props);
         }
-        if let Some(value) = self.label_props.clone() {
-            widget = widget.label_props(value);
+        if let Some(props) = &self.label_props {
+            widget.label_props.merge(props);
         }
-        if let Some(value) = self.chip_props.clone() {
-            widget = widget.chip_props(value);
+        if let Some(props) = &self.chip_props {
+            widget.chip_props.merge(props);
         }
         widget
     }

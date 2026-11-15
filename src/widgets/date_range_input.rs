@@ -557,27 +557,28 @@ impl DateRangeInputProps {
         self.button_props = Some(value.into());
         self
     }
-    pub fn apply<'a, M>(&self, mut widget: DateRangeInput<'a, M>) -> DateRangeInput<'a, M> {
-        if let Some(value) = self.width.clone() {
-            widget = widget.width(value);
-        }
-        if let Some(value) = self.metrics.clone() {
-            widget = widget.metrics(value);
-        }
-        if let Some(value) = self.spacing.clone() {
-            widget = widget.spacing(value);
-        }
-        if let Some(value) = self.padding.clone() {
-            widget = widget.padding(value);
-        }
-        if let Some(value) = self.entry_props.clone() {
-            widget = widget.entry_props(value);
-        }
-        if let Some(value) = self.button_props.clone() {
-            widget = widget.button_props(value);
-        }
+    pub fn apply<'a, M>(&self, widget: DateRangeInput<'a, M>) -> DateRangeInput<'a, M> {
+        let mut widget = widget;
         if let Some(props) = &self.dropdown_props {
-            widget = widget.dropdown_props(props.clone());
+            widget.dropdown_props.merge(props);
+        }
+        if let Some(value) = &self.width {
+            widget = widget.width(value.clone());
+        }
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
+        }
+        if let Some(value) = &self.spacing {
+            widget = widget.spacing(value.clone());
+        }
+        if let Some(value) = &self.padding {
+            widget = widget.padding(value.clone());
+        }
+        if let Some(props) = &self.entry_props {
+            widget.entry_props.merge(props);
+        }
+        if let Some(props) = &self.button_props {
+            widget.button_props.merge(props);
         }
         widget
     }

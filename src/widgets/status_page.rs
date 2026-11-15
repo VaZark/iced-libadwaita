@@ -393,21 +393,16 @@ impl CardProps {
         self
     }
     pub fn apply<'a, M: 'a>(&self, widget: Card<'a, M>) -> Card<'a, M> {
-        let widget = if let Some(props) = &self.container_props {
-            widget.container_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.child_props {
-            widget.child_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.separator_props {
-            widget.separator_props(props.clone())
-        } else {
-            widget
-        };
+        let mut widget = widget;
+        if let Some(props) = &self.container_props {
+            widget.container_props.merge(props);
+        }
+        if let Some(props) = &self.child_props {
+            widget.child_props.merge(props);
+        }
+        if let Some(props) = &self.separator_props {
+            widget.separator_props.merge(props);
+        }
         widget
     }
 }
@@ -438,26 +433,19 @@ impl StatusPageProps {
         self
     }
     pub fn apply<'a, M>(&self, widget: StatusPage<'a, M>) -> StatusPage<'a, M> {
-        let widget = if let Some(props) = &self.title_props {
-            widget.title_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.description_props {
-            widget.description_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.body_props {
-            widget.body_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.container_props {
-            widget.container_props(props.clone())
-        } else {
-            widget
-        };
+        let mut widget = widget;
+        if let Some(props) = &self.title_props {
+            widget.title_props.merge(props);
+        }
+        if let Some(props) = &self.description_props {
+            widget.description_props.merge(props);
+        }
+        if let Some(props) = &self.body_props {
+            widget.body_props.merge(props);
+        }
+        if let Some(props) = &self.container_props {
+            widget.container_props.merge(props);
+        }
         widget
     }
 }
@@ -518,10 +506,9 @@ impl PageProps {
         self
     }
     pub fn apply<'a, M: 'a>(&self, widget: Page<'a, M>) -> Page<'a, M> {
-        match &self.content_props {
-            Some(props) => widget.content_props(props.clone()),
-            None => widget,
-        }
+        let mut widget = widget;
+        crate::components::props::merge_optional!(widget, self; content_props);
+        widget
     }
 }
 
@@ -605,3 +592,5 @@ mod typed_presentation_tests {
         same_tree(&Tree::new(&baseline), &Tree::new(&configured));
     }
 }
+
+crate::components::props::impl_merge!(CardProps; fields: []; optional: [container_props, child_props, separator_props]; nested: []);

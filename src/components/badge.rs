@@ -781,3 +781,5 @@ mod nested_props_tests {
         let _: Element<'_, u8> = chip.into();
     }
 }
+
+super::props::impl_merge!(ChipProps; fields: []; optional: []; nested: [label_props, button_props, remove_button_props, container_props]);

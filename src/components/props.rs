@@ -57,6 +57,39 @@ macro_rules! merge_fields {
 }
 pub(crate) use merge_fields;
 
+// Optional child objects preserve absence and recursively overlay present fields.
+macro_rules! merge_optional {
+    ($target:ident, $overrides:ident; $($field:ident),* $(,)?) => { $(
+        if let Some(props) = &$overrides.$field && !props.is_empty() {
+            match &mut $target.$field {
+                Some(existing) => existing.merge(props),
+                None => $target.$field = Some(props.clone()),
+            }
+        }
+    )* };
+}
+pub(crate) use merge_optional;
+
+macro_rules! impl_merge {
+    ($ty:ty; fields: [$($field:ident),*]; optional: [$($optional:ident),*]; nested: [$($nested:ident),*]) => {
+        impl $ty {
+            pub(crate) fn is_empty(&self) -> bool {
+                true $(&& self.$field.is_none())*
+                    $(&& self.$optional.as_ref().is_none_or(|props| props.is_empty()))*
+                    $(&& self.$nested.is_empty())*
+            }
+
+            pub(crate) fn merge(&mut self, overrides: &Self) {
+                if overrides.is_empty() { return; }
+                $crate::components::props::merge_fields!(self, overrides; $($field),*);
+                $crate::components::props::merge_optional!(self, overrides; $($optional),*);
+                $(self.$nested.merge(&overrides.$nested);)*
+            }
+        }
+    };
+}
+pub(crate) use impl_merge;
+
 /// Overrides for an existing [`Text`], preserving its content and typography baseline.
 #[derive(Clone, Default)]
 pub struct TextProps {
@@ -76,6 +109,21 @@ pub struct TextProps {
 }
 
 impl TextProps {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.size.is_none()
+            && self.line_height.is_none()
+            && self.font.is_none()
+            && self.width.is_none()
+            && self.height.is_none()
+            && self.align_x.is_none()
+            && self.align_y.is_none()
+            && self.shaping.is_none()
+            && self.wrapping.is_none()
+            && self.color.is_none()
+            && self.style.is_none()
+            && self.overflow.is_none()
+    }
+
     pub(crate) fn merge(&mut self, overrides: &Self) {
         merge_fields!(self, overrides; size, line_height, font, width, height,
             align_x, align_y, shaping, wrapping, color, style, overflow);
@@ -136,6 +184,18 @@ pub struct ContainerProps {
 }
 
 impl ContainerProps {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.width.is_none()
+            && self.height.is_none()
+            && self.max_width.is_none()
+            && self.max_height.is_none()
+            && self.padding.is_none()
+            && self.align_x.is_none()
+            && self.align_y.is_none()
+            && self.clip.is_none()
+            && self.style.is_none()
+    }
+
     pub(crate) fn merge(&mut self, overrides: &Self) {
         merge_fields!(self, overrides; width, height, max_width, max_height,
             padding, align_x, align_y, clip, style);
@@ -172,6 +232,14 @@ pub struct ButtonProps {
 }
 
 impl ButtonProps {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.width.is_none()
+            && self.height.is_none()
+            && self.padding.is_none()
+            && self.clip.is_none()
+            && self.style.is_none()
+    }
+
     pub(crate) fn merge(&mut self, overrides: &Self) {
         merge_fields!(self, overrides; width, height, padding, clip, style);
     }
@@ -211,6 +279,10 @@ pub struct EntryProps {
     /// Field-wise overrides for the Entry's existing native input presentation.
     pub input_props: Option<TextInputProps>,
 }
+
+impl_merge!(EntryProps;
+    fields: [width, padding, section_spacing, left_section_width, right_section_width, flat, state, color, metrics];
+    optional: [input_props]; nested: []);
 
 impl EntryProps {
     setters! {

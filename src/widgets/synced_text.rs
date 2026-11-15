@@ -227,7 +227,9 @@ impl SyncedTextWidgetProps {
         self
     }
     pub fn apply<'a, M>(&self, widget: SyncedText<'a, M>) -> SyncedText<'a, M> {
-        widget.props(self.clone())
+        let mut widget = widget;
+        widget.props.merge(self);
+        widget
     }
 }
 
@@ -356,3 +358,5 @@ mod native_click_support {
         messages
     }
 }
+
+crate::components::props::impl_merge!(SyncedTextWidgetProps; fields: []; optional: []; nested: [empty_container, placeholder, active_line, line, line_button, line_container]);

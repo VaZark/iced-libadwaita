@@ -1347,36 +1347,37 @@ impl TreeProps {
         self.metrics = Some(value.into());
         self
     }
-    pub fn apply<'a, M: Clone + 'a>(&self, mut widget: Tree<'a, M>) -> Tree<'a, M> {
-        if let Some(value) = self.expander_props.clone() {
-            widget = widget.expander_props(value);
+    pub fn apply<'a, M: Clone + 'a>(&self, widget: Tree<'a, M>) -> Tree<'a, M> {
+        let mut widget = widget;
+        if let Some(props) = &self.expander_props {
+            widget.expander_props.merge(props);
         }
-        if let Some(value) = self.label_button_props.clone() {
-            widget = widget.label_button_props(value);
+        if let Some(props) = &self.label_button_props {
+            widget.label_button_props.merge(props);
         }
-        if let Some(value) = self.checkbox_button_props.clone() {
-            widget = widget.checkbox_button_props(value);
+        if let Some(props) = &self.checkbox_button_props {
+            widget.checkbox_button_props.merge(props);
         }
-        if let Some(value) = self.row_props.clone() {
-            widget = widget.row_props(value);
+        if let Some(props) = &self.row_props {
+            widget.row_props.merge(props);
         }
-        if let Some(value) = self.level_offset.clone() {
-            widget = widget.level_offset(value);
+        if let Some(value) = &self.level_offset {
+            widget = widget.level_offset(value.clone());
         }
-        if let Some(value) = self.row_height.clone() {
-            widget = widget.row_height(value);
+        if let Some(value) = &self.row_height {
+            widget = widget.row_height(value.clone());
         }
-        if let Some(value) = self.icon_padding.clone() {
-            widget = widget.icon_padding(value);
+        if let Some(value) = &self.icon_padding {
+            widget = widget.icon_padding(value.clone());
         }
-        if let Some(value) = self.label_padding.clone() {
-            widget = widget.label_padding(value);
+        if let Some(value) = &self.label_padding {
+            widget = widget.label_padding(value.clone());
         }
-        if let Some(value) = self.checkbox_padding.clone() {
-            widget = widget.checkbox_padding(value);
+        if let Some(value) = &self.checkbox_padding {
+            widget = widget.checkbox_padding(value.clone());
         }
-        if let Some(value) = self.metrics.clone() {
-            widget = widget.metrics(value);
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
         }
         widget
     }

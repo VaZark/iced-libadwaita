@@ -25,6 +25,16 @@ pub struct TextInputProps {
 }
 
 impl TextInputProps {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.align_x.is_none()
+            && self.width.is_none()
+            && self.padding.is_none()
+            && self.size.is_none()
+            && self.font.is_none()
+            && self.line_height.is_none()
+            && self.style.is_none()
+    }
+
     pub(crate) fn merge(&mut self, overrides: &Self) {
         super::props::merge_fields!(self, overrides; align_x, width, padding, size,
             font, line_height, style);

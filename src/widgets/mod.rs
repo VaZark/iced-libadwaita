@@ -99,8 +99,8 @@ pub use infinite::{InfiniteList, LoadTrigger};
 pub use item_card::ItemCard;
 pub use item_row::{ItemColumns, ItemRow, PICTURE_WIDTH, SUFFIX_WIDTH, TIME_WIDTH};
 pub use menu::{
-    Menu, MenuButton, MenuCheckStyle, MenuIconSide, MenuItem, MenuPresentation, menu_button,
-    primary_menu,
+    Menu, MenuButton, MenuCheckStyle, MenuIconSide, MenuItem, MenuPresentation, MenuProps,
+    menu_button, primary_menu,
 };
 pub use multi_select::MultiSelect;
 pub use navigation::{

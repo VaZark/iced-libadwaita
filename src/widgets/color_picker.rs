@@ -951,24 +951,25 @@ impl ColorPickerProps {
         self.button_props = Some(value.into());
         self
     }
-    pub fn apply<'a, M: Clone + 'a>(&self, mut widget: ColorPicker<'a, M>) -> ColorPicker<'a, M> {
-        if let Some(value) = self.width.clone() {
-            widget = widget.width(value);
+    pub fn apply<'a, M: Clone + 'a>(&self, widget: ColorPicker<'a, M>) -> ColorPicker<'a, M> {
+        let mut widget = widget;
+        if let Some(value) = &self.width {
+            widget = widget.width(value.clone());
         }
-        if let Some(value) = self.spacing.clone() {
-            widget = widget.spacing(value);
+        if let Some(value) = &self.spacing {
+            widget = widget.spacing(value.clone());
         }
-        if let Some(value) = self.swatch_spacing.clone() {
-            widget = widget.swatch_spacing(value);
+        if let Some(value) = &self.swatch_spacing {
+            widget = widget.swatch_spacing(value.clone());
         }
-        if let Some(value) = self.metrics.clone() {
-            widget = widget.metrics(value);
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
         }
-        if let Some(value) = self.label_props.clone() {
-            widget = widget.label_props(value);
+        if let Some(props) = &self.label_props {
+            widget.label_props.merge(props);
         }
-        if let Some(value) = self.button_props.clone() {
-            widget = widget.button_props(value);
+        if let Some(props) = &self.button_props {
+            widget.button_props.merge(props);
         }
         widget
     }
@@ -1000,18 +1001,19 @@ impl ColorInputProps {
         self.entry_props = Some(value.into());
         self
     }
-    pub fn apply<'a, M: Clone + 'a>(&self, mut widget: ColorInput<'a, M>) -> ColorInput<'a, M> {
-        if let Some(value) = self.spacing.clone() {
-            widget = widget.spacing(value);
-        }
-        if let Some(value) = self.metrics.clone() {
-            widget = widget.metrics(value);
-        }
-        if let Some(value) = self.entry_props.clone() {
-            widget = widget.entry_props(value);
-        }
+    pub fn apply<'a, M: Clone + 'a>(&self, widget: ColorInput<'a, M>) -> ColorInput<'a, M> {
+        let mut widget = widget;
         if let Some(props) = &self.dropdown_props {
-            widget = widget.dropdown_props(props.clone());
+            widget.dropdown_props.merge(props);
+        }
+        if let Some(value) = &self.spacing {
+            widget = widget.spacing(value.clone());
+        }
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
+        }
+        if let Some(props) = &self.entry_props {
+            widget.entry_props.merge(props);
         }
         widget
     }

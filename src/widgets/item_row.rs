@@ -523,26 +523,19 @@ impl ItemRowProps {
         self
     }
     pub fn apply<'a, M: 'a>(&self, widget: ItemRow<'a, M>) -> ItemRow<'a, M> {
-        let widget = if let Some(props) = &self.title_props {
-            widget.title_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.subtitle_props {
-            widget.subtitle_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.text_container_props {
-            widget.text_container_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.container_props {
-            widget.container_props(props.clone())
-        } else {
-            widget
-        };
+        let mut widget = widget;
+        if let Some(props) = &self.title_props {
+            widget.title_props.merge(props);
+        }
+        if let Some(props) = &self.subtitle_props {
+            widget.subtitle_props.merge(props);
+        }
+        if let Some(props) = &self.text_container_props {
+            widget.text_container_props.merge(props);
+        }
+        if let Some(props) = &self.container_props {
+            widget.container_props.merge(props);
+        }
         widget
     }
 }
@@ -587,3 +580,5 @@ mod typed_presentation_tests {
         same_tree(&Tree::new(&baseline), &Tree::new(&configured));
     }
 }
+
+crate::components::props::impl_merge!(ItemRowProps; fields: []; optional: [title_props, subtitle_props, text_container_props, container_props]; nested: []);

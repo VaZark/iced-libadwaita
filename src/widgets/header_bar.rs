@@ -762,36 +762,37 @@ impl HeaderBarProps {
         self.metrics = Some(value.into());
         self
     }
-    pub fn apply<'a, M: 'a>(&self, mut widget: HeaderBar<'a, M>) -> HeaderBar<'a, M> {
-        if let Some(value) = self.title_props.clone() {
-            widget = widget.title_props(value);
+    pub fn apply<'a, M: 'a>(&self, widget: HeaderBar<'a, M>) -> HeaderBar<'a, M> {
+        let mut widget = widget;
+        if let Some(props) = &self.title_props {
+            widget.title_props.merge(props);
         }
-        if let Some(value) = self.subtitle_props.clone() {
-            widget = widget.subtitle_props(value);
+        if let Some(props) = &self.subtitle_props {
+            widget.subtitle_props.merge(props);
         }
-        if let Some(value) = self.controls_props.clone() {
-            widget = widget.controls_props(value);
+        if let Some(props) = &self.controls_props {
+            widget.controls_props.merge(props);
         }
-        if let Some(value) = self.container_props.clone() {
-            widget = widget.container_props(value);
+        if let Some(props) = &self.container_props {
+            widget.container_props.merge(props);
         }
-        if let Some(value) = self.spacing.clone() {
-            widget = widget.spacing(value);
+        if let Some(value) = &self.spacing {
+            widget = widget.spacing(value.clone());
         }
-        if let Some(value) = self.padding.clone() {
-            widget = widget.padding(value);
+        if let Some(value) = &self.padding {
+            widget = widget.padding(value.clone());
         }
-        if let Some(value) = self.height.clone() {
-            widget = widget.height(value);
+        if let Some(value) = &self.height {
+            widget = widget.height(value.clone());
         }
-        if let Some(value) = self.title_gap.clone() {
-            widget = widget.title_gap(value);
+        if let Some(value) = &self.title_gap {
+            widget = widget.title_gap(value.clone());
         }
-        if let Some(value) = self.flat.clone() {
-            widget = widget.flat(value);
+        if let Some(value) = &self.flat {
+            widget = widget.flat(value.clone());
         }
-        if let Some(value) = self.metrics.clone() {
-            widget = widget.metrics(value);
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
         }
         widget
     }

@@ -548,18 +548,19 @@ impl NumberInputProps {
         self.button_props = Some(value.into());
         self
     }
-    pub fn apply<'a, M>(&self, mut widget: NumberInput<'a, M>) -> NumberInput<'a, M> {
-        if let Some(value) = self.width.clone() {
-            widget = widget.width(value);
+    pub fn apply<'a, M>(&self, widget: NumberInput<'a, M>) -> NumberInput<'a, M> {
+        let mut widget = widget;
+        if let Some(value) = &self.width {
+            widget = widget.width(value.clone());
         }
-        if let Some(value) = self.metrics.clone() {
-            widget = widget.metrics(value);
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
         }
-        if let Some(value) = self.entry_props.clone() {
-            widget = widget.entry_props(value);
+        if let Some(props) = &self.entry_props {
+            widget.entry_props.merge(props);
         }
-        if let Some(value) = self.button_props.clone() {
-            widget = widget.button_props(value);
+        if let Some(props) = &self.button_props {
+            widget.button_props.merge(props);
         }
         widget
     }

@@ -221,21 +221,16 @@ impl ProfileHeaderProps {
         self
     }
     pub fn apply<'a, M: 'a>(&self, widget: ProfileHeader<'a, M>) -> ProfileHeader<'a, M> {
-        let widget = if let Some(props) = &self.title_props {
-            widget.title_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.description_props {
-            widget.description_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.container_props {
-            widget.container_props(props.clone())
-        } else {
-            widget
-        };
+        let mut widget = widget;
+        if let Some(props) = &self.title_props {
+            widget.title_props.merge(props);
+        }
+        if let Some(props) = &self.description_props {
+            widget.description_props.merge(props);
+        }
+        if let Some(props) = &self.container_props {
+            widget.container_props.merge(props);
+        }
         widget
     }
 }

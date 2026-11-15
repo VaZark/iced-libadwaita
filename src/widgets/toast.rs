@@ -640,36 +640,25 @@ impl ToastProps {
         self
     }
     pub fn apply<M>(&self, widget: Toast<M>) -> Toast<M> {
-        let widget = if let Some(props) = &self.title_props {
-            widget.title_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.action_label_props {
-            widget.action_label_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.action_props {
-            widget.action_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.dismiss_props {
-            widget.dismiss_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.status_props {
-            widget.status_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.container_props {
-            widget.container_props(props.clone())
-        } else {
-            widget
-        };
+        let mut widget = widget;
+        if let Some(props) = &self.title_props {
+            widget.title_props.merge(props);
+        }
+        if let Some(props) = &self.action_label_props {
+            widget.action_label_props.merge(props);
+        }
+        if let Some(props) = &self.action_props {
+            widget.action_props.merge(props);
+        }
+        if let Some(props) = &self.dismiss_props {
+            widget.dismiss_props.merge(props);
+        }
+        if let Some(props) = &self.status_props {
+            widget.status_props.merge(props);
+        }
+        if let Some(props) = &self.container_props {
+            widget.container_props.merge(props);
+        }
         widget
     }
 }

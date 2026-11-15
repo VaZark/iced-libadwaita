@@ -676,36 +676,25 @@ impl AlertDialogProps {
         self
     }
     pub fn apply<'a, M>(&self, widget: AlertDialog<'a, M>) -> AlertDialog<'a, M> {
-        let widget = if let Some(props) = &self.title_props {
-            widget.title_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.body_props {
-            widget.body_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.action_label_props {
-            widget.action_label_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.action_props {
-            widget.action_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.body_container_props {
-            widget.body_container_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.container_props {
-            widget.container_props(props.clone())
-        } else {
-            widget
-        };
+        let mut widget = widget;
+        if let Some(props) = &self.title_props {
+            widget.title_props.merge(props);
+        }
+        if let Some(props) = &self.body_props {
+            widget.body_props.merge(props);
+        }
+        if let Some(props) = &self.action_label_props {
+            widget.action_label_props.merge(props);
+        }
+        if let Some(props) = &self.action_props {
+            widget.action_props.merge(props);
+        }
+        if let Some(props) = &self.body_container_props {
+            widget.body_container_props.merge(props);
+        }
+        if let Some(props) = &self.container_props {
+            widget.container_props.merge(props);
+        }
         widget
     }
 }
@@ -771,61 +760,40 @@ impl AboutDialogProps {
         self
     }
     pub fn apply<'a, M>(&self, widget: AboutDialog<'a, M>) -> AboutDialog<'a, M> {
-        let widget = if let Some(props) = &self.title_props {
-            widget.title_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.developer_props {
-            widget.developer_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.version_props {
-            widget.version_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.version_container_props {
-            widget.version_container_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.body_props {
-            widget.body_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.website_props {
-            widget.website_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.license_props {
-            widget.license_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.action_label_props {
-            widget.action_label_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.action_props {
-            widget.action_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.body_container_props {
-            widget.body_container_props(props.clone())
-        } else {
-            widget
-        };
-        let widget = if let Some(props) = &self.container_props {
-            widget.container_props(props.clone())
-        } else {
-            widget
-        };
+        let mut widget = widget;
+        if let Some(props) = &self.title_props {
+            widget.title_props.merge(props);
+        }
+        if let Some(props) = &self.developer_props {
+            widget.developer_props.merge(props);
+        }
+        if let Some(props) = &self.version_props {
+            widget.version_props.merge(props);
+        }
+        if let Some(props) = &self.version_container_props {
+            widget.version_container_props.merge(props);
+        }
+        if let Some(props) = &self.body_props {
+            widget.body_props.merge(props);
+        }
+        if let Some(props) = &self.website_props {
+            widget.website_props.merge(props);
+        }
+        if let Some(props) = &self.license_props {
+            widget.license_props.merge(props);
+        }
+        if let Some(props) = &self.action_label_props {
+            widget.action_label_props.merge(props);
+        }
+        if let Some(props) = &self.action_props {
+            widget.action_props.merge(props);
+        }
+        if let Some(props) = &self.body_container_props {
+            widget.body_container_props.merge(props);
+        }
+        if let Some(props) = &self.container_props {
+            widget.container_props.merge(props);
+        }
         widget
     }
 }

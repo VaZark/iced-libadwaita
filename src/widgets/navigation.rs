@@ -372,12 +372,13 @@ fn sidebar_row_resolved<'a, M: Clone + 'a>(
     )
     .padding([0.0, g.row_padding])
     .align_y(Vertical::Center);
-    // The selected background fades in and out (`Highlight`); the button keeps hover/press.
+    // Resolve the final target style (including child overrides) inside the native
+    // button's callback. Selection changes its fill, never its shape or input state.
+    let target_style = props.button_props.style.clone();
     let btn = props.button_props.apply(
         button(props.content_props.apply(content.width(Length::Fill)))
             .padding(0)
             .width(Length::Fill)
-            .style(sb::sidebar_row(false))
             .on_press(on_press),
     );
     let opacity = density
@@ -385,7 +386,17 @@ fn sidebar_row_resolved<'a, M: Clone + 'a>(
         .variant_number("navigation", &density.variant, "selection-opacity")
         .filter(|v| v.is_finite() && (0.0..=1.0).contains(v))
         .unwrap_or(0.10);
-    crate::layouts::highlight(btn, selected, m.radius_m, opacity).into()
+    crate::layouts::Highlight::button(btn, selected, move |theme, status, progress| {
+        let target = target_style.as_ref().map_or_else(
+            || sb::sidebar_row(false)(theme, status),
+            |style| style(theme, status),
+        );
+        sb::with_underlay(
+            target,
+            crate::color::alpha(theme.semantic.sidebar.fg, opacity * progress),
+        )
+    })
+    .into()
 }
 
 /// Like [`navigation_sidebar`] but rounds the bottom corners to match a
@@ -1831,7 +1842,7 @@ mod local_variant_tests {
         }
     }
 
-    use iced::advanced::{layout, renderer::Headless, widget::Tree};
+    use iced::advanced::{Renderer as _, layout, renderer::Headless, widget::Tree};
     use iced::{Point, Rectangle};
 
     fn renderer() -> iced::Renderer {
@@ -2110,6 +2121,232 @@ mod local_variant_tests {
                 rects.iter().any(|r| r.x == 38.0 && r.width == 344.0),
                 "typed padding must override variant padding for {style:?}: {rects:?}"
             );
+        }
+    }
+
+    #[test]
+    fn selected_sidebar_pixels_follow_custom_target_corners_in_native_states() {
+        use iced::advanced::{Shell, clipboard, renderer as renderer_style};
+        use iced::widget::button::{Status, Style};
+        use iced::{Border, Color, Event, mouse, window};
+        let mut renderer = renderer();
+        let config = config("[navigation]\nselection-opacity=0.5");
+        let density = NavigationDensity {
+            metrics: Metrics::default(),
+            tokens: std::sync::Arc::new(config.tokens()),
+            variant: "md".into(),
+        };
+        let pill = iced::border::Radius::from(20.0);
+        let square = iced::border::Radius::from(0.0);
+        let asymmetric = iced::border::Radius {
+            top_left: 20.0,
+            top_right: 0.0,
+            bottom_right: 20.0,
+            bottom_left: 0.0,
+        };
+        let mut theme = Theme::light();
+        theme.semantic.sidebar.fg = Color::BLACK;
+        // Deliberately unrelated to the density metrics and custom target corners.
+        theme.metrics.radius_m = 7.0;
+        for shape in [0, 1, 2, 3] {
+            for status in [Status::Active, Status::Hovered, Status::Pressed] {
+                for selected in [false, true] {
+                    let radius_for = move |status| match shape {
+                        0 => pill,
+                        1 => square,
+                        2 => asymmetric,
+                        _ => match status {
+                            Status::Active => pill,
+                            Status::Hovered => square,
+                            _ => asymmetric,
+                        },
+                    };
+                    let props = SidebarRowProps::default().button_props(
+                        ButtonProps::default()
+                            .width(80)
+                            .height(40)
+                            .padding(0)
+                            .style(move |_, status| Style {
+                                background: match status {
+                                    Status::Hovered => {
+                                        Some(Color::from_rgba(0.0, 0.0, 0.0, 0.2).into())
+                                    }
+                                    Status::Pressed => {
+                                        Some(Color::from_rgba(0.0, 0.0, 0.0, 0.4).into())
+                                    }
+                                    _ => None,
+                                },
+                                text_color: Color::TRANSPARENT,
+                                border: Border::default().rounded(radius_for(status)),
+                                ..Default::default()
+                            }),
+                    );
+                    let mut element = sidebar_row_resolved(
+                        None,
+                        String::new(),
+                        selected,
+                        (),
+                        false,
+                        props,
+                        &density,
+                    );
+                    let mut tree = Tree::new(element.as_widget());
+                    let viewport = Rectangle::with_size(Size::new(100.0, 60.0));
+                    let node = element.as_widget_mut().layout(
+                        &mut tree,
+                        &renderer,
+                        &layout::Limits::new(Size::ZERO, viewport.size()),
+                    );
+                    let layout = layout::Layout::new(&node);
+                    assert_eq!(layout.bounds().size(), Size::new(80.0, 40.0));
+                    let cursor = if status == Status::Active {
+                        mouse::Cursor::Unavailable
+                    } else {
+                        mouse::Cursor::Available(Point::new(40.0, 20.0))
+                    };
+                    let mut messages = vec![];
+                    if status == Status::Pressed {
+                        element.as_widget_mut().update(
+                            &mut tree,
+                            &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                            layout,
+                            cursor,
+                            &renderer,
+                            &mut clipboard::Null,
+                            &mut Shell::new(&mut messages),
+                            &viewport,
+                        );
+                    }
+                    element.as_widget_mut().update(
+                        &mut tree,
+                        &Event::Window(window::Event::RedrawRequested(std::time::Instant::now())),
+                        layout,
+                        cursor,
+                        &renderer,
+                        &mut clipboard::Null,
+                        &mut Shell::new(&mut messages),
+                        &viewport,
+                    );
+                    renderer.reset(viewport);
+                    element.as_widget().draw(
+                        &tree,
+                        &mut renderer,
+                        &theme,
+                        &renderer_style::Style {
+                            text_color: Color::TRANSPARENT,
+                        },
+                        layout,
+                        cursor,
+                        &viewport,
+                    );
+                    let pixels = renderer.screenshot(Size::new(100, 60), 1.0, Color::WHITE);
+                    let pixel =
+                        |x: usize, y: usize| &pixels[(y * 100 + x) * 4..(y * 100 + x) * 4 + 4];
+                    let radius = radius_for(status);
+                    let has_fill = selected || status != Status::Active;
+                    for (x, y, corner) in [
+                        (1, 1, radius.top_left),
+                        (78, 1, radius.top_right),
+                        (78, 38, radius.bottom_right),
+                        (1, 38, radius.bottom_left),
+                    ] {
+                        if corner > 0.0 || !has_fill {
+                            assert_eq!(
+                                pixel(x, y),
+                                &[255, 255, 255, 255],
+                                "outside target: shape={shape}, {status:?}, selected={selected}"
+                            );
+                        } else {
+                            assert!(pixel(x, y)[0] < 255, "square target corner lost its fill");
+                        }
+                    }
+                    let expected_alpha = match status {
+                        Status::Hovered => 0.2 + if selected { 0.5 * 0.8 } else { 0.0 },
+                        Status::Pressed => 0.4 + if selected { 0.5 * 0.6 } else { 0.0 },
+                        _ => {
+                            if selected {
+                                0.5
+                            } else {
+                                0.0
+                            }
+                        }
+                    };
+                    let expected = ((1.0_f32 - expected_alpha) * 255.0).round() as i16;
+                    assert!(
+                        (i16::from(pixel(40, 20)[0]) - expected).abs() <= 1,
+                        "selection and native state fill must compose: {shape}, {status:?}, {selected}"
+                    );
+                    if status == Status::Pressed {
+                        element.as_widget_mut().update(
+                            &mut tree,
+                            &Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+                            layout,
+                            cursor,
+                            &renderer,
+                            &mut clipboard::Null,
+                            &mut Shell::new(&mut messages),
+                            &viewport,
+                        );
+                        assert_eq!(messages, vec![()]);
+                    }
+                    assert_eq!(pixel(90, 20), &[255, 255, 255, 255]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sidebar_selection_uses_the_draw_theme_not_view_build_metrics() {
+        use iced::advanced::{Shell, clipboard, renderer as renderer_style};
+        use iced::{Color, Event, mouse, window};
+        let mut renderer = renderer();
+        let config = config("[navigation]\nselection-opacity=0.5");
+        let density = NavigationDensity {
+            metrics: Metrics::default(),
+            tokens: std::sync::Arc::new(config.tokens()),
+            variant: "md".into(),
+        };
+        let props =
+            SidebarRowProps::default().button_props(ButtonProps::default().width(80).height(40));
+        let mut element =
+            sidebar_row_resolved(None, String::new(), true, (), false, props, &density);
+        let mut tree = Tree::new(element.as_widget());
+        let viewport = Rectangle::with_size(Size::new(100.0, 60.0));
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport.size()),
+        );
+        let layout = layout::Layout::new(&node);
+        element.as_widget_mut().update(
+            &mut tree,
+            &Event::Window(window::Event::RedrawRequested(std::time::Instant::now())),
+            layout,
+            mouse::Cursor::Unavailable,
+            &renderer,
+            &mut clipboard::Null,
+            &mut Shell::new(&mut vec![]),
+            &viewport,
+        );
+        for radius in [0.0, 20.0, 0.0] {
+            let mut theme = Theme::light();
+            theme.metrics.radius_m = radius;
+            theme.semantic.sidebar.fg = Color::BLACK;
+            renderer.reset(viewport);
+            element.as_widget().draw(
+                &tree,
+                &mut renderer,
+                &theme,
+                &renderer_style::Style {
+                    text_color: Color::TRANSPARENT,
+                },
+                layout,
+                mouse::Cursor::Unavailable,
+                &viewport,
+            );
+            let pixels = renderer.screenshot(Size::new(100, 60), 1.0, Color::WHITE);
+            assert_eq!(pixels[(100 + 1) * 4] == 255, radius > 0.0);
+            assert!(pixels[(20 * 100 + 40) * 4] < 255);
         }
     }
 

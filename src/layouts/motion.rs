@@ -1413,8 +1413,12 @@ impl<'a, M: 'a> From<PushStack<'a, M>> for Element<'a, M, Theme> {
 pub struct Highlight<'a, M> {
     content: Element<'a, M, Theme>,
     selected: bool,
-    radius: f32,
-    alpha: f32,
+    paint: HighlightPaint,
+}
+
+enum HighlightPaint {
+    Background { radius: f32, alpha: f32 },
+    Target(std::rc::Rc<std::cell::Cell<f32>>),
 }
 
 pub fn highlight<'a, M>(
@@ -1426,8 +1430,31 @@ pub fn highlight<'a, M>(
     Highlight {
         content: content.into(),
         selected,
-        radius,
-        alpha,
+        paint: HighlightPaint::Background { radius, alpha },
+    }
+}
+
+impl<'a, M: Clone + 'a> Highlight<'a, M> {
+    /// Animate a button effect through its actual target style rather than drawing
+    /// a second, independently shaped quad. `style` receives the native button status
+    /// and current selection progress, including on the first draw and during fade-out.
+    ///
+    /// Resolve the target's complete style first, then apply a color-only effect to it.
+    /// The button retains ownership of bounds, corners, border, shadow and input.
+    pub fn button(
+        content: iced::widget::Button<'a, M, Theme>,
+        selected: bool,
+        style: impl Fn(&Theme, iced::widget::button::Status, f32) -> iced::widget::button::Style + 'a,
+    ) -> Self {
+        let progress = std::rc::Rc::new(std::cell::Cell::new(if selected { 1.0 } else { 0.0 }));
+        let shown = progress.clone();
+        Self {
+            content: content
+                .style(move |theme, status| style(theme, status, shown.get()))
+                .into(),
+            selected,
+            paint: HighlightPaint::Target(progress),
+        }
     }
 }
 
@@ -1539,19 +1566,20 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Highlight<'a, M> {
         viewport: &Rectangle,
     ) {
         let p = tree.state.downcast_ref::<HighlightState>().progress.shown;
-        if p > 0.001 {
-            renderer.fill_quad(
-                Quad {
-                    bounds: layout.bounds(),
-                    border: Border::default().rounded(self.radius),
-                    shadow: Default::default(),
-                    snap: false,
-                },
-                Background::Color(crate::color::alpha(
-                    theme.semantic.sidebar.fg,
-                    self.alpha * p,
-                )),
-            );
+        match &self.paint {
+            HighlightPaint::Background { radius, alpha } if p > 0.001 => {
+                renderer.fill_quad(
+                    Quad {
+                        bounds: layout.bounds(),
+                        border: Border::default().rounded(*radius),
+                        shadow: Default::default(),
+                        snap: false,
+                    },
+                    Background::Color(crate::color::alpha(theme.semantic.sidebar.fg, alpha * p)),
+                );
+            }
+            HighlightPaint::Target(progress) => progress.set(p),
+            _ => {}
         }
         self.content.as_widget().draw(
             &tree.children[0],
@@ -1568,6 +1596,180 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Highlight<'a, M> {
 impl<'a, M: 'a> From<Highlight<'a, M>> for Element<'a, M, Theme> {
     fn from(h: Highlight<'a, M>) -> Self {
         Element::new(h)
+    }
+}
+
+#[cfg(test)]
+mod highlight_target_tests {
+    use super::*;
+    use iced::advanced::{clipboard, renderer::Headless};
+    use iced::widget::{button, space};
+    use std::{cell::RefCell, rc::Rc};
+
+    fn renderer() -> iced::Renderer {
+        iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer")
+    }
+
+    #[test]
+    fn target_callback_receives_native_status_current_theme_and_animation_progress() {
+        use iced::widget::button::{Status, Style};
+        let mut renderer = renderer();
+        let viewport = Rectangle::with_size(Size::new(100.0, 60.0));
+        let limits = layout::Limits::new(Size::ZERO, viewport.size());
+        for enabled in [false, true] {
+            let seen = Rc::new(RefCell::new(vec![]));
+            let capture = seen.clone();
+            let content = button(space())
+                .width(80)
+                .height(40)
+                .padding(0)
+                .on_press_maybe(enabled.then_some(()));
+            let mut highlight = Highlight::button(content, true, move |theme, status, p| {
+                capture
+                    .borrow_mut()
+                    .push((status, p, theme.metrics.radius_m));
+                Style {
+                    border: Border::default().rounded(theme.metrics.radius_m),
+                    ..Default::default()
+                }
+            });
+            let mut tree = Tree::new(&highlight as &dyn Widget<(), Theme, iced::Renderer>);
+            let node = highlight.layout(&mut tree, &renderer, &limits);
+            let layout = Layout::new(&node);
+            let mut messages = vec![];
+            for (status, cursor, press) in [
+                (Status::Active, mouse::Cursor::Unavailable, false),
+                (
+                    Status::Hovered,
+                    mouse::Cursor::Available(iced::Point::new(40.0, 20.0)),
+                    false,
+                ),
+                (
+                    Status::Pressed,
+                    mouse::Cursor::Available(iced::Point::new(40.0, 20.0)),
+                    true,
+                ),
+            ] {
+                if press {
+                    highlight.update(
+                        &mut tree,
+                        &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                        layout,
+                        cursor,
+                        &renderer,
+                        &mut clipboard::Null,
+                        &mut Shell::new(&mut messages),
+                        &viewport,
+                    );
+                }
+                highlight.update(
+                    &mut tree,
+                    &Event::Window(window::Event::RedrawRequested(Instant::now())),
+                    layout,
+                    cursor,
+                    &renderer,
+                    &mut clipboard::Null,
+                    &mut Shell::new(&mut messages),
+                    &viewport,
+                );
+                for radius in [0.0, 23.0] {
+                    let mut theme = Theme::light();
+                    theme.metrics.radius_m = radius;
+                    for progress in [0.0, 0.25, 1.0, 0.5, 0.0] {
+                        tree.state
+                            .downcast_mut::<HighlightState>()
+                            .progress
+                            .set_immediate(progress);
+                        renderer.reset(viewport);
+                        highlight.draw(
+                            &tree,
+                            &mut renderer,
+                            &theme,
+                            &renderer::Style {
+                                text_color: Color::BLACK,
+                            },
+                            layout,
+                            cursor,
+                            &viewport,
+                        );
+                        assert_eq!(
+                            seen.borrow().last(),
+                            Some(&(
+                                if enabled { status } else { Status::Disabled },
+                                progress,
+                                radius
+                            ))
+                        );
+                    }
+                }
+            }
+            highlight.update(
+                &mut tree,
+                &Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+                layout,
+                mouse::Cursor::Available(iced::Point::new(40.0, 20.0)),
+                &renderer,
+                &mut clipboard::Null,
+                &mut Shell::new(&mut messages),
+                &viewport,
+            );
+            assert_eq!(messages.len(), usize::from(enabled));
+            // New views retain the original animation state and child's tree position.
+            tree.state
+                .downcast_mut::<HighlightState>()
+                .progress
+                .set_immediate(0.4);
+            let replacement = Highlight::button(button(space()).on_press(()), false, |_, _, _| {
+                Style::default()
+            });
+            tree.diff(&replacement as &dyn Widget<(), Theme, iced::Renderer>);
+            assert_eq!(
+                tree.state.downcast_ref::<HighlightState>().progress.shown,
+                0.4
+            );
+            assert_eq!(tree.children.len(), 1);
+        }
+    }
+
+    #[test]
+    fn legacy_highlight_still_draws_its_explicit_radius_and_alpha() {
+        let mut renderer = renderer();
+        let mut theme = Theme::light();
+        theme.semantic.sidebar.fg = Color::BLACK;
+        let mut highlight = highlight::<()>(space().width(80).height(40), true, 20.0, 0.4);
+        let mut tree = Tree::new(&highlight as &dyn Widget<(), Theme, iced::Renderer>);
+        tree.state
+            .downcast_mut::<HighlightState>()
+            .progress
+            .set_immediate(0.5);
+        let viewport = Rectangle::with_size(Size::new(100.0, 60.0));
+        let node = highlight.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport.size()),
+        );
+        renderer.reset(viewport);
+        highlight.draw(
+            &tree,
+            &mut renderer,
+            &theme,
+            &renderer::Style {
+                text_color: Color::BLACK,
+            },
+            Layout::new(&node),
+            mouse::Cursor::Unavailable,
+            &viewport,
+        );
+        let pixels = renderer.screenshot(Size::new(100, 60), 1.0, Color::WHITE);
+        let pixel = |x: usize, y: usize| &pixels[(y * 100 + x) * 4..(y * 100 + x) * 4 + 4];
+        assert_eq!(pixel(1, 1), &[255, 255, 255, 255]);
+        assert!((i16::from(pixel(40, 20)[0]) - 204).abs() <= 1);
+        assert_eq!(pixel(90, 20), &[255, 255, 255, 255]);
     }
 }
 

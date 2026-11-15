@@ -1096,7 +1096,9 @@ impl StepperWidgetProps {
     where
         M: Clone + 'a,
     {
-        widget.props(self.clone())
+        let mut widget = widget;
+        widget.props.merge(self);
+        widget
     }
 }
 
@@ -1144,3 +1146,5 @@ mod native_behavior_tests {
         assert_eq!(click_sized(stepper.into()), vec![0]);
     }
 }
+
+crate::components::props::impl_merge!(StepperWidgetProps; fields: []; optional: []; nested: [invalid_label, loading_dot, number, mark, label, description, label_container, step_button, step_container, connector_segment, horizontal_connector, vertical_connector, rail, vertical_content, vertical_row, indicator, content]);

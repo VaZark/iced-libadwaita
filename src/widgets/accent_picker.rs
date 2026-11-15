@@ -213,18 +213,19 @@ impl AccentPickerProps {
         self.button_props = Some(value.into());
         self
     }
-    pub fn apply<'a, M: Clone + 'a>(&self, mut widget: AccentPicker<'a, M>) -> AccentPicker<'a, M> {
-        if let Some(value) = self.spacing.clone() {
-            widget = widget.spacing(value);
+    pub fn apply<'a, M: Clone + 'a>(&self, widget: AccentPicker<'a, M>) -> AccentPicker<'a, M> {
+        let mut widget = widget;
+        if let Some(value) = &self.spacing {
+            widget = widget.spacing(value.clone());
         }
-        if let Some(value) = self.metrics.clone() {
-            widget = widget.metrics(value);
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
         }
-        if let Some(value) = self.entry_props.clone() {
-            widget = widget.entry_props(value);
+        if let Some(props) = &self.entry_props {
+            widget.entry_props.merge(props);
         }
-        if let Some(value) = self.button_props.clone() {
-            widget = widget.button_props(value);
+        if let Some(props) = &self.button_props {
+            widget.button_props.merge(props);
         }
         widget
     }

@@ -83,7 +83,11 @@ fn apply(
         style.background = Some(g.background());
     }
     if let Some(fg) = v.color("fg") {
-        style.text_color = if status == Status::Disabled { disabled(fg) } else { fg };
+        style.text_color = if status == Status::Disabled {
+            disabled(fg)
+        } else {
+            fg
+        };
     }
     // A menu bar item turns white on the navy highlight: its own text color while hovered/pressed.
     match status {
@@ -138,12 +142,7 @@ fn builtin(name: &str) -> fn(&Theme, Status) -> Style {
 
 /// `base` with the tokens of the variant `name` over it, when the theme declares it. The public
 /// styles are these: each is the default variant of its name, so a theme can restyle it.
-fn tuned(
-    name: &str,
-    theme: &Theme,
-    status: Status,
-    base: fn(&Theme, Status) -> Style,
-) -> Style {
+fn tuned(name: &str, theme: &Theme, status: Status, base: fn(&Theme, Status) -> Style) -> Style {
     let style = base(theme, status);
     let v = theme.variant("button", name);
     if v.exists() {
@@ -488,7 +487,33 @@ pub fn flat_row(radius: f32, hover: f32, pressed: f32) -> impl Fn(&Theme, Status
     }
 }
 
-/// A row in a `.navigation-sidebar`; `selected` shows the accent-tinted pill.
+/// Add a color layer beneath the target's fill without changing any target geometry
+/// or text/border/shadow properties. Opaque custom fills continue to cover the layer;
+/// transparent hover/pressed fills compose over it just as separate stacked fills do.
+pub(crate) fn with_underlay(mut target: Style, underlay: Color) -> Style {
+    if underlay.a <= 0.0 {
+        return target;
+    }
+    target.background = Some(match target.background {
+        None => Background::Color(underlay),
+        Some(Background::Color(fill)) => {
+            Background::Color(crate::color::composite_over(fill, underlay))
+        }
+        Some(Background::Gradient(iced::Gradient::Linear(mut gradient))) => {
+            if gradient.stops.iter().all(Option::is_none) {
+                Background::Color(underlay)
+            } else {
+                for stop in gradient.stops.iter_mut().flatten() {
+                    stop.color = crate::color::composite_over(stop.color, underlay);
+                }
+                Background::Gradient(iced::Gradient::Linear(gradient))
+            }
+        }
+    });
+    target
+}
+
+/// A row in a `.navigation-sidebar`; `selected` shows the selection fill.
 pub fn sidebar_row(selected: bool) -> impl Fn(&Theme, Status) -> Style + Copy {
     move |theme, status| {
         let fg = theme.semantic.sidebar.fg;
@@ -669,6 +694,113 @@ pub fn osd(theme: &Theme, status: Status) -> Style {
 /// `.card`: a clickable card surface (`[button.card]`).
 pub fn card(theme: &Theme, status: Status) -> Style {
     tuned("card", theme, status, card_base)
+}
+
+#[cfg(test)]
+mod target_effect_tests {
+    use super::*;
+
+    #[test]
+    fn underlay_preserves_full_target_geometry_and_state_styles() {
+        let theme = Theme::light();
+        let underlay = alpha(theme.semantic.sidebar.fg, 0.3);
+        let asymmetric = iced::border::Radius {
+            top_left: 19.0,
+            top_right: 0.0,
+            bottom_right: 7.0,
+            bottom_left: 3.0,
+        };
+        for radius in [0.0.into(), 999.0.into(), asymmetric] {
+            for status in [
+                Status::Active,
+                Status::Hovered,
+                Status::Pressed,
+                Status::Disabled,
+            ] {
+                let mut target = sidebar_row(false)(&theme, status);
+                target.border = Border {
+                    radius,
+                    width: 2.0,
+                    color: Color::WHITE,
+                };
+                target.shadow = Shadow {
+                    color: Color::BLACK,
+                    offset: Vector::new(3.0, 4.0),
+                    blur_radius: 5.0,
+                };
+                target.snap = true;
+                let effect = with_underlay(target, underlay);
+                assert_eq!(effect.border, target.border);
+                assert_eq!(effect.shadow, target.shadow);
+                assert_eq!(effect.text_color, target.text_color);
+                assert_eq!(effect.snap, target.snap);
+                let expected = match target.background {
+                    Some(Background::Color(fill)) => crate::color::composite_over(fill, underlay),
+                    None => underlay,
+                    _ => unreachable!(),
+                };
+                assert_eq!(effect.background, Some(Background::Color(expected)));
+                assert_eq!(
+                    with_underlay(target, Color::TRANSPARENT).background,
+                    target.background
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn tuned_custom_styles_and_gradients_keep_their_properties() {
+        use crate::theme_config::{Schema, ThemeConfig};
+        let config = ThemeConfig::builder("target-shape")
+            .files(false)
+            .schema(Schema::toolkit().variant("button", "custom", &[]))
+            .toolkit_text("[button.custom]\nradius=99px\nbg=#ffffff\nhover-bg=#0000ff\nactive-bg=#ff0000\nborder-width=2px\nborder=#00ff00")
+            .app_text("").build();
+        let theme = Theme::light().with_theme_config(&config);
+        for status in [
+            Status::Active,
+            Status::Hovered,
+            Status::Pressed,
+            Status::Disabled,
+        ] {
+            let target = variant("custom")(&theme, status);
+            let effect = with_underlay(target, Color::BLACK);
+            assert_eq!(effect.border, target.border);
+            assert_eq!(effect.border.radius, 99.0.into());
+            assert_eq!(effect.text_color, target.text_color);
+            if status != Status::Disabled {
+                // An opaque custom fill still covers the selection beneath it.
+                assert_eq!(effect.background, target.background);
+            }
+        }
+        let gradient = iced::gradient::Linear::new(0.7)
+            .add_stop(0.0, Color::from_rgba(1.0, 0.0, 0.0, 0.4))
+            .add_stop(1.0, Color::from_rgb(0.0, 0.0, 1.0));
+        let target = Style {
+            background: Some(Background::Gradient(gradient.into())),
+            ..Default::default()
+        };
+        let underlay = Color::from_rgba(0.0, 1.0, 0.0, 0.2);
+        let Some(Background::Gradient(iced::Gradient::Linear(effect))) =
+            with_underlay(target, underlay).background
+        else {
+            panic!("gradient must be retained")
+        };
+        assert_eq!(effect.angle, gradient.angle);
+        for (before, after) in gradient.stops.iter().zip(effect.stops.iter()) {
+            match (before, after) {
+                (Some(before), Some(after)) => {
+                    assert_eq!(before.offset, after.offset);
+                    assert_eq!(
+                        after.color,
+                        crate::color::composite_over(before.color, underlay)
+                    );
+                }
+                (None, None) => {}
+                _ => panic!("gradient stop layout changed"),
+            }
+        }
+    }
 }
 
 #[cfg(test)]

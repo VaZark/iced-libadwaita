@@ -890,7 +890,9 @@ impl RichTextWidgetProps {
     where
         M: Clone + 'a,
     {
-        widget.props(self.clone())
+        let mut widget = widget;
+        widget.props.merge(self);
+        widget
     }
 }
 
@@ -898,6 +900,35 @@ impl RichTextWidgetProps {
 mod native_props_tests {
     use super::*;
     use crate::widgets::synced_text::native_props_tests::{assert_override, text_props};
+
+    #[test]
+    fn aggregate_apply_merges_rich_line_fields_and_retains_owned_style() {
+        let theme = Theme::light();
+        let original = RichTextWidgetProps {
+            line: RichTextLineProps::default()
+                .width(137)
+                .height(29)
+                .size(19)
+                .style(|_| iced::widget::text::Style::default()),
+            code: crate::components::TextProps::default().width(151),
+            ..Default::default()
+        };
+        let rich = RichText::<()>::new(&theme, &[]).props(original.clone());
+        let rich = RichTextWidgetProps::default().apply(rich);
+        let rich = RichTextWidgetProps {
+            line: RichTextLineProps::default().height(37),
+            ..Default::default()
+        }
+        .apply(rich);
+        assert_eq!(rich.props.line.width, original.line.width);
+        assert_eq!(rich.props.line.height, Some(37.into()));
+        assert_eq!(rich.props.line.size, original.line.size);
+        assert_eq!(rich.props.code.width, original.code.width);
+        assert!(std::sync::Arc::ptr_eq(
+            rich.props.line.style.as_ref().unwrap(),
+            original.line.style.as_ref().unwrap()
+        ));
+    }
     #[test]
     fn defaults_preserve_layout_and_overrides_reach_native_children() {
         let blocks = [Block::CodeBlock {
@@ -915,3 +946,7 @@ mod native_props_tests {
         );
     }
 }
+
+crate::components::props::impl_merge!(RichTextWidgetProps; fields: []; optional: []; nested: [line, image_container, quote, quote_bar, language, code, code_container, list_marker, marker_container, table_cell, definition_detail, footnote_marker_container, footnote_marker]);
+
+crate::components::props::impl_merge!(RichTextLineProps; fields: [size, font, color, width, height, align_x, align_y, line_height, wrapping, style]; optional: []; nested: []);
