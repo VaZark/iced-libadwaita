@@ -12,6 +12,62 @@ use iced::alignment::Vertical;
 use iced::widget::{button, container, row, text};
 use iced::{Length, Padding};
 
+/// Owned presentation overrides; default values preserve the component defaults.
+#[derive(Clone, Default)]
+pub struct BadgeProps {
+    pub role: Option<Role>,
+    pub solid: Option<bool>,
+    pub padding: Option<Padding>,
+    pub metrics: Option<Metrics>,
+    pub label_props: super::props::TextProps,
+    pub container_props: super::props::ContainerProps,
+}
+impl BadgeProps {
+    pub fn role(mut self, value: impl Into<Role>) -> Self {
+        self.role = Some(value.into());
+        self
+    }
+    pub fn solid(mut self, value: impl Into<bool>) -> Self {
+        self.solid = Some(value.into());
+        self
+    }
+    pub fn padding(mut self, value: impl Into<Padding>) -> Self {
+        self.padding = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+    pub fn apply(&self, widget: Badge) -> Badge {
+        let mut widget = widget;
+        if let Some(value) = self.role.clone() {
+            widget = widget.role(value);
+        }
+        if let Some(value) = self.solid.clone() {
+            widget = widget.solid(value);
+        }
+        if let Some(value) = self.padding.clone() {
+            widget = widget.padding(value);
+        }
+        if let Some(value) = self.metrics.clone() {
+            widget = widget.metrics(value);
+        }
+
+        widget
+            .label_props(self.label_props.clone())
+            .container_props(self.container_props.clone())
+    }
+}
+
 /// A read-only pill: a label or a count, tinted by a [`Role`] (or solid with [`solid`](Self::solid)).
 pub struct Badge {
     label: String,
@@ -19,11 +75,25 @@ pub struct Badge {
     solid: bool,
     padding: Option<Padding>,
     metrics: Metrics,
+    label_props: super::props::TextProps,
+    container_props: super::props::ContainerProps,
 }
 
 impl Badge {
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+
     pub fn new(label: impl Into<String>) -> Self {
         Self {
+            label_props: super::props::TextProps::default(),
+            container_props: super::props::ContainerProps::default(),
             label: label.into(),
             role: Role::Neutral,
             solid: false,
@@ -62,9 +132,11 @@ impl Badge {
 impl<'a, M: 'a> From<Badge> for Element<'a, M> {
     fn from(b: Badge) -> Self {
         let c = container(
-            text(b.label)
-                .size(crate::Typography::desktop().small)
-                .wrapping(text::Wrapping::None),
+            b.label_props.apply(
+                text(b.label)
+                    .size(crate::Typography::desktop().small)
+                    .wrapping(text::Wrapping::None),
+            ),
         )
         .padding(b.padding.unwrap_or(Padding::from([
             b.metrics.space_xxs * 0.5,
@@ -72,9 +144,9 @@ impl<'a, M: 'a> From<Badge> for Element<'a, M> {
         ])))
         .center_y(Length::Shrink);
         if b.solid {
-            c.style(sc::role(b.role)).into()
+            b.container_props.apply(c.style(sc::role(b.role))).into()
         } else {
-            c.style(sc::tinted(b.role)).into()
+            b.container_props.apply(c.style(sc::tinted(b.role))).into()
         }
     }
 }
@@ -87,6 +159,7 @@ impl<'a, M: 'a> From<Badge> for Element<'a, M> {
 /// RoundBadge::new(Icon::Check.view(12.0)).role(Role::Success).solid(true)
 /// ```
 pub struct RoundBadge<'a, M> {
+    container_props: super::props::ContainerProps,
     content: Element<'a, M>,
     role: Role,
     color: Option<iced::Color>,
@@ -95,8 +168,13 @@ pub struct RoundBadge<'a, M> {
 }
 
 impl<'a, M: 'a> RoundBadge<'a, M> {
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
     pub fn new(content: impl Into<Element<'a, M>>) -> Self {
         Self {
+            container_props: Default::default(),
             content: content.into(),
             role: Role::Neutral,
             color: None,
@@ -128,28 +206,29 @@ impl<'a, M: 'a> RoundBadge<'a, M> {
 impl<'a, M: 'a> From<RoundBadge<'a, M>> for Element<'a, M> {
     fn from(b: RoundBadge<'a, M>) -> Self {
         let (role, solid, size, custom) = (b.role, b.solid, b.size, b.color);
-        container(b.content)
-            .center(Length::Fixed(size))
-            .style(move |t: &crate::Theme| {
-                let base = match (custom, solid) {
-                    (Some(c), true) => iced::widget::container::Style {
-                        text_color: Some(crate::color::readable_on(c)),
-                        background: Some(iced::Background::Color(c)),
-                        ..Default::default()
-                    },
-                    (Some(c), false) => iced::widget::container::Style {
-                        text_color: Some(c),
-                        background: Some(iced::Background::Color(crate::color::alpha(c, 0.18))),
-                        ..Default::default()
-                    },
-                    (None, true) => sc::role(role)(t),
-                    (None, false) => sc::tinted(role)(t),
-                };
-                iced::widget::container::Style {
-                    border: iced::Border::default().rounded(size / 2.0),
-                    ..base
-                }
-            })
+        b.container_props
+            .apply(container(b.content).center(Length::Fixed(size)).style(
+                move |t: &crate::Theme| {
+                    let base = match (custom, solid) {
+                        (Some(c), true) => iced::widget::container::Style {
+                            text_color: Some(crate::color::readable_on(c)),
+                            background: Some(iced::Background::Color(c)),
+                            ..Default::default()
+                        },
+                        (Some(c), false) => iced::widget::container::Style {
+                            text_color: Some(c),
+                            background: Some(iced::Background::Color(crate::color::alpha(c, 0.18))),
+                            ..Default::default()
+                        },
+                        (None, true) => sc::role(role)(t),
+                        (None, false) => sc::tinted(role)(t),
+                    };
+                    iced::widget::container::Style {
+                        border: iced::Border::default().rounded(size / 2.0),
+                        ..base
+                    }
+                },
+            ))
             .into()
     }
 }
@@ -176,12 +255,51 @@ impl ChipSize {
     /// `(text size, icon size, vertical padding, horizontal padding)` for `m`.
     fn dims(self, m: &Metrics) -> (f32, f32, f32, f32) {
         // Medium follows the metrics; the others step from it.
-        let (t, i, p, r) = (crate::Typography::desktop().small, m.icon_size - 2.0, m.space_xxs, m.space_m - 1.0);
+        let (t, i, p, r) = (
+            crate::Typography::desktop().small,
+            m.icon_size - 2.0,
+            m.space_xxs,
+            m.space_m - 1.0,
+        );
         match self {
             Self::Small => (t - 2.0, i - 4.0, p * 0.5, r - 3.0),
             Self::Medium => (t, i, p, r),
             Self::Large => (t + 2.0, i + 2.0, p * 2.0, r + 3.0),
         }
+    }
+}
+
+/// Owned presentation overrides; default values preserve the component defaults.
+#[derive(Clone, Default)]
+pub struct ChipProps {
+    pub label_props: super::props::TextProps,
+    pub button_props: super::props::ButtonProps,
+    pub remove_button_props: super::props::ButtonProps,
+    pub container_props: super::props::ContainerProps,
+}
+impl ChipProps {
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn button_props(mut self, props: super::props::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+    pub fn remove_button_props(mut self, props: super::props::ButtonProps) -> Self {
+        self.remove_button_props = props;
+        self
+    }
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: Chip<'a, M>) -> Chip<'a, M> {
+        widget
+            .label_props(self.label_props.clone())
+            .button_props(self.button_props.clone())
+            .remove_button_props(self.remove_button_props.clone())
+            .container_props(self.container_props.clone())
     }
 }
 
@@ -204,9 +322,29 @@ pub struct Chip<'a, M> {
     remove_padding: Option<Padding>,
     metrics: Metrics,
     _p: std::marker::PhantomData<&'a ()>,
+    label_props: super::props::TextProps,
+    button_props: super::props::ButtonProps,
+    remove_button_props: super::props::ButtonProps,
+    container_props: super::props::ContainerProps,
 }
 
 impl<'a, M> Chip<'a, M> {
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn button_props(mut self, props: super::props::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+    pub fn remove_button_props(mut self, props: super::props::ButtonProps) -> Self {
+        self.remove_button_props = props;
+        self
+    }
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
     /// A chip with a label, which must not be empty: for an icon alone, use
     /// [`from_icon`](Self::from_icon). Add an icon beside the label with [`icon`](Self::icon).
     pub fn new(label: impl Into<String>) -> Self {
@@ -232,6 +370,10 @@ impl<'a, M> Chip<'a, M> {
 
     fn build(label: String, icon: Option<IconSource>) -> Self {
         Self {
+            label_props: Default::default(),
+            button_props: Default::default(),
+            remove_button_props: Default::default(),
+            container_props: Default::default(),
             label,
             icon,
             color: None,
@@ -423,32 +565,39 @@ impl<'a, M: Clone + 'a> From<Chip<'a, M>> for Element<'a, M> {
         }
         // A chip with an icon and no label is just the icon, evenly padded.
         if !(c.label.is_empty() && c.icon.is_some()) {
-            body = body.push(text(c.label).size(text_size).wrapping(text::Wrapping::None));
+            body = body.push(
+                c.label_props
+                    .apply(text(c.label).size(text_size).wrapping(text::Wrapping::None)),
+            );
         }
-        let main = button(body)
-            .padding(c.padding.unwrap_or(Padding::from([pad_y, pad_x])))
-            .style(inner)
-            .on_press_maybe(c.on_press.filter(|_| !disabled));
+        let main = c.button_props.apply(
+            button(body)
+                .padding(c.padding.unwrap_or(Padding::from([pad_y, pad_x])))
+                .style(inner)
+                .on_press_maybe(c.on_press.filter(|_| !disabled)),
+        );
         let mut pill = row![main].align_y(Vertical::Center);
         if let Some(rm) = c.on_remove {
             pill = pill.push(
-                button(
-                    Icon::WindowClose
-                        .view(icon_size)
-                        .style(move |t: &Theme, _| iced::widget::svg::Style {
-                            color: Some(tint(t)),
-                        }),
-                )
-                .padding(
-                    c.remove_padding
-                        .unwrap_or(Padding::from([m.space_xxs, m.space_xs])),
-                )
-                .style(inner)
-                .on_press_maybe((!disabled).then_some(rm)),
+                c.remove_button_props.apply(
+                    button(
+                        Icon::WindowClose
+                            .view(icon_size)
+                            .style(move |t: &Theme, _| iced::widget::svg::Style {
+                                color: Some(tint(t)),
+                            }),
+                    )
+                    .padding(
+                        c.remove_padding
+                            .unwrap_or(Padding::from([m.space_xxs, m.space_xs])),
+                    )
+                    .style(inner)
+                    .on_press_maybe((!disabled).then_some(rm)),
+                ),
             );
         }
-        container(pill)
-            .style(move |t: &Theme| {
+        c.container_props
+            .apply(container(pill).style(move |t: &Theme| {
                 let (bg, fg) = chip_colors(t, role, custom, selected, disabled);
                 iced::widget::container::Style {
                     text_color: Some(fg),
@@ -456,7 +605,7 @@ impl<'a, M: Clone + 'a> From<Chip<'a, M>> for Element<'a, M> {
                     border: iced::Border::default().rounded(t.metrics.radius_pill),
                     ..Default::default()
                 }
-            })
+            }))
             .into()
     }
 }
@@ -533,7 +682,101 @@ mod spacing_params {
             .padding(2.0)
             .remove_padding(3.0)
             .on_remove(());
-        assert_eq!((c.spacing, c.padding), (Some(1.0), Some(Padding::from(2.0))));
+        assert_eq!(
+            (c.spacing, c.padding),
+            (Some(1.0), Some(Padding::from(2.0)))
+        );
         let _: Element<'_, ()> = c.into();
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct RoundBadgeProps {
+    pub role: Option<Role>,
+    pub solid: Option<bool>,
+    pub size: Option<f32>,
+    pub color: Option<iced::Color>,
+    pub container_props: super::props::ContainerProps,
+}
+impl RoundBadgeProps {
+    pub fn role(mut self, value: impl Into<Role>) -> Self {
+        self.role = Some(value.into());
+        self
+    }
+    pub fn solid(mut self, value: impl Into<bool>) -> Self {
+        self.solid = Some(value.into());
+        self
+    }
+    pub fn size(mut self, value: impl Into<f32>) -> Self {
+        self.size = Some(value.into());
+        self
+    }
+    pub fn color(mut self, value: impl Into<iced::Color>) -> Self {
+        self.color = Some(value.into());
+        self
+    }
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+    pub fn apply<'a, M: 'a>(&self, widget: RoundBadge<'a, M>) -> RoundBadge<'a, M> {
+        let mut widget = widget;
+        if let Some(value) = self.role.clone() {
+            widget = widget.role(value);
+        }
+        if let Some(value) = self.solid.clone() {
+            widget = widget.solid(value);
+        }
+        if let Some(value) = self.size.clone() {
+            widget = widget.size(value);
+        }
+        if let Some(value) = self.color.clone() {
+            widget = widget.color(value);
+        }
+        widget.container_props(self.container_props.clone())
+    }
+}
+
+#[cfg(test)]
+mod nested_props_tests {
+    use super::super::props::{ButtonProps, ContainerProps, TextProps};
+    use super::*;
+    use iced::advanced::widget::Tree;
+
+    #[test]
+    fn badge_props_reach_existing_label_and_surface_without_extra_wrappers() {
+        let plain: Element<'_, ()> = Badge::new("日本語 🦀").into();
+        let default: Element<'_, ()> = BadgeProps::default().apply(Badge::new("日本語 🦀")).into();
+        assert_eq!(plain.as_widget().size(), default.as_widget().size());
+        assert_eq!(
+            Tree::new(&plain).children.len(),
+            Tree::new(&default).children.len()
+        );
+        let custom: Element<'_, ()> = BadgeProps::default()
+            .label_props(TextProps::default().width(70))
+            .container_props(ContainerProps::default().width(160).height(40))
+            .apply(Badge::new("label"))
+            .into();
+        assert_eq!(
+            custom.as_widget().size(),
+            iced::Size::new(Length::Fixed(160.0), Length::Fixed(40.0))
+        );
+        let tree = Tree::new(&custom);
+        assert_eq!(tree.children.len(), Tree::new(&plain).children.len());
+    }
+
+    #[test]
+    fn chip_nested_overrides_do_not_change_selection_or_actions() {
+        let chip = Chip::new("tag")
+            .selected(true)
+            .disabled(true)
+            .on_press(1u8)
+            .on_remove(2)
+            .label_props(TextProps::default().size(18))
+            .button_props(ButtonProps::default().padding(10))
+            .remove_button_props(ButtonProps::default().padding(3));
+        assert!(chip.selected && chip.disabled);
+        assert_eq!((chip.on_press, chip.on_remove), (Some(1), Some(2)));
+        let _: Element<'_, u8> = chip.into();
     }
 }

@@ -14,9 +14,9 @@
 use crate::Element;
 use crate::components::ButtonContent;
 use crate::components::button::sized;
+use crate::components::{ButtonProps, ContainerProps, TextProps};
 use crate::styles::button::{self as sb, Position};
 use crate::widgets::Menu;
-use crate::widgets::dropdown::{menu_item, menu_item_disabled};
 use crate::widgets::popover::{Align, Appearance, Popover, popover};
 use crate::{Icon, Metrics, Theme};
 use iced::Length;
@@ -29,17 +29,21 @@ fn joined<'a, M: Clone + 'a>(
     disabled: bool,
     open: bool,
     m: &Metrics,
+    arrow_props: &ContainerProps,
+    separator_props: &ContainerProps,
 ) -> Element<'a, M> {
-    let arrow = container(Icon::GoDown.view(m.icon_size).style(move |t: &Theme, _| {
-        iced::widget::svg::Style {
-            color: Some(if disabled {
-                crate::color::fade(t.semantic.window.fg, t.semantic.opacity.disabled)
-            } else {
-                t.semantic.window.fg
-            }),
-        }
-    }))
-    .center_y(Length::Fixed(m.button_min_height - m.button_padding.y()));
+    let arrow = arrow_props.apply(
+        container(Icon::GoDown.view(m.icon_size).style(move |t: &Theme, _| {
+            iced::widget::svg::Style {
+                color: Some(if disabled {
+                    crate::color::fade(t.semantic.window.fg, t.semantic.opacity.disabled)
+                } else {
+                    t.semantic.window.fg
+                }),
+            }
+        }))
+        .center_y(Length::Fixed(m.button_min_height - m.button_padding.y())),
+    );
     let menu = Popover::new(arrow, popover)
         .appearance(Appearance::Linked(Position::End))
         .align(Align::End)
@@ -48,8 +52,10 @@ fn joined<'a, M: Clone + 'a>(
         .open_initially(open);
     row![
         main,
-        container(space().width(1).height(Length::Fill))
-            .style(crate::styles::container::bar_separator),
+        separator_props.apply(
+            container(space().width(1).height(Length::Fill))
+                .style(crate::styles::container::bar_separator)
+        ),
         menu,
     ]
     .height(Length::Shrink)
@@ -64,6 +70,9 @@ pub struct SplitButton<'a, M> {
     disabled: bool,
     open: bool,
     metrics: Metrics,
+    main_button_props: ButtonProps,
+    arrow_props: ContainerProps,
+    separator_props: ContainerProps,
 }
 
 /// A [`SplitButton`] with `content` as its label, `on_press` as its action and `menu` behind the
@@ -77,8 +86,24 @@ pub fn split_button<'a, M: Clone + 'a>(
 }
 
 impl<'a, M: Clone + 'a> SplitButton<'a, M> {
+    /// Presentation overrides applied after the child's defaults.
+    pub fn main_button_props(mut self, props: ButtonProps) -> Self {
+        self.main_button_props = props;
+        self
+    }
+    pub fn arrow_props(mut self, props: ContainerProps) -> Self {
+        self.arrow_props = props;
+        self
+    }
+    pub fn separator_props(mut self, props: ContainerProps) -> Self {
+        self.separator_props = props;
+        self
+    }
     pub fn new(content: impl Into<Element<'a, M>>, on_press: M, menu: Menu<M>) -> Self {
         Self {
+            arrow_props: ContainerProps::default(),
+            separator_props: ContainerProps::default(),
+            main_button_props: ButtonProps::default(),
             content: content.into(),
             on_press,
             menu,
@@ -107,6 +132,7 @@ impl<'a, M: Clone + 'a> From<SplitButton<'a, M>> for Element<'a, M> {
     fn from(s: SplitButton<'a, M>) -> Self {
         let m = s.metrics;
         let main = sized(s.content, &m).style(sb::linked(Position::Start));
+        let main = s.main_button_props.apply(main);
         let main = if s.disabled {
             main
         } else {
@@ -118,6 +144,8 @@ impl<'a, M: Clone + 'a> From<SplitButton<'a, M>> for Element<'a, M> {
             s.disabled,
             s.open,
             &m,
+            &s.arrow_props,
+            &s.separator_props,
         );
         // Like a menu button, it registers the accelerators its menu shows.
         crate::shortcut::Shortcuts::new()
@@ -168,11 +196,37 @@ pub struct SplitButtonAction<'a, T, M> {
     disabled: bool,
     open: bool,
     metrics: Metrics,
+    main_button_props: ButtonProps,
+    arrow_props: ContainerProps,
+    separator_props: ContainerProps,
+    label_props: TextProps,
+    option_props: super::dropdown::DropdownItemProps,
 }
 
 impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> SplitButtonAction<'a, T, M> {
     /// `on_select(value)` is sent when a menu item is chosen (change the selection, do not run
     /// it); `on_press(value)` when the button is pressed, with the selected value.
+    /// Presentation overrides applied after the child's defaults.
+    pub fn main_button_props(mut self, props: ButtonProps) -> Self {
+        self.main_button_props = props;
+        self
+    }
+    pub fn arrow_props(mut self, props: ContainerProps) -> Self {
+        self.arrow_props = props;
+        self
+    }
+    pub fn separator_props(mut self, props: ContainerProps) -> Self {
+        self.separator_props = props;
+        self
+    }
+    pub fn label_props(mut self, props: TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn option_props(mut self, props: super::dropdown::DropdownItemProps) -> Self {
+        self.option_props = props;
+        self
+    }
     pub fn new(
         actions: impl IntoIterator<Item = SplitAction<T>>,
         selected: T,
@@ -180,6 +234,11 @@ impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> SplitButtonAction<'a, T, M> {
         on_press: impl Fn(T) -> M + 'a,
     ) -> Self {
         Self {
+            arrow_props: ContainerProps::default(),
+            separator_props: ContainerProps::default(),
+            label_props: TextProps::default(),
+            option_props: super::dropdown::DropdownItemProps::default(),
+            main_button_props: ButtonProps::default(),
             actions: actions.into_iter().collect(),
             selected,
             on_select: Box::new(on_select),
@@ -217,11 +276,14 @@ impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> From<SplitButtonAction<'a, T,
             .find(|a| a.value == s.selected)
             .or_else(|| s.actions.first());
         let label = current.map(|a| a.label.clone()).unwrap_or_default();
-        let mut content = ButtonContent::new(label).metrics(m);
+        let mut content = ButtonContent::new(label)
+            .metrics(m)
+            .label_props(s.label_props);
         if let Some(icon) = current.and_then(|a| a.icon) {
             content = content.icon(icon);
         }
         let main = sized(Element::from(content), &m).style(sb::linked(Position::Start));
+        let main = s.main_button_props.apply(main);
         let main = if s.disabled || current.is_none() {
             main
         } else {
@@ -232,13 +294,30 @@ impl<'a, T: Clone + PartialEq + 'a, M: Clone + 'a> From<SplitButtonAction<'a, T,
         let items = s.actions.iter().map(|a| {
             let selected = a.value == s.selected;
             if a.disabled {
-                menu_item_disabled(a.label.clone(), selected)
+                super::dropdown::menu_item_disabled_with_props(
+                    a.label.clone(),
+                    selected,
+                    s.option_props.clone(),
+                )
             } else {
-                menu_item(a.label.clone(), selected, (s.on_select)(a.value.clone()))
+                super::dropdown::menu_item_with_props(
+                    a.label.clone(),
+                    selected,
+                    (s.on_select)(a.value.clone()),
+                    s.option_props.clone(),
+                )
             }
         });
         let items: Vec<Element<'a, M>> = items.collect();
-        joined(main.into(), popover(items, 280.0), s.disabled, s.open, &m)
+        joined(
+            main.into(),
+            popover(items, 280.0),
+            s.disabled,
+            s.open,
+            &m,
+            &s.arrow_props,
+            &s.separator_props,
+        )
     }
 }
 

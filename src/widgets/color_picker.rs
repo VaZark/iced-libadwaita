@@ -389,6 +389,8 @@ impl<'a, M: 'a> From<Surface<'a, M>> for Element<'a, M> {
 
 /// A color picker. See the [module](self).
 pub struct ColorPicker<'a, M> {
+    label_props: crate::components::TextProps,
+    button_props: crate::components::ButtonProps,
     value: Hsva,
     on_change: Option<std::rc::Rc<dyn Fn(Hsva) -> M + 'a>>,
     alpha: bool,
@@ -402,8 +404,21 @@ pub struct ColorPicker<'a, M> {
 }
 
 impl<'a, M: Clone + 'a> ColorPicker<'a, M> {
+    pub fn label_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
+    pub fn button_props(mut self, props: crate::components::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+
     pub fn new(value: Hsva, on_change: impl Fn(Hsva) -> M + 'a) -> Self {
         Self {
+            label_props: Default::default(),
+            button_props: Default::default(),
+
             value,
             on_change: Some(std::rc::Rc::new(on_change)),
             alpha: false,
@@ -504,10 +519,13 @@ impl<'a, M: Clone + 'a> From<ColorPicker<'a, M>> for Element<'a, M> {
                 .iter()
                 .map(|&c| {
                     let on_press = change.as_ref().map(|f| f(c));
-                    button(chip(c, m.button_min_height))
-                        .padding(0)
-                        .style(sb::flat)
-                        .on_press_maybe(on_press)
+                    p.button_props
+                        .apply(
+                            button(chip(c, m.button_min_height))
+                                .padding(0)
+                                .style(sb::flat)
+                                .on_press_maybe(on_press),
+                        )
                         .into()
                 })
                 .collect();
@@ -528,7 +546,7 @@ impl<'a, M: Clone + 'a> From<ColorPicker<'a, M>> for Element<'a, M> {
             col = col.push(
                 row![
                     chip(p.value, m.icon_size),
-                    ty::monospace(p.value.format(format))
+                    p.label_props.apply(ty::monospace(p.value.format(format)))
                 ]
                 .spacing(m.space_s)
                 .align_y(iced::Alignment::Center),
@@ -542,6 +560,8 @@ impl<'a, M: Clone + 'a> From<ColorPicker<'a, M>> for Element<'a, M> {
 /// [`ColorPicker`] with an entry for the color code, in a popover or a dialog. See the
 /// [module](self).
 pub struct ColorInput<'a, M> {
+    dropdown_props: super::popover::PopoverProps,
+    entry_props: crate::components::EntryProps,
     value: Hsva,
     text: &'a str,
     on_input: Box<dyn Fn(String) -> M + 'a>,
@@ -560,6 +580,16 @@ pub struct ColorInput<'a, M> {
 }
 
 impl<'a, M: Clone + 'a> ColorInput<'a, M> {
+    pub fn dropdown_props(mut self, props: super::popover::PopoverProps) -> Self {
+        self.dropdown_props = props;
+        self
+    }
+
+    pub fn entry_props(mut self, props: crate::components::EntryProps) -> Self {
+        self.entry_props = props;
+        self
+    }
+
     /// `text` is what the entry in the picker shows (the app keeps it, so typing is not
     /// interrupted); `value` is the color. `on_input` gets the typed text, `on_change` a color
     /// picked with the controls: parse the text with [`Hsva::parse`] and format a picked color
@@ -571,6 +601,9 @@ impl<'a, M: Clone + 'a> ColorInput<'a, M> {
         on_change: impl Fn(Hsva) -> M + 'a,
     ) -> Self {
         Self {
+            dropdown_props: Default::default(),
+            entry_props: Default::default(),
+
             value,
             text,
             on_input: Box::new(on_input),
@@ -667,7 +700,10 @@ impl<'a, M: Clone + 'a> From<ColorInput<'a, M>> for Element<'a, M> {
             entry = entry.state(crate::components::EntryState::Error);
         }
         let content = popover(
-            [Element::from(picker), Element::from(entry)],
+            [
+                Element::from(picker),
+                Element::from(i.entry_props.apply(entry)),
+            ],
             m.clamp_maximum,
         );
         let trigger = i.trigger.unwrap_or_else(|| color_box(i.value, m));
@@ -689,7 +725,7 @@ impl<'a, M: Clone + 'a> From<ColorInput<'a, M>> for Element<'a, M> {
         if i.dialog {
             opener = opener.presentation(crate::widgets::PopoverPresentation::Dialog);
         }
-        opener.into()
+        i.dropdown_props.apply(opener).into()
     }
 }
 
@@ -877,5 +913,106 @@ mod metric_regressions {
         assert_eq!(picker.width, None);
         let explicit = picker.width(123.0).metrics(Metrics::default());
         assert_eq!(explicit.width, Some(Length::Fixed(123.0)));
+    }
+}
+
+/// Presentation-only overrides supported by [`ColorPicker`]. Values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct ColorPickerProps {
+    pub width: Option<iced::Length>,
+    pub spacing: Option<f32>,
+    pub swatch_spacing: Option<f32>,
+    pub metrics: Option<crate::Metrics>,
+    pub label_props: Option<crate::components::TextProps>,
+    pub button_props: Option<crate::components::ButtonProps>,
+}
+impl ColorPickerProps {
+    pub fn width(mut self, value: impl Into<iced::Length>) -> Self {
+        self.width = Some(value.into());
+        self
+    }
+    pub fn spacing(mut self, value: impl Into<f32>) -> Self {
+        self.spacing = Some(value.into());
+        self
+    }
+    pub fn swatch_spacing(mut self, value: impl Into<f32>) -> Self {
+        self.swatch_spacing = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<crate::Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn label_props(mut self, value: impl Into<crate::components::TextProps>) -> Self {
+        self.label_props = Some(value.into());
+        self
+    }
+    pub fn button_props(mut self, value: impl Into<crate::components::ButtonProps>) -> Self {
+        self.button_props = Some(value.into());
+        self
+    }
+    pub fn apply<'a, M: Clone + 'a>(&self, mut widget: ColorPicker<'a, M>) -> ColorPicker<'a, M> {
+        if let Some(value) = self.width.clone() {
+            widget = widget.width(value);
+        }
+        if let Some(value) = self.spacing.clone() {
+            widget = widget.spacing(value);
+        }
+        if let Some(value) = self.swatch_spacing.clone() {
+            widget = widget.swatch_spacing(value);
+        }
+        if let Some(value) = self.metrics.clone() {
+            widget = widget.metrics(value);
+        }
+        if let Some(value) = self.label_props.clone() {
+            widget = widget.label_props(value);
+        }
+        if let Some(value) = self.button_props.clone() {
+            widget = widget.button_props(value);
+        }
+        widget
+    }
+}
+
+/// Presentation-only overrides supported by [`ColorInput`]. Values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct ColorInputProps {
+    pub dropdown_props: Option<super::popover::PopoverProps>,
+    pub spacing: Option<f32>,
+    pub metrics: Option<crate::Metrics>,
+    pub entry_props: Option<crate::components::EntryProps>,
+}
+impl ColorInputProps {
+    pub fn dropdown_props(mut self, props: super::popover::PopoverProps) -> Self {
+        self.dropdown_props = Some(props);
+        self
+    }
+
+    pub fn spacing(mut self, value: impl Into<f32>) -> Self {
+        self.spacing = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<crate::Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn entry_props(mut self, value: impl Into<crate::components::EntryProps>) -> Self {
+        self.entry_props = Some(value.into());
+        self
+    }
+    pub fn apply<'a, M: Clone + 'a>(&self, mut widget: ColorInput<'a, M>) -> ColorInput<'a, M> {
+        if let Some(value) = self.spacing.clone() {
+            widget = widget.spacing(value);
+        }
+        if let Some(value) = self.metrics.clone() {
+            widget = widget.metrics(value);
+        }
+        if let Some(value) = self.entry_props.clone() {
+            widget = widget.entry_props(value);
+        }
+        if let Some(props) = &self.dropdown_props {
+            widget = widget.dropdown_props(props.clone());
+        }
+        widget
     }
 }

@@ -43,6 +43,7 @@
 //! give the same [`Validity`] for a [`Field`](crate::widgets::Field) message or a form.
 
 use crate::Element;
+use crate::components::{ButtonProps, ContainerProps, EntryProps, TextProps};
 use crate::components::{EntryState, entry};
 use crate::components::{section_button, section_icon};
 use crate::layouts::anchor::{self, Placement, Side};
@@ -69,6 +70,14 @@ type ItemFn<'a, T, M> = Box<dyn Fn(&T) -> Element<'a, M> + 'a>;
 type LabelFn<'a, T> = Box<dyn Fn(&T) -> String + 'a>;
 
 pub struct Autocomplete<'a, T, M> {
+    error_props: TextProps,
+    loading_props: TextProps,
+    empty_props: TextProps,
+    retry_button_props: ButtonProps,
+    entry_props: EntryProps,
+    label_props: TextProps,
+    option_props: ContainerProps,
+    notice_props: ContainerProps,
     value: &'a str,
     lookup: &'a Lookup<String, T>,
     on_input: Box<dyn Fn(String) -> M + 'a>,
@@ -101,6 +110,14 @@ impl<'a, T, M> Autocomplete<'a, T, M> {
         on_input: impl Fn(String) -> M + 'a,
     ) -> Self {
         Self {
+            error_props: Default::default(),
+            loading_props: Default::default(),
+            empty_props: Default::default(),
+            retry_button_props: Default::default(),
+            entry_props: Default::default(),
+            label_props: Default::default(),
+            option_props: Default::default(),
+            notice_props: Default::default(),
             value,
             lookup,
             on_input: Box::new(on_input),
@@ -123,6 +140,39 @@ impl<'a, T, M> Autocomplete<'a, T, M> {
             max_rows: MAX_ROWS,
             open_initially: false,
         }
+    }
+    pub fn error_props(mut self, props: TextProps) -> Self {
+        self.error_props = props;
+        self
+    }
+    pub fn loading_props(mut self, props: TextProps) -> Self {
+        self.loading_props = props;
+        self
+    }
+    pub fn empty_props(mut self, props: TextProps) -> Self {
+        self.empty_props = props;
+        self
+    }
+    pub fn retry_button_props(mut self, props: ButtonProps) -> Self {
+        self.retry_button_props = props;
+        self
+    }
+    pub fn entry_props(mut self, props: EntryProps) -> Self {
+        self.entry_props = props;
+        self
+    }
+    /// Presentation for built-in suggestion labels (not custom item trees).
+    pub fn label_props(mut self, props: TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn option_props(mut self, props: ContainerProps) -> Self {
+        self.option_props = props;
+        self
+    }
+    pub fn notice_props(mut self, props: ContainerProps) -> Self {
+        self.notice_props = props;
+        self
     }
     /// A suggestion was picked (click, or Enter on the highlighted one).
     pub fn on_select(mut self, f: impl Fn(T) -> M + 'a) -> Self {
@@ -342,8 +392,9 @@ pub(crate) struct Widgeted<'a, T, M> {
     width: Length,
 }
 
-impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> for Element<'a, M> {
-    fn from(a: Autocomplete<'a, T, M>) -> Self {
+impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> Autocomplete<'a, T, M> {
+    fn into_widget(self) -> Widgeted<'a, T, M> {
+        let a = self;
         let m = a.metrics;
         let l = a.lookup;
         let enabled = !a.disabled;
@@ -380,15 +431,19 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> f
             .iter()
             .map(|t| a.label.as_ref().map_or_else(|| t.to_string(), |f| f(t)))
             .collect();
-        let notice = |el: Element<'a, M>| -> Element<'a, M> {
-            container(el)
-                .padding(a.notice_padding.unwrap_or(iced::Padding::from([
-                    m.space_s + m.space_xxs,
-                    m.space_m,
-                ])))
-                .width(Length::Fill)
-                .into()
-        };
+        let notice =
+            |el: Element<'a, M>| -> Element<'a, M> {
+                a.notice_props
+                    .apply(
+                        container(el)
+                            .padding(a.notice_padding.unwrap_or(iced::Padding::from([
+                                m.space_s + m.space_xxs,
+                                m.space_m,
+                            ])))
+                            .width(Length::Fill),
+                    )
+                    .into()
+            };
         let dim = crate::styles::text::dim;
         let gap = a.spacing.unwrap_or(m.space_s);
         let item_padding = a
@@ -399,14 +454,19 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> f
             Status::Idle => (Body::None, Vec::new()),
             Status::Failed(msg) => {
                 let mut r = row![
-                    text(msg.clone())
-                        .style(crate::styles::text::error)
-                        .width(Length::Fill)
+                    a.error_props.apply(
+                        text(msg.clone())
+                            .style(crate::styles::text::error)
+                            .width(Length::Fill)
+                    )
                 ]
                 .spacing(gap)
                 .align_y(iced::alignment::Vertical::Center);
                 if let Some(retry) = a.on_retry.clone() {
-                    r = r.push(button(text("Retry")).style(sb::flat).on_press(retry));
+                    r = r.push(
+                        a.retry_button_props
+                            .apply(button(text("Retry")).style(sb::flat).on_press(retry)),
+                    );
                 }
                 (Body::Notice, vec![notice(r.into())])
             }
@@ -417,30 +477,34 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> f
                     .map(|(t, label)| {
                         let content: Element<'a, M> = match &a.item {
                             Some(f) => f(t),
-                            None => text(label.clone()).wrapping(text::Wrapping::None).into(),
+                            None => a
+                                .label_props
+                                .apply(text(label.clone()).wrapping(text::Wrapping::None)),
                         };
-                        container(content)
-                            .padding(item_padding)
-                            .width(Length::Fill)
+                        a.option_props
+                            .apply(container(content).padding(item_padding).width(Length::Fill))
                             .into()
                     })
                     .collect::<Vec<_>>();
                 (Body::Rows(rows.len()), rows)
             }
             Status::Waiting(_) | Status::Loading { .. } => {
-                let r = row![busy(m.icon_size), text("Searching…").style(dim)]
-                    .spacing(gap)
-                    .align_y(iced::alignment::Vertical::Center);
+                let r = row![
+                    busy(m.icon_size),
+                    a.loading_props.apply(text("Searching…").style(dim))
+                ]
+                .spacing(gap)
+                .align_y(iced::alignment::Vertical::Center);
                 (Body::Notice, vec![notice(r.into())])
             }
             Status::Loaded => (
                 Body::Notice,
-                vec![notice(text("No results").style(dim).into())],
+                vec![notice(a.empty_props.apply(text("No results").style(dim)))],
             ),
         };
 
         let w = Widgeted {
-            entry: Element::from(e),
+            entry: Element::from(a.entry_props.apply(e)),
             items,
             labels,
             choices: results,
@@ -454,7 +518,13 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> f
             metrics: m,
             width: a.width,
         };
-        iced::Element::new(w)
+        w
+    }
+}
+
+impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> for Element<'a, M> {
+    fn from(a: Autocomplete<'a, T, M>) -> Self {
+        iced::Element::new(a.into_widget())
     }
 }
 
@@ -931,5 +1001,87 @@ impl<'a, 'b, T: Clone + 'a, M: 'a> overlay::Overlay<M, Theme, iced::Renderer>
             })
             .max()
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod typed_props_tests {
+    use super::*;
+    use crate::components::TextOverflow;
+
+    fn loading() -> Lookup<String, String> {
+        let mut lookup = Lookup::new().debounce(std::time::Duration::ZERO);
+        let now = Instant::now();
+        lookup.input("query".to_owned(), now);
+        lookup.poll(now).unwrap();
+        lookup
+    }
+
+    #[test]
+    fn entry_and_option_props_apply_without_changing_labels_or_selection() {
+        let label = "界🦀e\u{301}".repeat(100);
+        let mut lookup = loading();
+        lookup.complete(lookup.latest_id(), Ok(vec![label.clone()]));
+        let plain = Autocomplete::new("q", &lookup, |_| ()).into_widget();
+        let defaults = Autocomplete::new("q", &lookup, |_| ())
+            .entry_props(EntryProps::default())
+            .label_props(TextProps::default())
+            .option_props(ContainerProps::default())
+            .into_widget();
+        assert_eq!(
+            plain.entry.as_widget().size(),
+            defaults.entry.as_widget().size()
+        );
+        assert_eq!(
+            plain.items[0].as_widget().size(),
+            defaults.items[0].as_widget().size()
+        );
+        for policy in [TextOverflow::Wrap, TextOverflow::Clip, TextOverflow::Grow] {
+            let custom = Autocomplete::new("q", &lookup, |_| ())
+                .entry_props(EntryProps::default().width(143))
+                .label_props(TextProps::default().width(70).overflow(policy))
+                .option_props(ContainerProps::default().width(95))
+                .into_widget();
+            assert_eq!(custom.entry.as_widget().size().width, Length::Fixed(143.0));
+            assert_eq!(
+                custom.items[0].as_widget().size().width,
+                Length::Fixed(95.0)
+            );
+            assert_eq!(custom.labels, vec![label.clone()]);
+            assert_eq!(custom.choices, &[label.clone()]);
+        }
+    }
+
+    #[test]
+    fn notice_overrides_cover_loading_empty_and_error_without_enabling_input() {
+        let mut lookup = loading();
+        for status in 0..3 {
+            if status == 1 {
+                lookup.complete(lookup.latest_id(), Ok(Vec::new()));
+            }
+            if status == 2 {
+                lookup = loading();
+                lookup.complete(lookup.latest_id(), Err("失敗🦀".repeat(50)));
+            }
+            let widget = Autocomplete::new("q", &lookup, |_| ())
+                .on_retry(())
+                .loading_props(TextProps::default().overflow(TextOverflow::Wrap))
+                .empty_props(TextProps::default().size(17))
+                .error_props(TextProps::default().overflow(TextOverflow::Wrap).width(80))
+                .retry_button_props(ButtonProps::default().width(60).padding(9))
+                .notice_props(ContainerProps::default().width(155))
+                .into_widget();
+            assert_eq!(widget.body, Body::Notice);
+            assert_eq!(
+                widget.items[0].as_widget().size().width,
+                Length::Fixed(155.0)
+            );
+        }
+        let disabled = Autocomplete::new("q", &lookup, |_| ())
+            .disabled(true)
+            .entry_props(EntryProps::default().width(143))
+            .into_widget();
+        assert!(disabled.disabled);
+        assert_eq!(disabled.body, Body::None);
     }
 }

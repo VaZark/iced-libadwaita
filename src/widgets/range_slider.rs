@@ -663,3 +663,60 @@ mod tests {
         }
     }
 }
+
+/// Presentation-only builders supported by the native range slider.
+#[derive(Clone, Default)]
+pub struct RangeSliderProps {
+    pub width: Option<Length>,
+    pub height: Option<Length>,
+    pub orientation: Option<Axis>,
+}
+impl RangeSliderProps {
+    pub fn width(mut self, value: impl Into<Length>) -> Self {
+        self.width = Some(value.into());
+        self
+    }
+    pub fn height(mut self, value: impl Into<Length>) -> Self {
+        self.height = Some(value.into());
+        self
+    }
+    pub fn orientation(mut self, value: Axis) -> Self {
+        self.orientation = Some(value);
+        self
+    }
+    pub fn apply<'a, M, T: Scalar>(
+        &self,
+        mut slider: RangeSlider<'a, M, T>,
+    ) -> RangeSlider<'a, M, T> {
+        if let Some(v) = self.width {
+            slider = slider.width(v);
+        }
+        if let Some(v) = self.height {
+            slider = slider.height(v);
+        }
+        if let Some(v) = self.orientation {
+            slider = slider.orientation(v);
+        }
+        slider
+    }
+}
+
+#[cfg(test)]
+mod nested_props_tests {
+    use super::*;
+    #[test]
+    fn presentation_preserves_range_and_events() {
+        let slider = RangeSlider::new(0.0..=10.0, (2.0, 8.0), |v| v)
+            .step(0.5)
+            .min_gap(1.0);
+        let original = slider.value;
+        let slider = RangeSliderProps::default()
+            .width(231)
+            .orientation(Axis::Vertical)
+            .apply(slider);
+        assert_eq!(slider.value, original);
+        assert_eq!(slider.width, Length::Fixed(231.0));
+        assert_eq!(slider.axis, Axis::Vertical);
+        assert_eq!((slider.on_change.unwrap())((3.0, 7.0)), (3.0, 7.0));
+    }
+}

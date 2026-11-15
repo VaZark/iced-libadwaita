@@ -43,6 +43,7 @@ const FADE: f32 = 36.0;
 
 /// The height-clamped spoiler. See the [module](self).
 pub struct Spoiler<'a, M> {
+    props: SpoilerWidgetProps,
     content: Element<'a, M>,
     max_height: f32,
     expanded: bool,
@@ -56,8 +57,14 @@ pub struct Spoiler<'a, M> {
 
 impl<'a, M: Clone + 'a> Spoiler<'a, M> {
     /// Clips `content` to a maximum height (default 100) with a control for the rest.
+    /// Presentation overrides for native children; actions remain parent-owned.
+    pub fn props(mut self, props: SpoilerWidgetProps) -> Self {
+        self.props = props;
+        self
+    }
     pub fn new(content: impl Into<Element<'a, M>>) -> Self {
         Self {
+            props: SpoilerWidgetProps::default(),
             content: content.into(),
             max_height: 100.0,
             expanded: false,
@@ -75,6 +82,7 @@ impl<'a, M: Clone + 'a> Spoiler<'a, M> {
         build: impl Fn(usize) -> Element<'a, M> + 'a,
     ) -> SpoilerList<'a, M> {
         SpoilerList {
+            props: SpoilerWidgetProps::default(),
             state,
             build: Box::new(build),
             on_event: None,
@@ -403,13 +411,18 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Clamp<'a, M> {
 
 impl<'a, M: Clone + 'a> From<Spoiler<'a, M>> for Element<'a, M> {
     fn from(s: Spoiler<'a, M>) -> Self {
-        let control: Element<'a, M> = flat_button(text_label(if s.expanded {
-            s.hide.clone()
-        } else {
-            s.show.clone()
-        }))
-        .on_press_maybe(s.on_toggle.as_ref().map(|f| f(!s.expanded)))
-        .into();
+        let control: Element<'a, M> = s
+            .props
+            .toggle_button
+            .apply(
+                flat_button(s.props.toggle_label.apply(text_label(if s.expanded {
+                    s.hide.clone()
+                } else {
+                    s.show.clone()
+                })))
+                .on_press_maybe(s.on_toggle.as_ref().map(|f| f(!s.expanded))),
+            )
+            .into();
         iced::Element::new(Clamp {
             children: vec![s.content, control],
             max_height: s.max_height,
@@ -422,6 +435,7 @@ impl<'a, M: Clone + 'a> From<Spoiler<'a, M>> for Element<'a, M> {
 
 /// The partial-data spoiler: the visible items and the control for the rest.
 pub struct SpoilerList<'a, M> {
+    props: SpoilerWidgetProps,
     state: &'a SpoilerState,
     build: Box<dyn Fn(usize) -> Element<'a, M> + 'a>,
     on_event: Option<Rc<dyn Fn(Event) -> M + 'a>>,
@@ -431,6 +445,11 @@ pub struct SpoilerList<'a, M> {
 }
 
 impl<'a, M: Clone + 'a> SpoilerList<'a, M> {
+    pub fn props(mut self, props: SpoilerWidgetProps) -> Self {
+        self.props = props;
+        self
+    }
+
     /// The control was pressed: apply it with [`SpoilerState::apply`].
     pub fn on_event(mut self, f: impl Fn(Event) -> M + 'a) -> Self {
         self.on_event = Some(Rc::new(f));
@@ -461,12 +480,19 @@ impl<'a, M: Clone + 'a> From<SpoilerList<'a, M>> for Element<'a, M> {
                     .show
                     .clone()
                     .unwrap_or_else(|| format!("Show {} more", l.state.next_chunk()));
-                controls = controls
-                    .push(flat_button(text_label(label)).on_press_maybe(press(Event::More)));
+                controls = controls.push(
+                    l.props.more_button.apply(
+                        flat_button(l.props.more_label.apply(text_label(label)))
+                            .on_press_maybe(press(Event::More)),
+                    ),
+                );
             }
             if l.state.can_collapse() {
                 controls = controls.push(
-                    flat_button(text_label(l.hide.clone())).on_press_maybe(press(Event::Less)),
+                    l.props.less_button.apply(
+                        flat_button(l.props.less_label.apply(text_label(l.hide.clone())))
+                            .on_press_maybe(press(Event::Less)),
+                    ),
                 );
             }
             col = col.push(controls);
@@ -523,5 +549,75 @@ mod spacing_params {
         let s = Spoiler::<()>::new(iced::widget::text("x")).spacing(11.0);
         assert_eq!(s.gap, Some(11.0));
         let _: Element<'_, ()> = s.into();
+    }
+}
+
+/// Typed presentation for parent-built native children. Defaults preserve the original view.
+#[derive(Clone, Default)]
+pub struct SpoilerWidgetProps {
+    pub toggle_button: crate::components::ButtonProps,
+    pub toggle_label: crate::components::TextProps,
+    pub more_button: crate::components::ButtonProps,
+    pub more_label: crate::components::TextProps,
+    pub less_button: crate::components::ButtonProps,
+    pub less_label: crate::components::TextProps,
+}
+
+impl SpoilerWidgetProps {
+    pub fn toggle_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.toggle_button = props;
+        self
+    }
+    pub fn toggle_label(mut self, props: crate::components::TextProps) -> Self {
+        self.toggle_label = props;
+        self
+    }
+    pub fn more_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.more_button = props;
+        self
+    }
+    pub fn more_label(mut self, props: crate::components::TextProps) -> Self {
+        self.more_label = props;
+        self
+    }
+    pub fn less_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.less_button = props;
+        self
+    }
+    pub fn less_label(mut self, props: crate::components::TextProps) -> Self {
+        self.less_label = props;
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: Spoiler<'a, M>) -> Spoiler<'a, M>
+    where
+        M: Clone + 'a,
+    {
+        widget.props(self.clone())
+    }
+}
+
+#[cfg(test)]
+mod native_props_tests {
+    use super::*;
+    use crate::widgets::synced_text::native_props_tests::{assert_override, text_props};
+    #[test]
+    fn defaults_preserve_layout_and_overrides_reach_native_children() {
+        let state = SpoilerState::new(10, 2);
+        let make = || Spoiler::<()>::items(&state, |_| iced::widget::space().height(10).into());
+        assert_override(
+            make().into(),
+            make().props(SpoilerWidgetProps::default()).into(),
+            make()
+                .props(SpoilerWidgetProps::default().more_label(text_props()))
+                .into(),
+        );
+        let make = || Spoiler::<()>::new(iced::widget::space().height(300)).max_height(80.0);
+        assert_override(
+            make().into(),
+            make().props(SpoilerWidgetProps::default()).into(),
+            make()
+                .props(SpoilerWidgetProps::default().toggle_label(text_props()))
+                .into(),
+        );
     }
 }

@@ -88,6 +88,7 @@ impl<'a, M> TimelineItem<'a, M> {
 
 /// See the [module](self).
 pub struct Timeline<'a, M> {
+    props: TimelineWidgetProps,
     items: Vec<TimelineItem<'a, M>>,
     active: usize,
     bullet_size: Option<f32>,
@@ -132,8 +133,14 @@ pub(crate) fn line_fill(i: usize, n: usize, active: usize, reverse: bool) -> Fil
 
 impl<'a, M: 'a> Timeline<'a, M> {
     /// `active`: the index of the last item that is done (items after it are not yet).
+    /// Presentation overrides for native children; actions remain parent-owned.
+    pub fn props(mut self, props: TimelineWidgetProps) -> Self {
+        self.props = props;
+        self
+    }
     pub fn new(active: usize) -> Self {
         Self {
+            props: TimelineWidgetProps::default(),
             items: Vec::new(),
             active,
             bullet_size: None,
@@ -197,51 +204,61 @@ fn bullet<'a, M: 'a>(
     size: f32,
     custom: Option<Element<'a, M>>,
     m: &Metrics,
+    props: &TimelineWidgetProps,
 ) -> Element<'a, M> {
     let inner = m.icon_size.min(size);
     let mark: Element<'a, M> = match (custom, status) {
         (Some(c), _) => c,
         (None, Status::Completed) => Icon::Check.colored(inner, Color::WHITE).into(),
         (None, Status::Invalid) => Icon::WindowClose.colored(inner, Color::WHITE).into(),
-        (None, Status::Current) => container(space())
-            .width(inner * 0.5)
-            .height(inner * 0.5)
-            .style(move |_: &Theme| iced::widget::container::Style {
-                background: Some(Background::Color(Color::WHITE)),
-                border: Border::default().rounded(inner),
-                ..Default::default()
-            })
+        (None, Status::Current) => props
+            .current_mark
+            .apply(
+                container(space())
+                    .width(inner * 0.5)
+                    .height(inner * 0.5)
+                    .style(move |_: &Theme| iced::widget::container::Style {
+                        background: Some(Background::Color(Color::WHITE)),
+                        border: Border::default().rounded(inner),
+                        ..Default::default()
+                    }),
+            )
             .into(),
-        (None, Status::Loading) => ty::caption("…").into(),
+        (None, Status::Loading) => props.loading_mark.apply(ty::caption("…")).into(),
         (None, Status::Upcoming) => space().into(),
     };
-    container(mark)
-        .width(size)
-        .height(size)
-        .center(size)
-        .style(move |t: &Theme| {
-            let s = &t.semantic;
-            let (fill, line) = match status {
-                Status::Completed | Status::Current => (Some(s.accent.bg), s.accent.bg),
-                Status::Invalid => (Some(s.error.bg), s.error.bg),
-                Status::Loading => (None, s.accent.bg),
-                Status::Upcoming => (None, s.border),
-            };
-            iced::widget::container::Style {
-                background: fill.map(Background::Color),
-                border: Border {
-                    color: line,
-                    width: t.metrics.border_width,
-                    radius: (size / 2.0).into(),
-                },
-                ..Default::default()
-            }
-        })
+    props
+        .bullet
+        .apply(
+            container(mark)
+                .width(size)
+                .height(size)
+                .center(size)
+                .style(move |t: &Theme| {
+                    let s = &t.semantic;
+                    let (fill, line) = match status {
+                        Status::Completed | Status::Current => (Some(s.accent.bg), s.accent.bg),
+                        Status::Invalid => (Some(s.error.bg), s.error.bg),
+                        Status::Loading => (None, s.accent.bg),
+                        Status::Upcoming => (None, s.border),
+                    };
+                    iced::widget::container::Style {
+                        background: fill.map(Background::Color),
+                        border: Border {
+                            color: line,
+                            width: t.metrics.border_width,
+                            radius: (size / 2.0).into(),
+                        },
+                        ..Default::default()
+                    }
+                }),
+        )
         .into()
 }
 
 impl<'a, M: 'a> From<Timeline<'a, M>> for Element<'a, M> {
     fn from(t: Timeline<'a, M>) -> Self {
+        let props = t.props;
         let m = t.metrics;
         let n = t.items.len();
         let bullet_size = t.bullet_size.unwrap_or(m.button_min_height);
@@ -252,25 +269,27 @@ impl<'a, M: 'a> From<Timeline<'a, M>> for Element<'a, M> {
             let fill = line_fill(i, n, t.active, t.reverse);
             let last = i + 1 == n;
             let rail = column![
-                bullet(status, bullet_size, item.bullet, &m),
+                bullet(status, bullet_size, item.bullet, &m, &props),
                 // The line fills what is left of the item's height.
-                container(Element::from(Rule {
-                    vertical: true,
-                    thickness: line_width,
-                    variant: item.line,
-                    color: if fill == Fill::Full {
-                        RuleColor::Accent
-                    } else {
-                        RuleColor::Tone(crate::components::DividerTone::Border)
-                    },
-                }))
-                .height(if last { Length::Shrink } else { Length::Fill }),
+                props.connector.apply(
+                    container(Element::from(Rule {
+                        vertical: true,
+                        thickness: line_width,
+                        variant: item.line,
+                        color: if fill == Fill::Full {
+                            RuleColor::Accent
+                        } else {
+                            RuleColor::Tone(crate::components::DividerTone::Border)
+                        },
+                    }))
+                    .height(if last { Length::Shrink } else { Length::Fill })
+                ),
             ]
             .align_x(Horizontal::Center)
             .width(bullet_size);
 
-            let mut text =
-                column![ty::heading(item.title)].spacing(t.title_spacing.unwrap_or(m.space_xs));
+            let mut text = column![props.title.apply(ty::heading(item.title))]
+                .spacing(t.title_spacing.unwrap_or(m.space_xs));
             if let Some(body) = item.body {
                 text = text.push(body);
             }
@@ -281,9 +300,14 @@ impl<'a, M: 'a> From<Timeline<'a, M>> for Element<'a, M> {
                 iced::Padding::ZERO.bottom(t.item_spacing.unwrap_or(m.space_l))
             });
             let line = match t.align {
-                TimelineAlign::Left => row![rail, text.width(Length::Fill)],
+                TimelineAlign::Left => row![rail, props.body.apply(text.width(Length::Fill))],
                 TimelineAlign::Right => {
-                    row![text.width(Length::Fill).align_right(Length::Fill), rail]
+                    row![
+                        props
+                            .body
+                            .apply(text.width(Length::Fill).align_right(Length::Fill)),
+                        rail
+                    ]
                 }
             }
             .spacing(t.spacing.unwrap_or(m.space_m));
@@ -381,5 +405,72 @@ mod metric_regressions {
             .line_width(0.0)
             .metrics(Metrics::default());
         assert_eq!((t.bullet_size, t.line_width), (Some(0.0), Some(0.0)));
+    }
+}
+
+/// Typed presentation for parent-built native children. Defaults preserve the original view.
+#[derive(Clone, Default)]
+pub struct TimelineWidgetProps {
+    pub current_mark: crate::components::ContainerProps,
+    pub loading_mark: crate::components::TextProps,
+    pub bullet: crate::components::ContainerProps,
+    pub connector: crate::components::ContainerProps,
+    pub title: crate::components::TextProps,
+    pub body: crate::components::ContainerProps,
+}
+
+impl TimelineWidgetProps {
+    pub fn current_mark(mut self, props: crate::components::ContainerProps) -> Self {
+        self.current_mark = props;
+        self
+    }
+    pub fn loading_mark(mut self, props: crate::components::TextProps) -> Self {
+        self.loading_mark = props;
+        self
+    }
+    pub fn bullet(mut self, props: crate::components::ContainerProps) -> Self {
+        self.bullet = props;
+        self
+    }
+    pub fn connector(mut self, props: crate::components::ContainerProps) -> Self {
+        self.connector = props;
+        self
+    }
+    pub fn title(mut self, props: crate::components::TextProps) -> Self {
+        self.title = props;
+        self
+    }
+    pub fn body(mut self, props: crate::components::ContainerProps) -> Self {
+        self.body = props;
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: Timeline<'a, M>) -> Timeline<'a, M>
+    where
+        M: 'a,
+    {
+        widget.props(self.clone())
+    }
+}
+
+#[cfg(test)]
+mod native_props_tests {
+    use super::*;
+    use crate::widgets::synced_text::native_props_tests::{assert_override, text_props};
+    #[test]
+    fn defaults_preserve_layout_and_overrides_reach_native_children() {
+        for align in [TimelineAlign::Left, TimelineAlign::Right] {
+            let make = || {
+                Timeline::<()>::new(0)
+                    .align(align)
+                    .item(TimelineItem::new("Created"))
+            };
+            assert_override(
+                make().into(),
+                make().props(TimelineWidgetProps::default()).into(),
+                make()
+                    .props(TimelineWidgetProps::default().title(text_props()))
+                    .into(),
+            );
+        }
     }
 }

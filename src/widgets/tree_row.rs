@@ -29,6 +29,7 @@
 //! [`expandable`](TreeRow::expandable) shows it before the children exist (lazy loading).
 
 use crate::Element;
+use crate::components::{ButtonProps, ContainerProps};
 use crate::styles::button as sb;
 use crate::styles::container as sc;
 use crate::widgets::ActionRow;
@@ -61,12 +62,53 @@ pub struct TreeRow<'a, M> {
     metrics: Metrics,
     handle_padding: Option<iced::Padding>,
     handle_width: Option<f32>,
+    handle_button_props: ButtonProps,
+    header_button_props: ButtonProps,
+    header_props: ContainerProps,
+    children_props: ContainerProps,
 }
 
 impl<'a, M: 'a> TreeRow<'a, M> {
+    /// Presentation overrides applied after the child's defaults.
+    pub fn handle_button_props(mut self, props: ButtonProps) -> Self {
+        self.handle_button_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn header_button_props(mut self, props: ButtonProps) -> Self {
+        self.header_button_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn header_props(mut self, props: ContainerProps) -> Self {
+        self.header_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn children_props(mut self, props: ContainerProps) -> Self {
+        self.children_props = props;
+        self
+    }
+    /// Presentation for the underlying action row, preserving its content and actions.
+    pub fn row_props(mut self, props: super::rows::ActionRowProps) -> Self {
+        self.row = props.apply(self.row);
+        self
+    }
+    pub fn title_props(mut self, props: crate::components::TextProps) -> Self {
+        self.row = self.row.label_props(props);
+        self
+    }
+    pub fn subtitle_props(mut self, props: crate::components::TextProps) -> Self {
+        self.row = self.row.subtitle_props(props);
+        self
+    }
     pub fn new(title: impl Into<String>) -> Self {
         let metrics = Metrics::desktop();
         Self {
+            handle_button_props: ButtonProps::default(),
+            header_button_props: ButtonProps::default(),
+            header_props: ContainerProps::default(),
+            children_props: ContainerProps::default(),
             row: ActionRow::new(title).metrics(metrics),
             selected: false,
             expanded: false,
@@ -251,10 +293,13 @@ impl<'a, M: Clone + 'a> From<TreeRow<'a, M>> for Element<'a, M> {
             };
             let glyph = container(icon.view(glyph_size)).center(cell);
             if separate_toggle {
-                button(glyph)
-                    .padding(0)
-                    .style(sb::flat)
-                    .on_press_maybe(toggle)
+                x.handle_button_props
+                    .apply(
+                        button(glyph)
+                            .padding(0)
+                            .style(sb::flat)
+                            .on_press_maybe(toggle),
+                    )
                     .into()
             } else {
                 glyph.into()
@@ -275,23 +320,31 @@ impl<'a, M: Clone + 'a> From<TreeRow<'a, M>> for Element<'a, M> {
         ]
         .align_y(Vertical::Center);
         let header: Element<'a, M> = match action {
-            Some(message) => button(header)
-                .padding(0)
-                .width(Length::Fill)
-                .style(sb::list_row)
-                .on_press(message)
+            Some(message) => x
+                .header_button_props
+                .apply(
+                    button(header)
+                        .padding(0)
+                        .width(Length::Fill)
+                        .style(sb::list_row)
+                        .on_press(message),
+                )
                 .into(),
             None => header.into(),
         };
-        let header: Element<'a, M> = container(header)
-            .width(Length::Fill)
-            .style(move |t: &Theme| iced::widget::container::Style {
-                background: selected.then_some(Background::Color(crate::color::alpha(
-                    t.semantic.window.fg,
-                    t.semantic.opacity.flat_hover,
-                ))),
-                ..Default::default()
-            })
+        let header: Element<'a, M> = x
+            .header_props
+            .apply(
+                container(header)
+                    .width(Length::Fill)
+                    .style(move |t: &Theme| iced::widget::container::Style {
+                        background: selected.then_some(Background::Color(crate::color::alpha(
+                            t.semantic.window.fg,
+                            t.semantic.opacity.flat_hover,
+                        ))),
+                        ..Default::default()
+                    }),
+            )
             .into();
         if x.children.is_empty() {
             return header;
@@ -323,20 +376,23 @@ impl<'a, M: Clone + 'a> From<TreeRow<'a, M>> for Element<'a, M> {
                 )
                 .push(c);
         }
-        let list = container(inner)
-            .width(Length::Fill)
-            .style(move |t: &Theme| iced::widget::container::Style {
-                background: Some(Background::Color(crate::color::alpha(
-                    t.semantic.card.fg,
-                    style_tokens
-                        .as_ref()
-                        .unwrap_or(&t.tokens)
-                        .variant_number("tree-row", &variant, "children-opacity")
-                        .filter(|v| v.is_finite() && (0.0..=1.0).contains(v))
-                        .unwrap_or(0.03),
-                ))),
-                ..Default::default()
-            });
+        let list =
+            x.children_props.apply(
+                container(inner)
+                    .width(Length::Fill)
+                    .style(move |t: &Theme| iced::widget::container::Style {
+                        background: Some(Background::Color(crate::color::alpha(
+                            t.semantic.card.fg,
+                            style_tokens
+                                .as_ref()
+                                .unwrap_or(&t.tokens)
+                                .variant_number("tree-row", &variant, "children-opacity")
+                                .filter(|v| v.is_finite() && (0.0..=1.0).contains(v))
+                                .unwrap_or(0.03),
+                        ))),
+                        ..Default::default()
+                    }),
+            );
         // The disclosure primitive: always mounted, the revealer slides it (250 ms).
         crate::widgets::Collapsible::new(header, Element::from(list), x.expanded).into()
     }
@@ -468,6 +524,36 @@ mod tests {
                 vec![expected]
             );
         }
+    }
+
+    #[test]
+    fn child_presentation_preserves_independent_arrow_and_header_actions() {
+        let renderer = renderer();
+        let mut row: Element<'_, u8> = TreeRow::new("Branch")
+            .expandable(true)
+            .on_toggle(|_| 1)
+            .on_activate(2)
+            .title_props(crate::components::TextProps::default().size(16))
+            .handle_button_props(ButtonProps::default().style(sb::flat))
+            .header_button_props(ButtonProps::default().style(sb::list_row))
+            .header_props(ContainerProps::default().width(320))
+            .into();
+        let m = Metrics::desktop();
+        assert_eq!(
+            click(
+                &mut row,
+                &renderer,
+                iced::Point::new(
+                    m.row_padding.left + (m.icon_size + 8.0) / 2.0,
+                    m.row_min_height / 2.0
+                )
+            ),
+            vec![1]
+        );
+        assert_eq!(
+            click(&mut row, &renderer, iced::Point::new(300.0, 20.0)),
+            vec![2]
+        );
     }
 
     fn row() -> TreeRow<'static, u8> {

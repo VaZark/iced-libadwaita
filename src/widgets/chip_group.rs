@@ -79,6 +79,9 @@ struct Expansion<'a, M> {
 
 /// See the [module](self).
 pub struct ChipGroup<'a, K: Clone, M> {
+    chip_props: crate::components::badge::ChipProps,
+    entry_props: crate::components::EntryProps,
+    label_props: crate::components::TextProps,
     options: Vec<ChipOption<K>>,
     selected: std::borrow::Cow<'a, [K]>,
     on_toggle: Box<dyn Fn(K) -> M + 'a>,
@@ -97,6 +100,21 @@ pub struct ChipGroup<'a, K: Clone, M> {
 }
 
 impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
+    pub fn chip_props(mut self, props: crate::components::badge::ChipProps) -> Self {
+        self.chip_props = props;
+        self
+    }
+
+    pub fn entry_props(mut self, props: crate::components::EntryProps) -> Self {
+        self.entry_props = props;
+        self
+    }
+
+    pub fn label_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
     /// `selected` are the keys that are on; `on_toggle` gets the key of a pressed chip.
     pub fn new(
         options: impl IntoIterator<Item = ChipOption<K>>,
@@ -104,6 +122,10 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
         on_toggle: impl Fn(K) -> M + 'a,
     ) -> Self {
         Self {
+            chip_props: Default::default(),
+            entry_props: Default::default(),
+            label_props: Default::default(),
+
             options: options.into_iter().collect(),
             selected: selected.into(),
             on_toggle: Box::new(on_toggle),
@@ -210,7 +232,8 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for
         let gap = g.spacing.unwrap_or(m.space_s);
         let visible = g.visible();
         let body: Element<'a, M> = if visible.is_empty() {
-            ty::caption(g.empty.clone()).style(st::dim).into()
+            g.label_props
+                .apply(ty::caption(g.empty.clone()).style(st::dim))
         } else {
             let chips: Vec<Element<'a, M>> = visible
                 .into_iter()
@@ -228,7 +251,7 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for
                             c = c.on_color(on);
                         }
                     }
-                    Element::from(c)
+                    Element::from(g.chip_props.apply(c))
                 })
                 .collect();
             if let Some(Expansion {
@@ -281,9 +304,11 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for
         // The entry is drawn only when `search` gave it somewhere to send what is typed.
         match (g.query, g.on_query) {
             (Some(q), Some(on_query)) => column![
-                entry(g.placeholder, q.to_string())
-                    .on_input(on_query)
-                    .metrics(m),
+                g.entry_props.apply(
+                    entry(g.placeholder, q.to_string())
+                        .on_input(on_query)
+                        .metrics(m)
+                ),
                 body
             ]
             .spacing(g.search_gap.unwrap_or(m.space_m))
@@ -691,5 +716,66 @@ mod spacing_params {
             .search_spacing(2.0);
         assert_eq!((g.spacing, g.search_gap), (Some(1.0), Some(2.0)));
         let _: Element<'_, ()> = g.into();
+    }
+}
+
+/// Presentation-only overrides supported by [`ChipGroup`]. Values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct ChipGroupProps {
+    pub spacing: Option<f32>,
+    pub search_spacing: Option<f32>,
+    pub metrics: Option<crate::Metrics>,
+    pub entry_props: Option<crate::components::EntryProps>,
+    pub label_props: Option<crate::components::TextProps>,
+    pub chip_props: Option<crate::components::badge::ChipProps>,
+}
+impl ChipGroupProps {
+    pub fn spacing(mut self, value: impl Into<f32>) -> Self {
+        self.spacing = Some(value.into());
+        self
+    }
+    pub fn search_spacing(mut self, value: impl Into<f32>) -> Self {
+        self.search_spacing = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<crate::Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn entry_props(mut self, value: impl Into<crate::components::EntryProps>) -> Self {
+        self.entry_props = Some(value.into());
+        self
+    }
+    pub fn label_props(mut self, value: impl Into<crate::components::TextProps>) -> Self {
+        self.label_props = Some(value.into());
+        self
+    }
+    pub fn chip_props(mut self, value: impl Into<crate::components::badge::ChipProps>) -> Self {
+        self.chip_props = Some(value.into());
+        self
+    }
+    pub fn apply<'a, K: PartialEq + Clone + 'a, M: Clone + 'a>(
+        &self,
+        mut widget: ChipGroup<'a, K, M>,
+    ) -> ChipGroup<'a, K, M> {
+        if let Some(value) = self.spacing.clone() {
+            widget = widget.spacing(value);
+        }
+        if let Some(value) = self.search_spacing.clone() {
+            widget = widget.search_spacing(value);
+        }
+        if let Some(value) = self.metrics.clone() {
+            widget = widget.metrics(value);
+        }
+        if let Some(value) = self.entry_props.clone() {
+            widget = widget.entry_props(value);
+        }
+        if let Some(value) = self.label_props.clone() {
+            widget = widget.label_props(value);
+        }
+        if let Some(value) = self.chip_props.clone() {
+            widget = widget.chip_props(value);
+        }
+        widget
     }
 }

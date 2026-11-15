@@ -2,6 +2,7 @@
 
 use crate::Element;
 use crate::components::typography;
+use crate::components::{ButtonProps, ContainerProps, TextProps};
 use crate::styles::container as sc;
 use crate::{DecorationLayout, Icon, IconSource, Metrics, Theme, WindowButton};
 use iced::alignment::{Horizontal, Vertical};
@@ -61,18 +62,35 @@ impl Default for WindowControlIcons {
 
 /// `AdwWindowTitle`: centered title with optional subtitle.
 pub fn window_title<'a, M: 'a>(title: &str, subtitle: Option<&str>) -> Element<'a, M> {
+    window_title_with_props(
+        title,
+        subtitle,
+        &TextProps::default(),
+        &TextProps::default(),
+    )
+}
+
+/// Window title with typed text presentation overrides.
+pub fn window_title_with_props<'a, M: 'a>(
+    title: &str,
+    subtitle: Option<&str>,
+    title_props: &TextProps,
+    subtitle_props: &TextProps,
+) -> Element<'a, M> {
     // Bold unless the theme's `[windows] titlebar-font-weight` says normal.
     let name = if crate::theme_config::titlebar_bold() {
         typography::heading(title.to_string())
     } else {
         typography::body(title.to_string()).wrapping(text::Wrapping::None)
     };
-    let mut c = column![name].align_x(Horizontal::Center);
+    let mut c = column![title_props.apply(name)].align_x(Horizontal::Center);
     if let Some(s) = subtitle {
         c = c.push(
-            typography::caption(s.to_string())
-                .wrapping(text::Wrapping::None)
-                .style(crate::styles::text::dim),
+            subtitle_props.apply(
+                typography::caption(s.to_string())
+                    .wrapping(text::Wrapping::None)
+                    .style(crate::styles::text::dim),
+            ),
         );
     }
     c.into()
@@ -100,6 +118,10 @@ pub struct HeaderBar<'a, M> {
     height: Option<f32>,
     title_gap: Option<f32>,
     metrics: Metrics,
+    title_props: TextProps,
+    subtitle_props: TextProps,
+    controls_props: ButtonProps,
+    container_props: ContainerProps,
 }
 
 /// Builds an empty [`HeaderBar`].
@@ -108,8 +130,32 @@ pub fn header_bar<'a, M>() -> HeaderBar<'a, M> {
 }
 
 impl<'a, M> HeaderBar<'a, M> {
+    /// Owned presentation overrides for the concrete child.
+    pub fn title_props(mut self, props: TextProps) -> Self {
+        self.title_props = props;
+        self
+    }
+    /// Owned presentation overrides for the concrete child.
+    pub fn subtitle_props(mut self, props: TextProps) -> Self {
+        self.subtitle_props = props;
+        self
+    }
+    /// Owned presentation overrides for the concrete child.
+    pub fn controls_props(mut self, props: ButtonProps) -> Self {
+        self.controls_props = props;
+        self
+    }
+    /// Owned presentation overrides for the concrete child.
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
     pub fn new() -> Self {
         Self {
+            title_props: TextProps::default(),
+            subtitle_props: TextProps::default(),
+            controls_props: ButtonProps::default(),
+            container_props: ContainerProps::default(),
             start: Vec::new(),
             end: Vec::new(),
             title: None,
@@ -339,6 +385,7 @@ fn ctl<'a, M: Clone + 'a>(
     kind: &'static str,
     msg: M,
     flat: Option<bool>,
+    props: &ButtonProps,
 ) -> Element<'a, M> {
     let size = crate::theme_config::window_button_size();
     let radius = crate::theme_config::window_button_radius();
@@ -372,24 +419,32 @@ fn ctl<'a, M: Clone + 'a>(
             None => face.into(),
         };
         let variant = crate::styles::button::variant(&name);
-        return iced::widget::button(content)
-            .padding(0)
-            .style(move |theme, status| control_style(variant(theme, status), theme, status, kind))
-            .on_press(msg)
+        return props
+            .apply(
+                iced::widget::button(content)
+                    .padding(0)
+                    .style(move |theme, status| {
+                        control_style(variant(theme, status), theme, status, kind)
+                    })
+                    .on_press(msg),
+            )
             .into();
     }
-    iced::widget::button(container(icon.view(icon_size)).center(Length::Fixed(size)))
-        .padding(0)
-        .style(move |t: &Theme, status| {
-            let mut style = if flat.unwrap_or(t.flat_headerbars) {
-                crate::styles::button::circular(t, status)
-            } else {
-                crate::styles::button::headerbar(t, status)
-            };
-            style.border.radius = radius.into();
-            control_style(style, t, status, kind)
-        })
-        .on_press(msg)
+    props
+        .apply(
+            iced::widget::button(container(icon.view(icon_size)).center(Length::Fixed(size)))
+                .padding(0)
+                .style(move |t: &Theme, status| {
+                    let mut style = if flat.unwrap_or(t.flat_headerbars) {
+                        crate::styles::button::circular(t, status)
+                    } else {
+                        crate::styles::button::headerbar(t, status)
+                    };
+                    style.border.radius = radius.into();
+                    control_style(style, t, status, kind)
+                })
+                .on_press(msg),
+        )
         .into()
 }
 
@@ -405,10 +460,15 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
             let layout = c.layout.clone().unwrap_or_else(DecorationLayout::detect);
             let make = |b: WindowButton| -> Option<Element<'a, M>> {
                 match b {
-                    WindowButton::Minimize => c
-                        .on_minimize
-                        .clone()
-                        .map(|m| ctl(h.control_icons.minimize.clone(), "minimize", m, flat)),
+                    WindowButton::Minimize => c.on_minimize.clone().map(|m| {
+                        ctl(
+                            h.control_icons.minimize.clone(),
+                            "minimize",
+                            m,
+                            flat,
+                            &h.controls_props,
+                        )
+                    }),
                     WindowButton::Maximize => c.on_maximize.clone().map(|m| {
                         ctl(
                             if c.maximized {
@@ -419,12 +479,18 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
                             if c.maximized { "restore" } else { "maximize" },
                             m,
                             flat,
+                            &h.controls_props,
                         )
                     }),
-                    WindowButton::Close => c
-                        .on_close
-                        .clone()
-                        .map(|m| ctl(h.control_icons.close.clone(), "close", m, flat)),
+                    WindowButton::Close => c.on_close.clone().map(|m| {
+                        ctl(
+                            h.control_icons.close.clone(),
+                            "close",
+                            m,
+                            flat,
+                            &h.controls_props,
+                        )
+                    }),
                 }
             };
             // The window buttons sit together, `[windows] button-gap` apart.
@@ -463,7 +529,12 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
         }
         let mut title: Element<'a, M> = match (h.title_widget, h.title) {
             (Some(w), _) => w,
-            (None, Some(t)) => window_title(&t, h.subtitle.as_deref()),
+            (None, Some(t)) => window_title_with_props(
+                &t,
+                h.subtitle.as_deref(),
+                &h.title_props,
+                &h.subtitle_props,
+            ),
             (None, None) => space().into(),
         };
         // The theme's title bar: the application icon, and where the title sits.
@@ -519,7 +590,7 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
             style
         });
 
-        let mut area = mouse_area(bar);
+        let mut area = mouse_area(h.container_props.apply(bar));
         if let Some(d) = h.on_drag {
             area = area.on_press(d);
         }
@@ -633,5 +704,123 @@ mod tests {
         assert!(!bar.show_start_buttons && !bar.show_end_buttons);
         assert_eq!(bar.corners, (0.0, 0.0));
         assert!(bar.on_drag.is_none() && bar.controls.is_none());
+    }
+}
+
+/// Owned presentation overrides for a nested `HeaderBar`; values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct HeaderBarProps {
+    pub title_props: Option<TextProps>,
+    pub subtitle_props: Option<TextProps>,
+    pub controls_props: Option<ButtonProps>,
+    pub container_props: Option<ContainerProps>,
+    pub spacing: Option<f32>,
+    pub padding: Option<Padding>,
+    pub height: Option<f32>,
+    pub title_gap: Option<f32>,
+    pub flat: Option<bool>,
+    pub metrics: Option<Metrics>,
+}
+impl HeaderBarProps {
+    pub fn title_props(mut self, value: impl Into<TextProps>) -> Self {
+        self.title_props = Some(value.into());
+        self
+    }
+    pub fn subtitle_props(mut self, value: impl Into<TextProps>) -> Self {
+        self.subtitle_props = Some(value.into());
+        self
+    }
+    pub fn controls_props(mut self, value: impl Into<ButtonProps>) -> Self {
+        self.controls_props = Some(value.into());
+        self
+    }
+    pub fn container_props(mut self, value: impl Into<ContainerProps>) -> Self {
+        self.container_props = Some(value.into());
+        self
+    }
+    pub fn spacing(mut self, value: impl Into<f32>) -> Self {
+        self.spacing = Some(value.into());
+        self
+    }
+    pub fn padding(mut self, value: impl Into<Padding>) -> Self {
+        self.padding = Some(value.into());
+        self
+    }
+    pub fn height(mut self, value: impl Into<f32>) -> Self {
+        self.height = Some(value.into());
+        self
+    }
+    pub fn title_gap(mut self, value: impl Into<f32>) -> Self {
+        self.title_gap = Some(value.into());
+        self
+    }
+    pub fn flat(mut self, value: impl Into<bool>) -> Self {
+        self.flat = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn apply<'a, M: 'a>(&self, mut widget: HeaderBar<'a, M>) -> HeaderBar<'a, M> {
+        if let Some(value) = self.title_props.clone() {
+            widget = widget.title_props(value);
+        }
+        if let Some(value) = self.subtitle_props.clone() {
+            widget = widget.subtitle_props(value);
+        }
+        if let Some(value) = self.controls_props.clone() {
+            widget = widget.controls_props(value);
+        }
+        if let Some(value) = self.container_props.clone() {
+            widget = widget.container_props(value);
+        }
+        if let Some(value) = self.spacing.clone() {
+            widget = widget.spacing(value);
+        }
+        if let Some(value) = self.padding.clone() {
+            widget = widget.padding(value);
+        }
+        if let Some(value) = self.height.clone() {
+            widget = widget.height(value);
+        }
+        if let Some(value) = self.title_gap.clone() {
+            widget = widget.title_gap(value);
+        }
+        if let Some(value) = self.flat.clone() {
+            widget = widget.flat(value);
+        }
+        if let Some(value) = self.metrics.clone() {
+            widget = widget.metrics(value);
+        }
+        widget
+    }
+}
+
+#[cfg(test)]
+mod child_props_tests {
+    use super::*;
+    #[test]
+    fn reusable_props_forward_geometry_without_replacing_actions() {
+        let bar = HeaderBar::<u8>::new()
+            .title("Title")
+            .on_drag(7)
+            .window_controls(WindowControls {
+                on_close: Some(8),
+                ..Default::default()
+            });
+        let bar = HeaderBarProps::default()
+            .spacing(3.0)
+            .height(41.0)
+            .title_props(TextProps::default().size(21))
+            .controls_props(ButtonProps::default().width(35))
+            .apply(bar);
+        assert_eq!(bar.spacing, Some(3.0));
+        assert_eq!(bar.height, Some(41.0));
+        assert_eq!(bar.title_props.size, Some(iced::Pixels(21.0)));
+        assert_eq!(bar.controls_props.width, Some(Length::Fixed(35.0)));
+        assert_eq!(bar.on_drag, Some(7));
+        assert_eq!(bar.controls.as_ref().unwrap().on_close, Some(8));
+        let _: Element<'_, u8> = bar.into();
     }
 }

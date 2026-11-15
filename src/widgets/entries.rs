@@ -33,6 +33,10 @@ pub enum EntryInput<'a, M> {
 
 /// Standard full-width application control with its label inside the row.
 pub struct EntryRow<'a, M> {
+    dropdown_props: super::popover::PopoverProps,
+    button_props: crate::components::ButtonProps,
+    label_props: crate::components::TextProps,
+    entry_props: Option<crate::components::EntryProps>,
     label: String,
     input: EntryInput<'a, M>,
     description: Option<String>,
@@ -46,8 +50,31 @@ pub struct EntryRow<'a, M> {
     metrics: Metrics,
 }
 impl<'a, M: 'a> EntryRow<'a, M> {
+    pub fn dropdown_props(mut self, props: super::popover::PopoverProps) -> Self {
+        self.dropdown_props = props;
+        self
+    }
+    pub fn button_props(mut self, props: crate::components::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+    pub fn label_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
+    pub fn entry_props(mut self, props: crate::components::EntryProps) -> Self {
+        self.entry_props = Some(props);
+        self
+    }
+
     pub fn new(label: impl Into<String>, input: EntryInput<'a, M>) -> Self {
         Self {
+            dropdown_props: Default::default(),
+            button_props: Default::default(),
+            label_props: Default::default(),
+            entry_props: Default::default(),
+
             label: label.into(),
             input,
             description: None,
@@ -129,9 +156,11 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
         let gap = e.spacing.unwrap_or(m.space_xxs);
         let label_text = format!("{}{}", e.label, if e.required { " *" } else { "" });
         let label = || {
-            crate::Typography::desktop()
-                .caption(label_text.clone())
-                .style(crate::styles::text::dim)
+            e.label_props.apply(
+                crate::Typography::desktop()
+                    .caption(label_text.clone())
+                    .style(crate::styles::text::dim),
+            )
         };
         let line = |input: Element<'a, M>| -> Element<'a, M> {
             column![label(), input]
@@ -139,70 +168,102 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                 .width(Length::Fill)
                 .into()
         };
-        let content = match e.input {
-            EntryInput::Text(input) | EntryInput::Action(input) => {
-                let insets = input.label_insets(&m);
-                let input = embedded!(input, e.flat, m);
-                surface(
-                    column![container(label()).padding(insets), input]
-                        .spacing(gap)
-                        .width(Length::Fill),
-                    m,
-                    pad,
-                )
-            }
-            EntryInput::Number(input) => surface(line(embedded!(input, e.flat, m).into()), m, pad),
-            EntryInput::Date(input) => surface(line(embedded!(input, e.flat, m).into()), m, pad),
-            EntryInput::Multiline(input) => surface(line(input.flat(e.flat).embedded(m).into()), m, pad),
-            EntryInput::Custom(input) => surface(line(input), m, pad),
-            EntryInput::Switch { active, on_toggle } => {
-                let toggle = on_toggle(!active);
-                let sw = crate::components::switch(active).on_toggle(on_toggle);
-                button(surface(
-                    row![
-                        container(crate::Typography::desktop().body(label_text.clone()))
-                            .width(Length::Fill),
-                        sw
-                    ]
-                    .align_y(iced::Alignment::Center),
-                    m,
-                    pad,
-                ))
-                .padding(0)
-                .width(Length::Fill)
-                .style(crate::styles::button::list_row)
-                .on_press(toggle)
-                .into()
-            }
-            EntryInput::Select {
-                value,
-                options,
-                multiple,
-            } => {
-                let value = text(if value.is_empty() {
-                    "Select…".into()
-                } else {
-                    value
-                })
-                .width(Length::Fill);
-                let trigger = row![
-                    container(line(value.into())).width(Length::Fill),
-                    EntryIcon::Select.view(m.icon_size)
-                ]
-                .align_y(iced::Alignment::Center)
-                .spacing(e.value_spacing.unwrap_or(m.space_s));
-                super::Popover::new(surface(trigger, m, pad), options)
-                    .width(Length::Fill)
-                    .padding(0)
-                    .appearance(if e.flat {
-                        super::PopoverAppearance::Flat
+        let content =
+            match e.input {
+                EntryInput::Text(input) | EntryInput::Action(input) => {
+                    let insets = input.label_insets(&m);
+                    let input = embedded!(input, e.flat, m);
+                    let input = if let Some(props) = &e.entry_props {
+                        props.apply(input)
                     } else {
-                        super::PopoverAppearance::Row
+                        input
+                    };
+                    surface(
+                        column![container(label()).padding(insets), input]
+                            .spacing(gap)
+                            .width(Length::Fill),
+                        m,
+                        pad,
+                    )
+                }
+                EntryInput::Number(input) => {
+                    let input = embedded!(input, e.flat, m);
+                    let input = if let Some(props) = &e.entry_props {
+                        input.entry_props(props.clone())
+                    } else {
+                        input
+                    };
+                    surface(line(input.into()), m, pad)
+                }
+                EntryInput::Date(input) => {
+                    let input = embedded!(input, e.flat, m);
+                    let input = if let Some(props) = &e.entry_props {
+                        input.entry_props(props.clone())
+                    } else {
+                        input
+                    };
+                    surface(line(input.into()), m, pad)
+                }
+                EntryInput::Multiline(input) => {
+                    surface(line(input.flat(e.flat).embedded(m).into()), m, pad)
+                }
+                EntryInput::Custom(input) => surface(line(input), m, pad),
+                EntryInput::Switch { active, on_toggle } => {
+                    let toggle = on_toggle(!active);
+                    let sw = crate::components::switch(active).on_toggle(on_toggle);
+                    e.button_props
+                        .apply(
+                            button(surface(
+                                row![
+                                    container(e.label_props.apply(
+                                        crate::Typography::desktop().body(label_text.clone())
+                                    ))
+                                    .width(Length::Fill),
+                                    sw
+                                ]
+                                .align_y(iced::Alignment::Center),
+                                m,
+                                pad,
+                            ))
+                            .padding(0)
+                            .width(Length::Fill)
+                            .style(crate::styles::button::list_row)
+                            .on_press(toggle),
+                        )
+                        .into()
+                }
+                EntryInput::Select {
+                    value,
+                    options,
+                    multiple,
+                } => {
+                    let value = text(if value.is_empty() {
+                        "Select…".into()
+                    } else {
+                        value
                     })
-                    .keep_open(multiple)
-                    .into()
-            }
-        };
+                    .width(Length::Fill);
+                    let trigger = row![
+                        container(line(value.into())).width(Length::Fill),
+                        EntryIcon::Select.view(m.icon_size)
+                    ]
+                    .align_y(iced::Alignment::Center)
+                    .spacing(e.value_spacing.unwrap_or(m.space_s));
+                    e.dropdown_props
+                        .apply(
+                            super::Popover::new(surface(trigger, m, pad), options)
+                                .width(Length::Fill)
+                                .padding(0)
+                                .appearance(if e.flat {
+                                    super::PopoverAppearance::Flat
+                                } else {
+                                    super::PopoverAppearance::Row
+                                })
+                                .keep_open(multiple),
+                        )
+                        .into()
+                }
+            };
         let presentation =
             crate::primitives::validation::present(&e.validity, e.interaction.revealed());
         let focus_ring = e.flat
@@ -670,5 +731,71 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+/// Presentation overrides for an existing EntryRow, leaving validation and input content intact.
+#[derive(Clone, Default)]
+pub struct EntryRowProps {
+    pub dropdown_props: Option<super::popover::PopoverProps>,
+    pub button_props: Option<crate::components::ButtonProps>,
+    pub label_props: Option<crate::components::TextProps>,
+    pub entry_props: Option<crate::components::EntryProps>,
+    pub spacing: Option<f32>,
+    pub padding: Option<iced::Padding>,
+    pub value_spacing: Option<f32>,
+}
+impl EntryRowProps {
+    pub fn dropdown_props(mut self, props: super::popover::PopoverProps) -> Self {
+        self.dropdown_props = Some(props);
+        self
+    }
+    pub fn button_props(mut self, props: crate::components::ButtonProps) -> Self {
+        self.button_props = Some(props);
+        self
+    }
+    pub fn label_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = Some(props);
+        self
+    }
+    pub fn entry_props(mut self, props: crate::components::EntryProps) -> Self {
+        self.entry_props = Some(props);
+        self
+    }
+    pub fn spacing(mut self, value: f32) -> Self {
+        self.spacing = Some(value);
+        self
+    }
+    pub fn padding(mut self, value: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(value.into());
+        self
+    }
+    pub fn value_spacing(mut self, value: f32) -> Self {
+        self.value_spacing = Some(value);
+        self
+    }
+    pub fn apply<'a, M: 'a>(&self, mut row: EntryRow<'a, M>) -> EntryRow<'a, M> {
+        if let Some(props) = &self.label_props {
+            row = row.label_props(props.clone());
+        }
+        if let Some(props) = &self.entry_props {
+            row = row.entry_props(props.clone());
+        }
+        if let Some(v) = self.spacing {
+            row = row.spacing(v);
+        }
+        if let Some(v) = self.padding {
+            row = row.padding(v);
+        }
+        if let Some(v) = self.value_spacing {
+            row = row.value_spacing(v);
+        }
+        if let Some(props) = &self.dropdown_props {
+            row = row.dropdown_props(props.clone());
+        }
+        if let Some(props) = &self.button_props {
+            row = row.button_props(props.clone());
+        }
+        row
     }
 }

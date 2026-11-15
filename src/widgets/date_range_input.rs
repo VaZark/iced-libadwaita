@@ -39,6 +39,9 @@ use iced::widget::{button, container, mouse_area, text};
 use iced::{Background, Border, Length, Shadow};
 
 pub struct DateRangeInput<'a, M> {
+    dropdown_props: super::popover::PopoverProps,
+    entry_props: crate::components::EntryProps,
+    button_props: crate::components::ButtonProps,
     text: &'a str,
     view: Date,
     on_input: Option<Box<dyn Fn(String) -> M + 'a>>,
@@ -68,10 +71,29 @@ pub struct DateRangeInput<'a, M> {
 }
 
 impl<'a, M> DateRangeInput<'a, M> {
+    pub fn dropdown_props(mut self, props: super::popover::PopoverProps) -> Self {
+        self.dropdown_props = props;
+        self
+    }
+
+    pub fn entry_props(mut self, props: crate::components::EntryProps) -> Self {
+        self.entry_props = props;
+        self
+    }
+
+    pub fn button_props(mut self, props: crate::components::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+
     /// `text` is the entry's content (`2026-11-02 – 2026-11-09`, see [`DateRange::parse`]);
     /// `view` is any date in the month the calendar shows.
     pub fn new(text: &'a str, view: Date, on_input: impl Fn(String) -> M + 'a) -> Self {
         Self {
+            dropdown_props: Default::default(),
+            entry_props: Default::default(),
+            button_props: Default::default(),
+
             text,
             view: view.month_start(),
             on_input: Some(Box::new(on_input)),
@@ -376,7 +398,7 @@ impl<'a, M: Clone + 'a> From<DateRangeInput<'a, M>> for Element<'a, M> {
             {
                 b = b.on_press(f(selected.pick(date, min, max)));
             }
-            let cell: Element<'a, M> = b.into();
+            let cell: Element<'a, M> = d.button_props.apply(b).into();
             match &d.on_hover {
                 Some(h) if previewing && ok => mouse_area(cell)
                     .on_enter(h(Some(date)))
@@ -389,6 +411,7 @@ impl<'a, M: Clone + 'a> From<DateRangeInput<'a, M>> for Element<'a, M> {
         let opener = opener(
             popover([grid], 400.0),
             Opening {
+                dropdown_props: d.dropdown_props.clone(),
                 dialog: d.dialog,
                 scrim: d.scrim,
                 close_on_outside: d.close_on_outside,
@@ -399,7 +422,9 @@ impl<'a, M: Clone + 'a> From<DateRangeInput<'a, M>> for Element<'a, M> {
             },
             m,
         );
-        field.left_section(opener).width(d.width).into()
+        d.entry_props
+            .apply(field.left_section(opener).width(d.width))
+            .into()
     }
 }
 
@@ -483,8 +508,77 @@ mod spacing_params {
 
     #[test]
     fn the_calendar_gaps_are_parameters() {
-        let d = DateRangeInput::<()>::new("", Date::today(), |_| ()).spacing(1.0).padding(2.0);
+        let d = DateRangeInput::<()>::new("", Date::today(), |_| ())
+            .spacing(1.0)
+            .padding(2.0);
         assert_eq!((d.spacing, d.padding), (Some(1.0), Some(2.0)));
         let _: Element<'_, ()> = d.into();
+    }
+}
+
+/// Presentation-only overrides supported by [`DateRangeInput`]. Values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct DateRangeInputProps {
+    pub dropdown_props: Option<super::popover::PopoverProps>,
+    pub width: Option<iced::Length>,
+    pub metrics: Option<crate::Metrics>,
+    pub spacing: Option<f32>,
+    pub padding: Option<f32>,
+    pub entry_props: Option<crate::components::EntryProps>,
+    pub button_props: Option<crate::components::ButtonProps>,
+}
+impl DateRangeInputProps {
+    pub fn dropdown_props(mut self, props: super::popover::PopoverProps) -> Self {
+        self.dropdown_props = Some(props);
+        self
+    }
+
+    pub fn width(mut self, value: impl Into<iced::Length>) -> Self {
+        self.width = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<crate::Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn spacing(mut self, value: impl Into<f32>) -> Self {
+        self.spacing = Some(value.into());
+        self
+    }
+    pub fn padding(mut self, value: impl Into<f32>) -> Self {
+        self.padding = Some(value.into());
+        self
+    }
+    pub fn entry_props(mut self, value: impl Into<crate::components::EntryProps>) -> Self {
+        self.entry_props = Some(value.into());
+        self
+    }
+    pub fn button_props(mut self, value: impl Into<crate::components::ButtonProps>) -> Self {
+        self.button_props = Some(value.into());
+        self
+    }
+    pub fn apply<'a, M>(&self, mut widget: DateRangeInput<'a, M>) -> DateRangeInput<'a, M> {
+        if let Some(value) = self.width.clone() {
+            widget = widget.width(value);
+        }
+        if let Some(value) = self.metrics.clone() {
+            widget = widget.metrics(value);
+        }
+        if let Some(value) = self.spacing.clone() {
+            widget = widget.spacing(value);
+        }
+        if let Some(value) = self.padding.clone() {
+            widget = widget.padding(value);
+        }
+        if let Some(value) = self.entry_props.clone() {
+            widget = widget.entry_props(value);
+        }
+        if let Some(value) = self.button_props.clone() {
+            widget = widget.button_props(value);
+        }
+        if let Some(props) = &self.dropdown_props {
+            widget = widget.dropdown_props(props.clone());
+        }
+        widget
     }
 }

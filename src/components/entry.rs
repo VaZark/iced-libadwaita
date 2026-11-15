@@ -9,6 +9,82 @@ use crate::{Metrics, Theme};
 use iced::Length;
 use iced::widget::{container, row, text_editor, text_input};
 
+/// Safe presentation overrides for an existing text input. Values, password mode,
+/// focus IDs and event handlers always remain owned by the composing component.
+#[derive(Clone, Default)]
+pub struct TextInputProps {
+    pub align_x: Option<iced::alignment::Horizontal>,
+    pub width: Option<Length>,
+    pub padding: Option<iced::Padding>,
+    pub size: Option<iced::Pixels>,
+    pub font: Option<iced::Font>,
+    pub line_height: Option<iced::widget::text::LineHeight>,
+    pub style: Option<
+        std::sync::Arc<dyn Fn(&Theme, text_input::Status) -> text_input::Style + Send + Sync>,
+    >,
+}
+
+impl TextInputProps {
+    pub fn align_x(mut self, value: iced::alignment::Horizontal) -> Self {
+        self.align_x = Some(value);
+        self
+    }
+    pub fn width(mut self, value: impl Into<Length>) -> Self {
+        self.width = Some(value.into());
+        self
+    }
+    pub fn padding(mut self, value: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(value.into());
+        self
+    }
+    pub fn size(mut self, value: impl Into<iced::Pixels>) -> Self {
+        self.size = Some(value.into());
+        self
+    }
+    pub fn font(mut self, value: iced::Font) -> Self {
+        self.font = Some(value);
+        self
+    }
+    pub fn line_height(mut self, value: iced::widget::text::LineHeight) -> Self {
+        self.line_height = Some(value);
+        self
+    }
+    pub fn style(
+        mut self,
+        value: impl Fn(&Theme, text_input::Status) -> text_input::Style + Send + Sync + 'static,
+    ) -> Self {
+        self.style = Some(std::sync::Arc::new(value));
+        self
+    }
+    pub fn apply<'a, M: Clone + 'a>(
+        &self,
+        mut input: text_input::TextInput<'a, M, Theme>,
+    ) -> text_input::TextInput<'a, M, Theme> {
+        if let Some(v) = self.align_x {
+            input = input.align_x(v);
+        }
+        if let Some(v) = self.width {
+            input = input.width(v);
+        }
+        if let Some(v) = self.padding {
+            input = input.padding(v);
+        }
+        if let Some(v) = self.size {
+            input = input.size(v);
+        }
+        if let Some(v) = self.font {
+            input = input.font(v);
+        }
+        if let Some(v) = self.line_height {
+            input = input.line_height(v);
+        }
+        if let Some(style) = self.style.clone() {
+            input = input.style(move |theme, status| style(theme, status));
+        }
+        input
+    }
+}
+
 // ------------------------------------------------------------------ Entry
 
 /// Validation state of an [`Entry`] (`.error` / `.warning` / `.success`).
@@ -35,6 +111,21 @@ impl From<crate::primitives::validation::Presentation> for EntryState {
     }
 }
 
+/// Owned presentation overrides; default values preserve the component defaults.
+#[derive(Clone, Default)]
+pub struct EntryInputProps {
+    pub input_props: TextInputProps,
+}
+impl EntryInputProps {
+    pub fn input_props(mut self, props: TextInputProps) -> Self {
+        self.input_props = props;
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: Entry<'a, M>) -> Entry<'a, M> {
+        widget.input_props(self.input_props.clone())
+    }
+}
+
 /// `GtkEntry` / `GtkPasswordEntry`.
 ///
 /// Without [`on_input`](Entry::on_input) it is read-only and drawn disabled.
@@ -58,6 +149,7 @@ pub struct Entry<'a, M> {
     padding: Option<iced::Padding>,
     section_spacing: Option<f32>,
     id: Option<iced::widget::Id>,
+    input_props: TextInputProps,
 }
 
 /// `GtkEntry`.
@@ -95,8 +187,14 @@ impl<'a, M> Entry<'a, M> {
             padding: None,
             section_spacing: None,
             id: None,
+            input_props: TextInputProps::default(),
         }
     }
+    pub fn input_props(mut self, props: TextInputProps) -> Self {
+        self.input_props = props;
+        self
+    }
+
     /// Transparent page-surface style, like a flat navigation row.
     pub fn flat(mut self, flat: bool) -> Self {
         self.flat = flat;
@@ -285,11 +383,7 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
                     styles::text_input::default(t, status)
                 };
                 style.border.color = c;
-                style.border.width = if embedded {
-                    0.0
-                } else {
-                    t.focus_width()
-                };
+                style.border.width = if embedded { 0.0 } else { t.focus_width() };
                 style.value = c;
                 style
             });
@@ -303,7 +397,7 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
         if let Some(m) = e.on_submit {
             input = input.on_submit(m);
         }
-        let content: Element<'a, M> = input.into();
+        let content: Element<'a, M> = e.input_props.apply(input).into();
         if lw.is_none() && rw.is_none() {
             // An embedded entry sits in another widget's frame.
             return if e.embedded {
@@ -347,6 +441,76 @@ impl<'a, M: Clone + 'a> From<Entry<'a, M>> for Element<'a, M> {
 const TEXT_SIZE: f32 = 16.0;
 const LINE_HEIGHT: f32 = TEXT_SIZE * 1.3;
 
+/// Safe presentation options for the editor constructed by a TextView.
+/// Content, actions, and growing-height policy stay with the TextView.
+#[derive(Clone, Default)]
+pub struct TextEditorProps {
+    pub padding: Option<iced::Padding>,
+    pub size: Option<iced::Pixels>,
+    pub font: Option<iced::Font>,
+    pub style: Option<
+        std::sync::Arc<dyn Fn(&Theme, text_editor::Status) -> text_editor::Style + Send + Sync>,
+    >,
+}
+impl TextEditorProps {
+    pub fn padding(mut self, value: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(value.into());
+        self
+    }
+    pub fn size(mut self, value: impl Into<iced::Pixels>) -> Self {
+        self.size = Some(value.into());
+        self
+    }
+    pub fn font(mut self, value: iced::Font) -> Self {
+        self.font = Some(value);
+        self
+    }
+    pub fn style(
+        mut self,
+        value: impl Fn(&Theme, text_editor::Status) -> text_editor::Style + Send + Sync + 'static,
+    ) -> Self {
+        self.style = Some(std::sync::Arc::new(value));
+        self
+    }
+    pub fn apply<'a, M: 'a>(
+        &self,
+        mut editor: text_editor::TextEditor<
+            'a,
+            iced::advanced::text::highlighter::PlainText,
+            M,
+            Theme,
+        >,
+    ) -> text_editor::TextEditor<'a, iced::advanced::text::highlighter::PlainText, M, Theme> {
+        if let Some(value) = self.padding {
+            editor = editor.padding(value);
+        }
+        if let Some(value) = self.size {
+            editor = editor.size(value);
+        }
+        if let Some(value) = self.font {
+            editor = editor.font(value);
+        }
+        if let Some(style) = self.style.clone() {
+            editor = editor.style(move |theme, status| style(theme, status));
+        }
+        editor
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct TextViewProps {
+    pub editor_props: TextEditorProps,
+}
+impl TextViewProps {
+    pub fn editor_props(mut self, props: TextEditorProps) -> Self {
+        self.editor_props = props;
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: TextView<'a, M>) -> TextView<'a, M> {
+        widget.editor_props(self.editor_props.clone())
+    }
+}
+
 /// `GtkTextView`: a multi-line editor over a [`text_editor::Content`]. Without
 /// [`on_action`](TextView::on_action) it is read-only and drawn disabled.
 ///
@@ -356,6 +520,7 @@ const LINE_HEIGHT: f32 = TEXT_SIZE * 1.3;
 /// (default one line) up to that maximum, then scrolls. Without a maximum it never grows: an unbounded textarea
 /// would push the rest of the page away without limit.
 pub struct TextView<'a, M> {
+    editor_props: TextEditorProps,
     content: &'a text_editor::Content,
     on_action: Option<Box<dyn Fn(text_editor::Action) -> M + 'a>>,
     placeholder: Option<String>,
@@ -372,6 +537,7 @@ pub struct TextView<'a, M> {
 
 pub fn text_view<'a, M>(content: &'a text_editor::Content) -> TextView<'a, M> {
     TextView {
+        editor_props: Default::default(),
         content,
         on_action: None,
         placeholder: None,
@@ -388,6 +554,10 @@ pub fn text_view<'a, M>(content: &'a text_editor::Content) -> TextView<'a, M> {
 }
 
 impl<'a, M> TextView<'a, M> {
+    pub fn editor_props(mut self, props: TextEditorProps) -> Self {
+        self.editor_props = props;
+        self
+    }
     /// The padding around the text (default `entry_padding`).
     pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
         self.padding = Some(p.into());
@@ -508,7 +678,7 @@ impl<'a, M: Clone + 'a> From<TextView<'a, M>> for Element<'a, M> {
                 f(action)
             });
         }
-        e.into()
+        t.editor_props.apply(e).into()
     }
 }
 
@@ -625,7 +795,9 @@ mod spacing_params {
 
     #[test]
     fn entry_and_text_view_padding_are_parameters() {
-        let e = entry::<()>("", "x").padding([1.0, 2.0]).section_spacing(3.0);
+        let e = entry::<()>("", "x")
+            .padding([1.0, 2.0])
+            .section_spacing(3.0);
         assert_eq!(e.padding, Some(iced::Padding::from([1.0, 2.0])));
         assert_eq!(e.section_spacing, Some(3.0));
         let _: Element<'_, ()> = e.into();
@@ -633,5 +805,60 @@ mod spacing_params {
         let t = text_view::<()>(&content).padding(5.0);
         assert_eq!(t.padding, Some(iced::Padding::from(5.0)));
         let _: Element<'_, ()> = t.into();
+    }
+}
+
+#[cfg(test)]
+mod nested_props_tests {
+    use super::*;
+    use iced::advanced::{Widget, widget::Tree};
+
+    #[test]
+    fn input_defaults_preserve_geometry_and_widget_state() {
+        let input = text_input::<(), Theme, iced::Renderer>("hint", "日本語 🦀")
+            .width(147)
+            .padding(9)
+            .secure(true)
+            .on_input(|_| ());
+        let before = Widget::size(&input);
+        let input = TextInputProps::default().apply(input);
+        assert_eq!(Widget::size(&input), before);
+        let element: Element<'_, ()> = input.into();
+        assert!(Tree::new(&element).children.is_empty());
+    }
+
+    #[test]
+    fn entry_props_leave_value_security_id_and_actions_owned_by_parent() {
+        let e = Entry::new("hint", "secret")
+            .password(true)
+            .id("private")
+            .on_input(|_| 1u8)
+            .on_submit(2)
+            .input_props(TextInputProps::default().width(173).padding(7).size(18));
+        assert_eq!(e.value, "secret");
+        assert_eq!(e.placeholder, "hint");
+        assert!(e.secure && e.id.is_some());
+        assert_eq!(e.on_input.as_ref().unwrap()("edit".into()), 1);
+        assert_eq!(e.on_submit, Some(2));
+        let element: Element<'_, u8> = e.embedded().into();
+        assert_eq!(element.as_widget().size().width, Length::Fixed(173.0));
+    }
+
+    #[test]
+    fn input_style_is_owned_and_receives_current_theme_and_status() {
+        let props = TextInputProps::default()
+            .style(|theme, status| styles::text_input::default(theme, status));
+        let copy = props.clone();
+        assert!(std::sync::Arc::ptr_eq(
+            props.style.as_ref().unwrap(),
+            copy.style.as_ref().unwrap()
+        ));
+        let style = copy.style.unwrap();
+        let theme = Theme::default();
+        assert_eq!(
+            style(&theme, text_input::Status::Disabled).value,
+            styles::text_input::default(&theme, text_input::Status::Disabled).value
+        );
+        let _: Element<'_, ()> = props.apply(text_input("hint", "value")).into();
     }
 }

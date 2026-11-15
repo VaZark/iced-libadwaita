@@ -53,6 +53,7 @@ pub enum LoadTrigger {
 
 /// See the [module](self).
 pub struct InfiniteList<'a, M> {
+    props: InfiniteListWidgetProps,
     content: Element<'a, M>,
     status: Status,
     empty: bool,
@@ -70,8 +71,14 @@ pub struct InfiniteList<'a, M> {
 
 impl<'a, M: Clone + 'a> InfiniteList<'a, M> {
     /// `content` (the rows loaded so far) with the footer for `state`.
+    /// Presentation overrides for native children; actions remain parent-owned.
+    pub fn props(mut self, props: InfiniteListWidgetProps) -> Self {
+        self.props = props;
+        self
+    }
     pub fn new<Q: Clone, T>(content: impl Into<Element<'a, M>>, state: &Infinite<Q, T>) -> Self {
         Self {
+            props: InfiniteListWidgetProps::default(),
             content: content.into(),
             status: state.status().clone(),
             empty: state.is_empty(),
@@ -139,8 +146,9 @@ impl<'a, M: Clone + 'a> InfiniteList<'a, M> {
     fn footer(&self) -> Element<'a, M> {
         let m = &self.metrics;
         let dim = |s: String| -> Element<'a, M> {
-            crate::components::typography::caption(s)
-                .style(crate::styles::text::dim)
+            self.props
+                .status
+                .apply(crate::components::typography::caption(s).style(crate::styles::text::dim))
                 .into()
         };
         let inner: Element<'a, M> = match &self.status {
@@ -153,17 +161,25 @@ impl<'a, M: Clone + 'a> InfiniteList<'a, M> {
             .into(),
             Status::Failed(e) => {
                 let mut c = column![
-                    crate::components::typography::label("Could not load more results"),
+                    self.props
+                        .failure_title
+                        .apply(crate::components::typography::label(
+                            "Could not load more results"
+                        )),
                     dim(e.clone()),
                 ]
                 .spacing(m.space_xs)
                 .align_x(iced::Alignment::Center);
                 if let Some(retry) = &self.on_retry {
                     c = c.push(
-                        crate::components::raised_button(crate::components::typography::label(
-                            "Retry",
-                        ))
-                        .on_press(retry.clone()),
+                        self.props.retry_button.apply(
+                            crate::components::raised_button(
+                                self.props
+                                    .retry_label
+                                    .apply(crate::components::typography::label("Retry")),
+                            )
+                            .on_press(retry.clone()),
+                        ),
                     );
                 }
                 c.spacing(self.spacing.unwrap_or(m.space_s)).into()
@@ -174,18 +190,27 @@ impl<'a, M: Clone + 'a> InfiniteList<'a, M> {
                 "No more results"
             })),
             Status::Idle => match (self.trigger, &self.on_load_more) {
-                (LoadTrigger::LoadMore, Some(more)) => crate::components::raised_button(
-                    crate::components::typography::label("Load more"),
-                )
-                .on_press(more.clone())
-                .into(),
+                (LoadTrigger::LoadMore, Some(more)) => self
+                    .props
+                    .load_button
+                    .apply(
+                        crate::components::raised_button(
+                            self.props
+                                .load_label
+                                .apply(crate::components::typography::label("Load more")),
+                        )
+                        .on_press(more.clone()),
+                    )
+                    .into(),
                 _ => space().height(Length::Fixed(1.0)).into(),
             },
         };
-        let footer = container(inner)
-            .width(Length::Fill)
-            .center_x(Length::Fill)
-            .padding(self.padding.unwrap_or(iced::Padding::from(m.space_m)));
+        let footer = self.props.footer.apply(
+            container(inner)
+                .width(Length::Fill)
+                .center_x(Length::Fill)
+                .padding(self.padding.unwrap_or(iced::Padding::from(m.space_m))),
+        );
         match (&self.status, self.trigger, &self.on_load_more) {
             (Status::Idle, LoadTrigger::Scroll, Some(more)) => Element::new(EndTrigger {
                 child: footer.into(),
@@ -353,6 +378,78 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for EndTrigger<'a, M> {
             layout,
             cursor,
             viewport,
+        );
+    }
+}
+
+/// Typed presentation for parent-built native children. Defaults preserve the original view.
+#[derive(Clone, Default)]
+pub struct InfiniteListWidgetProps {
+    pub status: crate::components::TextProps,
+    pub failure_title: crate::components::TextProps,
+    pub retry_button: crate::components::ButtonProps,
+    pub retry_label: crate::components::TextProps,
+    pub load_button: crate::components::ButtonProps,
+    pub load_label: crate::components::TextProps,
+    pub footer: crate::components::ContainerProps,
+}
+
+impl InfiniteListWidgetProps {
+    pub fn status(mut self, props: crate::components::TextProps) -> Self {
+        self.status = props;
+        self
+    }
+    pub fn failure_title(mut self, props: crate::components::TextProps) -> Self {
+        self.failure_title = props;
+        self
+    }
+    pub fn retry_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.retry_button = props;
+        self
+    }
+    pub fn retry_label(mut self, props: crate::components::TextProps) -> Self {
+        self.retry_label = props;
+        self
+    }
+    pub fn load_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.load_button = props;
+        self
+    }
+    pub fn load_label(mut self, props: crate::components::TextProps) -> Self {
+        self.load_label = props;
+        self
+    }
+    pub fn footer(mut self, props: crate::components::ContainerProps) -> Self {
+        self.footer = props;
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: InfiniteList<'a, M>) -> InfiniteList<'a, M>
+    where
+        M: Clone + 'a,
+    {
+        widget.props(self.clone())
+    }
+}
+
+#[cfg(test)]
+mod native_props_tests {
+    use super::*;
+    use crate::widgets::synced_text::native_props_tests::{assert_override, text_props};
+    #[test]
+    fn defaults_preserve_layout_and_overrides_reach_native_children() {
+        let state = Infinite::<(), ()>::new(());
+        let make = || {
+            InfiniteList::new(iced::widget::space(), &state)
+                .trigger(LoadTrigger::LoadMore)
+                .on_load_more(())
+                .scrolled(false)
+        };
+        assert_override(
+            make().into(),
+            make().props(InfiniteListWidgetProps::default()).into(),
+            make()
+                .props(InfiniteListWidgetProps::default().load_label(text_props()))
+                .into(),
         );
     }
 }

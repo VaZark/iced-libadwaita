@@ -122,7 +122,129 @@ pub enum Align {
     End,
 }
 
+/// Presentation-only overrides for a nested [`Popover`]. Values, events, disabled
+/// state, focus, dismissal, and keep-open policy remain owned by its parent.
+#[derive(Clone, Default)]
+pub struct PopoverProps {
+    pub side: Option<crate::layouts::anchor::Side>,
+    pub offset: Option<f32>,
+    pub bounds: Option<PopoverBounds>,
+    pub appearance: Option<Appearance>,
+    pub align: Option<Align>,
+    pub padding: Option<Padding>,
+    pub width: Option<Length>,
+    pub popover_width: Option<f32>,
+    pub fit_content: Option<bool>,
+    pub window_radius: Option<f32>,
+    pub style: Option<crate::components::props::ButtonStyle>,
+}
+impl PopoverProps {
+    pub fn side(mut self, value: impl Into<crate::layouts::anchor::Side>) -> Self {
+        self.side = Some(value.into());
+        self
+    }
+    pub fn offset(mut self, value: f32) -> Self {
+        self.offset = Some(value);
+        self
+    }
+    pub fn bounds(mut self, value: impl Into<PopoverBounds>) -> Self {
+        self.bounds = Some(value.into());
+        self
+    }
+    pub fn appearance(mut self, value: impl Into<Appearance>) -> Self {
+        self.appearance = Some(value.into());
+        self
+    }
+    pub fn align(mut self, value: impl Into<Align>) -> Self {
+        self.align = Some(value.into());
+        self
+    }
+    pub fn padding(mut self, value: impl Into<Padding>) -> Self {
+        self.padding = Some(value.into());
+        self
+    }
+    pub fn width(mut self, value: impl Into<Length>) -> Self {
+        self.width = Some(value.into());
+        self
+    }
+    pub fn popover_width(mut self, value: f32) -> Self {
+        self.popover_width = Some(value);
+        self
+    }
+    pub fn fit_content(mut self, value: impl Into<bool>) -> Self {
+        self.fit_content = Some(value.into());
+        self
+    }
+    pub fn window_radius(mut self, value: f32) -> Self {
+        self.window_radius = Some(value);
+        self
+    }
+    pub fn style(
+        mut self,
+        style: impl Fn(&Theme, button::Status) -> button::Style + Send + Sync + 'static,
+    ) -> Self {
+        self.style = Some(std::sync::Arc::new(style));
+        self
+    }
+
+    pub fn apply<'a, M: 'a>(&self, mut widget: Popover<'a, M>) -> Popover<'a, M> {
+        if let Some(v) = self.appearance {
+            widget = widget.appearance(v);
+        }
+        if let Some(v) = self.side {
+            widget = widget.side(v);
+        }
+        if let Some(v) = self.offset {
+            widget = widget.offset(v);
+        }
+        if let Some(v) = self.bounds {
+            widget = widget.bounds(v);
+        }
+        if let Some(v) = self.align {
+            widget = widget.align(v);
+        }
+        if let Some(v) = self.padding {
+            widget = widget.padding(v);
+        }
+        if let Some(v) = self.width {
+            widget = widget.width(v);
+        }
+        if let Some(v) = self.popover_width {
+            widget = widget.popover_width(v);
+        }
+        if let Some(v) = self.fit_content {
+            widget.fit_content = v;
+        }
+        if let Some(v) = self.window_radius {
+            widget = widget.window_radius(v);
+        }
+        if let Some(style) = self.style.clone() {
+            widget.style = Some(style);
+        }
+        widget
+    }
+}
+
+/// Presentation overrides for the concrete container around a popover list.
+#[derive(Clone, Default)]
+pub struct PopoverSurfaceProps {
+    pub container: crate::components::ContainerProps,
+    pub spacing: Option<f32>,
+}
+
+impl PopoverSurfaceProps {
+    pub fn container_props(mut self, props: crate::components::ContainerProps) -> Self {
+        self.container = props;
+        self
+    }
+    pub fn spacing(mut self, spacing: f32) -> Self {
+        self.spacing = Some(spacing);
+        self
+    }
+}
+
 pub struct Popover<'a, M> {
+    style: Option<crate::components::props::ButtonStyle>,
     trigger: Element<'a, M>,
     popover: Element<'a, M>,
     appearance: Appearance,
@@ -183,6 +305,7 @@ impl<'a, M: 'a> Popover<'a, M> {
     pub fn new(trigger: impl Into<Element<'a, M>>, content: impl Into<Element<'a, M>>) -> Self {
         let m = Metrics::desktop();
         Self {
+            style: None,
             trigger: trigger.into(),
             popover: content.into(),
             appearance: Appearance::Button,
@@ -203,6 +326,16 @@ impl<'a, M: 'a> Popover<'a, M> {
             close_on_outside: true,
             window_radius: m.radius_window,
         }
+    }
+    pub fn props(self, props: PopoverProps) -> Self {
+        props.apply(self)
+    }
+    pub fn style(
+        mut self,
+        style: impl Fn(&Theme, button::Status) -> button::Style + Send + Sync + 'static,
+    ) -> Self {
+        self.style = Some(std::sync::Arc::new(style));
+        self
     }
     /// The side of the trigger the popover opens on (default below). It flips to the opposite
     /// side when it does not fit; see [`anchor`](crate::layouts::anchor).
@@ -323,12 +456,36 @@ pub fn popover_spaced<'a, M: 'a>(
     spacing: f32,
     padding: impl Into<Padding>,
 ) -> Element<'a, M> {
-    crate::components::framed(container(crate::layouts::scrolled_window(
-        column(items).spacing(spacing).width(Length::Fill),
-    ))
-    .padding(padding)
-    .max_height(max_height)
-    .style(sc::popover), "popover")
+    popover_spaced_with_props(
+        items,
+        max_height,
+        spacing,
+        padding,
+        PopoverSurfaceProps::default(),
+    )
+}
+
+/// [`popover_spaced`] with overrides applied to its existing surface container.
+pub fn popover_spaced_with_props<'a, M: 'a>(
+    items: impl IntoIterator<Item = Element<'a, M>>,
+    max_height: f32,
+    spacing: f32,
+    padding: impl Into<Padding>,
+    props: PopoverSurfaceProps,
+) -> Element<'a, M> {
+    crate::components::framed(
+        props.container.apply(
+            container(crate::layouts::scrolled_window(
+                column(items)
+                    .spacing(props.spacing.unwrap_or(spacing))
+                    .width(Length::Fill),
+            ))
+            .padding(padding)
+            .max_height(max_height)
+            .style(sc::popover),
+        ),
+        "popover",
+    )
 }
 
 impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
@@ -424,12 +581,15 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
         } else {
             button::Status::Active
         };
-        let st = match self.appearance {
-            Appearance::Button => sb::default(theme, status),
-            Appearance::Flat => sb::flat(theme, status),
-            Appearance::Row => sb::list_row(theme, status),
-            Appearance::Linked(pos) => sb::linked(pos)(theme, status),
-        };
+        let st = self.style.as_ref().map_or_else(
+            || match self.appearance {
+                Appearance::Button => sb::default(theme, status),
+                Appearance::Flat => sb::flat(theme, status),
+                Appearance::Row => sb::list_row(theme, status),
+                Appearance::Linked(pos) => sb::linked(pos)(theme, status),
+            },
+            |style| style(theme, status),
+        );
         if let Some(bg) = st.background {
             renderer.fill_quad(
                 Quad {
@@ -769,8 +929,8 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
         // A completed click on an item (it captured the release) closes the menu.
         if !stay
             && matches!(
-            event,
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+                event,
+                Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
             )
             && cursor.is_over(bounds)
             && shell.is_event_captured()
@@ -918,10 +1078,69 @@ mod spacing_params {
     #[test]
     fn the_surface_gap_and_padding_are_parameters() {
         let _: Element<'_, ()> = popover_spaced(
-            [iced::widget::text("a").into(), iced::widget::text("b").into()],
+            [
+                iced::widget::text("a").into(),
+                iced::widget::text("b").into(),
+            ],
             200.0,
             9.0,
             [3.0, 5.0],
+        );
+    }
+}
+
+#[cfg(test)]
+mod typed_props_tests {
+    use super::*;
+    use iced::advanced::Widget;
+
+    fn widget() -> Popover<'static, ()> {
+        Popover::new(iced::widget::text("trigger"), iced::widget::text("body"))
+    }
+
+    #[test]
+    fn native_props_defaults_do_not_change_parent_policy() {
+        let original = widget()
+            .disabled(true)
+            .keep_open(true)
+            .scrim(false)
+            .close_on_outside(false);
+        let before = original.size();
+        let original = PopoverProps::default().apply(original);
+        assert_eq!(original.size(), before);
+        assert!(original.disabled && original.keep_open);
+        assert!(!original.scrim && !original.close_on_outside);
+        assert!(original.style.is_none());
+        assert!(!original.fit_content);
+    }
+
+    #[test]
+    fn native_props_forward_geometry_and_owned_style() {
+        let props = PopoverProps::default()
+            .width(151)
+            .popover_width(221.0)
+            .offset(11.0)
+            .padding(7)
+            .fit_content(true)
+            .window_radius(19.0)
+            .appearance(Appearance::Flat)
+            .align(Align::End)
+            .bounds(PopoverBounds::Window)
+            .side(crate::layouts::anchor::Side::Top)
+            .style(|_, _| button::Style {
+                text_color: iced::Color::BLACK,
+                ..Default::default()
+            });
+        let result = props.apply(widget().disabled(true).keep_open(true));
+        assert_eq!(result.width, Length::Fixed(151.0));
+        assert_eq!(result.popover_width, Some(221.0));
+        assert_eq!(result.offset, 11.0);
+        assert_eq!(result.padding, Padding::from(7));
+        assert!(result.fit_content && result.disabled && result.keep_open);
+        assert_eq!(result.window_radius, 19.0);
+        assert_eq!(
+            (result.style.unwrap())(&Theme::default(), button::Status::Active).text_color,
+            iced::Color::BLACK
         );
     }
 }

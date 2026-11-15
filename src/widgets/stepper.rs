@@ -166,6 +166,7 @@ impl<'a, M> StepperStep<'a, M> {
 
 /// See the [module](self).
 pub struct Stepper<'a, M> {
+    props: StepperWidgetProps,
     steps: Vec<StepperStep<'a, M>>,
     active: usize,
     on_step_click: Option<Box<dyn Fn(usize) -> M + 'a>>,
@@ -195,8 +196,14 @@ impl<'a, M: Clone + 'a> Default for Stepper<'a, M> {
 }
 
 impl<'a, M: Clone + 'a> Stepper<'a, M> {
+    /// Presentation overrides for native children; actions remain parent-owned.
+    pub fn props(mut self, props: StepperWidgetProps) -> Self {
+        self.props = props;
+        self
+    }
     pub fn new() -> Self {
         Self {
+            props: StepperWidgetProps::default(),
             steps: Vec::new(),
             active: 0,
             on_step_click: None,
@@ -336,6 +343,7 @@ struct Item<M> {
 }
 
 struct Look<M> {
+    props: StepperWidgetProps,
     items: Vec<Item<M>>,
     fills: Vec<Fill>,
     diameter: f32,
@@ -408,33 +416,40 @@ impl<M: Clone> Look<M> {
             Status::Completed => svg_of(it.completed_icon.unwrap_or(Icon::Check), |t, d| {
                 solid(t, t.semantic.accent.color, d)
             }),
-            Status::Invalid => text("!")
-                .size(crate::Typography::desktop().heading * self.scale)
-                .font(bold())
-                .style(|t: &Theme| text::Style {
-                    color: Some(t.semantic.error.color),
-                })
+            Status::Invalid => self
+                .props
+                .invalid_label
+                .apply(
+                    text("!")
+                        .size(crate::Typography::desktop().heading * self.scale)
+                        .font(bold())
+                        .style(|t: &Theme| text::Style {
+                            color: Some(t.semantic.error.color),
+                        }),
+                )
                 .into(),
             Status::Loading => {
                 let dot = move || {
-                    container(space())
-                        .width(Length::Fixed(size / 5.0))
-                        .height(Length::Fixed(size / 5.0))
-                        .style(move |t: &Theme| container::Style {
-                            background: Some(
-                                crate::color::fade(
-                                    t.semantic.accent.color,
-                                    if dis {
-                                        t.semantic.opacity.disabled
-                                    } else {
-                                        1.0
-                                    },
-                                )
-                                .into(),
-                            ),
-                            border: Border::default().rounded(size),
-                            ..Default::default()
-                        })
+                    self.props.loading_dot.apply(
+                        container(space())
+                            .width(Length::Fixed(size / 5.0))
+                            .height(Length::Fixed(size / 5.0))
+                            .style(move |t: &Theme| container::Style {
+                                background: Some(
+                                    crate::color::fade(
+                                        t.semantic.accent.color,
+                                        if dis {
+                                            t.semantic.opacity.disabled
+                                        } else {
+                                            1.0
+                                        },
+                                    )
+                                    .into(),
+                                ),
+                                border: Border::default().rounded(size),
+                                ..Default::default()
+                            }),
+                    )
                 };
                 row![dot(), dot(), dot()]
                     .spacing(size / 8.0)
@@ -455,43 +470,54 @@ impl<M: Clone> Look<M> {
                         })
                     }
                 }
-                None => text(prim::number(n).to_string())
-                    .size(size)
-                    .font(bold())
-                    .style(move |t: &Theme| text::Style {
-                        color: Some(if status == Status::Current {
-                            t.semantic.accent.fg
-                        } else {
-                            dim_fg(t, dis)
-                        }),
-                    })
+                None => self
+                    .props
+                    .number
+                    .apply(
+                        text(prim::number(n).to_string())
+                            .size(size)
+                            .font(bold())
+                            .style(move |t: &Theme| text::Style {
+                                color: Some(if status == Status::Current {
+                                    t.semantic.accent.fg
+                                } else {
+                                    dim_fg(t, dis)
+                                }),
+                            }),
+                    )
                     .into(),
             },
         };
         let d = self.diameter;
-        container(inner)
-            .center(Length::Fixed(d))
-            .style(move |t: &Theme| {
-                let s = &t.semantic;
-                let (bg, border) = match status {
-                    Status::Current => (Some(s.accent.bg), s.accent.bg),
-                    Status::Completed | Status::Loading => {
-                        (Some(crate::color::fade(s.accent.bg, 0.18)), s.accent.bg)
-                    }
-                    Status::Invalid => (Some(crate::color::fade(s.error.bg, 0.18)), s.error.bg),
-                    Status::Upcoming => (None, s.border),
-                };
-                let k = if dis { s.opacity.disabled } else { 1.0 };
-                container::Style {
-                    background: bg.map(|c| crate::color::fade(c, k).into()),
-                    border: Border {
-                        color: crate::color::fade(border, k),
-                        width: t.metrics.border_width,
-                        radius: (d / 2.0).into(),
-                    },
-                    ..Default::default()
-                }
-            })
+        self.props
+            .mark
+            .apply(
+                container(inner)
+                    .center(Length::Fixed(d))
+                    .style(move |t: &Theme| {
+                        let s = &t.semantic;
+                        let (bg, border) = match status {
+                            Status::Current => (Some(s.accent.bg), s.accent.bg),
+                            Status::Completed | Status::Loading => {
+                                (Some(crate::color::fade(s.accent.bg, 0.18)), s.accent.bg)
+                            }
+                            Status::Invalid => {
+                                (Some(crate::color::fade(s.error.bg, 0.18)), s.error.bg)
+                            }
+                            Status::Upcoming => (None, s.border),
+                        };
+                        let k = if dis { s.opacity.disabled } else { 1.0 };
+                        container::Style {
+                            background: bg.map(|c| crate::color::fade(c, k).into()),
+                            border: Border {
+                                color: crate::color::fade(border, k),
+                                width: t.metrics.border_width,
+                                radius: (d / 2.0).into(),
+                            },
+                            ..Default::default()
+                        }
+                    }),
+            )
             .into()
     }
 
@@ -507,44 +533,51 @@ impl<M: Clone> Look<M> {
         } else {
             text::Wrapping::None
         };
-        let title = text(it.label.clone())
-            .size(size)
-            .wrapping(wrap)
-            .font(if status == Status::Current {
-                bold()
-            } else {
-                iced::Font::DEFAULT
-            })
-            .style(move |t: &Theme| {
-                let c = match status {
-                    Status::Invalid => t.semantic.error.color,
-                    Status::Upcoming => crate::color::fade(t.semantic.window.fg, 0.7),
-                    _ => t.semantic.window.fg,
-                };
-                text::Style {
-                    color: Some(if dis {
-                        crate::color::fade(c, t.semantic.opacity.disabled)
-                    } else {
-                        c
-                    }),
-                }
-            });
+        let title = self.props.label.apply(
+            text(it.label.clone())
+                .size(size)
+                .wrapping(wrap)
+                .font(if status == Status::Current {
+                    bold()
+                } else {
+                    iced::Font::DEFAULT
+                })
+                .style(move |t: &Theme| {
+                    let c = match status {
+                        Status::Invalid => t.semantic.error.color,
+                        Status::Upcoming => crate::color::fade(t.semantic.window.fg, 0.7),
+                        _ => t.semantic.window.fg,
+                    };
+                    text::Style {
+                        color: Some(if dis {
+                            crate::color::fade(c, t.semantic.opacity.disabled)
+                        } else {
+                            c
+                        }),
+                    }
+                }),
+        );
         let mut col = column![title].spacing(self.text_gap());
         if let Some(d) = &it.description {
             col = col.push(
-                text(d.clone())
-                    .size(crate::Typography::desktop().caption * self.scale)
-                    .wrapping(wrap)
-                    .style(move |t: &Theme| text::Style {
-                        color: Some(if dis {
-                            crate::color::fade(
-                                t.semantic.window.fg,
-                                0.4 * t.semantic.opacity.disabled,
-                            )
-                        } else {
-                            crate::color::fade(t.semantic.window.fg, t.semantic.opacity.dim + 0.1)
+                self.props.description.apply(
+                    text(d.clone())
+                        .size(crate::Typography::desktop().caption * self.scale)
+                        .wrapping(wrap)
+                        .style(move |t: &Theme| text::Style {
+                            color: Some(if dis {
+                                crate::color::fade(
+                                    t.semantic.window.fg,
+                                    0.4 * t.semantic.opacity.disabled,
+                                )
+                            } else {
+                                crate::color::fade(
+                                    t.semantic.window.fg,
+                                    t.semantic.opacity.dim + 0.1,
+                                )
+                            }),
                         }),
-                    }),
+                ),
             );
         }
         col.into()
@@ -566,7 +599,10 @@ impl<M: Clone> Look<M> {
         } else {
             let body = self.body(it, wrapping);
             let body: Element<'a, M> = if fill {
-                container(body).width(Length::Fill).into()
+                self.props
+                    .label_container
+                    .apply(container(body).width(Length::Fill))
+                    .into()
             } else {
                 body
             };
@@ -583,11 +619,17 @@ impl<M: Clone> Look<M> {
         match &it.click {
             Some(msg) => {
                 let b = flat_button(r).padding(pad).on_press(msg.clone());
-                if fill { b.width(Length::Fill) } else { b }.into()
+                self.props
+                    .step_button
+                    .apply(if fill { b.width(Length::Fill) } else { b })
+                    .into()
             }
             None => {
                 let c = container(r).padding(pad);
-                if fill { c.width(Length::Fill) } else { c }.into()
+                self.props
+                    .step_container
+                    .apply(if fill { c.width(Length::Fill) } else { c })
+                    .into()
             }
         }
     }
@@ -610,11 +652,11 @@ impl<M: Clone> Look<M> {
                 border: Border::default().rounded(t.metrics.radius_s),
                 ..Default::default()
             });
-            if horizontal {
+            self.props.connector_segment.apply(if horizontal {
                 c.width(Length::FillPortion(portion)).height(Length::Fill)
             } else {
                 c.height(Length::FillPortion(portion)).width(Length::Fill)
-            }
+            })
         };
         let inner: Element<'a, M> = match fill {
             Fill::Empty => seg(false, 1).into(),
@@ -631,15 +673,21 @@ impl<M: Clone> Look<M> {
         };
         if horizontal {
             let c = container(inner).height(Length::Fixed(self.m.border_width));
-            match fixed {
-                Some(w) => c.width(Length::Fixed(w)),
-                None => c.width(Length::Fill),
-            }
-            .into()
+            self.props
+                .horizontal_connector
+                .apply(match fixed {
+                    Some(w) => c.width(Length::Fixed(w)),
+                    None => c.width(Length::Fill),
+                })
+                .into()
         } else {
-            container(inner)
-                .width(Length::Fixed(self.m.border_width))
-                .height(Length::Fill)
+            self.props
+                .vertical_connector
+                .apply(
+                    container(inner)
+                        .width(Length::Fixed(self.m.border_width))
+                        .height(Length::Fill),
+                )
                 .into()
         }
     }
@@ -713,22 +761,27 @@ impl<M: Clone> Look<M> {
             let rail: Element<'a, M> = if last {
                 space().width(Length::Fixed(self.diameter)).into()
             } else {
-                container(self.line(self.fills[i], false, None))
-                    .width(Length::Fixed(self.diameter))
-                    .height(Length::Fill)
-                    .align_x(Alignment::Center)
+                self.props
+                    .rail
+                    .apply(
+                        container(self.line(self.fills[i], false, None))
+                            .width(Length::Fixed(self.diameter))
+                            .height(Length::Fill)
+                            .align_x(Alignment::Center),
+                    )
                     .into()
             };
             let gap = if last { 0.0 } else { m.space_m };
             let body: Element<'a, M> = match content {
-                Some(c) => container(c)
-                    .width(Length::Fill)
-                    .padding(Padding {
+                Some(c) => self
+                    .props
+                    .vertical_content
+                    .apply(container(c).width(Length::Fill).padding(Padding {
                         top: m.space_xs,
                         bottom: m.space_m + gap,
                         left: m.space_m,
                         right: m.space_m,
-                    })
+                    }))
                     .into(),
                 None => space()
                     .width(Length::Fill)
@@ -744,7 +797,11 @@ impl<M: Clone> Look<M> {
             for p in parts {
                 r = r.push(p);
             }
-            col = col.push(container(r).padding(rail_pad).width(Length::Fill));
+            col = col.push(
+                self.props
+                    .vertical_row
+                    .apply(container(r).padding(rail_pad).width(Length::Fill)),
+            );
         }
         col.into()
     }
@@ -822,6 +879,7 @@ impl<'a, M: Clone + 'a> From<Stepper<'a, M>> for Element<'a, M> {
         };
 
         let look = Look {
+            props: s.props.clone(),
             items,
             fills,
             diameter,
@@ -857,14 +915,19 @@ impl<'a, M: Clone + 'a> From<Stepper<'a, M>> for Element<'a, M> {
                     look.horizontal(false, true)
                 } else if s.collapse && count > 1 {
                     let height = look.line_height();
+                    let props = s.props.clone();
                     responsive(move |size| {
                         let need: f32 =
                             (0..look.items.len()).map(|i| look.estimate(i)).sum::<f32>()
                                 + look.m.space_l * look.items.len().saturating_sub(1) as f32;
-                        container(look.horizontal(need > size.width, false))
-                            .width(Length::Fill)
-                            .height(Length::Fill)
-                            .align_y(Alignment::Center)
+                        props
+                            .indicator
+                            .apply(
+                                container(look.horizontal(need > size.width, false))
+                                    .width(Length::Fill)
+                                    .height(Length::Fill)
+                                    .align_y(Alignment::Center),
+                            )
                             .into()
                     })
                     .width(Length::Fill)
@@ -874,10 +937,13 @@ impl<'a, M: Clone + 'a> From<Stepper<'a, M>> for Element<'a, M> {
                     look.horizontal(false, false)
                 };
                 match content {
-                    Some(c) => column![indicator, container(c).width(Length::Fill)]
-                        .spacing(gap)
-                        .width(Length::Fill)
-                        .into(),
+                    Some(c) => column![
+                        indicator,
+                        s.props.content.apply(container(c).width(Length::Fill))
+                    ]
+                    .spacing(gap)
+                    .width(Length::Fill)
+                    .into(),
                     None => indicator,
                 }
             }
@@ -932,5 +998,149 @@ mod metric_regressions {
         ] {
             assert_eq!(size.diameter_with_metrics(m), expected);
         }
+    }
+}
+
+/// Typed presentation for parent-built native children. Defaults preserve the original view.
+#[derive(Clone, Default)]
+pub struct StepperWidgetProps {
+    pub invalid_label: crate::components::TextProps,
+    pub loading_dot: crate::components::ContainerProps,
+    pub number: crate::components::TextProps,
+    pub mark: crate::components::ContainerProps,
+    pub label: crate::components::TextProps,
+    pub description: crate::components::TextProps,
+    pub label_container: crate::components::ContainerProps,
+    pub step_button: crate::components::ButtonProps,
+    pub step_container: crate::components::ContainerProps,
+    pub connector_segment: crate::components::ContainerProps,
+    pub horizontal_connector: crate::components::ContainerProps,
+    pub vertical_connector: crate::components::ContainerProps,
+    pub rail: crate::components::ContainerProps,
+    pub vertical_content: crate::components::ContainerProps,
+    pub vertical_row: crate::components::ContainerProps,
+    pub indicator: crate::components::ContainerProps,
+    pub content: crate::components::ContainerProps,
+}
+
+impl StepperWidgetProps {
+    pub fn invalid_label(mut self, props: crate::components::TextProps) -> Self {
+        self.invalid_label = props;
+        self
+    }
+    pub fn loading_dot(mut self, props: crate::components::ContainerProps) -> Self {
+        self.loading_dot = props;
+        self
+    }
+    pub fn number(mut self, props: crate::components::TextProps) -> Self {
+        self.number = props;
+        self
+    }
+    pub fn mark(mut self, props: crate::components::ContainerProps) -> Self {
+        self.mark = props;
+        self
+    }
+    pub fn label(mut self, props: crate::components::TextProps) -> Self {
+        self.label = props;
+        self
+    }
+    pub fn description(mut self, props: crate::components::TextProps) -> Self {
+        self.description = props;
+        self
+    }
+    pub fn label_container(mut self, props: crate::components::ContainerProps) -> Self {
+        self.label_container = props;
+        self
+    }
+    pub fn step_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.step_button = props;
+        self
+    }
+    pub fn step_container(mut self, props: crate::components::ContainerProps) -> Self {
+        self.step_container = props;
+        self
+    }
+    pub fn connector_segment(mut self, props: crate::components::ContainerProps) -> Self {
+        self.connector_segment = props;
+        self
+    }
+    pub fn horizontal_connector(mut self, props: crate::components::ContainerProps) -> Self {
+        self.horizontal_connector = props;
+        self
+    }
+    pub fn vertical_connector(mut self, props: crate::components::ContainerProps) -> Self {
+        self.vertical_connector = props;
+        self
+    }
+    pub fn rail(mut self, props: crate::components::ContainerProps) -> Self {
+        self.rail = props;
+        self
+    }
+    pub fn vertical_content(mut self, props: crate::components::ContainerProps) -> Self {
+        self.vertical_content = props;
+        self
+    }
+    pub fn vertical_row(mut self, props: crate::components::ContainerProps) -> Self {
+        self.vertical_row = props;
+        self
+    }
+    pub fn indicator(mut self, props: crate::components::ContainerProps) -> Self {
+        self.indicator = props;
+        self
+    }
+    pub fn content(mut self, props: crate::components::ContainerProps) -> Self {
+        self.content = props;
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: Stepper<'a, M>) -> Stepper<'a, M>
+    where
+        M: Clone + 'a,
+    {
+        widget.props(self.clone())
+    }
+}
+
+#[cfg(test)]
+mod native_props_tests {
+    use super::*;
+    use crate::widgets::synced_text::native_props_tests::{assert_override, text_props};
+    #[test]
+    fn defaults_preserve_layout_and_overrides_reach_native_children() {
+        for orientation in [StepperOrientation::Horizontal, StepperOrientation::Vertical] {
+            let make = || {
+                Stepper::<()>::new()
+                    .collapse(false)
+                    .orientation(orientation)
+                    .step(StepperStep::new("Account").description("Details"))
+            };
+            assert_override(
+                make().into(),
+                make().props(StepperWidgetProps::default()).into(),
+                make()
+                    .props(StepperWidgetProps::default().label(text_props()))
+                    .into(),
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod native_behavior_tests {
+    use super::*;
+    use crate::components::ButtonProps;
+    use crate::widgets::synced_text::native_props_tests::click_sized;
+    #[test]
+    fn presentation_preserves_click_rules() {
+        let stepper = Stepper::new()
+            .collapse(false)
+            .active(1)
+            .on_step_click(|i| i)
+            .step(StepperStep::new("First"))
+            .step(StepperStep::new("Second"))
+            .props(
+                StepperWidgetProps::default()
+                    .step_button(ButtonProps::default().width(137).height(29)),
+            );
+        assert_eq!(click_sized(stepper.into()), vec![0]);
     }
 }

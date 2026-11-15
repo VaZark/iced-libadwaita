@@ -15,6 +15,8 @@ use iced::widget::{button, container, row};
 type Custom<'a, M> = (&'a str, std::rc::Rc<dyn Fn(String) -> M + 'a>);
 
 pub struct AccentPicker<'a, M> {
+    button_props: crate::components::ButtonProps,
+    entry_props: crate::components::EntryProps,
     selected: AccentColor,
     on_select: std::rc::Rc<dyn Fn(AccentColor) -> M + 'a>,
     custom: Option<Custom<'a, M>>,
@@ -30,6 +32,8 @@ pub fn accent_picker<'a, M: Clone + 'a>(
     on_select: impl Fn(AccentColor) -> M + 'a,
 ) -> AccentPicker<'a, M> {
     AccentPicker {
+        button_props: Default::default(),
+        entry_props: Default::default(),
         selected,
         on_select: std::rc::Rc::new(on_select),
         custom: None,
@@ -42,6 +46,15 @@ pub fn accent_picker<'a, M: Clone + 'a>(
 }
 
 impl<'a, M: Clone + 'a> AccentPicker<'a, M> {
+    pub fn button_props(mut self, props: crate::components::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+    pub fn entry_props(mut self, props: crate::components::EntryProps) -> Self {
+        self.entry_props = props;
+        self
+    }
+
     /// Adds the custom swatch. `text` is what the popover's entry shows (the app keeps it, so
     /// typing is not interrupted); `on_text` gets what was typed. Parse it with
     /// [`AccentColor::parse`] and select the result.
@@ -100,10 +113,13 @@ impl<'a, M: Clone + 'a> From<AccentPicker<'a, M>> for Element<'a, M> {
         let mut swatches: Vec<Element<'a, M>> = AccentColor::ALL
             .iter()
             .map(|a| {
-                button(round_swatch(a.to_color(), *a == p.selected, m))
-                    .padding(0)
-                    .style(|_: &Theme, _| iced::widget::button::Style::default())
-                    .on_press((p.on_select)(*a))
+                p.button_props
+                    .apply(
+                        button(round_swatch(a.to_color(), *a == p.selected, m))
+                            .padding(0)
+                            .style(|_: &Theme, _| iced::widget::button::Style::default())
+                            .on_press((p.on_select)(*a)),
+                    )
                     .into()
             })
             .collect();
@@ -140,6 +156,7 @@ impl<'a, M: Clone + 'a> From<AccentPicker<'a, M>> for Element<'a, M> {
             );
             swatches.push(
                 input
+                    .entry_props(p.entry_props.clone())
                     .swatches(AccentColor::ALL.map(|a| {
                         let c = a.to_color();
                         Hsva::from_rgba(c.r, c.g, c.b, 1.0).format(ColorFormat::Hex)
@@ -168,5 +185,47 @@ mod spacing_params {
         let p = accent_picker(AccentColor::Blue, |_| ()).spacing(3.0);
         assert_eq!(p.spacing, Some(3.0));
         let _: Element<'_, ()> = p.into();
+    }
+}
+
+/// Presentation-only overrides supported by [`AccentPicker`]. Values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct AccentPickerProps {
+    pub spacing: Option<f32>,
+    pub metrics: Option<crate::Metrics>,
+    pub entry_props: Option<crate::components::EntryProps>,
+    pub button_props: Option<crate::components::ButtonProps>,
+}
+impl AccentPickerProps {
+    pub fn spacing(mut self, value: impl Into<f32>) -> Self {
+        self.spacing = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<crate::Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn entry_props(mut self, value: impl Into<crate::components::EntryProps>) -> Self {
+        self.entry_props = Some(value.into());
+        self
+    }
+    pub fn button_props(mut self, value: impl Into<crate::components::ButtonProps>) -> Self {
+        self.button_props = Some(value.into());
+        self
+    }
+    pub fn apply<'a, M: Clone + 'a>(&self, mut widget: AccentPicker<'a, M>) -> AccentPicker<'a, M> {
+        if let Some(value) = self.spacing.clone() {
+            widget = widget.spacing(value);
+        }
+        if let Some(value) = self.metrics.clone() {
+            widget = widget.metrics(value);
+        }
+        if let Some(value) = self.entry_props.clone() {
+            widget = widget.entry_props(value);
+        }
+        if let Some(value) = self.button_props.clone() {
+            widget = widget.button_props(value);
+        }
+        widget
     }
 }

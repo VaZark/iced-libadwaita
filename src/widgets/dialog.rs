@@ -3,6 +3,7 @@
 //! (`AdwShortcutsDialog`, `AdwPreferencesDialog`).
 
 use crate::Element;
+use crate::components::{ButtonProps, ContainerProps, TextProps};
 use crate::styles::{button as sb, container as sc, text as st};
 use crate::{DecorationLayout, Metrics, Role, Theme, Typography, WindowButton};
 use iced::Length;
@@ -62,6 +63,12 @@ pub enum ResponseAppearance {
 
 /// `AdwAlertDialog`. Turn it into an element and present it with [`dialog`].
 pub struct AlertDialog<'a, M> {
+    title_props: TextProps,
+    body_props: TextProps,
+    action_label_props: TextProps,
+    action_props: ButtonProps,
+    body_container_props: ContainerProps,
+    container_props: ContainerProps,
     heading: String,
     body: Option<String>,
     child: Option<Element<'a, M>>,
@@ -72,8 +79,51 @@ pub struct AlertDialog<'a, M> {
 }
 
 impl<'a, M> AlertDialog<'a, M> {
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn title_props(mut self, props: TextProps) -> Self {
+        self.title_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn body_props(mut self, props: TextProps) -> Self {
+        self.body_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn action_label_props(mut self, props: TextProps) -> Self {
+        self.action_label_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn action_props(mut self, props: ButtonProps) -> Self {
+        self.action_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn body_container_props(mut self, props: ContainerProps) -> Self {
+        self.body_container_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+
     pub fn new(heading: impl Into<String>) -> Self {
         Self {
+            title_props: TextProps::default(),
+            body_props: TextProps::default(),
+            action_label_props: TextProps::default(),
+            action_props: ButtonProps::default(),
+            body_container_props: ContainerProps::default(),
+            container_props: ContainerProps::default(),
+
             heading: heading.into(),
             body: None,
             child: None,
@@ -136,12 +186,15 @@ impl<'a, M: Clone + 'a> From<AlertDialog<'a, M>> for Element<'a, M> {
     fn from(a: AlertDialog<'a, M>) -> Self {
         let m = a.metrics;
         let t = Typography::desktop();
-        let mut body = column![t.title_2(a.heading).align_x(Horizontal::Center)]
-            .spacing(a.spacing.unwrap_or(m.space_m))
-            .align_x(Horizontal::Center)
-            .width(Length::Fill);
+        let mut body = column![
+            a.title_props
+                .apply(t.title_2(a.heading).align_x(Horizontal::Center))
+        ]
+        .spacing(a.spacing.unwrap_or(m.space_m))
+        .align_x(Horizontal::Center)
+        .width(Length::Fill);
         if let Some(b) = a.body {
-            body = body.push(t.body(b).align_x(Horizontal::Center));
+            body = body.push(a.body_props.apply(t.body(b).align_x(Horizontal::Center)));
         }
         if let Some(c) = a.child {
             body = body.push(c);
@@ -176,38 +229,57 @@ impl<'a, M: Clone + 'a> From<AlertDialog<'a, M>> for Element<'a, M> {
                 });
             let radius = m.radius_l;
             buttons = buttons.push(
-                button(container(lbl).center(Length::Fill))
-                    .padding(0)
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .style(move |th, s| {
-                        let mut st = sb::flat(th, s);
-                        st.border.radius = match (i, n) {
-                            (_, 1) => iced::border::bottom(radius),
-                            (0, _) => iced::border::bottom_left(radius),
-                            (i, n) if i + 1 == n => iced::border::bottom_right(radius),
-                            _ => 0.0.into(),
-                        };
-                        st
-                    })
-                    .on_press(msg),
+                a.action_props.apply(
+                    button(container(a.action_label_props.apply(lbl)).center(Length::Fill))
+                        .padding(0)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .style(move |th, s| {
+                            let mut st = sb::flat(th, s);
+                            st.border.radius = match (i, n) {
+                                (_, 1) => iced::border::bottom(radius),
+                                (0, _) => iced::border::bottom_left(radius),
+                                (i, n) if i + 1 == n => iced::border::bottom_right(radius),
+                                _ => 0.0.into(),
+                            };
+                            st
+                        })
+                        .on_press(msg),
+                ),
             );
         }
 
-        crate::components::framed(container(column![
-            container(body).padding(a.padding.unwrap_or(m.dialog_padding)),
-            separator_h(),
-            buttons
-        ])
-        .width(Length::Fill)
-        .max_width(m.dialog_width)
-        .clip(true)
-        .style(sc::dialog), "dialog")
+        crate::components::framed(
+            a.container_props.apply(
+                container(column![
+                    a.body_container_props
+                        .apply(container(body).padding(a.padding.unwrap_or(m.dialog_padding))),
+                    separator_h(),
+                    buttons
+                ])
+                .width(Length::Fill)
+                .max_width(m.dialog_width)
+                .clip(true)
+                .style(sc::dialog),
+            ),
+            "dialog",
+        )
     }
 }
 
 /// `AdwAboutDialog` (content only; present it with [`dialog`]).
 pub struct AboutDialog<'a, M> {
+    title_props: TextProps,
+    developer_props: TextProps,
+    version_props: TextProps,
+    version_container_props: ContainerProps,
+    body_props: TextProps,
+    website_props: TextProps,
+    license_props: TextProps,
+    action_label_props: TextProps,
+    action_props: ButtonProps,
+    body_container_props: ContainerProps,
+    container_props: ContainerProps,
     application_name: String,
     developer_name: Option<String>,
     version: Option<String>,
@@ -222,8 +294,86 @@ pub struct AboutDialog<'a, M> {
 }
 
 impl<'a, M> AboutDialog<'a, M> {
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn title_props(mut self, props: TextProps) -> Self {
+        self.title_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn developer_props(mut self, props: TextProps) -> Self {
+        self.developer_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn version_props(mut self, props: TextProps) -> Self {
+        self.version_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn version_container_props(mut self, props: ContainerProps) -> Self {
+        self.version_container_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn body_props(mut self, props: TextProps) -> Self {
+        self.body_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn website_props(mut self, props: TextProps) -> Self {
+        self.website_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn license_props(mut self, props: TextProps) -> Self {
+        self.license_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn action_label_props(mut self, props: TextProps) -> Self {
+        self.action_label_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn action_props(mut self, props: ButtonProps) -> Self {
+        self.action_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn body_container_props(mut self, props: ContainerProps) -> Self {
+        self.body_container_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+
     pub fn new(application_name: impl Into<String>) -> Self {
         Self {
+            title_props: TextProps::default(),
+            developer_props: TextProps::default(),
+            version_props: TextProps::default(),
+            version_container_props: ContainerProps::default(),
+            body_props: TextProps::default(),
+            website_props: TextProps::default(),
+            license_props: TextProps::default(),
+            action_label_props: TextProps::default(),
+            action_props: ButtonProps::default(),
+            body_container_props: ContainerProps::default(),
+            container_props: ContainerProps::default(),
+
             application_name: application_name.into(),
             developer_name: None,
             version: None,
@@ -294,30 +444,38 @@ impl<'a, M: Clone + 'a> From<AboutDialog<'a, M>> for Element<'a, M> {
         if let Some(i) = a.icon {
             col = col.push(i);
         }
-        col = col.push(t.title_2(a.application_name));
+        col = col.push(a.title_props.apply(t.title_2(a.application_name)));
         if let Some(d) = a.developer_name {
-            col = col.push(t.body(d).style(st::dim));
+            col = col.push(a.developer_props.apply(t.body(d).style(st::dim)));
         }
         if let Some(v) = a.version {
             col = col.push(
-                container(t.caption(v))
-                    .padding(crate::Metrics::desktop().small_button_padding)
-                    .style(sc::tinted(Role::Accent)),
+                a.version_container_props.apply(
+                    container(a.version_props.apply(t.caption(v)))
+                        .padding(crate::Metrics::desktop().small_button_padding)
+                        .style(sc::tinted(Role::Accent)),
+                ),
             );
         }
         if let Some(c) = a.comments {
-            col = col.push(t.body(c).align_x(Horizontal::Center));
+            col = col.push(a.body_props.apply(t.body(c).align_x(Horizontal::Center)));
         }
         if let Some(w) = a.website {
-            col = col.push(t.body(w).style(st::accent));
+            col = col.push(a.website_props.apply(t.body(w).style(st::accent)));
         }
         if let Some(l) = a.license {
-            col = col.push(t.caption(l).style(st::dim));
+            col = col.push(a.license_props.apply(t.caption(l).style(st::dim)));
         }
-        let mut c = column![container(col).padding(a.padding.unwrap_or(m.dialog_padding))];
+        let mut c = column![
+            a.body_container_props
+                .apply(container(col).padding(a.padding.unwrap_or(m.dialog_padding)))
+        ];
         if let Some(msg) = a.on_close {
             c = c.push(separator_h()).push(
-                button(container(text("Close")).center(Length::Fill))
+                a.action_props.apply(
+                    button(
+                        container(a.action_label_props.apply(text("Close"))).center(Length::Fill),
+                    )
                     .padding(0)
                     .width(Length::Fill)
                     .height(Length::Fixed(m.button_min_height + 12.0))
@@ -327,13 +485,19 @@ impl<'a, M: Clone + 'a> From<AboutDialog<'a, M>> for Element<'a, M> {
                         st
                     })
                     .on_press(msg),
+                ),
             );
         }
-        crate::components::framed(container(c)
-            .width(Length::Fill)
-            .max_width(m.dialog_width + 40.0)
-            .clip(true)
-            .style(sc::dialog), "dialog")
+        crate::components::framed(
+            a.container_props.apply(
+                container(c)
+                    .width(Length::Fill)
+                    .max_width(m.dialog_width + 40.0)
+                    .clip(true)
+                    .style(sc::dialog),
+            ),
+            "dialog",
+        )
     }
 }
 
@@ -342,15 +506,24 @@ pub fn shortcuts_dialog<'a, M: Clone + 'a>(
     sections: Vec<(String, Vec<(String, String)>)>,
     on_close: M,
 ) -> Element<'a, M> {
+    shortcuts_dialog_with_props(sections, on_close, &ShortcutsDialogProps::default())
+}
+
+pub fn shortcuts_dialog_with_props<'a, M: Clone + 'a>(
+    sections: Vec<(String, Vec<(String, String)>)>,
+    on_close: M,
+    props: &ShortcutsDialogProps,
+) -> Element<'a, M> {
     let m = Metrics::desktop();
     let t = Typography::desktop();
     let mut col = column![].spacing(m.space_l);
     for (title, items) in sections {
-        let mut list = column![t.heading(title)].spacing(m.space_s);
+        let mut list =
+            column![props.section_title_props.apply(t.heading(title))].spacing(m.space_s);
         for (label, accel) in items {
             list = list.push(
                 row![
-                    container(t.body(label)).width(Length::Fill),
+                    container(props.label_props.apply(t.body(label))).width(Length::Fill),
                     crate::widgets::shortcut_label(&accel)
                 ]
                 .align_y(Vertical::Center),
@@ -358,7 +531,14 @@ pub fn shortcuts_dialog<'a, M: Clone + 'a>(
         }
         col = col.push(list);
     }
-    dialog_frame("Keyboard Shortcuts", col.into(), on_close, 480.0, 420.0)
+    dialog_frame(
+        "Keyboard Shortcuts",
+        col.into(),
+        on_close,
+        480.0,
+        420.0,
+        &props.frame_props,
+    )
 }
 
 /// `AdwPreferencesDialog`: a dialog with a header bar wrapping a page.
@@ -367,7 +547,16 @@ pub fn preferences_dialog<'a, M: Clone + 'a>(
     page: impl Into<Element<'a, M>>,
     on_close: M,
 ) -> Element<'a, M> {
-    dialog_frame(&title.into(), page.into(), on_close, 640.0, 520.0)
+    preferences_dialog_with_props(title, page, on_close, &DialogFrameProps::default())
+}
+
+pub fn preferences_dialog_with_props<'a, M: Clone + 'a>(
+    title: impl Into<String>,
+    page: impl Into<Element<'a, M>>,
+    on_close: M,
+    props: &DialogFrameProps,
+) -> Element<'a, M> {
+    dialog_frame(&title.into(), page.into(), on_close, 640.0, 520.0, props)
 }
 
 fn dialog_frame<'a, M: Clone + 'a>(
@@ -376,6 +565,7 @@ fn dialog_frame<'a, M: Clone + 'a>(
     on_close: M,
     width: f32,
     height: f32,
+    props: &DialogFrameProps,
 ) -> Element<'a, M> {
     // `AdwHeaderBar` in a dialog: the dialog title and only a close button, on the
     // side the system puts it (end by default). The header is flat so it shares the
@@ -394,23 +584,34 @@ fn dialog_frame<'a, M: Clone + 'a>(
         start: close(close_at_start),
         end: close(!close_at_start),
     };
-    let bar = crate::widgets::header_bar()
-        .title(title.to_string())
-        // Flat: the header flows into the dialog body instead of having its own color.
-        .flat(true)
-        .window_controls(crate::widgets::WindowControls {
-            on_close: Some(on_close),
-            layout: Some(layout),
-            ..Default::default()
-        });
-    let content = container(body).padding(Metrics::desktop().space_l);
-    crate::components::framed(container(crate::widgets::toolbar_view(crate::layouts::scrolled_window(content)).top_bar(bar))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .max_width(width)
-        .max_height(height)
-        .clip(true)
-        .style(sc::dialog), "dialog")
+    let bar = props.header_props.apply(
+        crate::widgets::header_bar()
+            .title(title.to_string())
+            // Flat: the header flows into the dialog body instead of having its own color.
+            .flat(true)
+            .window_controls(crate::widgets::WindowControls {
+                on_close: Some(on_close),
+                layout: Some(layout),
+                ..Default::default()
+            }),
+    );
+    let content = props
+        .body_props
+        .apply(container(body).padding(Metrics::desktop().space_l));
+    crate::components::framed(
+        props.container_props.apply(
+            container(
+                crate::widgets::toolbar_view(crate::layouts::scrolled_window(content)).top_bar(bar),
+            )
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .max_width(width)
+            .max_height(height)
+            .clip(true)
+            .style(sc::dialog),
+        ),
+        "dialog",
+    )
 }
 
 #[cfg(test)]
@@ -424,7 +625,10 @@ mod spacing_params_tests {
             .response("OK", ResponseAppearance::Default, 1)
             .spacing(3.0)
             .padding(5.0);
-        assert_eq!((a.spacing, a.padding), (Some(3.0), Some(iced::Padding::from(5.0))));
+        assert_eq!(
+            (a.spacing, a.padding),
+            (Some(3.0), Some(iced::Padding::from(5.0)))
+        );
         let _: Element<'_, u8> = a.into();
         let b = AboutDialog::<u8>::new("App")
             .version("1")
@@ -433,5 +637,297 @@ mod spacing_params_tests {
             .align(Horizontal::Left);
         assert_eq!(b.align, Horizontal::Left);
         let _: Element<'_, u8> = b.into();
+    }
+}
+
+/// Reusable, no-op-by-default presentation for [`AlertDialog`].
+#[derive(Clone, Default)]
+pub struct AlertDialogProps {
+    pub title_props: Option<TextProps>,
+    pub body_props: Option<TextProps>,
+    pub action_label_props: Option<TextProps>,
+    pub action_props: Option<ButtonProps>,
+    pub body_container_props: Option<ContainerProps>,
+    pub container_props: Option<ContainerProps>,
+}
+impl AlertDialogProps {
+    pub fn title_props(mut self, props: TextProps) -> Self {
+        self.title_props = Some(props);
+        self
+    }
+    pub fn body_props(mut self, props: TextProps) -> Self {
+        self.body_props = Some(props);
+        self
+    }
+    pub fn action_label_props(mut self, props: TextProps) -> Self {
+        self.action_label_props = Some(props);
+        self
+    }
+    pub fn action_props(mut self, props: ButtonProps) -> Self {
+        self.action_props = Some(props);
+        self
+    }
+    pub fn body_container_props(mut self, props: ContainerProps) -> Self {
+        self.body_container_props = Some(props);
+        self
+    }
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = Some(props);
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: AlertDialog<'a, M>) -> AlertDialog<'a, M> {
+        let widget = if let Some(props) = &self.title_props {
+            widget.title_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.body_props {
+            widget.body_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.action_label_props {
+            widget.action_label_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.action_props {
+            widget.action_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.body_container_props {
+            widget.body_container_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.container_props {
+            widget.container_props(props.clone())
+        } else {
+            widget
+        };
+        widget
+    }
+}
+
+/// Reusable, no-op-by-default presentation for [`AboutDialog`].
+#[derive(Clone, Default)]
+pub struct AboutDialogProps {
+    pub title_props: Option<TextProps>,
+    pub developer_props: Option<TextProps>,
+    pub version_props: Option<TextProps>,
+    pub version_container_props: Option<ContainerProps>,
+    pub body_props: Option<TextProps>,
+    pub website_props: Option<TextProps>,
+    pub license_props: Option<TextProps>,
+    pub action_label_props: Option<TextProps>,
+    pub action_props: Option<ButtonProps>,
+    pub body_container_props: Option<ContainerProps>,
+    pub container_props: Option<ContainerProps>,
+}
+impl AboutDialogProps {
+    pub fn title_props(mut self, props: TextProps) -> Self {
+        self.title_props = Some(props);
+        self
+    }
+    pub fn developer_props(mut self, props: TextProps) -> Self {
+        self.developer_props = Some(props);
+        self
+    }
+    pub fn version_props(mut self, props: TextProps) -> Self {
+        self.version_props = Some(props);
+        self
+    }
+    pub fn version_container_props(mut self, props: ContainerProps) -> Self {
+        self.version_container_props = Some(props);
+        self
+    }
+    pub fn body_props(mut self, props: TextProps) -> Self {
+        self.body_props = Some(props);
+        self
+    }
+    pub fn website_props(mut self, props: TextProps) -> Self {
+        self.website_props = Some(props);
+        self
+    }
+    pub fn license_props(mut self, props: TextProps) -> Self {
+        self.license_props = Some(props);
+        self
+    }
+    pub fn action_label_props(mut self, props: TextProps) -> Self {
+        self.action_label_props = Some(props);
+        self
+    }
+    pub fn action_props(mut self, props: ButtonProps) -> Self {
+        self.action_props = Some(props);
+        self
+    }
+    pub fn body_container_props(mut self, props: ContainerProps) -> Self {
+        self.body_container_props = Some(props);
+        self
+    }
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = Some(props);
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: AboutDialog<'a, M>) -> AboutDialog<'a, M> {
+        let widget = if let Some(props) = &self.title_props {
+            widget.title_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.developer_props {
+            widget.developer_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.version_props {
+            widget.version_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.version_container_props {
+            widget.version_container_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.body_props {
+            widget.body_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.website_props {
+            widget.website_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.license_props {
+            widget.license_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.action_label_props {
+            widget.action_label_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.action_props {
+            widget.action_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.body_container_props {
+            widget.body_container_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.container_props {
+            widget.container_props(props.clone())
+        } else {
+            widget
+        };
+        widget
+    }
+}
+
+/// Presentation of a dialog frame; close handling and window-control placement remain owned by the dialog.
+#[derive(Clone, Default)]
+pub struct DialogFrameProps {
+    pub header_props: super::header_bar::HeaderBarProps,
+    pub body_props: ContainerProps,
+    pub container_props: ContainerProps,
+}
+impl DialogFrameProps {
+    pub fn header_props(mut self, props: super::header_bar::HeaderBarProps) -> Self {
+        self.header_props = props;
+        self
+    }
+    pub fn body_props(mut self, props: ContainerProps) -> Self {
+        self.body_props = props;
+        self
+    }
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+}
+#[derive(Clone, Default)]
+pub struct ShortcutsDialogProps {
+    pub section_title_props: TextProps,
+    pub label_props: TextProps,
+    pub frame_props: DialogFrameProps,
+}
+impl ShortcutsDialogProps {
+    pub fn section_title_props(mut self, props: TextProps) -> Self {
+        self.section_title_props = props;
+        self
+    }
+    pub fn label_props(mut self, props: TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn frame_props(mut self, props: DialogFrameProps) -> Self {
+        self.frame_props = props;
+        self
+    }
+}
+
+#[cfg(test)]
+mod typed_presentation_tests {
+    #[test]
+    fn custom_presentation_retains_response_appearance_and_messages() {
+        let props = AlertDialogProps::default()
+            .action_props(ButtonProps::default().width(91))
+            .title_props(TextProps::default().size(23));
+        let dialog = props.apply(AlertDialog::new("Delete?").response(
+            "Delete",
+            ResponseAppearance::Destructive,
+            7u8,
+        ));
+        assert_eq!(
+            dialog.responses,
+            vec![("Delete".into(), ResponseAppearance::Destructive, 7)]
+        );
+        assert_eq!(dialog.action_props.width, Some(Length::Fixed(91.0)));
+        let _: Element<'_, u8> = dialog.into();
+    }
+    #[test]
+    fn function_adapters_build_with_typed_props() {
+        let props = DialogFrameProps::default().body_props(ContainerProps::default().padding(9));
+        let _: Element<'_, u8> =
+            preferences_dialog_with_props("Preferences", iced::widget::space(), 7, &props);
+        let _: Element<'_, u8> = shortcuts_dialog_with_props(
+            vec![("Section".into(), vec![("Open".into(), "Ctrl+O".into())])],
+            7,
+            &ShortcutsDialogProps::default()
+                .section_title_props(TextProps::default().size(23))
+                .frame_props(props),
+        );
+    }
+
+    use super::*;
+    use iced::advanced::widget::Tree;
+    fn same_tree(a: &Tree, b: &Tree) {
+        assert!(a.tag == b.tag);
+        assert_eq!(a.children.len(), b.children.len());
+        for (a, b) in a.children.iter().zip(&b.children) {
+            same_tree(a, b);
+        }
+    }
+    #[test]
+    fn reusable_defaults_preserve_geometry_and_tree() {
+        let build = || {
+            AlertDialog::new("Title").body("Body").response(
+                "OK",
+                ResponseAppearance::Destructive,
+                7u8,
+            )
+        };
+        let w = build();
+        let baseline: Element<'_, u8> = w.into();
+        let w = AlertDialogProps::default().apply(build());
+        let configured: Element<'_, u8> = w.into();
+        assert_eq!(baseline.as_widget().size(), configured.as_widget().size());
+        same_tree(&Tree::new(&baseline), &Tree::new(&configured));
     }
 }

@@ -45,6 +45,10 @@ use std::rc::Rc;
 
 /// See the [module](self).
 pub struct TagFilter<'a, K: Clone, M> {
+    entry_props: crate::components::entry::TextInputProps,
+    row_props: super::entries::EntryRowProps,
+    label_props: crate::components::TextProps,
+    chip_props: crate::components::badge::ChipProps,
     groups: Cow<'a, TagGroups<K>>,
     options: Vec<ChipOption<K>>,
     query: &'a str,
@@ -75,6 +79,25 @@ pub struct TagFilter<'a, K: Clone, M> {
 }
 
 impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M> {
+    pub fn row_props(mut self, props: super::entries::EntryRowProps) -> Self {
+        self.row_props = props;
+        self
+    }
+    pub fn entry_props(mut self, props: crate::components::entry::TextInputProps) -> Self {
+        self.entry_props = props;
+        self
+    }
+
+    pub fn label_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
+    pub fn chip_props(mut self, props: crate::components::badge::ChipProps) -> Self {
+        self.chip_props = props;
+        self
+    }
+
     /// `options` is every tag on offer, `groups` what is picked (owned by the app) and `query`
     /// what the field holds.
     pub fn new(
@@ -105,6 +128,10 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
         on_query: impl Fn(String) -> M + 'a,
     ) -> Self {
         Self {
+            entry_props: Default::default(),
+            row_props: Default::default(),
+            label_props: Default::default(),
+            chip_props: Default::default(),
             groups,
             options: options.into_iter().collect(),
             query,
@@ -277,7 +304,7 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
         if let Some(color) = option.and_then(|o| o.color) {
             chip = chip.color(color);
         }
-        chip.into()
+        self.chip_props.apply(chip).into()
     }
     /// The pills of the entry in order, and where the field goes among them.
     fn pills(&mut self) -> (Vec<Element<'a, M>>, usize) {
@@ -359,7 +386,7 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
         if let Some(id) = f.field_id.clone() {
             field = field.id(id);
         }
-        items.push(field.into());
+        items.push(f.entry_props.apply(field).into());
         let input = if f.multiple {
             token_flow_with_caret(
                 items,
@@ -400,11 +427,13 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
             });
         }
         let mut entry = EntryRow::new(f.label.clone(), EntryInput::Custom(line.into()))
+            .label_props(f.label_props.clone())
             .flat(f.flat)
             .metrics(m);
         if let Some(d) = f.description.take() {
             entry = entry.description(d);
         }
+        let entry = f.row_props.apply(entry);
         let chips: Element<'a, M> = match f.choices.take() {
             Some(choices) => choices,
             None => {
@@ -505,5 +534,93 @@ mod tests {
         let mut f =
             TagFilter::new(&groups, options(), "", |e| e, |_| GroupEvent::AddGroup).multiple(true);
         assert_eq!(f.pills().1, 1);
+    }
+}
+
+/// Presentation-only overrides supported by [`TagFilter`]. Values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct TagFilterProps {
+    pub spacing: Option<f32>,
+    pub pill_spacing: Option<f32>,
+    pub field_padding: Option<iced::Padding>,
+    pub chips_spacing: Option<f32>,
+    pub metrics: Option<crate::Metrics>,
+    pub entry_props: Option<crate::components::entry::TextInputProps>,
+    pub label_props: Option<crate::components::TextProps>,
+    pub chip_props: Option<crate::components::badge::ChipProps>,
+    pub row_props: Option<super::entries::EntryRowProps>,
+}
+impl TagFilterProps {
+    pub fn spacing(mut self, value: impl Into<f32>) -> Self {
+        self.spacing = Some(value.into());
+        self
+    }
+    pub fn pill_spacing(mut self, value: impl Into<f32>) -> Self {
+        self.pill_spacing = Some(value.into());
+        self
+    }
+    pub fn field_padding(mut self, value: impl Into<iced::Padding>) -> Self {
+        self.field_padding = Some(value.into());
+        self
+    }
+    pub fn chips_spacing(mut self, value: impl Into<f32>) -> Self {
+        self.chips_spacing = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<crate::Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn entry_props(
+        mut self,
+        value: impl Into<crate::components::entry::TextInputProps>,
+    ) -> Self {
+        self.entry_props = Some(value.into());
+        self
+    }
+    pub fn label_props(mut self, value: impl Into<crate::components::TextProps>) -> Self {
+        self.label_props = Some(value.into());
+        self
+    }
+    pub fn chip_props(mut self, value: impl Into<crate::components::badge::ChipProps>) -> Self {
+        self.chip_props = Some(value.into());
+        self
+    }
+    pub fn row_props(mut self, value: impl Into<super::entries::EntryRowProps>) -> Self {
+        self.row_props = Some(value.into());
+        self
+    }
+    pub fn apply<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a>(
+        &self,
+        mut widget: TagFilter<'a, K, M>,
+    ) -> TagFilter<'a, K, M> {
+        if let Some(value) = self.spacing.clone() {
+            widget = widget.spacing(value);
+        }
+        if let Some(value) = self.pill_spacing.clone() {
+            widget = widget.pill_spacing(value);
+        }
+        if let Some(value) = self.field_padding.clone() {
+            widget = widget.field_padding(value);
+        }
+        if let Some(value) = self.chips_spacing.clone() {
+            widget = widget.chips_spacing(value);
+        }
+        if let Some(value) = self.metrics.clone() {
+            widget = widget.metrics(value);
+        }
+        if let Some(value) = self.entry_props.clone() {
+            widget = widget.entry_props(value);
+        }
+        if let Some(value) = self.label_props.clone() {
+            widget = widget.label_props(value);
+        }
+        if let Some(value) = self.chip_props.clone() {
+            widget = widget.chip_props(value);
+        }
+        if let Some(value) = self.row_props.clone() {
+            widget = widget.row_props(value);
+        }
+        widget
     }
 }

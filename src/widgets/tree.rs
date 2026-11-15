@@ -37,6 +37,7 @@
 use crate::Element;
 use crate::components::flat_button;
 use crate::components::typography::label as plain_label;
+use crate::components::{ButtonProps, ContainerProps};
 use crate::primitives::tree::{self, Event, Position, Row, TreeNode, TreeState};
 use crate::styles::button as sb;
 use crate::styles::text as st;
@@ -176,11 +177,39 @@ pub struct Tree<'a, M> {
     icon_padding: Option<iced::Padding>,
     label_padding: Option<iced::Padding>,
     checkbox_padding: Option<iced::Padding>,
+    expander_props: ButtonProps,
+    label_button_props: ButtonProps,
+    checkbox_button_props: ButtonProps,
+    row_props: ContainerProps,
 }
 
 impl<'a, M: Clone + 'a> Tree<'a, M> {
+    /// Presentation overrides applied after theme geometry and style.
+    pub fn expander_props(mut self, props: ButtonProps) -> Self {
+        self.expander_props = props;
+        self
+    }
+    /// Presentation overrides applied after theme geometry and style.
+    pub fn label_button_props(mut self, props: ButtonProps) -> Self {
+        self.label_button_props = props;
+        self
+    }
+    /// Presentation overrides applied after theme geometry and style.
+    pub fn checkbox_button_props(mut self, props: ButtonProps) -> Self {
+        self.checkbox_button_props = props;
+        self
+    }
+    /// Presentation overrides applied after theme geometry and style.
+    pub fn row_props(mut self, props: ContainerProps) -> Self {
+        self.row_props = props;
+        self
+    }
     pub fn new(data: &'a [TreeNode], state: &'a TreeState) -> Self {
         Self {
+            expander_props: ButtonProps::default(),
+            label_button_props: ButtonProps::default(),
+            checkbox_button_props: ButtonProps::default(),
+            row_props: ContainerProps::default(),
             data,
             state,
             lines: false,
@@ -416,8 +445,11 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
         // The arrow; a leaf keeps its width so labels line up (GTK's indent-for-icon).
         let arrow = g.icon_size + g.handle_padding;
         let expander: Element<'a, M> = if r.error.is_some() {
-            flat_button(plain_label("Retry").style(st::error))
-                .on_press_maybe(self.emit(Event::Retry(r.value.clone())))
+            self.expander_props
+                .apply(
+                    flat_button(plain_label("Retry").style(st::error))
+                        .on_press_maybe(self.emit(Event::Retry(r.value.clone()))),
+                )
                 .into()
         } else if r.loading {
             container(plain_label("…").style(st::dim))
@@ -430,10 +462,13 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
             } else {
                 Icon::GoNext
             };
-            button(container(icon.view(g.icon_size - g.expander_icon_inset)).center(arrow))
-                .padding(0)
-                .style(sb::flat)
-                .on_press_maybe(self.emit(Event::Toggle(r.value.clone())))
+            self.expander_props
+                .apply(
+                    button(container(icon.view(g.icon_size - g.expander_icon_inset)).center(arrow))
+                        .padding(0)
+                        .style(sb::flat)
+                        .on_press_maybe(self.emit(Event::Toggle(r.value.clone()))),
+                )
                 .into()
         } else {
             space().width(arrow).into()
@@ -461,12 +496,14 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
             _ => self.text(r),
         };
         line = line.push(
-            button(text)
-                .padding(g.label_padding)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .style(sb::flat_toggle(selected))
-                .on_press_maybe(self.emit(Event::Click(r.value.clone()))),
+            self.label_button_props.apply(
+                button(text)
+                    .padding(g.label_padding)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .style(sb::flat_toggle(selected))
+                    .on_press_maybe(self.emit(Event::Click(r.value.clone()))),
+            ),
         );
         if self.drag == DragMode::Handle {
             line = line.push(
@@ -475,9 +512,8 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
                     .center_x(g.grip_width),
             );
         }
-        container(line)
-            .height(g.row_height)
-            .width(Length::Fill)
+        self.row_props
+            .apply(container(line).height(g.row_height).width(Length::Fill))
             .into()
     }
 
@@ -512,10 +548,13 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
                     },
                     ..Default::default()
                 });
-        button(container(boxed).padding(g.checkbox_padding))
-            .padding(0)
-            .style(sb::flat)
-            .on_press_maybe(self.emit(Event::Check(r.value.clone(), !on)))
+        self.checkbox_button_props
+            .apply(
+                button(container(boxed).padding(g.checkbox_padding))
+                    .padding(0)
+                    .style(sb::flat)
+                    .on_press_maybe(self.emit(Event::Check(r.value.clone(), !on))),
+            )
             .into()
     }
 }
@@ -1250,5 +1289,95 @@ mod tests {
         let d = data();
         assert!(!tree::can_move(&d, "a", "a1"));
         assert!(tree::can_move(&d, "b", "a1"));
+    }
+}
+
+/// Owned presentation overrides for a nested `Tree`; values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct TreeProps {
+    pub expander_props: Option<ButtonProps>,
+    pub label_button_props: Option<ButtonProps>,
+    pub checkbox_button_props: Option<ButtonProps>,
+    pub row_props: Option<ContainerProps>,
+    pub level_offset: Option<f32>,
+    pub row_height: Option<f32>,
+    pub icon_padding: Option<iced::Padding>,
+    pub label_padding: Option<iced::Padding>,
+    pub checkbox_padding: Option<iced::Padding>,
+    pub metrics: Option<Metrics>,
+}
+impl TreeProps {
+    pub fn expander_props(mut self, value: impl Into<ButtonProps>) -> Self {
+        self.expander_props = Some(value.into());
+        self
+    }
+    pub fn label_button_props(mut self, value: impl Into<ButtonProps>) -> Self {
+        self.label_button_props = Some(value.into());
+        self
+    }
+    pub fn checkbox_button_props(mut self, value: impl Into<ButtonProps>) -> Self {
+        self.checkbox_button_props = Some(value.into());
+        self
+    }
+    pub fn row_props(mut self, value: impl Into<ContainerProps>) -> Self {
+        self.row_props = Some(value.into());
+        self
+    }
+    pub fn level_offset(mut self, value: impl Into<f32>) -> Self {
+        self.level_offset = Some(value.into());
+        self
+    }
+    pub fn row_height(mut self, value: impl Into<f32>) -> Self {
+        self.row_height = Some(value.into());
+        self
+    }
+    pub fn icon_padding(mut self, value: impl Into<iced::Padding>) -> Self {
+        self.icon_padding = Some(value.into());
+        self
+    }
+    pub fn label_padding(mut self, value: impl Into<iced::Padding>) -> Self {
+        self.label_padding = Some(value.into());
+        self
+    }
+    pub fn checkbox_padding(mut self, value: impl Into<iced::Padding>) -> Self {
+        self.checkbox_padding = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn apply<'a, M: Clone + 'a>(&self, mut widget: Tree<'a, M>) -> Tree<'a, M> {
+        if let Some(value) = self.expander_props.clone() {
+            widget = widget.expander_props(value);
+        }
+        if let Some(value) = self.label_button_props.clone() {
+            widget = widget.label_button_props(value);
+        }
+        if let Some(value) = self.checkbox_button_props.clone() {
+            widget = widget.checkbox_button_props(value);
+        }
+        if let Some(value) = self.row_props.clone() {
+            widget = widget.row_props(value);
+        }
+        if let Some(value) = self.level_offset.clone() {
+            widget = widget.level_offset(value);
+        }
+        if let Some(value) = self.row_height.clone() {
+            widget = widget.row_height(value);
+        }
+        if let Some(value) = self.icon_padding.clone() {
+            widget = widget.icon_padding(value);
+        }
+        if let Some(value) = self.label_padding.clone() {
+            widget = widget.label_padding(value);
+        }
+        if let Some(value) = self.checkbox_padding.clone() {
+            widget = widget.checkbox_padding(value);
+        }
+        if let Some(value) = self.metrics.clone() {
+            widget = widget.metrics(value);
+        }
+        widget
     }
 }

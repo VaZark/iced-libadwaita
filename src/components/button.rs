@@ -7,6 +7,21 @@ use iced::alignment::Vertical;
 use iced::widget::{Button, button, container, row, space};
 use iced::{Length, Padding};
 
+/// Owned presentation overrides; default values preserve the component defaults.
+#[derive(Clone, Default)]
+pub struct ButtonContentProps {
+    pub label_props: super::props::TextProps,
+}
+impl ButtonContentProps {
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: ButtonContent<'a, M>) -> ButtonContent<'a, M> {
+        widget.label_props(self.label_props.clone())
+    }
+}
+
 /// `AdwButtonContent`: an optional icon next to a label.
 pub struct ButtonContent<'a, M> {
     label: String,
@@ -15,11 +30,18 @@ pub struct ButtonContent<'a, M> {
     icon_end: bool,
     metrics: Metrics,
     _p: std::marker::PhantomData<&'a M>,
+    label_props: super::props::TextProps,
 }
 
 impl<'a, M> ButtonContent<'a, M> {
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
     pub fn new(label: impl Into<String>) -> Self {
         Self {
+            label_props: super::props::TextProps::default(),
             label: label.into(),
             icon: None,
             spacing: None,
@@ -53,7 +75,9 @@ impl<'a, M: 'a> From<ButtonContent<'a, M>> for Element<'a, M> {
         let mut r = row![]
             .spacing(c.spacing.unwrap_or(c.metrics.space_s))
             .align_y(Vertical::Center);
-        let label = crate::components::typography::label(c.label);
+        let label = c
+            .label_props
+            .apply(crate::components::typography::label(c.label));
         match (c.icon, c.icon_end) {
             (Some(i), false) => r = r.push(i.view(c.metrics.icon_size)).push(label),
             (Some(i), true) => r = r.push(label).push(i.view(c.metrics.icon_size)),
@@ -199,6 +223,7 @@ impl<'a, M: 'a> ButtonVariant for Button<'a, M, Theme> {
 /// Its [`variant`](CircularButton::variant) is `flat` unless set: any variant (`suggested`,
 /// `default`, an app's own) styles its colors; its shape stays a circle.
 pub struct CircularButton<'a, M> {
+    container_props: super::props::ContainerProps,
     content: Element<'a, M>,
     size: f32,
     variant: String,
@@ -206,9 +231,14 @@ pub struct CircularButton<'a, M> {
 }
 
 impl<'a, M: 'a> CircularButton<'a, M> {
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
     /// A circular button around any content.
     pub fn new(content: impl Into<Element<'a, M>>) -> Self {
         Self {
+            container_props: Default::default(),
             content: content.into(),
             size: crate::theme_config::circular_button_size()
                 .unwrap_or_else(|| Metrics::desktop().button_min_height),
@@ -251,15 +281,27 @@ impl<'a, M: 'a> CircularButton<'a, M> {
 
 impl<'a, M: Clone + 'a> From<CircularButton<'a, M>> for Element<'a, M> {
     fn from(b: CircularButton<'a, M>) -> Self {
-        circular_shell(b.content, b.size)
-            .style(sb::circular_variant(&b.variant, b.size))
-            .on_press_maybe(b.on_press)
-            .into()
+        button(
+            b.container_props.apply(
+                container(b.content)
+                    .center(Length::Fixed(b.size))
+                    .clip(true),
+            ),
+        )
+        .width(b.size)
+        .height(b.size)
+        .padding(Padding::ZERO)
+        .style(sb::circular_variant(&b.variant, b.size))
+        .on_press_maybe(b.on_press)
+        .into()
     }
 }
 
 /// A button exactly `size` by `size` with its content centered and clipped to the square.
-fn circular_shell<'a, M: 'a>(content: impl Into<Element<'a, M>>, size: f32) -> Button<'a, M, Theme> {
+fn circular_shell<'a, M: 'a>(
+    content: impl Into<Element<'a, M>>,
+    size: f32,
+) -> Button<'a, M, Theme> {
     button(container(content).center(Length::Fixed(size)).clip(true))
         .width(Length::Fixed(size))
         .height(Length::Fixed(size))
@@ -295,6 +337,10 @@ pub fn suggested_circular_button<'a, M: 'a>(
 }
 
 impl<'a, M: 'a> SuggestedCircularButton<'a, M> {
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.inner = self.inner.container_props(props);
+        self
+    }
     /// The diameter in px.
     pub fn size(mut self, px: f32) -> Self {
         self.inner = self.inner.size(px);
@@ -405,6 +451,7 @@ pub struct ToggleGroup<'a, T, M> {
     active: Option<T>,
     on_select: Box<dyn Fn(T) -> M + 'a>,
     width: Length,
+    label_props: super::props::TextProps,
     homogeneous: bool,
     compact: Option<bool>,
     metrics: Metrics,
@@ -421,6 +468,7 @@ pub fn toggle_group<'a, T: Clone + PartialEq, M>(
         active,
         on_select: Box::new(on_select),
         width: Length::Shrink,
+        label_props: Default::default(),
         homogeneous: false,
         compact: None,
         metrics: Metrics::desktop(),
@@ -428,6 +476,10 @@ pub fn toggle_group<'a, T: Clone + PartialEq, M>(
 }
 
 impl<'a, T, M> ToggleGroup<'a, T, M> {
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -476,16 +528,20 @@ impl<'a, T: Clone + PartialEq + 'a, M: 'a> From<ToggleGroup<'a, T, M>> for Eleme
                     match (item.custom, item.icon, item.label) {
                         (Some(c), _, _) => (c, None),
                         (None, Some(ic), Some(l)) => (
-                            row![icon(ic), crate::components::typography::label(l)]
-                                .spacing(m.space_s)
-                                .align_y(Vertical::Center)
-                                .into(),
+                            row![
+                                icon(ic),
+                                g.label_props.apply(crate::components::typography::label(l))
+                            ]
+                            .spacing(m.space_s)
+                            .align_y(Vertical::Center)
+                            .into(),
                             Some(icon(ic)),
                         ),
                         (None, Some(ic), None) => (icon(ic), None),
-                        (None, None, Some(l)) => {
-                            (crate::components::typography::label(l).into(), None)
-                        }
+                        (None, None, Some(l)) => (
+                            g.label_props.apply(crate::components::typography::label(l)),
+                            None,
+                        ),
                         (None, None, None) => (iced::widget::space().into(), None),
                     };
                 (item.value, full, compact)
@@ -544,7 +600,10 @@ mod spacing_params {
 
     #[test]
     fn button_content_gap_and_icon_side_are_parameters() {
-        let c = ButtonContent::<()>::new("Go").icon(Icon::Check).spacing(2.0).icon_end(true);
+        let c = ButtonContent::<()>::new("Go")
+            .icon(Icon::Check)
+            .spacing(2.0)
+            .icon_end(true);
         assert_eq!((c.spacing, c.icon_end), (Some(2.0), true));
         let _: Element<'_, ()> = c.into();
     }
@@ -577,7 +636,12 @@ mod circular_button_tests {
     fn the_diameter_follows_the_theme_unless_set() {
         let b = CircularButton::<()>::new(iced::widget::space());
         assert_eq!(b.diameter(), Metrics::desktop().button_min_height);
-        assert_eq!(CircularButton::<()>::new(iced::widget::space()).size(0.0).diameter(), 1.0);
+        assert_eq!(
+            CircularButton::<()>::new(iced::widget::space())
+                .size(0.0)
+                .diameter(),
+            1.0
+        );
     }
 
     #[test]
@@ -585,5 +649,68 @@ mod circular_button_tests {
         let b: Button<'_, (), Theme> = flat_button(iced::widget::space()).variant("suggested");
         let _: Element<'_, ()> = b.into();
         let _: Element<'_, ()> = variant_button(iced::widget::space(), "flat").into();
+    }
+}
+
+/// Presentation for the labels constructed by a toggle group (not custom children).
+#[derive(Clone, Default)]
+pub struct ToggleGroupProps {
+    pub width: Option<Length>,
+    pub homogeneous: Option<bool>,
+    pub compact: Option<Option<bool>>,
+    pub metrics: Option<Metrics>,
+    pub label_props: super::props::TextProps,
+}
+impl ToggleGroupProps {
+    pub fn width(mut self, value: impl Into<Length>) -> Self {
+        self.width = Some(value.into());
+        self
+    }
+    pub fn homogeneous(mut self, value: impl Into<bool>) -> Self {
+        self.homogeneous = Some(value.into());
+        self
+    }
+    pub fn compact(mut self, value: impl Into<Option<bool>>) -> Self {
+        self.compact = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn apply<'a, T, M>(&self, group: ToggleGroup<'a, T, M>) -> ToggleGroup<'a, T, M> {
+        let mut widget = group;
+        if let Some(value) = self.width.clone() {
+            widget = widget.width(value);
+        }
+        if let Some(value) = self.homogeneous.clone() {
+            widget = widget.homogeneous(value);
+        }
+        if let Some(value) = self.compact.clone() {
+            widget = widget.compact(value);
+        }
+        if let Some(value) = self.metrics.clone() {
+            widget = widget.metrics(value);
+        }
+        widget.label_props(self.label_props.clone())
+    }
+}
+
+/// Overrides for the content container; the button's circular shell remains fixed.
+#[derive(Clone, Default)]
+pub struct CircularButtonProps {
+    pub container_props: super::props::ContainerProps,
+}
+impl CircularButtonProps {
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+    pub fn apply<'a, M: 'a>(&self, widget: CircularButton<'a, M>) -> CircularButton<'a, M> {
+        widget.container_props(self.container_props.clone())
     }
 }

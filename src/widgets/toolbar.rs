@@ -1,6 +1,7 @@
 //! `AdwToolbarView` and `GtkActionBar`.
 
 use crate::Element;
+use crate::components::ContainerProps;
 use crate::styles::container as sc;
 use crate::{Metrics, Theme};
 use iced::alignment::Vertical;
@@ -99,6 +100,7 @@ pub struct ToolbarView<'a, M> {
     named_variant: Option<String>,
     tokens: Option<crate::theme_config::Tokens>,
     spacing: f32,
+    content_props: ContainerProps,
 }
 
 pub fn toolbar_view<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> ToolbarView<'a, M> {
@@ -106,8 +108,14 @@ pub fn toolbar_view<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> ToolbarVie
 }
 
 impl<'a, M: 'a> ToolbarView<'a, M> {
+    /// Owned presentation overrides for the concrete child.
+    pub fn content_props(mut self, props: ContainerProps) -> Self {
+        self.content_props = props;
+        self
+    }
     pub fn new(content: impl Into<Element<'a, M>>) -> Self {
         Self {
+            content_props: ContainerProps::default(),
             top: Vec::new(),
             bottom: Vec::new(),
             content: content.into(),
@@ -183,9 +191,12 @@ impl<'a, M: 'a> From<ToolbarView<'a, M>> for Element<'a, M> {
 
         let mut layers = vec![
             // The content between the bars: popovers opened inside stay inside it.
-            container(crate::layouts::content_area(t.content))
-                .width(Length::Fill)
-                .height(Length::Fill)
+            t.content_props
+                .apply(
+                    container(crate::layouts::content_area(t.content))
+                        .width(Length::Fill)
+                        .height(Length::Fill),
+                )
                 .into(),
         ];
         if has_top {
@@ -314,6 +325,8 @@ pub struct ActionBar<'a, M> {
     spacing: Option<f32>,
     section_spacing: Option<f32>,
     padding: Option<iced::Padding>,
+    section_props: ContainerProps,
+    container_props: ContainerProps,
 }
 
 pub fn action_bar<'a, M>() -> ActionBar<'a, M> {
@@ -321,8 +334,18 @@ pub fn action_bar<'a, M>() -> ActionBar<'a, M> {
 }
 
 impl<'a, M> ActionBar<'a, M> {
+    pub fn section_props(mut self, props: ContainerProps) -> Self {
+        self.section_props = props;
+        self
+    }
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
     pub fn new() -> Self {
         Self {
+            section_props: ContainerProps::default(),
+            container_props: ContainerProps::default(),
             start: Vec::new(),
             center: None,
             end: Vec::new(),
@@ -371,27 +394,32 @@ impl<'a, M: 'a> From<ActionBar<'a, M>> for Element<'a, M> {
     fn from(a: ActionBar<'a, M>) -> Self {
         let m = a.metrics;
         let side = |v: Vec<Element<'a, M>>, h| {
-            container(
-                row(v)
-                    .spacing(a.spacing.unwrap_or(m.space_s))
-                    .align_y(Vertical::Center),
+            a.section_props.apply(
+                container(
+                    row(v)
+                        .spacing(a.spacing.unwrap_or(m.space_s))
+                        .align_y(Vertical::Center),
+                )
+                .width(Length::FillPortion(1))
+                .align_x(h),
             )
-            .width(Length::FillPortion(1))
-            .align_x(h)
         };
-        container(
-            row![
-                side(a.start, iced::alignment::Horizontal::Left),
-                a.center.unwrap_or_else(|| space().into()),
-                side(a.end, iced::alignment::Horizontal::Right),
-            ]
-            .align_y(Vertical::Center)
-            .spacing(a.section_spacing.unwrap_or(m.space_m)),
-        )
-        .padding(a.padding.unwrap_or(iced::Padding::from(m.space_s)))
-        .width(Length::Fill)
-        .style(sc::headerbar)
-        .into()
+        a.container_props
+            .apply(
+                container(
+                    row![
+                        side(a.start, iced::alignment::Horizontal::Left),
+                        a.center.unwrap_or_else(|| space().into()),
+                        side(a.end, iced::alignment::Horizontal::Right),
+                    ]
+                    .align_y(Vertical::Center)
+                    .spacing(a.section_spacing.unwrap_or(m.space_m)),
+                )
+                .padding(a.padding.unwrap_or(iced::Padding::from(m.space_s)))
+                .width(Length::Fill)
+                .style(sc::headerbar),
+            )
+            .into()
     }
 }
 
@@ -617,5 +645,31 @@ mod tests {
             .padding([3.0, 4.0]);
         assert_eq!((a.spacing, a.section_spacing), (Some(1.0), Some(2.0)));
         let _: Element<'_, ()> = a.into();
+    }
+}
+
+/// Owned presentation overrides for a nested `ToolbarView`; values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct ToolbarProps {
+    pub content_props: Option<ContainerProps>,
+    pub spacing: Option<f32>,
+}
+impl ToolbarProps {
+    pub fn content_props(mut self, value: impl Into<ContainerProps>) -> Self {
+        self.content_props = Some(value.into());
+        self
+    }
+    pub fn spacing(mut self, value: impl Into<f32>) -> Self {
+        self.spacing = Some(value.into());
+        self
+    }
+    pub fn apply<'a, M: 'a>(&self, mut widget: ToolbarView<'a, M>) -> ToolbarView<'a, M> {
+        if let Some(value) = self.content_props.clone() {
+            widget = widget.content_props(value);
+        }
+        if let Some(value) = self.spacing.clone() {
+            widget = widget.spacing(value);
+        }
+        widget
     }
 }

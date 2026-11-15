@@ -37,6 +37,18 @@ pub(crate) fn row_frame<'a, M: 'a>(
 /// The spacing and padding of the inner [`ActionRow`] of a row built on one.
 macro_rules! forward_row_spacing {
     () => {
+        pub fn label_props(mut self, props: crate::components::TextProps) -> Self {
+            self.row = self.row.label_props(props);
+            self
+        }
+        pub fn button_props(mut self, props: crate::components::ButtonProps) -> Self {
+            self.row = self.row.button_props(props);
+            self
+        }
+        pub fn row_props(mut self, props: ActionRowProps) -> Self {
+            self.row = props.apply(self.row);
+            self
+        }
         /// The gap between the row's prefix, title block and suffix (default: the theme's
         /// `row_spacing`).
         pub fn spacing(mut self, px: f32) -> Self {
@@ -58,6 +70,9 @@ macro_rules! forward_row_spacing {
 
 /// `AdwActionRow`.
 pub struct ActionRow<'a, M> {
+    label_props: crate::components::TextProps,
+    subtitle_props: crate::components::TextProps,
+    button_props: crate::components::ButtonProps,
     title: String,
     subtitle: Option<String>,
     prefix: Option<Element<'a, M>>,
@@ -82,12 +97,31 @@ pub fn action_row<'a, M>(title: impl Into<String>) -> ActionRow<'a, M> {
 }
 
 impl<'a, M> ActionRow<'a, M> {
+    pub fn label_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
+    pub fn subtitle_props(mut self, props: crate::components::TextProps) -> Self {
+        self.subtitle_props = props;
+        self
+    }
+
+    pub fn button_props(mut self, props: crate::components::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+
     /// A row that opens a destination. Value actions belong in `EntryRow::action`.
     pub fn navigation(title: impl Into<String>, destination: M) -> Self {
         Self::new(title).chevron(true).on_activate(destination)
     }
     pub fn new(title: impl Into<String>) -> Self {
         Self {
+            label_props: Default::default(),
+            subtitle_props: Default::default(),
+            button_props: Default::default(),
+
             title: title.into(),
             subtitle: None,
             prefix: None,
@@ -193,18 +227,22 @@ impl<'a, M: Clone + 'a> From<ActionRow<'a, M>> for Element<'a, M> {
     fn from(r: ActionRow<'a, M>) -> Self {
         let m = r.metrics;
         let mut titles = column![
-            r.typography
-                .body(r.title)
-                .wrapping(text::Wrapping::WordOrGlyph)
+            r.label_props.apply(
+                r.typography
+                    .body(r.title)
+                    .wrapping(text::Wrapping::WordOrGlyph)
+            )
         ]
         .spacing(r.title_spacing.unwrap_or(m.space_xxs));
         if let Some(s) = r.subtitle {
             titles = titles.push(
-                r.typography
-                    .caption(s)
-                    .size(r.typography.body * 0.93)
-                    .wrapping(text::Wrapping::WordOrGlyph)
-                    .style(st::dim),
+                r.subtitle_props.apply(
+                    r.typography
+                        .caption(s)
+                        .size(r.typography.body * 0.93)
+                        .wrapping(text::Wrapping::WordOrGlyph)
+                        .style(st::dim),
+                ),
             );
         }
         let gap = r.spacing.unwrap_or(m.row_spacing);
@@ -240,11 +278,15 @@ impl<'a, M: Clone + 'a> From<ActionRow<'a, M>> for Element<'a, M> {
             .padding(r.padding.unwrap_or(m.row_padding))
             .width(Length::Fill);
         match r.on_press {
-            Some(msg) => button(framed)
-                .padding(0)
-                .width(Length::Fill)
-                .style(sb::list_row)
-                .on_press(msg)
+            Some(msg) => r
+                .button_props
+                .apply(
+                    button(framed)
+                        .padding(0)
+                        .width(Length::Fill)
+                        .style(sb::list_row)
+                        .on_press(msg),
+                )
                 .into(),
             None => framed.into(),
         }
@@ -308,6 +350,8 @@ impl<'a, M: Clone + 'a> From<SwitchRow<'a, M>> for Element<'a, M> {
 
 /// `AdwButtonRow`: a centered action row.
 pub struct ButtonRow<M> {
+    label_props: crate::components::TextProps,
+    button_props: crate::components::ButtonProps,
     title: String,
     on_press: Option<M>,
     role: Role,
@@ -316,8 +360,20 @@ pub struct ButtonRow<M> {
 }
 
 impl<M> ButtonRow<M> {
+    pub fn label_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
+    pub fn button_props(mut self, props: crate::components::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+
     pub fn new(title: impl Into<String>) -> Self {
         Self {
+            label_props: Default::default(),
+            button_props: Default::default(),
             title: title.into(),
             on_press: None,
             role: Role::Primary,
@@ -349,7 +405,7 @@ impl<'a, M: Clone + 'a> From<ButtonRow<M>> for Element<'a, M> {
         let label = typography::label(b.title).style(move |t: &Theme| iced::widget::text::Style {
             color: Some(t.semantic.swatch(role).color),
         });
-        let inner = container(row_frame(label, &m))
+        let inner = container(row_frame(b.label_props.apply(label), &m))
             .padding(b.padding.unwrap_or(m.row_padding))
             .width(Length::Fill)
             .align_x(Horizontal::Center);
@@ -360,7 +416,7 @@ impl<'a, M: Clone + 'a> From<ButtonRow<M>> for Element<'a, M> {
         if let Some(msg) = b.on_press {
             btn = btn.on_press(msg);
         }
-        btn.into()
+        b.button_props.apply(btn).into()
     }
 }
 
@@ -371,6 +427,8 @@ pub struct ComboRow<'a, T, M>
 where
     T: ToString + PartialEq + Clone,
 {
+    dropdown_props: super::dropdown::DropdownItemProps,
+    label_props: crate::components::TextProps,
     row: ActionRow<'a, M>,
     options: &'a [T],
     selected: Option<T>,
@@ -382,6 +440,16 @@ where
 }
 
 impl<'a, T: ToString + PartialEq + Clone, M> ComboRow<'a, T, M> {
+    pub fn dropdown_props(mut self, props: super::dropdown::DropdownItemProps) -> Self {
+        self.dropdown_props = props;
+        self
+    }
+
+    pub fn value_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
     forward_row_spacing!();
     pub fn new(
         title: impl Into<String>,
@@ -390,6 +458,9 @@ impl<'a, T: ToString + PartialEq + Clone, M> ComboRow<'a, T, M> {
         on_select: impl Fn(T) -> M + 'a,
     ) -> Self {
         Self {
+            dropdown_props: Default::default(),
+            label_props: Default::default(),
+
             // Compact fixed-size suffix: pin it to the end, no flex wrapping.
             row: ActionRow::new(title).wrap_suffix(false),
             options,
@@ -442,11 +513,11 @@ where
         let value = row![
             // The chosen value is live content, in the normal text color (like text in an
             // entry); dimmed is reserved for secondary text and the disabled state.
-            if c.insensitive {
+            c.label_props.apply(if c.insensitive {
                 typography::label(current).style(st::dim)
             } else {
                 typography::label(current)
-            },
+            }),
             Icon::GoDown
                 .view(m.icon_size)
                 .style(move |t: &Theme, _| iced::widget::svg::Style {
@@ -466,9 +537,18 @@ where
         let items = c.options.iter().map(|o| {
             let is_selected = selected.as_ref() == Some(o);
             if disabled.as_ref().is_some_and(|f| f(o)) {
-                crate::widgets::menu_item_disabled(o.to_string(), is_selected)
+                super::dropdown::menu_item_disabled_with_props(
+                    o.to_string(),
+                    is_selected,
+                    c.dropdown_props.clone(),
+                )
             } else {
-                crate::widgets::menu_item(o.to_string(), is_selected, on_select(o.clone()))
+                super::dropdown::menu_item_with_props(
+                    o.to_string(),
+                    is_selected,
+                    on_select(o.clone()),
+                    c.dropdown_props.clone(),
+                )
             }
         });
         crate::widgets::Popover::new(header, crate::widgets::popover(items, 280.0))
@@ -724,6 +804,7 @@ impl<'a, M: Clone + 'a> From<SliderRow<'a, M>> for Element<'a, M> {
 /// [`RangeSlider`](crate::widgets::RangeSlider), with the current `lo – hi` shown next to it. Wraps
 /// below the title like [`SliderRow`] (see [`CollapseBehavior`]).
 pub struct RangeSliderRow<'a, M> {
+    label_props: crate::components::TextProps,
     row: ActionRow<'a, M>,
     slider: crate::widgets::RangeSlider<'a, M>,
     value: (f32, f32),
@@ -736,6 +817,11 @@ pub struct RangeSliderRow<'a, M> {
 }
 
 impl<'a, M> RangeSliderRow<'a, M> {
+    pub fn value_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
     forward_row_spacing!();
     pub fn new(
         title: impl Into<String>,
@@ -744,6 +830,7 @@ impl<'a, M> RangeSliderRow<'a, M> {
         on_change: impl Fn((f32, f32)) -> M + 'a,
     ) -> Self {
         Self {
+            label_props: Default::default(),
             row: ActionRow::new(title),
             bounds: (*range.start(), *range.end()),
             slider: crate::widgets::RangeSlider::new(range, value, on_change),
@@ -824,10 +911,12 @@ impl<'a, M: Clone + 'a> From<RangeSliderRow<'a, M>> for Element<'a, M> {
         // Wide enough for the longest end, so the slider does not move while dragging.
         let longest = fmt(r.bounds.0).len().max(fmt(r.bounds.1).len()) as f32;
         let label = container(
-            text(format!("{} \u{2013} {}", fmt(r.value.0), fmt(r.value.1)))
-                .size(size)
-                .wrapping(text::Wrapping::None)
-                .style(crate::styles::text::dim),
+            r.label_props.apply(
+                text(format!("{} \u{2013} {}", fmt(r.value.0), fmt(r.value.1)))
+                    .size(size)
+                    .wrapping(text::Wrapping::None)
+                    .style(crate::styles::text::dim),
+            ),
         )
         .width(Length::Fixed((2.0 * longest + 3.0) * size * 0.56))
         .align_x(Horizontal::Right);
@@ -847,6 +936,10 @@ pub struct ToggleGroupRow<'a, T, M> {
 }
 
 impl<'a, T: Clone + PartialEq, M> ToggleGroupRow<'a, T, M> {
+    pub fn group_props(mut self, props: crate::components::button::ToggleGroupProps) -> Self {
+        self.group = props.apply(self.group);
+        self
+    }
     forward_row_spacing!();
     pub fn new(
         title: impl Into<String>,
@@ -938,13 +1031,26 @@ mod spacing_params_tests {
     fn rows_built_on_an_action_row_forward_the_params() {
         let o = [String::from("x")];
         each(SwitchRow::new("A", true, |_| 0).spacing(2.0).padding(3.0));
-        each(ComboRow::new("A", &o, None, |_| 0).spacing(2.0).value_spacing(1.0));
-        each(ExpanderRow::new("A", true, |_| 0).title_spacing(2.0).padding(3.0));
+        each(
+            ComboRow::new("A", &o, None, |_| 0)
+                .spacing(2.0)
+                .value_spacing(1.0),
+        );
+        each(
+            ExpanderRow::new("A", true, |_| 0)
+                .title_spacing(2.0)
+                .padding(3.0),
+        );
         each(SliderRow::new("A", 1.0, 0.0..=2.0, |_| 0).spacing(2.0));
         each(RangeSliderRow::new("A", (0.0, 1.0), 0.0..=2.0, |_| 0).value_spacing(2.0));
         each(
-            ToggleGroupRow::new("A", vec![crate::components::ToggleItem::new(1u8, "x")], None, |_| 0u8)
-                .padding(3.0),
+            ToggleGroupRow::new(
+                "A",
+                vec![crate::components::ToggleItem::new(1u8, "x")],
+                None,
+                |_| 0u8,
+            )
+            .padding(3.0),
         );
         let s = SwitchRow::<u8>::new("A", true, |_| 0).spacing(7.0);
         assert_eq!(s.row.spacing, Some(7.0));
@@ -966,5 +1072,270 @@ mod spacing_params_tests {
         let b = ButtonRow::<u8>::new("A").padding([1.0, 2.0]);
         assert_eq!(b.padding, Some(iced::Padding::from([1.0, 2.0])));
         each(b);
+    }
+}
+
+/// Presentation-only overrides for an existing action row; content and actions remain owned.
+#[derive(Clone, Default)]
+pub struct ActionRowProps {
+    pub label_props: Option<crate::components::TextProps>,
+    pub subtitle_props: Option<crate::components::TextProps>,
+    pub button_props: Option<crate::components::ButtonProps>,
+    pub spacing: Option<f32>,
+    pub title_spacing: Option<f32>,
+    pub line_spacing: Option<f32>,
+    pub padding: Option<iced::Padding>,
+    pub collapse: Option<CollapseBehavior>,
+    pub wrap_suffix: Option<bool>,
+}
+impl ActionRowProps {
+    pub fn label_props(mut self, value: impl Into<crate::components::TextProps>) -> Self {
+        self.label_props = Some(value.into());
+        self
+    }
+
+    pub fn subtitle_props(mut self, value: impl Into<crate::components::TextProps>) -> Self {
+        self.subtitle_props = Some(value.into());
+        self
+    }
+
+    pub fn button_props(mut self, value: impl Into<crate::components::ButtonProps>) -> Self {
+        self.button_props = Some(value.into());
+        self
+    }
+
+    pub fn spacing(mut self, value: impl Into<f32>) -> Self {
+        self.spacing = Some(value.into());
+        self
+    }
+
+    pub fn title_spacing(mut self, value: impl Into<f32>) -> Self {
+        self.title_spacing = Some(value.into());
+        self
+    }
+
+    pub fn line_spacing(mut self, value: impl Into<f32>) -> Self {
+        self.line_spacing = Some(value.into());
+        self
+    }
+
+    pub fn padding(mut self, value: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(value.into());
+        self
+    }
+
+    pub fn collapse(mut self, value: impl Into<CollapseBehavior>) -> Self {
+        self.collapse = Some(value.into());
+        self
+    }
+
+    pub fn wrap_suffix(mut self, value: impl Into<bool>) -> Self {
+        self.wrap_suffix = Some(value.into());
+        self
+    }
+
+    pub fn apply<'a, M>(&self, mut row: ActionRow<'a, M>) -> ActionRow<'a, M> {
+        if let Some(props) = &self.label_props {
+            row.label_props = props.clone();
+        }
+        if let Some(props) = &self.subtitle_props {
+            row.subtitle_props = props.clone();
+        }
+        if let Some(props) = &self.button_props {
+            row.button_props = props.clone();
+        }
+        if let Some(v) = self.spacing {
+            row = row.spacing(v);
+        }
+        if let Some(v) = self.title_spacing {
+            row = row.title_spacing(v);
+        }
+        if let Some(v) = self.line_spacing {
+            row = row.line_spacing(v);
+        }
+        if let Some(v) = self.padding {
+            row = row.padding(v);
+        }
+        if let Some(v) = self.collapse {
+            row = row.collapse(v);
+        }
+        if let Some(v) = self.wrap_suffix {
+            row = row.wrap_suffix(v);
+        }
+        row
+    }
+}
+/// Presentation overrides for the concrete combo row, excluding selection and events.
+#[derive(Clone, Default)]
+pub struct ComboRowProps {
+    pub dropdown_props: Option<super::dropdown::DropdownItemProps>,
+    pub row_props: Option<ActionRowProps>,
+    pub label_props: Option<crate::components::TextProps>,
+    pub value_spacing: Option<f32>,
+}
+impl ComboRowProps {
+    pub fn dropdown_props(mut self, props: super::dropdown::DropdownItemProps) -> Self {
+        self.dropdown_props = Some(props);
+        self
+    }
+
+    pub fn row_props(mut self, value: impl Into<ActionRowProps>) -> Self {
+        self.row_props = Some(value.into());
+        self
+    }
+
+    pub fn label_props(mut self, value: impl Into<crate::components::TextProps>) -> Self {
+        self.label_props = Some(value.into());
+        self
+    }
+
+    pub fn value_spacing(mut self, value: impl Into<f32>) -> Self {
+        self.value_spacing = Some(value.into());
+        self
+    }
+
+    pub fn apply<'a, T: ToString + PartialEq + Clone, M>(
+        &self,
+        mut row: ComboRow<'a, T, M>,
+    ) -> ComboRow<'a, T, M> {
+        if let Some(props) = &self.row_props {
+            row.row = props.apply(row.row);
+        }
+        if let Some(props) = &self.label_props {
+            row.row = row.row.label_props(props.clone());
+        }
+        if let Some(v) = self.value_spacing {
+            row = row.value_spacing(v);
+        }
+        if let Some(props) = &self.dropdown_props {
+            row.dropdown_props = props.clone();
+        }
+        row
+    }
+}
+/// Presentation overrides for a concrete toggle-group row.
+#[derive(Clone, Default)]
+pub struct ToggleGroupRowProps {
+    pub metrics: Option<Metrics>,
+    pub group_props: Option<crate::components::button::ToggleGroupProps>,
+    pub row_props: Option<ActionRowProps>,
+    pub homogeneous: Option<bool>,
+}
+impl ToggleGroupRowProps {
+    pub fn metrics(mut self, metrics: Metrics) -> Self {
+        self.metrics = Some(metrics);
+        self
+    }
+    pub fn group_props(mut self, props: crate::components::button::ToggleGroupProps) -> Self {
+        self.group_props = Some(props);
+        self
+    }
+
+    pub fn row_props(mut self, value: impl Into<ActionRowProps>) -> Self {
+        self.row_props = Some(value.into());
+        self
+    }
+
+    pub fn homogeneous(mut self, value: impl Into<bool>) -> Self {
+        self.homogeneous = Some(value.into());
+        self
+    }
+
+    pub fn apply<'a, T: Clone + PartialEq, M>(
+        &self,
+        mut row: ToggleGroupRow<'a, T, M>,
+    ) -> ToggleGroupRow<'a, T, M> {
+        if let Some(props) = &self.row_props {
+            row.row = props.apply(row.row);
+        }
+        if let Some(v) = self.homogeneous {
+            row = row.homogeneous(v);
+        }
+        if let Some(props) = &self.group_props {
+            row.group = props.apply(row.group);
+        }
+        if let Some(metrics) = self.metrics {
+            row = row.metrics(metrics);
+        }
+        row
+    }
+}
+
+#[cfg(test)]
+mod nested_props_tests {
+    use super::*;
+    use crate::components::{ButtonProps, TextProps};
+    use iced::Size;
+    use iced::advanced::{layout, renderer::Headless, widget::Tree};
+
+    fn geometry(widget: impl Into<Element<'static, ()>>) -> (Size, usize) {
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        let mut widget = widget.into();
+        let mut tree = Tree::new(&widget);
+        let node = widget.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(600.0, 1000.0)),
+        );
+        fn count(tree: &Tree) -> usize {
+            1 + tree.children.iter().map(count).sum::<usize>()
+        }
+        (node.size(), count(&tree))
+    }
+
+    #[test]
+    fn default_nested_props_preserve_geometry_and_tree() {
+        let make = || {
+            ActionRow::new("日本語 🦀")
+                .subtitle("secondary")
+                .on_activate(())
+        };
+        assert_eq!(
+            geometry(make()),
+            geometry(ActionRowProps::default().apply(make()))
+        );
+        let configured = make().label_props(TextProps::default().height(83));
+        assert_eq!(
+            ActionRowProps::default()
+                .apply(configured)
+                .label_props
+                .height,
+            Some(83.into())
+        );
+    }
+
+    #[test]
+    fn label_and_button_overrides_reach_real_children_after_defaults() {
+        let make = || ActionRow::new("Title").on_activate(());
+        let baseline = geometry(make());
+        let label = geometry(make().label_props(TextProps::default().height(120)));
+        assert!(label.0.height >= 120.0);
+        assert!(label.0.height > baseline.0.height);
+        assert_eq!(label.1, baseline.1, "no replacement child or extra wrapper");
+        let button = geometry(make().button_props(ButtonProps::default().width(237).height(199)));
+        assert_eq!(button.0, Size::new(237.0, 199.0));
+        assert_eq!(button.1, baseline.1);
+    }
+
+    #[test]
+    fn reusable_row_props_preserve_data_and_actions() {
+        let row = ActionRowProps::default()
+            .spacing(9.0)
+            .apply(ActionRow::new("kept").on_activate(7u8));
+        assert_eq!(row.title, "kept");
+        assert_eq!(row.on_press, Some(7));
+        assert_eq!(row.spacing, Some(9.0));
+        let options = ["a", "b"];
+        let row = ComboRowProps::default()
+            .value_spacing(17.0)
+            .apply(ComboRow::new("choice", &options, Some("b"), |_| 8u8));
+        assert_eq!(row.selected, Some("b"));
+        assert_eq!((row.on_select)("a"), 8);
+        assert_eq!(row.value_spacing, Some(17.0));
     }
 }

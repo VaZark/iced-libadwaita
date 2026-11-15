@@ -29,6 +29,9 @@ use iced::widget::{button, column, container, row, space, text};
 use iced::{Background, Border, Length, Shadow};
 
 pub struct DateInput<'a, M> {
+    dropdown_props: super::popover::PopoverProps,
+    entry_props: crate::components::EntryProps,
+    button_props: crate::components::ButtonProps,
     text: &'a str,
     view: Date,
     on_input: Option<std::rc::Rc<dyn Fn(String) -> M + 'a>>,
@@ -58,6 +61,21 @@ pub struct DateInput<'a, M> {
 }
 
 impl<'a, M> DateInput<'a, M> {
+    pub fn dropdown_props(mut self, props: super::popover::PopoverProps) -> Self {
+        self.dropdown_props = props;
+        self
+    }
+
+    pub fn entry_props(mut self, props: crate::components::EntryProps) -> Self {
+        self.entry_props = props;
+        self
+    }
+
+    pub fn button_props(mut self, props: crate::components::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+
     /// Transparent page-surface entry style.
     pub fn flat(mut self, flat: bool) -> Self {
         self.flat = flat;
@@ -70,6 +88,10 @@ impl<'a, M> DateInput<'a, M> {
     /// `text` is the entry's content, `view` any date in the month the calendar shows.
     pub fn new(text: &'a str, view: Date, on_input: impl Fn(String) -> M + 'a) -> Self {
         Self {
+            dropdown_props: Default::default(),
+            entry_props: Default::default(),
+            button_props: Default::default(),
+
             text,
             view: view.month_start(),
             on_input: Some(std::rc::Rc::new(on_input)),
@@ -255,8 +277,9 @@ const GAP: f32 = 2.0;
 const WEEKDAY_H: f32 = 22.0;
 
 /// How a date input's calendar opens: a popover or a dialog.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct Opening {
+    pub dropdown_props: super::popover::PopoverProps,
     pub dialog: bool,
     pub scrim: bool,
     pub close_on_outside: bool,
@@ -287,7 +310,7 @@ pub(crate) fn opener<'a, M: 'a>(
     if o.dialog {
         p = p.presentation(crate::widgets::PopoverPresentation::Dialog);
     }
-    p.into()
+    o.dropdown_props.apply(p).into()
 }
 
 pub(crate) type OnNav<'a, M> = Box<dyn Fn(CalendarView) -> M + 'a>;
@@ -586,7 +609,7 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
                 {
                     b = b.on_press(message);
                 }
-                b.into()
+                d.button_props.apply(b).into()
             },
         );
         let grid = if d.dialog {
@@ -598,7 +621,7 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
             if let Some(f) = on_input {
                 display = display.on_input(move |value| f(value));
             }
-            column![display, grid]
+            column![d.entry_props.apply(display), grid]
                 .spacing(d.spacing.unwrap_or(m.space_s))
                 .into()
         } else {
@@ -608,6 +631,7 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
         let opener = opener(
             calendar,
             Opening {
+                dropdown_props: d.dropdown_props.clone(),
                 dialog: d.dialog,
                 scrim: d.scrim,
                 close_on_outside: d.close_on_outside,
@@ -618,7 +642,9 @@ impl<'a, M: Clone + 'a> From<DateInput<'a, M>> for Element<'a, M> {
             },
             m,
         );
-        field.right_section(opener).width(d.width).into()
+        d.entry_props
+            .apply(field.right_section(opener).width(d.width))
+            .into()
     }
 }
 
@@ -736,8 +762,77 @@ mod spacing_params {
 
     #[test]
     fn the_calendar_gaps_are_parameters() {
-        let d = DateInput::<()>::new("", Date::today(), |_| ()).spacing(1.0).padding(2.0);
+        let d = DateInput::<()>::new("", Date::today(), |_| ())
+            .spacing(1.0)
+            .padding(2.0);
         assert_eq!((d.spacing, d.padding), (Some(1.0), Some(2.0)));
         let _: Element<'_, ()> = d.into();
+    }
+}
+
+/// Presentation-only overrides supported by [`DateInput`]. Values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct DateInputProps {
+    pub dropdown_props: Option<super::popover::PopoverProps>,
+    pub width: Option<iced::Length>,
+    pub metrics: Option<crate::Metrics>,
+    pub spacing: Option<f32>,
+    pub padding: Option<f32>,
+    pub entry_props: Option<crate::components::EntryProps>,
+    pub button_props: Option<crate::components::ButtonProps>,
+}
+impl DateInputProps {
+    pub fn dropdown_props(mut self, props: super::popover::PopoverProps) -> Self {
+        self.dropdown_props = Some(props);
+        self
+    }
+
+    pub fn width(mut self, value: impl Into<iced::Length>) -> Self {
+        self.width = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<crate::Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn spacing(mut self, value: impl Into<f32>) -> Self {
+        self.spacing = Some(value.into());
+        self
+    }
+    pub fn padding(mut self, value: impl Into<f32>) -> Self {
+        self.padding = Some(value.into());
+        self
+    }
+    pub fn entry_props(mut self, value: impl Into<crate::components::EntryProps>) -> Self {
+        self.entry_props = Some(value.into());
+        self
+    }
+    pub fn button_props(mut self, value: impl Into<crate::components::ButtonProps>) -> Self {
+        self.button_props = Some(value.into());
+        self
+    }
+    pub fn apply<'a, M>(&self, mut widget: DateInput<'a, M>) -> DateInput<'a, M> {
+        if let Some(value) = self.width.clone() {
+            widget = widget.width(value);
+        }
+        if let Some(value) = self.metrics.clone() {
+            widget = widget.metrics(value);
+        }
+        if let Some(value) = self.spacing.clone() {
+            widget = widget.spacing(value);
+        }
+        if let Some(value) = self.padding.clone() {
+            widget = widget.padding(value);
+        }
+        if let Some(value) = self.entry_props.clone() {
+            widget = widget.entry_props(value);
+        }
+        if let Some(value) = self.button_props.clone() {
+            widget = widget.button_props(value);
+        }
+        if let Some(props) = &self.dropdown_props {
+            widget = widget.dropdown_props(props.clone());
+        }
+        widget
     }
 }

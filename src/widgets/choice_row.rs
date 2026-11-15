@@ -14,10 +14,10 @@
 //! The width the toggle group needs is estimated from the labels; set it with
 //! [`min_width`](ChoiceRow::min_width) when the estimate is off.
 
+use crate::components::ToggleItem;
 use crate::metas::MetaComponent;
 use crate::primitives::When;
 use crate::widgets::{ComboRow, ToggleGroupRow};
-use crate::components::ToggleItem;
 use crate::{Element, Icon, Metrics, Typography};
 use iced::Length;
 use std::rc::Rc;
@@ -33,8 +33,14 @@ pub enum ChoicePresentation {
 
 type IconOf<'a, T> = Rc<dyn Fn(&T) -> Option<Icon> + 'a>;
 
+/// Compatibility names for the native nested row presentation props.
+pub type ChoiceToggleProps = crate::widgets::rows::ToggleGroupRowProps;
+pub type ChoiceDropdownProps = crate::widgets::rows::ComboRowProps;
+
 /// See the [module](self).
 pub struct ChoiceRow<'a, T, M> {
+    toggle_props: crate::widgets::rows::ToggleGroupRowProps,
+    dropdown_props: crate::widgets::rows::ComboRowProps,
     title: String,
     subtitle: Option<String>,
     options: &'a [T],
@@ -57,6 +63,8 @@ where
         on_select: impl Fn(T) -> M + 'a,
     ) -> Self {
         Self {
+            toggle_props: Default::default(),
+            dropdown_props: Default::default(),
             title: title.into(),
             subtitle: None,
             options,
@@ -66,6 +74,20 @@ where
             min_width: None,
             metrics: Metrics::desktop(),
         }
+    }
+    pub fn toggle_props(mut self, props: crate::widgets::rows::ToggleGroupRowProps) -> Self {
+        self.toggle_props = props;
+        self
+    }
+    pub fn dropdown_props(mut self, props: crate::widgets::rows::ComboRowProps) -> Self {
+        self.dropdown_props = props;
+        self
+    }
+    /// Apply the same native action-row presentation to both variants.
+    pub fn row_props(mut self, props: crate::widgets::rows::ActionRowProps) -> Self {
+        self.toggle_props.row_props = Some(props.clone());
+        self.dropdown_props.row_props = Some(props);
+        self
     }
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {
         self.subtitle = Some(s.into());
@@ -111,7 +133,9 @@ where
 
     /// The presentation a container of `width` gets.
     pub fn presentation(&self, width: f32) -> ChoicePresentation {
-        if When::min_width(self.needed_width()).holds(width, &crate::breakpoints::Breakpoints::current()) {
+        if When::min_width(self.needed_width())
+            .holds(width, &crate::breakpoints::Breakpoints::current())
+        {
             ChoicePresentation::Toggles
         } else {
             ChoicePresentation::Dropdown
@@ -128,9 +152,11 @@ where
         MetaComponent::new()
             .width(Length::Fill)
             .height(height)
-            .variant(ChoicePresentation::Toggles, When::min_width(needed), move |_| {
-                toggles.toggles()
-            })
+            .variant(
+                ChoicePresentation::Toggles,
+                When::min_width(needed),
+                move |_| toggles.toggles(),
+            )
             .variant(ChoicePresentation::Dropdown, When::always(), move |_| {
                 combo.dropdown()
             })
@@ -149,8 +175,12 @@ where
             })
             .collect();
         let on = self.on_select.clone();
-        let mut row = ToggleGroupRow::new(self.title.clone(), items, self.selected.clone(), move |v| on(v))
+        let mut row =
+            ToggleGroupRow::new(self.title.clone(), items, self.selected.clone(), move |v| {
+                on(v)
+            })
             .metrics(self.metrics);
+        row = self.toggle_props.apply(row);
         if let Some(s) = &self.subtitle {
             row = row.subtitle(s.clone());
         }
@@ -159,7 +189,13 @@ where
 
     fn dropdown(&self) -> Element<'a, M> {
         let on = self.on_select.clone();
-        let mut row = ComboRow::new(self.title.clone(), self.options, self.selected.clone(), move |v| on(v));
+        let mut row = ComboRow::new(
+            self.title.clone(),
+            self.options,
+            self.selected.clone(),
+            move |v| on(v),
+        );
+        row = self.dropdown_props.apply(row);
         if let Some(s) = &self.subtitle {
             row = row.subtitle(s.clone());
         }
@@ -181,7 +217,14 @@ where
 mod tests {
     use super::*;
 
-    const STYLES: [&str; 6] = ["Default", "Flat", "Suggested", "Destructive", "Pill", "Suggested pill"];
+    const STYLES: [&str; 6] = [
+        "Default",
+        "Flat",
+        "Suggested",
+        "Destructive",
+        "Pill",
+        "Suggested pill",
+    ];
 
     fn row() -> ChoiceRow<'static, &'static str, u8> {
         ChoiceRow::new("Style", &STYLES, Some("Flat"), |_| 0)
@@ -200,8 +243,14 @@ mod tests {
         let needed = r.needed_width();
         assert_eq!(r.presentation(needed - 1.0), ChoicePresentation::Dropdown);
         assert_eq!(r.presentation(needed), ChoicePresentation::Toggles);
-        assert_eq!(row().min_width(300.0).presentation(299.0), ChoicePresentation::Dropdown);
-        assert_eq!(row().min_width(300.0).presentation(300.0), ChoicePresentation::Toggles);
+        assert_eq!(
+            row().min_width(300.0).presentation(299.0),
+            ChoicePresentation::Dropdown
+        );
+        assert_eq!(
+            row().min_width(300.0).presentation(300.0),
+            ChoicePresentation::Toggles
+        );
     }
 
     #[test]
@@ -210,5 +259,52 @@ mod tests {
         let _ = r.toggles();
         let _ = r.dropdown();
         let _: Element<'_, u8> = r.into();
+    }
+}
+
+#[cfg(test)]
+mod typed_props_tests {
+    use super::*;
+    use crate::components::{ButtonProps, TextOverflow, TextProps};
+    use crate::widgets::rows::{ActionRowProps, ComboRowProps, ToggleGroupRowProps};
+
+    #[test]
+    fn choice_uses_native_row_props_without_changing_default_presentation() {
+        let options = ["界🦀e\u{301}".repeat(80), "other".to_owned()];
+        let original = ChoiceRow::new("Title", &options, None, |_| ());
+        let defaults = ChoiceRow::new("Title", &options, None, |_| ())
+            .toggle_props(ToggleGroupRowProps::default())
+            .dropdown_props(ComboRowProps::default());
+        assert_eq!(original.needed_width(), defaults.needed_width());
+        assert_eq!(
+            original.toggles().as_widget().size(),
+            defaults.toggles().as_widget().size()
+        );
+        assert_eq!(
+            original.dropdown().as_widget().size(),
+            defaults.dropdown().as_widget().size()
+        );
+        let custom = ChoiceRow::new("Title", &options, None, |_| ())
+            .row_props(
+                ActionRowProps::default()
+                    .label_props(TextProps::default().width(80).overflow(TextOverflow::Wrap))
+                    .button_props(ButtonProps::default().width(193)),
+            )
+            .dropdown_props(ComboRowProps::default().value_spacing(17.0_f32));
+        assert_eq!(
+            custom
+                .toggle_props
+                .row_props
+                .as_ref()
+                .unwrap()
+                .button_props
+                .as_ref()
+                .unwrap()
+                .width,
+            Some(Length::Fixed(193.0))
+        );
+        let _ = custom.toggles();
+        let _ = custom.dropdown();
+        assert_eq!(custom.dropdown_props.value_spacing, Some(17.0));
     }
 }

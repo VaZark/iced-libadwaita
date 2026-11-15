@@ -20,6 +20,10 @@ impl<'a, T: Scalar + 'a, M: 'a> Scale<'a, T, M> {
                 .single(),
         }
     }
+    pub fn slider_props(mut self, props: super::range_slider::RangeSliderProps) -> Self {
+        self.slider = props.apply(self.slider);
+        self
+    }
     pub fn orientation(mut self, axis: Axis) -> Self {
         self.slider = self.slider.orientation(axis);
         self
@@ -51,5 +55,47 @@ impl<'a, T: Scalar + 'a, M: 'a> Scale<'a, T, M> {
 impl<'a, T: Scalar + 'a, M: 'a> From<Scale<'a, T, M>> for Element<'a, M> {
     fn from(scale: Scale<'a, T, M>) -> Self {
         scale.slider.into()
+    }
+}
+
+/// Presentation-only overrides supported by [`Scale`]. Values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct ScaleProps {
+    pub width: Option<iced::Length>,
+    pub height: Option<iced::Length>,
+    pub orientation: Option<Axis>,
+    pub slider_props: Option<super::range_slider::RangeSliderProps>,
+}
+impl ScaleProps {
+    pub fn width(mut self, value: impl Into<iced::Length>) -> Self {
+        self.width = Some(value.into());
+        self
+    }
+    pub fn height(mut self, value: impl Into<iced::Length>) -> Self {
+        self.height = Some(value.into());
+        self
+    }
+    pub fn orientation(mut self, value: impl Into<Axis>) -> Self {
+        self.orientation = Some(value.into());
+        self
+    }
+    pub fn slider_props(mut self, value: impl Into<super::range_slider::RangeSliderProps>) -> Self {
+        self.slider_props = Some(value.into());
+        self
+    }
+    pub fn apply<'a, T: Scalar + 'a, M: 'a>(&self, mut widget: Scale<'a, T, M>) -> Scale<'a, T, M> {
+        if let Some(value) = self.width.clone() {
+            widget = widget.width(value);
+        }
+        if let Some(value) = self.height.clone() {
+            widget = widget.height(value);
+        }
+        if let Some(value) = self.orientation.clone() {
+            widget = widget.orientation(value);
+        }
+        if let Some(value) = self.slider_props.clone() {
+            widget = widget.slider_props(value);
+        }
+        widget
     }
 }

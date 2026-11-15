@@ -11,6 +11,7 @@
 //! body in a [`Collapsible`](super::Collapsible) to animate it).
 
 use crate::Element;
+use crate::components::{ButtonProps, ContainerProps, TextProps};
 use crate::components::{icon_button, typography as ty};
 use crate::{Icon, Metrics, Theme};
 use iced::widget::{container, mouse_area, row};
@@ -25,6 +26,11 @@ pub enum CollapseState {
 
 /// See the [module](self).
 pub struct SectionDivider<'a, M> {
+    container_props: Option<ContainerProps>,
+    title_props: TextProps,
+    detail_props: TextProps,
+    line_props: ContainerProps,
+    toggle_props: ButtonProps,
     title: String,
     detail: Option<String>,
     open: bool,
@@ -40,8 +46,44 @@ pub struct SectionDivider<'a, M> {
 }
 
 impl<'a, M> SectionDivider<'a, M> {
+    /// An explicit container adds a wrapper only when one is not already present.
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = Some(props);
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn title_props(mut self, props: TextProps) -> Self {
+        self.title_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn detail_props(mut self, props: TextProps) -> Self {
+        self.detail_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn line_props(mut self, props: ContainerProps) -> Self {
+        self.line_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn toggle_props(mut self, props: ButtonProps) -> Self {
+        self.toggle_props = props;
+        self
+    }
+
     pub fn new(title: impl Into<String>) -> Self {
         Self {
+            container_props: None,
+            title_props: TextProps::default(),
+            detail_props: TextProps::default(),
+            line_props: ContainerProps::default(),
+            toggle_props: ButtonProps::default(),
+
             title: title.into(),
             detail: None,
             open: true,
@@ -130,18 +172,23 @@ impl<'a, M: Clone + 'a> From<SectionDivider<'a, M>> for Element<'a, M> {
             d.on_toggle = None;
         }
         let m = d.metrics;
-        let line = container(iced::widget::space())
-            .width(Length::Fill)
-            .height(Length::Fixed(1.0))
-            .style(|t: &Theme| container::Style {
-                background: Some(crate::color::alpha(t.semantic.window.fg, 0.12).into()),
-                ..Default::default()
-            });
-        let mut head = row![ty::heading(d.title)]
+        let line = d.line_props.apply(
+            container(iced::widget::space())
+                .width(Length::Fill)
+                .height(Length::Fixed(1.0))
+                .style(|t: &Theme| container::Style {
+                    background: Some(crate::color::alpha(t.semantic.window.fg, 0.12).into()),
+                    ..Default::default()
+                }),
+        );
+        let mut head = row![d.title_props.apply(ty::heading(d.title))]
             .spacing(d.spacing.unwrap_or(m.space_m))
             .align_y(Alignment::Center);
         if let Some(detail) = d.detail {
-            head = head.push(ty::caption(detail).style(crate::styles::text::dim));
+            head = head.push(
+                d.detail_props
+                    .apply(ty::caption(detail).style(crate::styles::text::dim)),
+            );
         }
         let head = head.push(line).width(Length::Fill);
         let head: Element<'a, M> = match d.on_toggle.clone() {
@@ -153,13 +200,17 @@ impl<'a, M: Clone + 'a> From<SectionDivider<'a, M>> for Element<'a, M> {
         };
         let end: Element<'a, M> = match (d.action, d.on_toggle) {
             (Some(action), _) => action,
-            (None, Some(msg)) if d.chevron => icon_button(if d.open {
-                Icon::GoDown
-            } else {
-                Icon::GoPrevious
-            })
-            .on_press(msg)
-            .into(),
+            (None, Some(msg)) if d.chevron => d
+                .toggle_props
+                .apply(
+                    icon_button(if d.open {
+                        Icon::GoDown
+                    } else {
+                        Icon::GoPrevious
+                    })
+                    .on_press(msg),
+                )
+                .into(),
             (None, _) => iced::widget::space().width(0).into(),
         };
         let mut row = row![head, end]
@@ -168,9 +219,12 @@ impl<'a, M: Clone + 'a> From<SectionDivider<'a, M>> for Element<'a, M> {
         if let Some(trailing) = d.trailing {
             row = row.push(trailing);
         }
-        match d.padding {
-            Some(p) => container(row).padding(p).into(),
-            None => row.into(),
+        match (d.padding, d.container_props) {
+            (padding, Some(props)) => props
+                .apply(container(row).padding(padding.unwrap_or(iced::Padding::ZERO)))
+                .into(),
+            (Some(p), None) => container(row).padding(p).into(),
+            (None, None) => row.into(),
         }
     }
 }
@@ -197,5 +251,89 @@ mod tests {
             .padding([1.0, 4.0]);
         assert_eq!((d.spacing, d.end_spacing), (Some(2.0), Some(3.0)));
         let _: Element<'_, u8> = d.into();
+    }
+}
+
+/// Reusable, no-op-by-default presentation for [`SectionDivider`].
+#[derive(Clone, Default)]
+pub struct SectionDividerProps {
+    pub container_props: Option<ContainerProps>,
+    pub title_props: Option<TextProps>,
+    pub detail_props: Option<TextProps>,
+    pub line_props: Option<ContainerProps>,
+    pub toggle_props: Option<ButtonProps>,
+}
+impl SectionDividerProps {
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = Some(props);
+        self
+    }
+
+    pub fn title_props(mut self, props: TextProps) -> Self {
+        self.title_props = Some(props);
+        self
+    }
+    pub fn detail_props(mut self, props: TextProps) -> Self {
+        self.detail_props = Some(props);
+        self
+    }
+    pub fn line_props(mut self, props: ContainerProps) -> Self {
+        self.line_props = Some(props);
+        self
+    }
+    pub fn toggle_props(mut self, props: ButtonProps) -> Self {
+        self.toggle_props = Some(props);
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: SectionDivider<'a, M>) -> SectionDivider<'a, M> {
+        let widget = if let Some(props) = &self.container_props {
+            widget.container_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.title_props {
+            widget.title_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.detail_props {
+            widget.detail_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.line_props {
+            widget.line_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.toggle_props {
+            widget.toggle_props(props.clone())
+        } else {
+            widget
+        };
+        widget
+    }
+}
+
+#[cfg(test)]
+mod typed_presentation_tests {
+    use super::*;
+    use iced::advanced::widget::Tree;
+    fn same_tree(a: &Tree, b: &Tree) {
+        assert!(a.tag == b.tag);
+        assert_eq!(a.children.len(), b.children.len());
+        for (a, b) in a.children.iter().zip(&b.children) {
+            same_tree(a, b);
+        }
+    }
+    #[test]
+    fn reusable_defaults_preserve_geometry_and_tree() {
+        let build = || SectionDivider::new("Title").detail("Body").on_toggle(7u8);
+        let w = build();
+        let baseline: Element<'_, u8> = w.into();
+        let w = SectionDividerProps::default().apply(build());
+        let configured: Element<'_, u8> = w.into();
+        assert_eq!(baseline.as_widget().size(), configured.as_widget().size());
+        same_tree(&Tree::new(&baseline), &Tree::new(&configured));
     }
 }

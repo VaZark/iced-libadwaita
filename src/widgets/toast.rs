@@ -1,6 +1,7 @@
 //! `AdwToast` and `AdwToastOverlay`.
 
 use crate::Element;
+use crate::components::{ButtonProps, ContainerProps, TextProps};
 use crate::{Metrics, Role, Theme};
 use iced::Length;
 use iced::alignment::{Horizontal, Vertical};
@@ -134,6 +135,12 @@ pub fn toast_target() -> ToastTarget {
 /// * [`background`](Toast::background): a hard-coded surface (text still chosen by contrast);
 /// * [`text_color`](Toast::text_color): a hard-coded text color.
 pub struct Toast<M> {
+    title_props: TextProps,
+    action_label_props: TextProps,
+    action_props: ButtonProps,
+    dismiss_props: ButtonProps,
+    status_props: ContainerProps,
+    container_props: ContainerProps,
     title: String,
     timeout: Option<u32>,
     id: Option<u64>,
@@ -152,8 +159,51 @@ pub struct Toast<M> {
 }
 
 impl<M> Toast<M> {
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn title_props(mut self, props: TextProps) -> Self {
+        self.title_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn action_label_props(mut self, props: TextProps) -> Self {
+        self.action_label_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn action_props(mut self, props: ButtonProps) -> Self {
+        self.action_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn dismiss_props(mut self, props: ButtonProps) -> Self {
+        self.dismiss_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn status_props(mut self, props: ContainerProps) -> Self {
+        self.status_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+
     pub fn new(title: impl Into<String>) -> Self {
         Self {
+            title_props: TextProps::default(),
+            action_label_props: TextProps::default(),
+            action_props: ButtonProps::default(),
+            dismiss_props: ButtonProps::default(),
+            status_props: ContainerProps::default(),
+            container_props: ContainerProps::default(),
+
             title: title.into(),
             timeout: None,
             id: None,
@@ -332,56 +382,70 @@ fn toast_element<'a, M: Clone + 'a>(t: Toast<M>, position: ToastPosition) -> Ele
         // The vivid fill of the status color reads on both the dark surfaces.
         let color = move |th: &Theme| th.semantic.swatch(status).bg;
         r = r.push(
-            container(
-                iced::widget::space()
-                    .width(m.progress_height)
-                    .height(m.progress_height),
-            )
-            .style(move |th: &Theme| iced::widget::container::Style {
-                background: Some(iced::Background::Color(color(th))),
-                border: iced::Border::default().rounded(th.metrics.radius_pill),
-                ..Default::default()
-            }),
+            t.status_props.apply(
+                container(
+                    iced::widget::space()
+                        .width(m.progress_height)
+                        .height(m.progress_height),
+                )
+                .style(move |th: &Theme| iced::widget::container::Style {
+                    background: Some(iced::Background::Color(color(th))),
+                    border: iced::Border::default().rounded(th.metrics.radius_pill),
+                    ..Default::default()
+                }),
+            ),
         );
     }
-    r = r.push(text(t.title).size(crate::Typography::desktop().body));
+    r = r.push(
+        t.title_props
+            .apply(text(t.title).size(crate::Typography::desktop().body)),
+    );
     if let Some((label, msg)) = t.action {
         r = r.push(
-            button(text(label).size(crate::Typography::desktop().body))
+            t.action_props.apply(
+                button(
+                    t.action_label_props
+                        .apply(text(label).size(crate::Typography::desktop().body)),
+                )
                 .padding(m.button_padding)
                 .style(action_style)
                 .on_press(msg),
+            ),
         );
     }
     if let Some(msg) = t.on_dismiss {
-        r = r.push(
-            button(
-                crate::Icon::WindowClose
-                    .view(m.icon_size)
-                    .style(move |th: &Theme, _| iced::widget::svg::Style {
-                        color: Some(colors(th, background, text_color, role).1),
-                    }),
-            )
-            .padding(m.space_s)
-            .style(on_surface)
-            .on_press(msg),
-        );
+        r =
+            r.push(
+                t.dismiss_props.apply(
+                    button(crate::Icon::WindowClose.view(m.icon_size).style(
+                        move |th: &Theme, _| iced::widget::svg::Style {
+                            color: Some(colors(th, background, text_color, role).1),
+                        },
+                    ))
+                    .padding(m.space_s)
+                    .style(on_surface)
+                    .on_press(msg),
+                ),
+            );
     }
-    let toast = container(r)
-        .padding(
-            t.padding
-                .unwrap_or(iced::Padding::from([m.space_s, m.space_l])),
-        )
-        .style(move |th: &Theme| {
-            let (bg, fg) = colors(th, background, text_color, role);
-            iced::widget::container::Style {
-                text_color: Some(fg),
-                background: Some(iced::Background::Color(bg)),
-                border: iced::Border::default().rounded(radius.unwrap_or(th.metrics.radius_toast)),
-                shadow: th.shadows.popover().shadow,
-                snap: false,
-            }
-        });
+    let toast = t.container_props.apply(
+        container(r)
+            .padding(
+                t.padding
+                    .unwrap_or(iced::Padding::from([m.space_s, m.space_l])),
+            )
+            .style(move |th: &Theme| {
+                let (bg, fg) = colors(th, background, text_color, role);
+                iced::widget::container::Style {
+                    text_color: Some(fg),
+                    background: Some(iced::Background::Color(bg)),
+                    border: iced::Border::default()
+                        .rounded(radius.unwrap_or(th.metrics.radius_toast)),
+                    shadow: th.shadows.popover().shadow,
+                    snap: false,
+                }
+            }),
+    );
     // Slides up on show: 300ms, ADW_EASE (`SHOW_DURATION`). No hide animation: the app
     // removes the toast.
     // It slides in from the edge it is anchored to.
@@ -537,5 +601,103 @@ mod tests {
             pink,
             "text_color is a hard override"
         );
+    }
+}
+
+/// Reusable, no-op-by-default presentation for [`Toast`].
+#[derive(Clone, Default)]
+pub struct ToastProps {
+    pub title_props: Option<TextProps>,
+    pub action_label_props: Option<TextProps>,
+    pub action_props: Option<ButtonProps>,
+    pub dismiss_props: Option<ButtonProps>,
+    pub status_props: Option<ContainerProps>,
+    pub container_props: Option<ContainerProps>,
+}
+impl ToastProps {
+    pub fn title_props(mut self, props: TextProps) -> Self {
+        self.title_props = Some(props);
+        self
+    }
+    pub fn action_label_props(mut self, props: TextProps) -> Self {
+        self.action_label_props = Some(props);
+        self
+    }
+    pub fn action_props(mut self, props: ButtonProps) -> Self {
+        self.action_props = Some(props);
+        self
+    }
+    pub fn dismiss_props(mut self, props: ButtonProps) -> Self {
+        self.dismiss_props = Some(props);
+        self
+    }
+    pub fn status_props(mut self, props: ContainerProps) -> Self {
+        self.status_props = Some(props);
+        self
+    }
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = Some(props);
+        self
+    }
+    pub fn apply<M>(&self, widget: Toast<M>) -> Toast<M> {
+        let widget = if let Some(props) = &self.title_props {
+            widget.title_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.action_label_props {
+            widget.action_label_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.action_props {
+            widget.action_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.dismiss_props {
+            widget.dismiss_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.status_props {
+            widget.status_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.container_props {
+            widget.container_props(props.clone())
+        } else {
+            widget
+        };
+        widget
+    }
+}
+
+#[cfg(test)]
+mod typed_presentation_tests {
+    use super::*;
+    use iced::advanced::widget::Tree;
+    fn same_tree(a: &Tree, b: &Tree) {
+        assert!(a.tag == b.tag);
+        assert_eq!(a.children.len(), b.children.len());
+        for (a, b) in a.children.iter().zip(&b.children) {
+            same_tree(a, b);
+        }
+    }
+    #[test]
+    fn reusable_defaults_preserve_geometry_and_tree() {
+        let build = || {
+            Toast::new("Title")
+                .action("Undo", 7u8)
+                .on_dismiss(8)
+                .timeout(0)
+        };
+        let w = build();
+        let baseline: Element<'_, u8> = toast_element(w, ToastPosition::BottomCenter);
+        let w = ToastProps::default().apply(build());
+        let configured: Element<'_, u8> = toast_element(w, ToastPosition::BottomCenter);
+        assert_eq!(baseline.as_widget().size(), configured.as_widget().size());
+        same_tree(&Tree::new(&baseline), &Tree::new(&configured));
     }
 }

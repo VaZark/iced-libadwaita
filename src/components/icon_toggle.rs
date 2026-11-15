@@ -13,19 +13,54 @@ use crate::components::{flat_button, suggested_button};
 use crate::{IconSource, Metrics};
 use std::rc::Rc;
 
+/// Owned presentation overrides; default values preserve the component defaults.
+#[derive(Clone, Default)]
+pub struct IconToggleButtonProps {
+    pub tooltip_props: super::tooltip::TooltipProps,
+    pub button_props: super::props::ButtonProps,
+}
+impl IconToggleButtonProps {
+    pub fn tooltip_props(mut self, props: super::tooltip::TooltipProps) -> Self {
+        self.tooltip_props = props;
+        self
+    }
+    pub fn button_props(mut self, props: super::props::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+    pub fn apply<'a, M: 'a>(&self, widget: IconToggleButton<'a, M>) -> IconToggleButton<'a, M> {
+        widget
+            .button_props(self.button_props.clone())
+            .tooltip_props(self.tooltip_props.clone())
+    }
+}
+
 /// See the [module](self).
 pub struct IconToggleButton<'a, M> {
+    tooltip_props: super::tooltip::TooltipProps,
     icon: IconSource,
     active: bool,
     size: f32,
     disabled: bool,
     tooltip: Option<String>,
     on_toggle: Option<Rc<dyn Fn(bool) -> M + 'a>>,
+    button_props: super::props::ButtonProps,
 }
 
 impl<'a, M: 'a> IconToggleButton<'a, M> {
+    pub fn tooltip_props(mut self, props: super::tooltip::TooltipProps) -> Self {
+        self.tooltip_props = props;
+        self
+    }
+    pub fn button_props(mut self, props: super::props::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+
     pub fn new(icon: impl Into<IconSource>, active: bool) -> Self {
         Self {
+            tooltip_props: Default::default(),
+            button_props: super::props::ButtonProps::default(),
             icon: icon.into(),
             active,
             size: Metrics::desktop().icon_size,
@@ -64,12 +99,21 @@ impl<'a, M: Clone + 'a> From<IconToggleButton<'a, M>> for Element<'a, M> {
             b.on_toggle.as_ref().map(|f| f(!b.active))
         };
         let button: Element<'a, M> = if b.active {
-            suggested_button(icon).on_press_maybe(press).into()
+            b.button_props
+                .apply(suggested_button(icon).on_press_maybe(press))
+                .into()
         } else {
-            flat_button(icon).on_press_maybe(press).into()
+            b.button_props
+                .apply(flat_button(icon).on_press_maybe(press))
+                .into()
         };
         match b.tooltip {
-            Some(t) => crate::components::tooltip(button, t, super::TooltipPosition::Bottom),
+            Some(t) => super::tooltip::tooltip_with_props(
+                button,
+                t,
+                super::TooltipPosition::Bottom,
+                b.tooltip_props,
+            ),
             None => button,
         }
     }

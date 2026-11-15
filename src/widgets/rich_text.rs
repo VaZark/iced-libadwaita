@@ -102,6 +102,7 @@ enum Script {
 }
 
 pub struct RichText<'a, M> {
+    props: RichTextWidgetProps,
     blocks: &'a [Block],
     look: Look,
     compact: bool,
@@ -118,6 +119,7 @@ pub struct RichText<'a, M> {
 
 /// Where we are while drawing: footnote numbers, the task counter, and the callbacks.
 struct Ctx<'a, M> {
+    props: RichTextWidgetProps,
     look: Look,
     gap: f32,
     order: Vec<String>,
@@ -132,8 +134,14 @@ struct Ctx<'a, M> {
 }
 
 impl<'a, M: Clone + 'a> RichText<'a, M> {
+    /// Presentation overrides for native children; actions remain parent-owned.
+    pub fn props(mut self, props: RichTextWidgetProps) -> Self {
+        self.props = props;
+        self
+    }
     pub fn new(theme: &Theme, blocks: &'a [Block]) -> Self {
         Self {
+            props: RichTextWidgetProps::default(),
             blocks,
             look: Look::of(theme),
             compact: false,
@@ -212,6 +220,7 @@ impl<'a, M: Clone + 'a> From<RichText<'a, M>> for Element<'a, M> {
         let k = if r.compact { 0.9 } else { 1.0 };
         let m = crate::Metrics::desktop();
         let cx = Ctx {
+            props: r.props,
             look: r.look.scaled(k),
             gap: r
                 .spacing
@@ -256,7 +265,12 @@ fn font(st: &Style) -> Font {
     }
 }
 
-fn one<'a>(cx_look: &Look, text: String, st: &Style) -> Span<'a, String, Font> {
+fn one<'a>(
+    cx_look: &Look,
+    props: &RichTextLineProps,
+    text: String,
+    st: &Style,
+) -> Span<'a, String, Font> {
     let mut s = span(text).size(st.size).font(font(st));
     if let Some(c) = st.color {
         s = s.color(c);
@@ -272,6 +286,15 @@ fn one<'a>(cx_look: &Look, text: String, st: &Style) -> Span<'a, String, Font> {
     }
     if let Some(url) = &st.link {
         s = s.link(url.clone()).underline(true);
+    }
+    if let Some(size) = props.size {
+        s = s.size(size);
+    }
+    if let Some(font) = props.font {
+        s = s.font(font);
+    }
+    if let Some(color) = props.color {
+        s = s.color(color);
     }
     s.strikethrough(st.strike)
 }
@@ -290,7 +313,7 @@ fn spans<'a, M>(
     for i in inlines {
         match i {
             Inline::Text(t) => match st.script {
-                None => out.push(one(&cx.look, t.clone(), st)),
+                None => out.push(one(&cx.look, &cx.props.line, t.clone(), st)),
                 Some(sc) => {
                     let mapped = match sc {
                         Script::Super => rt::superscript(t),
@@ -298,9 +321,10 @@ fn spans<'a, M>(
                     };
                     // A character with no script form is drawn small and dim instead.
                     out.push(match mapped {
-                        Some(m) => one(&cx.look, m, st),
+                        Some(m) => one(&cx.look, &cx.props.line, m, st),
                         None => one(
                             &cx.look,
+                            &cx.props.line,
                             t.clone(),
                             &Style {
                                 size: st.size * 0.7,
@@ -313,6 +337,7 @@ fn spans<'a, M>(
             },
             Inline::Code(c) => out.push(one(
                 &cx.look,
+                &cx.props.line,
                 c.clone(),
                 &Style {
                     mono: true,
@@ -345,7 +370,7 @@ fn spans<'a, M>(
                     s.color = Some(cx.look.accent);
                     s.italic = true;
                 });
-                out.push(one(&cx.look, format!("▣ {label}"), &s));
+                out.push(one(&cx.look, &cx.props.line, format!("▣ {label}"), &s));
             }
             Inline::FootnoteRef(label) => {
                 let n = cx
@@ -355,9 +380,9 @@ fn spans<'a, M>(
                     .map_or(0, |p| p + 1);
                 let mark = rt::superscript(&n.to_string()).unwrap_or_else(|| format!("[{n}]"));
                 let s = with(&|s| s.color = Some(cx.look.accent));
-                out.push(one(&cx.look, mark, &s));
+                out.push(one(&cx.look, &cx.props.line, mark, &s));
             }
-            Inline::LineBreak => out.push(one(&cx.look, "\n".into(), st)),
+            Inline::LineBreak => out.push(one(&cx.look, &cx.props.line, "\n".into(), st)),
         }
     }
 }
@@ -382,7 +407,7 @@ fn line_aligned<'a, M: Clone + 'a>(
         let f = f.clone();
         r = r.on_link_click(move |url| f(url));
     }
-    r.into()
+    cx.props.line.apply(r).into()
 }
 
 fn body_style<M>(cx: &Ctx<'_, M>) -> Style {
@@ -414,13 +439,18 @@ fn block<'a, M: Clone + 'a>(cx: &Ctx<'a, M>, b: &'a Block, depth: usize) -> Elem
         }
         Block::Paragraph(content) => match content.as_slice() {
             // A picture on its own is drawn as one, when it is a file we can read.
-            [Inline::Image { url, .. }] if Path::new(url).is_file() => container(
-                image(url.clone())
-                    .width(Length::Shrink)
-                    .height(Length::Shrink),
-            )
-            .max_width(420.0)
-            .into(),
+            [Inline::Image { url, .. }] if Path::new(url).is_file() => cx
+                .props
+                .image_container
+                .apply(
+                    container(
+                        image(url.clone())
+                            .width(Length::Shrink)
+                            .height(Length::Shrink),
+                    )
+                    .max_width(420.0),
+                )
+                .into(),
             _ => line(cx, content, body_style(cx)),
         },
         Block::Quote(inner) => {
@@ -428,14 +458,21 @@ fn block<'a, M: Clone + 'a>(cx: &Ctx<'a, M>, b: &'a Block, depth: usize) -> Elem
             // The bar is a second layer over the text, so it is as tall as the text: a `Fill`
             // bar in a row would have no height to fill.
             stack![
-                container(blocks(cx, inner, depth)).padding(Padding::ZERO.left(cx.quote_indent)),
-                container(space().width(3.0).height(Length::Fill)).style(move |_: &Theme| {
-                    container::Style {
-                        background: Some(Background::Color(bar)),
-                        border: Border::default().rounded(2.0),
-                        ..container::Style::default()
-                    }
-                }),
+                cx.props.quote.apply(
+                    container(blocks(cx, inner, depth))
+                        .padding(Padding::ZERO.left(cx.quote_indent))
+                ),
+                cx.props
+                    .quote_bar
+                    .apply(container(space().width(3.0).height(Length::Fill)).style(
+                        move |_: &Theme| {
+                            container::Style {
+                                background: Some(Background::Color(bar)),
+                                border: Border::default().rounded(2.0),
+                                ..container::Style::default()
+                            }
+                        }
+                    )),
             ]
             .width(Length::Fill)
             .into()
@@ -449,22 +486,32 @@ fn block<'a, M: Clone + 'a>(cx: &Ctx<'a, M>, b: &'a Block, depth: usize) -> Elem
             };
             let mut col = column![].spacing(cx.code_spacing);
             if let Some(l) = lang.as_deref().filter(|l| !l.is_empty()) {
-                col = col.push(text(l.to_string()).size(cx.look.caption).color(cx.look.dim));
+                col = col.push(
+                    cx.props
+                        .language
+                        .apply(text(l.to_string()).size(cx.look.caption).color(cx.look.dim)),
+                );
             }
             col = col.push(
-                text(code.trim_end().to_string())
-                    .size(mono.size)
-                    .font(font(&mono)),
+                cx.props.code.apply(
+                    text(code.trim_end().to_string())
+                        .size(mono.size)
+                        .font(font(&mono)),
+                ),
             );
             let (bg, radius) = (cx.look.code_bg, cx.look.radius);
-            container(col)
-                .padding(cx.code_padding)
-                .width(Length::Fill)
-                .style(move |_: &Theme| container::Style {
-                    background: Some(Background::Color(bg)),
-                    border: Border::default().rounded(radius),
-                    ..container::Style::default()
-                })
+            cx.props
+                .code_container
+                .apply(
+                    container(col)
+                        .padding(cx.code_padding)
+                        .width(Length::Fill)
+                        .style(move |_: &Theme| container::Style {
+                            background: Some(Background::Color(bg)),
+                            border: Border::default().rounded(radius),
+                            ..container::Style::default()
+                        }),
+                )
                 .into()
         }
         Block::Rule => divider().into(),
@@ -492,15 +539,27 @@ fn list<'a, M: Clone + 'a>(
                 }
                 c.into()
             }
-            None => text(rt::marker(start, n, depth))
-                .size(cx.look.body)
-                .color(cx.look.dim)
+            None => cx
+                .props
+                .list_marker
+                .apply(
+                    text(rt::marker(start, n, depth))
+                        .size(cx.look.body)
+                        .color(cx.look.dim),
+                )
                 .into(),
         };
         let content = blocks(cx, &item.blocks, depth + 1);
-        row![container(lead).width(cx.marker_width).align_x(Alignment::End), content]
-            .spacing(cx.marker_spacing)
-            .into()
+        row![
+            cx.props.marker_container.apply(
+                container(lead)
+                    .width(cx.marker_width)
+                    .align_x(Alignment::End)
+            ),
+            content
+        ]
+        .spacing(cx.marker_spacing)
+        .into()
     });
     column(rows)
         .spacing(cx.gap / 2.0)
@@ -527,14 +586,22 @@ fn table<'a, M: Clone + 'a>(
                 Align::Center => iced::alignment::Horizontal::Center,
                 Align::Right => iced::alignment::Horizontal::Right,
             };
-            container(line_aligned(cx, rt::cell(cells, c), st, h))
-                .width(Length::FillPortion(1))
-                .padding([crate::Metrics::desktop().space_xs, crate::Metrics::desktop().gap])
+            cx.props
+                .table_cell
+                .apply(
+                    container(line_aligned(cx, rt::cell(cells, c), st, h))
+                        .width(Length::FillPortion(1))
+                        .padding([
+                            crate::Metrics::desktop().space_xs,
+                            crate::Metrics::desktop().gap,
+                        ]),
+                )
                 .into()
         }))
         .into()
     };
-    let mut col = column![one_row(head, true), divider()].spacing(crate::Metrics::desktop().space_xxs);
+    let mut col =
+        column![one_row(head, true), divider()].spacing(crate::Metrics::desktop().space_xxs);
     for r in rows {
         col = col.push(one_row(r, false));
     }
@@ -554,9 +621,9 @@ fn definitions<'a, M: Clone + 'a>(
         };
         let mut col = column![line(cx, &d.term, term)].spacing(crate::Metrics::desktop().space_xxs);
         for detail in &d.details {
-            col = col.push(
+            col = col.push(cx.props.definition_detail.apply(
                 container(line(cx, detail, body_style(cx))).padding(Padding::ZERO.left(16.0)),
-            );
+            ));
         }
         col.into()
     }))
@@ -579,6 +646,7 @@ fn footnotes<'a, M: Clone + 'a>(
     let mut sorted: Vec<&Footnote> = notes.iter().collect();
     sorted.sort_by_key(|n| number(n));
     let small = Ctx {
+        props: cx.props.clone(),
         look: cx.look.scaled(0.9),
         gap: cx.gap / 2.0,
         order: cx.order.clone(),
@@ -595,13 +663,17 @@ fn footnotes<'a, M: Clone + 'a>(
         let k = number(n);
         let label = if k == usize::MAX { i + 1 } else { k + 1 };
         row![
-            container(
-                text(format!("{label}."))
-                    .size(small.look.body)
-                    .color(small.look.dim)
-            )
-            .width(24.0)
-            .align_x(Alignment::End),
+            cx.props.footnote_marker_container.apply(
+                container(
+                    cx.props.footnote_marker.apply(
+                        text(format!("{label}."))
+                            .size(small.look.body)
+                            .color(small.look.dim)
+                    )
+                )
+                .width(24.0)
+                .align_x(Alignment::End)
+            ),
             blocks(&small, &n.blocks, depth),
         ]
         .spacing(crate::Metrics::desktop().gap)
@@ -642,5 +714,204 @@ mod tests {
             .marker_spacing(8.0);
         assert_eq!((r.spacing, r.marker_width), (Some(3.0), Some(7.0)));
         let _: Element<'_, ()> = r.into();
+    }
+}
+
+/// Typed presentation for parent-built native children. Defaults preserve the original view.
+#[derive(Clone, Default)]
+pub struct RichTextWidgetProps {
+    pub line: RichTextLineProps,
+    pub image_container: crate::components::ContainerProps,
+    pub quote: crate::components::ContainerProps,
+    pub quote_bar: crate::components::ContainerProps,
+    pub language: crate::components::TextProps,
+    pub code: crate::components::TextProps,
+    pub code_container: crate::components::ContainerProps,
+    pub list_marker: crate::components::TextProps,
+    pub marker_container: crate::components::ContainerProps,
+    pub table_cell: crate::components::ContainerProps,
+    pub definition_detail: crate::components::ContainerProps,
+    pub footnote_marker_container: crate::components::ContainerProps,
+    pub footnote_marker: crate::components::TextProps,
+}
+
+/// Native presentation supported by iced's rich text (no link handlers or document state).
+/// Span size, font and color overrides are applied after document typography as well.
+#[derive(Clone, Default)]
+pub struct RichTextLineProps {
+    pub size: Option<iced::Pixels>,
+    pub font: Option<Font>,
+    pub color: Option<Color>,
+    pub width: Option<Length>,
+    pub height: Option<Length>,
+    pub align_x: Option<iced::widget::text::Alignment>,
+    pub align_y: Option<iced::alignment::Vertical>,
+    pub line_height: Option<iced::widget::text::LineHeight>,
+    pub wrapping: Option<iced::widget::text::Wrapping>,
+    pub style: Option<crate::components::props::TextStyle>,
+}
+impl RichTextLineProps {
+    pub fn size(mut self, value: impl Into<iced::Pixels>) -> Self {
+        self.size = Some(value.into());
+        self
+    }
+    pub fn font(mut self, value: impl Into<Font>) -> Self {
+        self.font = Some(value.into());
+        self
+    }
+    pub fn color(mut self, value: impl Into<Color>) -> Self {
+        self.color = Some(value.into());
+        self
+    }
+    pub fn width(mut self, value: impl Into<Length>) -> Self {
+        self.width = Some(value.into());
+        self
+    }
+    pub fn height(mut self, value: impl Into<Length>) -> Self {
+        self.height = Some(value.into());
+        self
+    }
+    pub fn align_x(mut self, value: impl Into<iced::widget::text::Alignment>) -> Self {
+        self.align_x = Some(value.into());
+        self
+    }
+    pub fn align_y(mut self, value: impl Into<iced::alignment::Vertical>) -> Self {
+        self.align_y = Some(value.into());
+        self
+    }
+    pub fn line_height(mut self, value: impl Into<iced::widget::text::LineHeight>) -> Self {
+        self.line_height = Some(value.into());
+        self
+    }
+    pub fn wrapping(mut self, value: impl Into<iced::widget::text::Wrapping>) -> Self {
+        self.wrapping = Some(value.into());
+        self
+    }
+    pub fn style(
+        mut self,
+        style: impl Fn(&Theme) -> iced::widget::text::Style + Send + Sync + 'static,
+    ) -> Self {
+        self.style = Some(std::sync::Arc::new(style));
+        self
+    }
+
+    pub fn apply<'a, M: 'a>(
+        &self,
+        mut widget: iced::widget::text::Rich<'a, String, M, Theme>,
+    ) -> iced::widget::text::Rich<'a, String, M, Theme> {
+        if let Some(v) = self.size {
+            widget = widget.size(v);
+        }
+        if let Some(v) = self.font {
+            widget = widget.font(v);
+        }
+        if let Some(v) = self.width {
+            widget = widget.width(v);
+        }
+        if let Some(v) = self.height {
+            widget = widget.height(v);
+        }
+        if let Some(v) = self.align_x {
+            widget = widget.align_x(v);
+        }
+        if let Some(v) = self.align_y {
+            widget = widget.align_y(v);
+        }
+        if let Some(v) = self.line_height {
+            widget = widget.line_height(v);
+        }
+        if let Some(v) = self.wrapping {
+            widget = widget.wrapping(v);
+        }
+        if let Some(style) = self.style.clone() {
+            widget = widget.style(move |theme| style(theme));
+        }
+        if let Some(v) = self.color {
+            widget = widget.color(v);
+        }
+        widget
+    }
+}
+
+impl RichTextWidgetProps {
+    pub fn line(mut self, props: RichTextLineProps) -> Self {
+        self.line = props;
+        self
+    }
+    pub fn image_container(mut self, props: crate::components::ContainerProps) -> Self {
+        self.image_container = props;
+        self
+    }
+    pub fn quote(mut self, props: crate::components::ContainerProps) -> Self {
+        self.quote = props;
+        self
+    }
+    pub fn quote_bar(mut self, props: crate::components::ContainerProps) -> Self {
+        self.quote_bar = props;
+        self
+    }
+    pub fn language(mut self, props: crate::components::TextProps) -> Self {
+        self.language = props;
+        self
+    }
+    pub fn code(mut self, props: crate::components::TextProps) -> Self {
+        self.code = props;
+        self
+    }
+    pub fn code_container(mut self, props: crate::components::ContainerProps) -> Self {
+        self.code_container = props;
+        self
+    }
+    pub fn list_marker(mut self, props: crate::components::TextProps) -> Self {
+        self.list_marker = props;
+        self
+    }
+    pub fn marker_container(mut self, props: crate::components::ContainerProps) -> Self {
+        self.marker_container = props;
+        self
+    }
+    pub fn table_cell(mut self, props: crate::components::ContainerProps) -> Self {
+        self.table_cell = props;
+        self
+    }
+    pub fn definition_detail(mut self, props: crate::components::ContainerProps) -> Self {
+        self.definition_detail = props;
+        self
+    }
+    pub fn footnote_marker_container(mut self, props: crate::components::ContainerProps) -> Self {
+        self.footnote_marker_container = props;
+        self
+    }
+    pub fn footnote_marker(mut self, props: crate::components::TextProps) -> Self {
+        self.footnote_marker = props;
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: RichText<'a, M>) -> RichText<'a, M>
+    where
+        M: Clone + 'a,
+    {
+        widget.props(self.clone())
+    }
+}
+
+#[cfg(test)]
+mod native_props_tests {
+    use super::*;
+    use crate::widgets::synced_text::native_props_tests::{assert_override, text_props};
+    #[test]
+    fn defaults_preserve_layout_and_overrides_reach_native_children() {
+        let blocks = [Block::CodeBlock {
+            lang: Some("Rust".into()),
+            code: "let x = 1;".into(),
+        }];
+        let theme = Theme::light();
+        let make = || RichText::<()>::new(&theme, &blocks);
+        assert_override(
+            make().into(),
+            make().props(RichTextWidgetProps::default()).into(),
+            make()
+                .props(RichTextWidgetProps::default().code(text_props()))
+                .into(),
+        );
     }
 }

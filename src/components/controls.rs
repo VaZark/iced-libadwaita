@@ -6,9 +6,9 @@
 use crate::Element;
 use crate::styles;
 use crate::{Metrics, Role, Surface, Swatch, Theme};
+use iced::Length;
 use iced::widget::{Button, Checkbox, Radio};
 use iced::widget::{button, checkbox, container, radio, text};
-use iced::Length;
 use std::ops::RangeInclusive;
 
 // ------------------------------------------------- CheckButton / RadioButton
@@ -53,9 +53,22 @@ where
 
 /// `GtkLinkButton`: accent-colored text button (`.link`).
 pub fn link_button<'a, M: 'a>(label: impl Into<String>) -> Button<'a, M, Theme> {
-    button(crate::components::typography::label(label.into()))
+    link_button_with_props(label, LinkButtonProps::default())
+}
+
+pub fn link_button_with_props<'a, M: 'a>(
+    label: impl Into<String>,
+    props: LinkButtonProps,
+) -> Button<'a, M, Theme> {
+    props.button_props.apply(
+        button(
+            props
+                .label_props
+                .apply(crate::components::typography::label(label.into())),
+        )
         .padding(Metrics::desktop().space_xs)
-        .style(styles::button::link)
+        .style(styles::button::link),
+    )
 }
 
 // -------------------------------------------------------------------- Tag
@@ -63,37 +76,123 @@ pub fn link_button<'a, M: 'a>(label: impl Into<String>) -> Button<'a, M, Theme> 
 /// A small rounded label tinted with a [`Role`] (status chip). Not a libadwaita widget; the
 /// pattern behind `.tag`-style badges in GNOME apps.
 pub fn tag<'a, M: 'a>(label: impl Into<String>, role: Role) -> Element<'a, M> {
-    container(
-        text(label.into())
-            .size(crate::Typography::desktop().small)
-            .wrapping(text::Wrapping::None),
-    )
-    .padding(Metrics::desktop().small_button_padding)
-    .style(styles::container::tinted(role))
-    .into()
+    tag_with_props(label, role, TagProps::default())
+}
+
+pub fn tag_with_props<'a, M: 'a>(
+    label: impl Into<String>,
+    role: Role,
+    props: TagProps,
+) -> Element<'a, M> {
+    props
+        .container_props
+        .apply(
+            container(
+                props.label_props.apply(
+                    text(label.into())
+                        .size(crate::Typography::desktop().small)
+                        .wrapping(text::Wrapping::None),
+                ),
+            )
+            .padding(Metrics::desktop().small_button_padding)
+            .style(styles::container::tinted(role)),
+        )
+        .into()
 }
 
 // ----------------------------------------------------------------- Swatches
 
 /// A labeled color sample (`bg` with `fg` text), e.g. to document a theme's surfaces.
 pub fn color_swatch<'a, M: 'a>(label: impl Into<String>, surface: Surface) -> Element<'a, M> {
+    color_swatch_with_props(label, surface, ColorSwatchProps::default())
+}
+
+pub fn color_swatch_with_props<'a, M: 'a>(
+    label: impl Into<String>,
+    surface: Surface,
+    props: ColorSwatchProps,
+) -> Element<'a, M> {
     let m = Metrics::desktop();
-    container(text(label.into()).size(12).color(surface.fg))
-        .padding(m.space_m)
-        .width(Length::Fill)
-        .style(move |t: &Theme| iced::widget::container::Style {
-            background: Some(iced::Background::Color(surface.bg)),
-            border: iced::Border {
-                color: crate::color::alpha(surface.fg, 0.2),
-                width: 1.0,
-                radius: t.metrics.radius_m.into(),
-            },
-            ..Default::default()
-        })
+    props
+        .container_props
+        .apply(
+            container(
+                props
+                    .label_props
+                    .apply(text(label.into()).size(12).color(surface.fg)),
+            )
+            .padding(m.space_m)
+            .width(Length::Fill)
+            .style(move |t: &Theme| iced::widget::container::Style {
+                background: Some(iced::Background::Color(surface.bg)),
+                border: iced::Border {
+                    color: crate::color::alpha(surface.fg, 0.2),
+                    width: 1.0,
+                    radius: t.metrics.radius_m.into(),
+                },
+                ..Default::default()
+            }),
+        )
         .into()
 }
 
 /// [`color_swatch`] for a status [`Swatch`] (`bg` / `fg`).
 pub fn status_swatch<'a, M: 'a>(label: impl Into<String>, swatch: Swatch) -> Element<'a, M> {
-    color_swatch(label, swatch.surface())
+    status_swatch_with_props(label, swatch, ColorSwatchProps::default())
+}
+
+#[derive(Clone, Default)]
+pub struct LinkButtonProps {
+    pub label_props: super::props::TextProps,
+    pub button_props: super::props::ButtonProps,
+}
+impl LinkButtonProps {
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn button_props(mut self, props: super::props::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct TagProps {
+    pub label_props: super::props::TextProps,
+    pub container_props: super::props::ContainerProps,
+}
+impl TagProps {
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct ColorSwatchProps {
+    pub label_props: super::props::TextProps,
+    pub container_props: super::props::ContainerProps,
+}
+impl ColorSwatchProps {
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+}
+
+pub fn status_swatch_with_props<'a, M: 'a>(
+    label: impl Into<String>,
+    swatch: Swatch,
+    props: ColorSwatchProps,
+) -> Element<'a, M> {
+    color_swatch_with_props(label, swatch.surface(), props)
 }

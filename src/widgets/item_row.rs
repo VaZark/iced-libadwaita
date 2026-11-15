@@ -34,6 +34,7 @@
 use crate::Element;
 use crate::Metrics;
 use crate::components::typography as ty;
+use crate::components::{ContainerProps, TextProps};
 use crate::layouts::{Flex, FlexCells};
 use crate::primitives::sorting::SortState;
 use crate::styles::text as st;
@@ -52,6 +53,10 @@ pub const SUFFIX_WIDTH: f32 = 36.0;
 
 /// See the [module](self).
 pub struct ItemRow<'a, M> {
+    title_props: TextProps,
+    subtitle_props: TextProps,
+    text_container_props: ContainerProps,
+    container_props: ContainerProps,
     title: String,
     subtitle: Option<String>,
     picture: Option<Element<'a, M>>,
@@ -70,8 +75,37 @@ pub struct ItemRow<'a, M> {
 }
 
 impl<'a, M: 'a> ItemRow<'a, M> {
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn title_props(mut self, props: TextProps) -> Self {
+        self.title_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn subtitle_props(mut self, props: TextProps) -> Self {
+        self.subtitle_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn text_container_props(mut self, props: ContainerProps) -> Self {
+        self.text_container_props = props;
+        self
+    }
+
+    /// Presentation applied after the nested widget defaults; content and events are retained.
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+
     pub fn new(title: impl Into<String>) -> Self {
         Self {
+            title_props: TextProps::default(),
+            subtitle_props: TextProps::default(),
+            text_container_props: ContainerProps::default(),
+            container_props: ContainerProps::default(),
+
             title: title.into(),
             subtitle: None,
             picture: None,
@@ -163,22 +197,30 @@ impl<'a, M: Clone + 'a> From<ItemRow<'a, M>> for Element<'a, M> {
         // columns line up and shrink together, none below what its label needs.
         let mut line = FlexCells::new().spacing(m.space_m);
         if r.compact {
-            line = line.cell(r.title_flex, ty::body(r.title).width(Length::Fill));
+            line = line.cell(
+                r.title_flex,
+                r.title_props.apply(ty::body(r.title).width(Length::Fill)),
+            );
             if let Some(s) = r.subtitle {
                 line = line.cell(
                     r.subtitle_flex,
-                    ty::caption(s).style(st::dim).width(Length::Fill),
+                    r.subtitle_props
+                        .apply(ty::caption(s).style(st::dim).width(Length::Fill)),
                 );
             }
         } else {
             if let Some(p) = r.picture {
                 line = line.cell(Flex::fixed(PICTURE_WIDTH), p);
             }
-            let mut text = column![ty::body(r.title)];
+            let mut text = column![r.title_props.apply(ty::body(r.title))];
             if let Some(s) = r.subtitle {
-                text = text.push(ty::caption(s).style(st::dim));
+                text = text.push(r.subtitle_props.apply(ty::caption(s).style(st::dim)));
             }
-            line = line.cell(r.title_flex, container(text).width(Length::Fill));
+            line = line.cell(
+                r.title_flex,
+                r.text_container_props
+                    .apply(container(text).width(Length::Fill)),
+            );
         }
         for (flex, align, cell) in r.columns {
             line = line.cell(flex, container(cell).width(Length::Fill).align_x(align));
@@ -197,10 +239,13 @@ impl<'a, M: Clone + 'a> From<ItemRow<'a, M>> for Element<'a, M> {
         } else {
             Padding::ZERO
         });
-        container(container(line).padding(pad))
-            .width(Length::Fill)
-            .center_y(r.height)
-            .height(r.height)
+        r.container_props
+            .apply(
+                container(container(line).padding(pad))
+                    .width(Length::Fill)
+                    .center_y(r.height)
+                    .height(r.height),
+            )
             .into()
     }
 }
@@ -449,5 +494,96 @@ mod tests {
         assert_eq!(cols.header::<()>(&state, |_| ()).len(), 3);
         // No picture in compact mode.
         assert_eq!(cols.compact(true).header::<()>(&state, |_| ()).len(), 2);
+    }
+}
+
+/// Reusable, no-op-by-default presentation for [`ItemRow`].
+#[derive(Clone, Default)]
+pub struct ItemRowProps {
+    pub title_props: Option<TextProps>,
+    pub subtitle_props: Option<TextProps>,
+    pub text_container_props: Option<ContainerProps>,
+    pub container_props: Option<ContainerProps>,
+}
+impl ItemRowProps {
+    pub fn title_props(mut self, props: TextProps) -> Self {
+        self.title_props = Some(props);
+        self
+    }
+    pub fn subtitle_props(mut self, props: TextProps) -> Self {
+        self.subtitle_props = Some(props);
+        self
+    }
+    pub fn text_container_props(mut self, props: ContainerProps) -> Self {
+        self.text_container_props = Some(props);
+        self
+    }
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = Some(props);
+        self
+    }
+    pub fn apply<'a, M: 'a>(&self, widget: ItemRow<'a, M>) -> ItemRow<'a, M> {
+        let widget = if let Some(props) = &self.title_props {
+            widget.title_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.subtitle_props {
+            widget.subtitle_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.text_container_props {
+            widget.text_container_props(props.clone())
+        } else {
+            widget
+        };
+        let widget = if let Some(props) = &self.container_props {
+            widget.container_props(props.clone())
+        } else {
+            widget
+        };
+        widget
+    }
+}
+
+#[cfg(test)]
+mod typed_presentation_tests {
+    #[test]
+    fn container_geometry_applies_in_both_layouts() {
+        for compact in [false, true] {
+            let row = ItemRowProps::default()
+                .container_props(ContainerProps::default().width(123).height(45))
+                .apply(
+                    ItemRow::<u8>::new("Title")
+                        .subtitle("Subtitle")
+                        .compact(compact),
+                );
+            let element: Element<'_, u8> = row.into();
+            assert_eq!(
+                element.as_widget().size(),
+                iced::Size::new(Length::Fixed(123.0), Length::Fixed(45.0))
+            );
+        }
+    }
+
+    use super::*;
+    use iced::advanced::widget::Tree;
+    fn same_tree(a: &Tree, b: &Tree) {
+        assert!(a.tag == b.tag);
+        assert_eq!(a.children.len(), b.children.len());
+        for (a, b) in a.children.iter().zip(&b.children) {
+            same_tree(a, b);
+        }
+    }
+    #[test]
+    fn reusable_defaults_preserve_geometry_and_tree() {
+        let build = || ItemRow::<u8>::new("Title").subtitle("Body").compact(true);
+        let w = build();
+        let baseline: Element<'_, u8> = w.into();
+        let w = ItemRowProps::default().apply(build());
+        let configured: Element<'_, u8> = w.into();
+        assert_eq!(baseline.as_widget().size(), configured.as_widget().size());
+        same_tree(&Tree::new(&baseline), &Tree::new(&configured));
     }
 }

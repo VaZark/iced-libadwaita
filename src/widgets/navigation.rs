@@ -2,6 +2,7 @@
 //! `.navigation-sidebar`, and `AdwBreakpoint`.
 
 use crate::Element;
+use crate::components::{ButtonProps, ContainerProps, TextProps};
 use crate::primitives::drag::{DropHint, Place, Targets};
 use crate::styles::{button as sb, container as sc};
 use crate::widgets::{drag_source, drop_zone_at, header_bar, toolbar_view};
@@ -353,6 +354,54 @@ pub fn sidebar_row_opening<'a, M: Clone + 'a>(
     padding: SidebarPadding,
     opens: bool,
 ) -> Element<'a, M> {
+    sidebar_row_opening_with_props(
+        icon,
+        label,
+        selected,
+        on_press,
+        padding,
+        opens,
+        SidebarRowProps::default(),
+    )
+}
+
+/// Presentation of the concrete widgets inside a sidebar row.
+#[derive(Clone, Default)]
+pub struct SidebarRowProps {
+    pub label_props: TextProps,
+    pub label_container_props: ContainerProps,
+    pub content_props: ContainerProps,
+    pub button_props: ButtonProps,
+}
+impl SidebarRowProps {
+    pub fn label_props(mut self, props: TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn label_container_props(mut self, props: ContainerProps) -> Self {
+        self.label_container_props = props;
+        self
+    }
+    pub fn content_props(mut self, props: ContainerProps) -> Self {
+        self.content_props = props;
+        self
+    }
+    pub fn button_props(mut self, props: ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+}
+
+/// Sidebar row with owned typed presentation overrides, without changing selection or actions.
+pub fn sidebar_row_opening_with_props<'a, M: Clone + 'a>(
+    icon: Option<crate::IconView<'a>>,
+    label: impl Into<String>,
+    selected: bool,
+    on_press: M,
+    padding: SidebarPadding,
+    opens: bool,
+    props: SidebarRowProps,
+) -> Element<'a, M> {
     let m = Metrics::desktop();
     let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
     if let Some(i) = icon {
@@ -361,9 +410,15 @@ pub fn sidebar_row_opening<'a, M: Clone + 'a>(
     // libadwaita ellipsizes; we clip at the row edge so text never paints
     // outside the selection highlight.
     r = r.push(
-        container(crate::components::typography::label(label.into()))
+        props.label_container_props.apply(
+            container(
+                props
+                    .label_props
+                    .apply(crate::components::typography::label(label.into())),
+            )
             .width(Length::Fill)
             .clip(true),
+        ),
     );
     if opens {
         r = r.push(Icon::GoNext.view(m.icon_size));
@@ -402,11 +457,13 @@ pub fn sidebar_row_opening<'a, M: Clone + 'a>(
             .center_y(Length::Fixed(padding.row_height(&m)))
     };
     // The selected background fades in and out (`Highlight`); the button keeps hover/press.
-    let btn = button(content.width(Length::Fill))
-        .padding(0)
-        .width(Length::Fill)
-        .style(sb::sidebar_row(false))
-        .on_press(on_press);
+    let btn = props.button_props.apply(
+        button(props.content_props.apply(content.width(Length::Fill)))
+            .padding(0)
+            .width(Length::Fill)
+            .style(sb::sidebar_row(false))
+            .on_press(on_press),
+    );
     let opacity = crate::theme_config::current()
         .number("navigation", "selection-opacity")
         .filter(|v| v.is_finite() && (0.0..=1.0).contains(v))
@@ -494,6 +551,8 @@ pub struct SidebarItem<M> {
     expander: Option<(bool, M)>,
     /// A row that takes drops but cannot be picked up: what the copy says, and what is sent.
     drop_only: Option<(String, std::rc::Rc<dyn Fn(Place) -> M>)>,
+    row_props: SidebarRowProps,
+    card_props: super::rows::ActionRowProps,
 }
 
 /// How far a nested [`SidebarItem`] is indented per level.
@@ -511,8 +570,18 @@ struct Reorder<M> {
 }
 
 impl<M> SidebarItem<M> {
+    pub fn row_props(mut self, props: SidebarRowProps) -> Self {
+        self.row_props = props;
+        self
+    }
+    pub fn card_props(mut self, props: super::rows::ActionRowProps) -> Self {
+        self.card_props = props;
+        self
+    }
     pub fn new(title: impl Into<String>, on_press: M) -> Self {
         Self {
+            row_props: SidebarRowProps::default(),
+            card_props: super::rows::ActionRowProps::default(),
             icon: None,
             tint: None,
             title: title.into(),
@@ -777,13 +846,14 @@ fn item_rows<'a, M: Clone + 'a>(
             crate::components::divider().spacing((level.inset(&m) - level.gap(&m)).max(0.0)),
         )
     });
-    let row = sidebar_row_opening(
+    let row = sidebar_row_opening_with_props(
         i.icon_view(m.icon_size),
         i.title,
         i.selected,
         i.on_press,
         i.padding.unwrap_or(level),
         i.opens,
+        i.row_props,
     );
     // A chevron to fold what is under the row, and the indent of a nested one.
     let row: Element<'a, M> = match i.expander {
@@ -951,7 +1021,7 @@ fn cards_view<'a, M: Clone + 'a>(items: Vec<SidebarItem<M>>) -> Element<'a, M> {
         if let Some(s) = i.subtitle {
             r = r.subtitle(s);
         }
-        Element::from(r)
+        Element::from(i.card_props.apply(r))
     });
     crate::widgets::page(crate::widgets::boxed_list(rows))
         .metrics(m)
@@ -1046,6 +1116,8 @@ pub struct NavigationSplitView<'a, M> {
     on_close_drawer: Option<M>,
     min_content: f32,
     drawer_width: f32,
+    sidebar_props: ContainerProps,
+    content_props: ContainerProps,
 }
 
 /// libadwaita's width for a split-view sidebar: `fraction` of the total width
@@ -1101,8 +1173,20 @@ pub fn collapse_width() -> f32 {
 }
 
 impl<'a, M: 'a> NavigationSplitView<'a, M> {
+    /// Presentation overrides applied after theme geometry and style.
+    pub fn sidebar_props(mut self, props: ContainerProps) -> Self {
+        self.sidebar_props = props;
+        self
+    }
+    /// Presentation overrides applied after theme geometry and style.
+    pub fn content_props(mut self, props: ContainerProps) -> Self {
+        self.content_props = props;
+        self
+    }
     pub fn new(sidebar: impl Into<Element<'a, M>>, content: impl Into<Element<'a, M>>) -> Self {
         Self {
+            sidebar_props: ContainerProps::default(),
+            content_props: ContainerProps::default(),
             sidebar: sidebar.into(),
             content: content.into(),
             sidebar_width: navigation_geometry("initial-sidebar-width", 240.0),
@@ -1227,9 +1311,13 @@ impl<'a, M: Clone + 'a> NavigationSplitView<'a, M> {
         if v.collapsed && v.collapsed_sidebar != CollapsedSidebar::Drawer {
             // The sidebar is the parent page; the content is pushed over it (and popped back)
             // with the navigation slide.
-            let first: Element<'a, M> = container(v.sidebar)
-                .width(Length::Fill)
-                .height(Length::Fill)
+            let first: Element<'a, M> = v
+                .sidebar_props
+                .apply(
+                    container(v.sidebar)
+                        .width(Length::Fill)
+                        .height(Length::Fill),
+                )
                 .into();
             return crate::layouts::push_stack(first, v.content, v.show_content)
                 .window_radius(r)
@@ -1238,14 +1326,22 @@ impl<'a, M: Clone + 'a> NavigationSplitView<'a, M> {
         // Beside the content or as a drawer, one widget moves the sidebar between the two on the
         // same spring: crossing the collapse breakpoint slides it out of the layout (or in),
         // displacing the content, the way a drawer slides over it.
-        let sidebar: Element<'a, M> = container(v.sidebar)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(pane(left))
+        let sidebar: Element<'a, M> = v
+            .sidebar_props
+            .apply(
+                container(v.sidebar)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .style(pane(left)),
+            )
             .into();
-        let content: Element<'a, M> = container(crate::layouts::content_area(v.content))
-            .width(Length::Fill)
-            .height(Length::Fill)
+        let content: Element<'a, M> = v
+            .content_props
+            .apply(
+                container(crate::layouts::content_area(v.content))
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+            )
             .into();
         let mut split = crate::layouts::adaptive_split(
             sidebar,
@@ -1272,11 +1368,29 @@ pub struct OverlaySplitView<'a, M> {
     collapsed: bool,
     show_sidebar: bool,
     on_close: Option<M>,
+    sidebar_props: ContainerProps,
+    scrim_props: ContainerProps,
+    separator_props: ContainerProps,
 }
 
 impl<'a, M: 'a> OverlaySplitView<'a, M> {
+    pub fn sidebar_props(mut self, props: ContainerProps) -> Self {
+        self.sidebar_props = props;
+        self
+    }
+    pub fn scrim_props(mut self, props: ContainerProps) -> Self {
+        self.scrim_props = props;
+        self
+    }
+    pub fn separator_props(mut self, props: ContainerProps) -> Self {
+        self.separator_props = props;
+        self
+    }
     pub fn new(sidebar: impl Into<Element<'a, M>>, content: impl Into<Element<'a, M>>) -> Self {
         Self {
+            sidebar_props: ContainerProps::default(),
+            scrim_props: ContainerProps::default(),
+            separator_props: ContainerProps::default(),
             sidebar: sidebar.into(),
             content: content.into(),
             sidebar_width: Metrics::desktop().sidebar_width,
@@ -1310,24 +1424,30 @@ impl<'a, M: Clone + 'a> From<OverlaySplitView<'a, M>> for Element<'a, M> {
         if !v.show_sidebar {
             return content;
         }
-        let side = container(v.sidebar)
-            .width(Length::Fixed(v.sidebar_width))
-            .height(Length::Fill);
+        let side = v.sidebar_props.apply(
+            container(v.sidebar)
+                .width(Length::Fixed(v.sidebar_width))
+                .height(Length::Fill),
+        );
         if !v.collapsed {
             return row![
                 side,
-                container(space().width(navigation_geometry("separator-width", 1.0)))
-                    .height(Length::Fill)
-                    .style(sc::sidebar_separator),
+                v.separator_props.apply(
+                    container(space().width(navigation_geometry("separator-width", 1.0)))
+                        .height(Length::Fill)
+                        .style(sc::sidebar_separator)
+                ),
                 content
             ]
             .into();
         }
         let mut scrim = mouse_area(
-            container(space())
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .style(sc::backdrop),
+            v.scrim_props.apply(
+                container(space())
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .style(sc::backdrop),
+            ),
         );
         if let Some(m) = v.on_close {
             scrim = scrim.on_press(m);
@@ -1354,8 +1474,25 @@ impl<'a, M> NavigationPage<'a, M> {
 /// `AdwNavigationView`: shows the top page with a header bar and a back
 /// button (sending `on_pop`) when the stack has more than one page.
 pub fn navigation_view<'a, M: Clone + 'a>(
+    pages: Vec<NavigationPage<'a, M>>,
+    on_pop: M,
+) -> Element<'a, M> {
+    navigation_view_with_props(
+        pages,
+        on_pop,
+        super::header_bar::HeaderBarProps::default(),
+        super::toolbar::ToolbarProps::default(),
+        ButtonProps::default(),
+    )
+}
+
+/// Navigation stack with presentation-only overrides for its header, toolbar, and back control.
+pub fn navigation_view_with_props<'a, M: Clone + 'a>(
     mut pages: Vec<NavigationPage<'a, M>>,
     on_pop: M,
+    header_props: super::header_bar::HeaderBarProps,
+    toolbar_props: super::toolbar::ToolbarProps,
+    back_button_props: ButtonProps,
 ) -> Element<'a, M> {
     let depth = pages.len();
     let Some(top) = pages.pop() else {
@@ -1363,9 +1500,14 @@ pub fn navigation_view<'a, M: Clone + 'a>(
     };
     let mut bar = header_bar().title(top.title);
     if depth > 1 {
-        bar = bar.pack_start(crate::components::circular_button(Icon::GoPrevious).on_press(on_pop));
+        bar = bar.pack_start(
+            back_button_props
+                .apply(crate::components::circular_button(Icon::GoPrevious).on_press(on_pop)),
+        );
     }
-    toolbar_view(top.content).top_bar(bar).into()
+    toolbar_props
+        .apply(toolbar_view(top.content).top_bar(header_props.apply(bar)))
+        .into()
 }
 
 #[cfg(test)]

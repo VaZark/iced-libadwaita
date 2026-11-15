@@ -26,6 +26,9 @@ pub enum InputWrapperLayout {
 }
 
 pub struct InputWrapper<'a, M> {
+    label_props: super::props::TextProps,
+    description_props: super::props::TextProps,
+    message_props: super::props::TextProps,
     label: String,
     control: Element<'a, M>,
     description: Option<String>,
@@ -46,8 +49,23 @@ pub struct InputWrapper<'a, M> {
 }
 
 impl<'a, M: 'a> InputWrapper<'a, M> {
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn description_props(mut self, props: super::props::TextProps) -> Self {
+        self.description_props = props;
+        self
+    }
+    pub fn message_props(mut self, props: super::props::TextProps) -> Self {
+        self.message_props = props;
+        self
+    }
     pub fn new(label: impl Into<String>, control: impl Into<Element<'a, M>>) -> Self {
         Self {
+            label_props: Default::default(),
+            description_props: Default::default(),
+            message_props: Default::default(),
             label: label.into(),
             control: control.into(),
             description: None,
@@ -250,70 +268,72 @@ impl<'a, M: 'a> From<InputWrapper<'a, M>> for Element<'a, M> {
         let label = if f.plain_label {
             crate::Typography::desktop().body(f.label)
         } else {
-            text(f.label).size(crate::Typography::desktop().small).font(iced::Font {
-                weight: iced::font::Weight::Bold,
-                ..iced::Font::DEFAULT
-            })
+            text(f.label)
+                .size(crate::Typography::desktop().small)
+                .font(iced::Font {
+                    weight: iced::font::Weight::Bold,
+                    ..iced::Font::DEFAULT
+                })
         }
         .style(move |t: &Theme| text::Style {
             color: Some(dim(t)),
         });
-        let mut title = row![label].spacing(m.space_xxs);
+        let mut title = row![f.label_props.apply(label)].spacing(m.space_xxs);
         title = title.push(if f.required {
-            Element::from(
-                text("*")
-                    .size(crate::Typography::desktop().small)
-                    .style(move |t: &Theme| text::Style {
-                        color: Some(if disabled {
-                            dim(t)
-                        } else {
-                            t.semantic.error.color
-                        }),
+            Element::from(text("*").size(crate::Typography::desktop().small).style(
+                move |t: &Theme| text::Style {
+                    color: Some(if disabled {
+                        dim(t)
+                    } else {
+                        t.semantic.error.color
                     }),
-            )
+                },
+            ))
         } else {
             space().into()
         });
 
         // Description or message, always one element so positions are stable.
         let has_note = msg.is_some() || f.description.is_some();
-        let note: Element<'a, M> = if let Some(msg) = msg {
-            let invalid = p == Presentation::Invalid;
-            let icon = if invalid {
-                Icon::DialogError
-            } else {
-                Icon::DialogWarning
-            };
-            let size = crate::Typography::desktop().small;
-            row![
-                icon.view(size)
-                    .style(move |t: &Theme, _| iced::widget::svg::Style {
-                        color: ring_color(t, p),
-                    }),
-                text(msg).size(size).style(move |t: &Theme| text::Style {
-                    color: ring_color(t, p),
-                })
-            ]
-            .spacing(m.space_xs)
-            .align_y(Alignment::Center)
-            .into()
-        } else if let Some(d) = f.description {
-            text(d)
-                .size(crate::Typography::desktop().small)
-                .style(move |t: &Theme| text::Style {
-                    color: Some(crate::color::fade(
-                        t.semantic.window.fg,
-                        if disabled {
-                            t.semantic.opacity.disabled * 0.6
-                        } else {
-                            0.7
-                        },
-                    )),
-                })
+        let note: Element<'a, M> =
+            if let Some(msg) = msg {
+                let invalid = p == Presentation::Invalid;
+                let icon = if invalid {
+                    Icon::DialogError
+                } else {
+                    Icon::DialogWarning
+                };
+                let size = crate::Typography::desktop().small;
+                row![
+                    icon.view(size)
+                        .style(move |t: &Theme, _| iced::widget::svg::Style {
+                            color: ring_color(t, p),
+                        }),
+                    f.message_props
+                        .apply(text(msg).size(size).style(move |t: &Theme| text::Style {
+                            color: ring_color(t, p),
+                        }))
+                ]
+                .spacing(m.space_xs)
+                .align_y(Alignment::Center)
                 .into()
-        } else {
-            space().into()
-        };
+            } else if let Some(d) = f.description {
+                f.description_props
+                    .apply(text(d).size(crate::Typography::desktop().small).style(
+                        move |t: &Theme| text::Style {
+                            color: Some(crate::color::fade(
+                                t.semantic.window.fg,
+                                if disabled {
+                                    t.semantic.opacity.disabled * 0.6
+                                } else {
+                                    0.7
+                                },
+                            )),
+                        },
+                    ))
+            } else {
+                space().into()
+            };
         let note = container(note).padding(Padding {
             // A row with nothing to say below it takes no space for it.
             top: if has_note || (!f.hide_label && f.layout == InputWrapperLayout::Stacked) {
@@ -438,5 +458,33 @@ mod spacing_params {
             .inline_padding(3.0);
         assert_eq!((w.spacing, w.label_spacing), (Some(1.0), Some(2.0)));
         let _: Element<'_, ()> = w.into();
+    }
+}
+
+/// Overrides for the text children of an input wrapper.
+#[derive(Clone, Default)]
+pub struct InputWrapperProps {
+    pub label_props: super::props::TextProps,
+    pub description_props: super::props::TextProps,
+    pub message_props: super::props::TextProps,
+}
+impl InputWrapperProps {
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn description_props(mut self, props: super::props::TextProps) -> Self {
+        self.description_props = props;
+        self
+    }
+    pub fn message_props(mut self, props: super::props::TextProps) -> Self {
+        self.message_props = props;
+        self
+    }
+    pub fn apply<'a, M: 'a>(&self, widget: InputWrapper<'a, M>) -> InputWrapper<'a, M> {
+        widget
+            .label_props(self.label_props.clone())
+            .description_props(self.description_props.clone())
+            .message_props(self.message_props.clone())
     }
 }

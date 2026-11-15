@@ -9,6 +9,34 @@ use crate::{Icon, Metrics, Theme};
 use iced::widget::{container, row, text_input};
 use iced::{Alignment, Border, Length};
 
+/// Owned presentation overrides; default values preserve the component defaults.
+#[derive(Clone, Default)]
+pub struct SearchBarProps {
+    pub input_props: super::entry::TextInputProps,
+    pub button_props: super::props::ButtonProps,
+    pub container_props: super::props::ContainerProps,
+}
+impl SearchBarProps {
+    pub fn input_props(mut self, props: super::entry::TextInputProps) -> Self {
+        self.input_props = props;
+        self
+    }
+    pub fn button_props(mut self, props: super::props::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: SearchBar<'a, M>) -> SearchBar<'a, M> {
+        widget
+            .input_props(self.input_props.clone())
+            .button_props(self.button_props.clone())
+            .container_props(self.container_props.clone())
+    }
+}
+
 /// See the [module](self).
 pub struct SearchBar<'a, M> {
     value: &'a str,
@@ -21,11 +49,17 @@ pub struct SearchBar<'a, M> {
     padding: Option<iced::Padding>,
     input_padding: Option<iced::Padding>,
     metrics: Metrics,
+    input_props: super::entry::TextInputProps,
+    button_props: super::props::ButtonProps,
+    container_props: super::props::ContainerProps,
 }
 
 /// A search bar showing `value` and sending each edit through `on_input`.
 pub fn search_bar<'a, M>(value: &'a str, on_input: impl Fn(String) -> M + 'a) -> SearchBar<'a, M> {
     SearchBar {
+        input_props: Default::default(),
+        button_props: Default::default(),
+        container_props: Default::default(),
         value,
         placeholder: "Search".into(),
         on_input: Box::new(on_input),
@@ -40,6 +74,18 @@ pub fn search_bar<'a, M>(value: &'a str, on_input: impl Fn(String) -> M + 'a) ->
 }
 
 impl<'a, M> SearchBar<'a, M> {
+    pub fn input_props(mut self, props: super::entry::TextInputProps) -> Self {
+        self.input_props = props;
+        self
+    }
+    pub fn button_props(mut self, props: super::props::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
     /// The gap between the icon, the field and the close button (default `space_s`).
     pub fn spacing(mut self, px: f32) -> Self {
         self.spacing = Some(px);
@@ -92,30 +138,36 @@ impl<'a, M: Clone + 'a> From<SearchBar<'a, M>> for Element<'a, M> {
         if let Some(id) = b.id {
             input = input.id(id);
         }
-        let mut r = row![Icon::Search.view(m.icon_size), input]
+        let mut r = row![Icon::Search.view(m.icon_size), b.input_props.apply(input)]
             .spacing(b.spacing.unwrap_or(m.space_s))
             .align_y(Alignment::Center);
         if let Some(close) = b.on_close {
-            r = r.push(icon_button(Icon::WindowClose).on_press(close));
+            r = r.push(
+                b.button_props
+                    .apply(icon_button(Icon::WindowClose).on_press(close)),
+            );
         }
-        container(r)
-            .padding(
-                b.padding
-                    .unwrap_or(iced::Padding::from([m.space_xxs, m.space_m])),
+        b.container_props
+            .apply(
+                container(r)
+                    .padding(
+                        b.padding
+                            .unwrap_or(iced::Padding::from([m.space_xxs, m.space_m])),
+                    )
+                    .width(b.width)
+                    .style(|theme: &Theme| {
+                        let fg = theme.semantic.window.fg;
+                        container::Style {
+                            background: Some(alpha(fg, 0.09).into()),
+                            border: Border {
+                                color: alpha(fg, 0.14),
+                                width: 1.0,
+                                radius: 999.0.into(),
+                            },
+                            ..Default::default()
+                        }
+                    }),
             )
-            .width(b.width)
-            .style(|theme: &Theme| {
-                let fg = theme.semantic.window.fg;
-                container::Style {
-                    background: Some(alpha(fg, 0.09).into()),
-                    border: Border {
-                        color: alpha(fg, 0.14),
-                        width: 1.0,
-                        radius: 999.0.into(),
-                    },
-                    ..Default::default()
-                }
-            })
             .into()
     }
 }
@@ -140,8 +192,14 @@ mod spacing_params {
 
     #[test]
     fn search_bar_gaps_and_padding_are_parameters() {
-        let b = search_bar("", |_: String| ()).spacing(1.0).padding(2.0).input_padding(3.0);
-        assert_eq!((b.spacing, b.padding), (Some(1.0), Some(iced::Padding::from(2.0))));
+        let b = search_bar("", |_: String| ())
+            .spacing(1.0)
+            .padding(2.0)
+            .input_padding(3.0);
+        assert_eq!(
+            (b.spacing, b.padding),
+            (Some(1.0), Some(iced::Padding::from(2.0)))
+        );
         let _: Element<'_, ()> = b.into();
     }
 }

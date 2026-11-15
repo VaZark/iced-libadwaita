@@ -16,23 +16,77 @@ pub fn tooltip<'a, M: 'a>(
     label: impl Into<String>,
     position: TooltipPosition,
 ) -> Element<'a, M> {
-    iced_tooltip(content, text(label.into()).size(12), position)
-        .gap(GAP)
-        .style(|t: &crate::Theme| match t.token_color("tooltip", "bg") {
-            // A theme with its own tooltip: a fill, its text color and a 1px solid border.
-            Some(bg) => iced::widget::container::Style {
-                background: Some(iced::Background::Color(bg)),
-                text_color: Some(t.token_color("tooltip", "fg").unwrap_or(t.semantic.window.fg)),
-                border: iced::Border {
-                    color: t.token_color("frame.tooltip", "border").unwrap_or(iced::Color::BLACK),
-                    width: 1.0,
-                    radius: 0.0.into(),
-                },
-                ..Default::default()
+    tooltip_with_props(content, label, position, TooltipProps::default())
+}
+
+/// Presentation for the tooltip label and the existing tooltip surface.
+#[derive(Clone, Default)]
+pub struct TooltipProps {
+    pub label_props: super::props::TextProps,
+    pub container_style: Option<super::props::ContainerStyle>,
+    pub gap: Option<f32>,
+    pub padding: Option<iced::Pixels>,
+}
+impl TooltipProps {
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn style(
+        mut self,
+        style: impl Fn(&crate::Theme) -> iced::widget::container::Style + Send + Sync + 'static,
+    ) -> Self {
+        self.container_style = Some(std::sync::Arc::new(style));
+        self
+    }
+    pub fn gap(mut self, gap: f32) -> Self {
+        self.gap = Some(gap);
+        self
+    }
+    pub fn padding(mut self, padding: impl Into<iced::Pixels>) -> Self {
+        self.padding = Some(padding.into());
+        self
+    }
+}
+
+pub fn tooltip_with_props<'a, M: 'a>(
+    content: impl Into<Element<'a, M>>,
+    label: impl Into<String>,
+    position: TooltipPosition,
+    props: TooltipProps,
+) -> Element<'a, M> {
+    let mut tooltip = iced_tooltip(
+        content,
+        props.label_props.apply(text(label.into()).size(12)),
+        position,
+    )
+    .gap(props.gap.unwrap_or(GAP))
+    .style(|t: &crate::Theme| match t.token_color("tooltip", "bg") {
+        // A theme with its own tooltip: a fill, its text color and a 1px solid border.
+        Some(bg) => iced::widget::container::Style {
+            background: Some(iced::Background::Color(bg)),
+            text_color: Some(
+                t.token_color("tooltip", "fg")
+                    .unwrap_or(t.semantic.window.fg),
+            ),
+            border: iced::Border {
+                color: t
+                    .token_color("frame.tooltip", "border")
+                    .unwrap_or(iced::Color::BLACK),
+                width: 1.0,
+                radius: 0.0.into(),
             },
-            None => crate::styles::container::osd(t),
-        })
-        .into()
+            ..Default::default()
+        },
+        None => crate::styles::container::osd(t),
+    });
+    if let Some(padding) = props.padding {
+        tooltip = tooltip.padding(padding);
+    }
+    if let Some(style) = props.container_style {
+        tooltip = tooltip.style(move |theme| style(theme));
+    }
+    tooltip.into()
 }
 
 #[cfg(test)]

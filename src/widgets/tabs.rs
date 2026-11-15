@@ -27,6 +27,7 @@
 
 use crate::Element;
 use crate::components::typography::label;
+use crate::components::{ButtonProps, ContainerProps, TextProps};
 use crate::primitives::tabs::TabList;
 use crate::styles::button as sb;
 use crate::styles::container as sc;
@@ -112,6 +113,13 @@ pub struct Tabs<'a, K, M> {
     icon_spacing: Option<f32>,
     panel_spacing: Option<f32>,
     tokens: Option<crate::theme_config::Tokens>,
+    label_props: TextProps,
+    tab_button_props: ButtonProps,
+    close_button_props: ButtonProps,
+    tab_container_props: ContainerProps,
+    indicator_props: ContainerProps,
+    separator_props: ContainerProps,
+    panel_props: Option<ContainerProps>,
 }
 
 fn tab_metric_for(
@@ -128,8 +136,50 @@ fn resolve_tab_metric(configured: Option<f32>, inherited: f32) -> f32 {
 }
 
 impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
+    /// Owned presentation overrides for the concrete child.
+    pub fn label_props(mut self, props: TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    /// Owned presentation overrides for the concrete child.
+    pub fn tab_button_props(mut self, props: ButtonProps) -> Self {
+        self.tab_button_props = props;
+        self
+    }
+    /// Owned presentation overrides for the concrete child.
+    pub fn close_button_props(mut self, props: ButtonProps) -> Self {
+        self.close_button_props = props;
+        self
+    }
+    /// Presentation overrides for the concrete tab_container container.
+    pub fn tab_container_props(mut self, props: ContainerProps) -> Self {
+        self.tab_container_props = props;
+        self
+    }
+    /// Presentation overrides for the concrete indicator container.
+    pub fn indicator_props(mut self, props: ContainerProps) -> Self {
+        self.indicator_props = props;
+        self
+    }
+    /// Presentation overrides for the concrete separator container.
+    pub fn separator_props(mut self, props: ContainerProps) -> Self {
+        self.separator_props = props;
+        self
+    }
+    /// Presentation overrides for the concrete panel container.
+    pub fn panel_props(mut self, props: ContainerProps) -> Self {
+        self.panel_props = Some(props);
+        self
+    }
     pub fn new(active: Option<K>, on_change: impl Fn(K) -> M + 'a) -> Self {
         Self {
+            tab_container_props: ContainerProps::default(),
+            indicator_props: ContainerProps::default(),
+            separator_props: ContainerProps::default(),
+            panel_props: None,
+            label_props: TextProps::default(),
+            tab_button_props: ButtonProps::default(),
+            close_button_props: ButtonProps::default(),
             items: Vec::new(),
             active,
             on_change: Box::new(on_change),
@@ -259,15 +309,18 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
             .as_ref()
             .filter(|_| item.closable && !item.disabled)?;
         Some(
-            button(Icon::WindowClose.view(self.tab_metric(
-                name,
-                "close-icon-size",
-                self.metrics.icon_size,
-            )))
-            .padding(self.metrics.space_xs)
-            .style(sb::circular_flat)
-            .on_press(f(item.key.clone()))
-            .into(),
+            self.close_button_props
+                .apply(
+                    button(Icon::WindowClose.view(self.tab_metric(
+                        name,
+                        "close-icon-size",
+                        self.metrics.icon_size,
+                    )))
+                    .padding(self.metrics.space_xs)
+                    .style(sb::circular_flat)
+                    .on_press(f(item.key.clone())),
+                )
+                .into(),
         )
     }
     /// The message a press on tab `i` sends: none when it is disabled.
@@ -301,18 +354,20 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
         if let Some(icon) = item.icon {
             content = content.push(icon.view(m.icon_size));
         }
-        content = content.push(text(item.label.clone()));
+        content = content.push(self.label_props.apply(text(item.label.clone())));
         let b = button(content)
             .padding(
                 self.padding
                     .unwrap_or(iced::Padding::from([m.space_xs, m.space_m])),
             )
             .on_press_maybe(self.press(i));
-        let title: Element<'a, M> = match variant {
-            TabsVariant::Pills if active => b.style(sb::suggested_pill),
-            _ => b.style(sb::flat),
-        }
-        .into();
+        let title: Element<'a, M> = self
+            .tab_button_props
+            .apply(match variant {
+                TabsVariant::Pills if active => b.style(sb::suggested_pill),
+                _ => b.style(sb::flat),
+            })
+            .into();
         match self.close_button(i, name) {
             Some(close) => row![title, close].align_y(Vertical::Center).into(),
             None => title,
@@ -351,7 +406,7 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
                         background: on.then_some(iced::Background::Color(t.semantic.accent.bg)),
                         ..Default::default()
                     });
-                    column![button, line].into()
+                    column![button, self.indicator_props.apply(line)].into()
                 }
                 TabsVariant::Outline => {
                     let border_width = self.tab_metric(name, "border-width", m.border_width);
@@ -372,7 +427,7 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
                 }
                 _ => button,
             };
-            tabs = tabs.push(container(tab).width(width));
+            tabs = tabs.push(self.tab_container_props.apply(container(tab).width(width)));
         }
         let tabs = tabs.width(if self.grow {
             Length::Fill
@@ -382,9 +437,15 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
         match variant {
             TabsVariant::Default | TabsVariant::Outline => column![
                 tabs,
-                container(space().height(self.tab_metric(name, "separator-width", m.border_width)))
+                self.separator_props.apply(
+                    container(space().height(self.tab_metric(
+                        name,
+                        "separator-width",
+                        m.border_width
+                    )))
                     .width(Length::Fill)
                     .style(sc::card_separator)
+                )
             ]
             .into(),
             _ => tabs.into(),
@@ -422,11 +483,11 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
                 line = line.push(icon.view(m.icon_size));
             }
             let text = label(item.label.clone());
-            line = line.push(if item.disabled {
+            line = line.push(self.label_props.apply(if item.disabled {
                 text.style(st::dim)
             } else {
                 text
-            });
+            }));
             let height = if on { strip_height } else { body };
             let face = container(
                 Bevel::new(
@@ -477,10 +538,12 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
         let page = Bevel::new(panel, "frame.panel", page_style, page_width)
             .padding(self.padding.map_or(m.inset, |p| p.top.max(m.inset)));
         iced::widget::stack![
-            container(page).width(Length::Fill).padding(iced::Padding {
-                top: page_top,
-                ..iced::Padding::ZERO
-            }),
+            self.panel_props.clone().unwrap_or_default().apply(
+                container(page).width(Length::Fill).padding(iced::Padding {
+                    top: page_top,
+                    ..iced::Padding::ZERO
+                })
+            ),
             strip,
         ]
         .into()
@@ -498,9 +561,15 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
             .and_then(|i| self.items[i].panel.as_ref())
             .map(|build| build());
         match panel {
-            Some(p) => column![list, p]
-                .spacing(self.panel_spacing.unwrap_or(self.metrics.space_m))
-                .into(),
+            Some(p) => {
+                let p = match &self.panel_props {
+                    Some(props) => props.apply(container(p)).into(),
+                    None => p,
+                };
+                column![list, p]
+                    .spacing(self.panel_spacing.unwrap_or(self.metrics.space_m))
+                    .into()
+            }
             None => list,
         }
     }
