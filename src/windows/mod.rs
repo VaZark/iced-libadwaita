@@ -223,7 +223,9 @@ pub fn frame<'a, M: Clone + 'a>(
         None => stack![body, outline, grips].into(),
         Some(f) => {
             let framed: Element<'a, M> = match f.bevel {
-                Some(style) => crate::components::Bevel::new(body, "frame.window", style, f.width).into(),
+                Some(style) => {
+                    crate::layouts::Bevel::new(body, "frame.window", style, f.width).into()
+                }
                 None => container(body)
                     .padding(f.width)
                     .style(move |t: &Theme| iced::widget::container::Style {

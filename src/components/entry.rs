@@ -25,6 +25,11 @@ pub struct TextInputProps {
 }
 
 impl TextInputProps {
+    pub(crate) fn merge(&mut self, overrides: &Self) {
+        super::props::merge_fields!(self, overrides; align_x, width, padding, size,
+            font, line_height, style);
+    }
+
     pub fn align_x(mut self, value: iced::alignment::Horizontal) -> Self {
         self.align_x = Some(value);
         self
@@ -121,8 +126,9 @@ impl EntryInputProps {
         self.input_props = props;
         self
     }
-    pub fn apply<'a, M>(&self, widget: Entry<'a, M>) -> Entry<'a, M> {
-        widget.input_props(self.input_props.clone())
+    pub fn apply<'a, M>(&self, mut widget: Entry<'a, M>) -> Entry<'a, M> {
+        widget.input_props.merge(&self.input_props);
+        widget
     }
 }
 
@@ -453,6 +459,10 @@ pub struct TextEditorProps {
     >,
 }
 impl TextEditorProps {
+    pub(crate) fn merge(&mut self, overrides: &Self) {
+        super::props::merge_fields!(self, overrides; padding, size, font, style);
+    }
+
     pub fn padding(mut self, value: impl Into<iced::Padding>) -> Self {
         self.padding = Some(value.into());
         self
@@ -506,8 +516,9 @@ impl TextViewProps {
         self.editor_props = props;
         self
     }
-    pub fn apply<'a, M>(&self, widget: TextView<'a, M>) -> TextView<'a, M> {
-        widget.editor_props(self.editor_props.clone())
+    pub fn apply<'a, M>(&self, mut widget: TextView<'a, M>) -> TextView<'a, M> {
+        widget.editor_props.merge(&self.editor_props);
+        widget
     }
 }
 
@@ -812,6 +823,79 @@ mod spacing_params {
 mod nested_props_tests {
     use super::*;
     use iced::advanced::{Widget, widget::Tree};
+
+    #[test]
+    fn aggregate_merge_preserves_input_fields_security_and_events() {
+        let original = TextInputProps::default()
+            .width(173)
+            .padding(7)
+            .size(18)
+            .font(iced::Font::MONOSPACE)
+            .align_x(iced::alignment::Horizontal::Right)
+            .line_height(iced::widget::text::LineHeight::Relative(1.7))
+            .style(crate::styles::text_input::default);
+        let input = Entry::new("hint", "secret")
+            .password(true)
+            .id("private")
+            .state(EntryState::Error)
+            .on_input(|_| 1u8)
+            .on_submit(2)
+            .input_props(original.clone());
+        let input = EntryInputProps::default().apply(input);
+        let input = EntryInputProps::default()
+            .input_props(TextInputProps::default().size(21))
+            .apply(input);
+        assert_eq!(input.input_props.width, original.width);
+        assert_eq!(input.input_props.padding, original.padding);
+        assert_eq!(input.input_props.size, Some(iced::Pixels(21.0)));
+        assert_eq!(input.input_props.font, original.font);
+        assert_eq!(input.input_props.align_x, original.align_x);
+        assert_eq!(input.input_props.line_height, original.line_height);
+        assert!(std::sync::Arc::ptr_eq(
+            input.input_props.style.as_ref().unwrap(),
+            original.style.as_ref().unwrap()
+        ));
+        assert_eq!(input.value, "secret");
+        assert_eq!(input.placeholder, "hint");
+        assert!(input.secure);
+        assert_eq!(input.id, Some(iced::widget::Id::new("private")));
+        assert_eq!(input.state, EntryState::Error);
+        assert_eq!(input.on_input.as_ref().unwrap()("edit".into()), 1);
+        assert_eq!(input.on_submit, Some(2));
+    }
+
+    #[test]
+    fn text_view_aggregate_merges_editor_fields_without_changing_content_or_policy() {
+        let content = text_editor::Content::with_text("retained");
+        let original = TextEditorProps::default()
+            .size(19)
+            .padding(7)
+            .font(iced::Font::MONOSPACE)
+            .style(crate::styles::text_editor::default);
+        let view = text_view(&content)
+            .editor_props(original.clone())
+            .max_lines(4)
+            .min_lines(2)
+            .on_action(|_| 9u8);
+        let view = TextViewProps::default().apply(view);
+        let view = TextViewProps::default()
+            .editor_props(TextEditorProps::default().padding(11))
+            .apply(view);
+        assert_eq!(view.editor_props.size, original.size);
+        assert_eq!(view.editor_props.font, original.font);
+        assert_eq!(view.editor_props.padding, Some(iced::Padding::from(11)));
+        assert!(std::sync::Arc::ptr_eq(
+            view.editor_props.style.as_ref().unwrap(),
+            original.style.as_ref().unwrap()
+        ));
+        assert!(std::ptr::eq(view.content, &content));
+        assert_eq!(view.min_lines, 2);
+        assert_eq!(view.max_lines, Some(4));
+        assert_eq!(
+            view.on_action.as_ref().unwrap()(text_editor::Action::SelectAll),
+            9
+        );
+    }
 
     #[test]
     fn input_defaults_preserve_geometry_and_widget_state() {

@@ -71,9 +71,9 @@ impl AvatarProps {
             widget = widget.shape(value);
         }
 
+        widget.label_props.merge(&self.label_props);
+        widget.container_props.merge(&self.container_props);
         widget
-            .label_props(self.label_props.clone())
-            .container_props(self.container_props.clone())
     }
 }
 

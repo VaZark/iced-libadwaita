@@ -854,6 +854,29 @@ fn declare_design_tokens(mut s: Schema) -> Schema {
         None,
         "Width of a drawn scrollbar, in px (also the arrow buttons' size)",
     );
+    for (key, default, description) in [
+        (
+            "popover-width",
+            260.0,
+            "Preferred width of menu popovers, in logical px",
+        ),
+        (
+            "popover-max-height",
+            360.0,
+            "Maximum height of menu popovers, in logical px",
+        ),
+    ] {
+        s = s.variable(
+            "menu",
+            key,
+            VariableType::Length {
+                min: Some(1.0),
+                max: Some(4096.0),
+            },
+            Some(Value::Length(default)),
+            description,
+        );
+    }
     s = s.variable(
         "menu",
         "item-height",
@@ -3490,7 +3513,7 @@ mod libadwaita_theme_tests {
             ("win95", include_str!("../themes/win95.conf")),
             ("winxp", include_str!("../themes/winxp.conf")),
             ("win7", include_str!("../themes/win7.conf")),
-            ("mac", include_str!("../themes/mac.conf")),
+            ("mate", include_str!("../themes/mate.conf")),
             ("gnome2", include_str!("../themes/gnome2.conf")),
         ] {
             let report = Schema::toolkit().validate(text);

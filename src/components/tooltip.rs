@@ -28,6 +28,11 @@ pub struct TooltipProps {
     pub padding: Option<iced::Pixels>,
 }
 impl TooltipProps {
+    pub(crate) fn merge(&mut self, overrides: &Self) {
+        self.label_props.merge(&overrides.label_props);
+        super::props::merge_fields!(self, overrides; container_style, gap, padding);
+    }
+
     pub fn label_props(mut self, props: super::props::TextProps) -> Self {
         self.label_props = props;
         self

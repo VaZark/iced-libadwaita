@@ -29,11 +29,11 @@ impl SearchBarProps {
         self.container_props = props;
         self
     }
-    pub fn apply<'a, M>(&self, widget: SearchBar<'a, M>) -> SearchBar<'a, M> {
+    pub fn apply<'a, M>(&self, mut widget: SearchBar<'a, M>) -> SearchBar<'a, M> {
+        widget.input_props.merge(&self.input_props);
+        widget.button_props.merge(&self.button_props);
+        widget.container_props.merge(&self.container_props);
         widget
-            .input_props(self.input_props.clone())
-            .button_props(self.button_props.clone())
-            .container_props(self.container_props.clone())
     }
 }
 

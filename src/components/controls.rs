@@ -41,12 +41,12 @@ pub fn scale<'a, T, M>(
     range: RangeInclusive<T>,
     value: T,
     on_change: impl Fn(T) -> M + 'a,
-) -> crate::widgets::Scale<'a, T, M>
+) -> super::Scale<'a, T, M>
 where
     T: crate::primitives::range::Scalar + 'a,
     M: 'a,
 {
-    crate::widgets::Scale::new(range, value, on_change)
+    super::Scale::new(range, value, on_change)
 }
 
 // --------------------------------------------------- LinkButton / card button

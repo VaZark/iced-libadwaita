@@ -14,6 +14,7 @@ pub(crate) mod chip_group;
 pub(crate) mod choice_row;
 pub(crate) mod collapsible;
 pub(crate) mod color_picker;
+pub(crate) mod context_menu;
 pub(crate) mod date_input;
 pub(crate) mod date_range_input;
 pub(crate) mod dialog;
@@ -72,6 +73,7 @@ pub use chip_group::{ChipGroup, ChipOption};
 pub use choice_row::{ChoicePresentation, ChoiceRow};
 pub use collapsible::Collapsible;
 pub use color_picker::{ColorInput, ColorPicker};
+pub use context_menu::{ContextMenu, ContextMenuProps, context_menu};
 pub use date_input::DateInput;
 pub use date_range_input::DateRangeInput;
 pub use dialog::{

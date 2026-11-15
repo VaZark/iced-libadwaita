@@ -481,10 +481,10 @@ impl InputWrapperProps {
         self.message_props = props;
         self
     }
-    pub fn apply<'a, M: 'a>(&self, widget: InputWrapper<'a, M>) -> InputWrapper<'a, M> {
+    pub fn apply<'a, M: 'a>(&self, mut widget: InputWrapper<'a, M>) -> InputWrapper<'a, M> {
+        widget.label_props.merge(&self.label_props);
+        widget.description_props.merge(&self.description_props);
+        widget.message_props.merge(&self.message_props);
         widget
-            .label_props(self.label_props.clone())
-            .description_props(self.description_props.clone())
-            .message_props(self.message_props.clone())
     }
 }

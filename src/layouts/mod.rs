@@ -6,6 +6,7 @@
 pub mod anchor;
 pub(crate) mod anchored;
 pub mod animation;
+pub(crate) mod bevel;
 pub(crate) mod clip_window;
 pub(crate) mod container;
 pub(crate) mod content_area;
@@ -26,6 +27,7 @@ pub(crate) mod virtual_list;
 pub mod virtualize;
 
 pub use anchored::{Anchored, Indicator};
+pub use bevel::{Bevel, bevel_of, framed};
 pub use clip_window::{Anchor as ClipAnchor, ClipWindow};
 pub use container::{Container, ContainerSize};
 pub use content_area::{ContentArea, content_area};

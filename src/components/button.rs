@@ -17,8 +17,9 @@ impl ButtonContentProps {
         self.label_props = props;
         self
     }
-    pub fn apply<'a, M>(&self, widget: ButtonContent<'a, M>) -> ButtonContent<'a, M> {
-        widget.label_props(self.label_props.clone())
+    pub fn apply<'a, M>(&self, mut widget: ButtonContent<'a, M>) -> ButtonContent<'a, M> {
+        widget.label_props.merge(&self.label_props);
+        widget
     }
 }
 
@@ -696,7 +697,8 @@ impl ToggleGroupProps {
         if let Some(value) = self.metrics.clone() {
             widget = widget.metrics(value);
         }
-        widget.label_props(self.label_props.clone())
+        widget.label_props.merge(&self.label_props);
+        widget
     }
 }
 
@@ -710,7 +712,8 @@ impl CircularButtonProps {
         self.container_props = props;
         self
     }
-    pub fn apply<'a, M: 'a>(&self, widget: CircularButton<'a, M>) -> CircularButton<'a, M> {
-        widget.container_props(self.container_props.clone())
+    pub fn apply<'a, M: 'a>(&self, mut widget: CircularButton<'a, M>) -> CircularButton<'a, M> {
+        widget.container_props.merge(&self.container_props);
+        widget
     }
 }

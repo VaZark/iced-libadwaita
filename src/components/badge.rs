@@ -62,9 +62,9 @@ impl BadgeProps {
             widget = widget.metrics(value);
         }
 
+        widget.label_props.merge(&self.label_props);
+        widget.container_props.merge(&self.container_props);
         widget
-            .label_props(self.label_props.clone())
-            .container_props(self.container_props.clone())
     }
 }
 
@@ -294,12 +294,12 @@ impl ChipProps {
         self.container_props = props;
         self
     }
-    pub fn apply<'a, M>(&self, widget: Chip<'a, M>) -> Chip<'a, M> {
+    pub fn apply<'a, M>(&self, mut widget: Chip<'a, M>) -> Chip<'a, M> {
+        widget.label_props.merge(&self.label_props);
+        widget.button_props.merge(&self.button_props);
+        widget.remove_button_props.merge(&self.remove_button_props);
+        widget.container_props.merge(&self.container_props);
         widget
-            .label_props(self.label_props.clone())
-            .button_props(self.button_props.clone())
-            .remove_button_props(self.remove_button_props.clone())
-            .container_props(self.container_props.clone())
     }
 }
 
@@ -733,7 +733,8 @@ impl RoundBadgeProps {
         if let Some(value) = self.color.clone() {
             widget = widget.color(value);
         }
-        widget.container_props(self.container_props.clone())
+        widget.container_props.merge(&self.container_props);
+        widget
     }
 }
 

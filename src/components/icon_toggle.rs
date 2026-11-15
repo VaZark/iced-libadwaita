@@ -28,10 +28,56 @@ impl IconToggleButtonProps {
         self.button_props = props;
         self
     }
-    pub fn apply<'a, M: 'a>(&self, widget: IconToggleButton<'a, M>) -> IconToggleButton<'a, M> {
+    pub fn apply<'a, M: 'a>(&self, mut widget: IconToggleButton<'a, M>) -> IconToggleButton<'a, M> {
+        widget.button_props.merge(&self.button_props);
+        widget.tooltip_props.merge(&self.tooltip_props);
         widget
-            .button_props(self.button_props.clone())
-            .tooltip_props(self.tooltip_props.clone())
+    }
+}
+
+#[cfg(test)]
+mod aggregate_merge_tests {
+    use super::*;
+    use crate::components::{ButtonProps, TextProps, TooltipProps};
+
+    #[test]
+    fn nested_tooltip_fields_and_callbacks_survive_partial_overrides() {
+        let tooltip = TooltipProps::default()
+            .gap(9.0)
+            .padding(7)
+            .style(|_| iced::widget::container::Style::default())
+            .label_props(TextProps::default().width(123).size(19));
+        let widget = IconToggleButton::<bool>::new(crate::Icon::Search, true)
+            .tooltip("Retained")
+            .tooltip_props(tooltip.clone())
+            .button_props(ButtonProps::default().width(83).clip(true));
+        let widget = IconToggleButtonProps::default().apply(widget);
+        let widget = IconToggleButtonProps::default()
+            .button_props(ButtonProps::default().clip(false))
+            .tooltip_props(
+                TooltipProps::default()
+                    .gap(0.0)
+                    .label_props(TextProps::default().size(21)),
+            )
+            .apply(widget);
+        assert_eq!(widget.button_props.width, Some(iced::Length::Fixed(83.0)));
+        assert_eq!(widget.button_props.clip, Some(false));
+        assert_eq!(widget.tooltip_props.gap, Some(0.0));
+        assert_eq!(widget.tooltip_props.padding, tooltip.padding);
+        assert_eq!(
+            widget.tooltip_props.label_props.width,
+            tooltip.label_props.width
+        );
+        assert_eq!(
+            widget.tooltip_props.label_props.size,
+            Some(iced::Pixels(21.0))
+        );
+        assert!(std::sync::Arc::ptr_eq(
+            widget.tooltip_props.container_style.as_ref().unwrap(),
+            tooltip.container_style.as_ref().unwrap()
+        ));
+        assert_eq!(widget.tooltip.as_deref(), Some("Retained"));
+        assert!(widget.active);
     }
 }
 

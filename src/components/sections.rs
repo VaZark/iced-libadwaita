@@ -206,8 +206,9 @@ impl SectionIconProps {
         self.container_props = props;
         self
     }
-    pub fn apply(&self, widget: SectionIcon) -> SectionIcon {
-        widget.container_props(self.container_props.clone())
+    pub fn apply(&self, mut widget: SectionIcon) -> SectionIcon {
+        widget.container_props.merge(&self.container_props);
+        widget
     }
 }
 #[derive(Clone, Default)]
@@ -224,9 +225,9 @@ impl SectionButtonProps {
         self.container_props = props;
         self
     }
-    pub fn apply<'a, M>(&self, widget: SectionButton<'a, M>) -> SectionButton<'a, M> {
+    pub fn apply<'a, M>(&self, mut widget: SectionButton<'a, M>) -> SectionButton<'a, M> {
+        widget.button_props.merge(&self.button_props);
+        widget.container_props.merge(&self.container_props);
         widget
-            .button_props(self.button_props.clone())
-            .container_props(self.container_props.clone())
     }
 }

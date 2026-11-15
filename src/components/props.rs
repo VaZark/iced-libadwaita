@@ -47,6 +47,16 @@ macro_rules! apply_fields {
     )* };
 }
 
+// Aggregate adapters overlay presentation without clearing fields the caller omitted.
+macro_rules! merge_fields {
+    ($target:ident, $overrides:ident; $($field:ident),* $(,)?) => { $(
+        if let Some(value) = &$overrides.$field {
+            $target.$field = Some(value.clone());
+        }
+    )* };
+}
+pub(crate) use merge_fields;
+
 /// Overrides for an existing [`Text`], preserving its content and typography baseline.
 #[derive(Clone, Default)]
 pub struct TextProps {
@@ -66,6 +76,11 @@ pub struct TextProps {
 }
 
 impl TextProps {
+    pub(crate) fn merge(&mut self, overrides: &Self) {
+        merge_fields!(self, overrides; size, line_height, font, width, height,
+            align_x, align_y, shaping, wrapping, color, style, overflow);
+    }
+
     setters! {
         size: Pixels, line_height: text::LineHeight, font: Font,
         width: Length, height: Length, align_x: text::Alignment,
@@ -121,6 +136,11 @@ pub struct ContainerProps {
 }
 
 impl ContainerProps {
+    pub(crate) fn merge(&mut self, overrides: &Self) {
+        merge_fields!(self, overrides; width, height, max_width, max_height,
+            padding, align_x, align_y, clip, style);
+    }
+
     setters! {
         width: Length, height: Length, max_width: Pixels, max_height: Pixels,
         padding: Padding, align_x: alignment::Horizontal, align_y: alignment::Vertical, clip: bool,
@@ -152,6 +172,10 @@ pub struct ButtonProps {
 }
 
 impl ButtonProps {
+    pub(crate) fn merge(&mut self, overrides: &Self) {
+        merge_fields!(self, overrides; width, height, padding, clip, style);
+    }
+
     setters! { width: Length, height: Length, padding: Padding, clip: bool }
     pub fn style(
         mut self,
@@ -184,7 +208,7 @@ pub struct EntryProps {
     pub state: Option<EntryState>,
     pub color: Option<Color>,
     pub metrics: Option<Metrics>,
-    /// Explicit replacement for the Entry's native text-input presentation overrides.
+    /// Field-wise overrides for the Entry's existing native input presentation.
     pub input_props: Option<TextInputProps>,
 }
 
@@ -201,7 +225,7 @@ impl EntryProps {
             widget = widget.metrics(metrics);
         }
         if let Some(input_props) = self.input_props.clone() {
-            widget = widget.input_props(input_props);
+            widget = super::entry::EntryInputProps { input_props }.apply(widget);
         }
         widget
     }
@@ -215,6 +239,51 @@ mod tests {
 
     fn size<M>(widget: &impl Widget<M, Theme, iced::Renderer>) -> Size<Length> {
         widget.size()
+    }
+
+    #[test]
+    fn merge_helpers_preserve_absent_fields_and_replace_explicit_callbacks() {
+        macro_rules! check {
+            ($base:expr, $overrides:expr; $($field:ident),+ $(,)?) => {{
+                let base = $base;
+                let mut actual = base.clone();
+                actual.merge(&Default::default());
+                $(assert_eq!(actual.$field, base.$field);)+
+                assert!(Arc::ptr_eq(actual.style.as_ref().unwrap(), base.style.as_ref().unwrap()));
+                let overrides = $overrides;
+                actual.merge(&overrides);
+                $(assert_eq!(actual.$field, overrides.$field.clone().or(base.$field.clone()));)+
+                assert!(Arc::ptr_eq(actual.style.as_ref().unwrap(), overrides.style.as_ref().unwrap()));
+            }};
+        }
+        check!(
+            TextProps::default().size(17).line_height(text::LineHeight::Relative(1.7))
+                .font(Font::MONOSPACE).width(113).height(31)
+                .align_x(text::Alignment::Center).align_y(alignment::Vertical::Bottom)
+                .shaping(text::Shaping::Advanced).wrapping(text::Wrapping::WordOrGlyph)
+                .color(Color::BLACK).overflow(TextOverflow::Clip)
+                .style(|_| text::Style::default()),
+            TextProps::default().size(21).overflow(TextOverflow::Wrap)
+                .style(|_| text::Style::default());
+            size, line_height, font, width, height, align_x, align_y, shaping,
+            wrapping, color, overflow
+        );
+        check!(
+            ContainerProps::default().width(137).height(43).max_width(200).max_height(100)
+                .padding(7).align_x(alignment::Horizontal::Center)
+                .align_y(alignment::Vertical::Bottom).clip(true)
+                .style(|_| container::Style::default()),
+            ContainerProps::default().height(47).clip(false)
+                .style(|_| container::Style::default());
+            width, height, max_width, max_height, padding, align_x, align_y, clip
+        );
+        check!(
+            ButtonProps::default().width(137).height(43).padding(7).clip(true)
+                .style(|_, _| button::Style::default()),
+            ButtonProps::default().height(47).clip(false)
+                .style(|_, _| button::Style::default());
+            width, height, padding, clip
+        );
     }
 
     #[test]

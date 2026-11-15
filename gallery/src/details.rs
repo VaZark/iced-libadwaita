@@ -4,6 +4,152 @@
 use super::*;
 use iced::widget::{column, container, row, text};
 
+fn document_menu(notifications: bool) -> w::Menu<Message> {
+    w::Menu::new("Document")
+        .section([
+            w::MenuItem::action(
+                "Open document",
+                Message::ShowToast("Opened the demo document"),
+            ),
+            w::MenuItem::action("Save a copy", Message::ShowToast("Saved a demo copy")),
+            w::MenuItem::action("Unavailable command", Message::Noop).disabled(),
+        ])
+        .section([w::MenuItem::check(
+            "Notifications",
+            notifications,
+            Message::Notifications(!notifications),
+        )])
+}
+
+fn document_target<'a>() -> Element<'a> {
+    cmp::flat_button(ty::label("Demo document — left-click to open"))
+        .on_press(Message::ShowToast("Opened the demo document"))
+        .into()
+}
+
+#[cfg(test)]
+mod menu_tests {
+    use super::*;
+    use iced::advanced::{Shell, layout, renderer::Headless, widget::Tree};
+    use iced::{Event, Rectangle, Size, keyboard, mouse};
+
+    fn key(named: keyboard::key::Named) -> Event {
+        Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(named),
+            modified_key: keyboard::Key::Named(named),
+            physical_key: keyboard::key::Physical::Unidentified(
+                keyboard::key::NativeCode::Unidentified,
+            ),
+            location: keyboard::Location::Standard,
+            modifiers: keyboard::Modifiers::empty(),
+            text: None,
+            repeat: false,
+        })
+    }
+
+    #[test]
+    fn document_text_and_context_menus_activate_live_state_and_preserve_left_click() {
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(iad::Typography::desktop().body),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        let m = Metrics::desktop();
+        let viewport = Rectangle::with_size(Size::new(m.clamp_maximum, m.clamp_maximum));
+        for context in [false, true] {
+            let mut element: Element<'_> = if context {
+                w::context_menu(document_target(), document_menu(false)).into()
+            } else {
+                w::menu_button(Icon::OpenMenu, document_menu(false))
+                    .text_trigger("Document")
+                    .into()
+            };
+            let mut tree = Tree::new(&element);
+            let node = element.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport.size()),
+            );
+            let mut messages = Vec::new();
+            if context {
+                for event in [
+                    mouse::Event::ButtonPressed(mouse::Button::Left),
+                    mouse::Event::ButtonReleased(mouse::Button::Left),
+                ] {
+                    element.as_widget_mut().update(
+                        &mut tree,
+                        &Event::Mouse(event),
+                        layout::Layout::new(&node),
+                        mouse::Cursor::Available(node.bounds().center()),
+                        &renderer,
+                        &mut iced::advanced::clipboard::Null,
+                        &mut Shell::new(&mut messages),
+                        &viewport,
+                    );
+                }
+                assert!(matches!(
+                    messages.as_slice(),
+                    [Message::ShowToast("Opened the demo document")]
+                ));
+                messages.clear();
+                let mut plain = document_target();
+                let mut plain_tree = Tree::new(&plain);
+                let plain_node = plain.as_widget_mut().layout(
+                    &mut plain_tree,
+                    &renderer,
+                    &layout::Limits::new(Size::ZERO, viewport.size()),
+                );
+                assert_eq!(plain_node.size(), node.size());
+            }
+            element.as_widget_mut().update(
+                &mut tree,
+                &Event::Mouse(mouse::Event::ButtonPressed(if context {
+                    mouse::Button::Right
+                } else {
+                    mouse::Button::Left
+                })),
+                layout::Layout::new(&node),
+                mouse::Cursor::Available(node.bounds().center()),
+                &renderer,
+                &mut iced::advanced::clipboard::Null,
+                &mut Shell::new(&mut messages),
+                &viewport,
+            );
+            assert!(messages.is_empty());
+            let mut overlay = element
+                .as_widget_mut()
+                .overlay(
+                    &mut tree,
+                    layout::Layout::new(&node),
+                    &renderer,
+                    &viewport,
+                    iced::Vector::ZERO,
+                )
+                .expect("core menu overlay");
+            let menu_node = overlay.as_overlay_mut().layout(&renderer, viewport.size());
+            // End selects the live check item after the disabled command.
+            for event in [
+                key(keyboard::key::Named::End),
+                key(keyboard::key::Named::Enter),
+            ] {
+                overlay.as_overlay_mut().update(
+                    &event,
+                    layout::Layout::new(&menu_node),
+                    mouse::Cursor::Unavailable,
+                    &renderer,
+                    &mut iced::advanced::clipboard::Null,
+                    &mut Shell::new(&mut messages),
+                );
+            }
+            assert!(matches!(
+                messages.as_slice(),
+                [Message::Notifications(true)]
+            ));
+        }
+    }
+}
+
 /// Children stacked vertically with `spacing`.
 fn stack<'a>(spacing: f32, children: Vec<Element<'a>>) -> iced::widget::Column<'a, Message, Theme> {
     column(children).spacing(spacing)
@@ -861,7 +1007,17 @@ impl Gallery {
                     )
                     .presentation(presentation)
                 };
+                let commands = || document_menu(self.notifications);
+                let text_menu = w::menu_button(Icon::OpenMenu, commands())
+                    .text_trigger("Document")
+                    .presentation(presentation);
+                let context_target = w::context_menu(
+                    document_target(),
+                    commands(),
+                );
                 column![
+                    g("Text trigger").description("Open Document with a click or the keyboard. Commands report their result; Notifications changes the check state.").push(w::card(text_menu)),
+                    g("Context menu").description("Right-click the document, or focus it and press Menu / Shift+F10. Left-click still opens it. Escape or an outside click dismisses the menu.").push(w::card(context_target)),
                     g("Menu button").description("The menu includes a disabled item.").push(w::card(row![menu])),
                     g("Check items").description("A check item shows its state as text after the label, as in GNOME's quick settings: On or Off, or words of your own with state_labels. MenuCheckStyle::Mark opts in to a check mark.").push(w::card(
                         row![checks(w::MenuCheckStyle::Text), checks(w::MenuCheckStyle::Mark)].spacing(m.space_m),
