@@ -118,11 +118,20 @@ impl<'a, M> ThemeToggle<'a, M> {
         }
     }
 }
+fn appearance_icon_size(metrics: &Metrics, tokens: &crate::theme_config::Tokens) -> f32 {
+    tokens
+        .number("theme-toggle", "icon-size")
+        .unwrap_or(metrics.icon_size)
+}
+
 impl<'a, M: Clone + 'a> From<ThemeToggle<'a, M>> for Element<'a, M> {
     fn from(toggle: ThemeToggle<'a, M>) -> Self {
         let content = toggle.container_props.apply(
-            container(toggle.mode.icon().view(toggle.metrics.icon_size + 2.0))
-                .center(Length::Fixed(toggle.metrics.button_min_height)),
+            container(toggle.mode.icon().view(appearance_icon_size(
+                &toggle.metrics,
+                &crate::theme_config::current().tokens(),
+            )))
+            .center(Length::Fixed(toggle.metrics.button_min_height)),
         );
         let control = toggle.button_props.apply(
             button(content)
@@ -145,6 +154,33 @@ impl<'a, M: Clone + 'a> From<ThemeToggle<'a, M>> for Element<'a, M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn icon_size_is_config_owned_or_inherits_metrics_without_arithmetic() {
+        let mut metrics = Metrics::default();
+        metrics.icon_size = 23.0;
+        let config = |text: &str| {
+            crate::theme_config::ThemeConfig::builder("appearance-icon-test")
+                .files(false)
+                .toolkit_text("")
+                .app_text(text)
+                .build()
+        };
+        let base = config("");
+        assert_eq!(appearance_icon_size(&metrics, &base.tokens()), 23.0);
+        let explicit = config("[theme-toggle]\nicon-size=31px\n");
+        assert!(explicit.warnings().is_empty());
+        assert_eq!(appearance_icon_size(&metrics, &explicit.tokens()), 31.0);
+        for invalid in ["0px", "-1px", "129px", "NaNpx", "24"] {
+            let cfg = config(&format!("[theme-toggle]\nicon-size={invalid}\n"));
+            assert!(!cfg.warnings().is_empty(), "{invalid}");
+            assert_eq!(appearance_icon_size(&metrics, &cfg.tokens()), 23.0);
+        }
+        assert_eq!(
+            appearance_icon_size(&metrics, &crate::theme_config::libadwaita().tokens()),
+            18.0
+        );
+    }
+
     #[test]
     fn defaults_to_system_and_cycles_all_three_preferences() {
         assert_eq!(ThemeMode::default(), ThemeMode::System);
@@ -230,13 +266,16 @@ mod child_api_tests {
     }
 
     #[test]
-    fn default_native_and_aggregate_props_preserve_the_old_layout_and_aliases() {
+    fn default_native_and_aggregate_props_preserve_configured_layout_and_aliases() {
         let renderer = renderer();
         let metrics = metrics();
-        let old: Element<'_, ThemeMode> = crate::components::tooltip(
+        let baseline: Element<'_, ThemeMode> = crate::components::tooltip(
             button(
-                container(ThemeMode::System.icon().view(metrics.icon_size + 2.0))
-                    .center(Length::Fixed(metrics.button_min_height)),
+                container(ThemeMode::System.icon().view(appearance_icon_size(
+                    &metrics,
+                    &crate::theme_config::current().tokens(),
+                )))
+                .center(Length::Fixed(metrics.button_min_height)),
             )
             .padding(3)
             .style(crate::styles::button::flat)
@@ -256,7 +295,7 @@ mod child_api_tests {
             ThemeToggleProps::default().apply(widget);
         let current: Element<'_, ThemeMode> = widget.into();
         let mut layouts = vec![];
-        for mut element in [old, current] {
+        for mut element in [baseline, current] {
             let mut tree = Tree::new(element.as_widget());
             let node = element.as_widget_mut().layout(
                 &mut tree,
@@ -350,6 +389,49 @@ mod child_api_tests {
     }
 
     #[test]
+    fn resolved_icon_geometry_reaches_the_native_child() {
+        let renderer = renderer();
+        let mut metrics = metrics();
+        metrics.icon_size = 23.0;
+        let expected = appearance_icon_size(&metrics, &crate::theme_config::current().tokens());
+        let mut element: Element<'_, ()> =
+            ThemeToggle::new(ThemeMode::System).metrics(metrics).into();
+        let mut tree = Tree::new(&element);
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(400.0, 240.0)),
+        );
+        assert!(
+            nodes(&node)
+                .iter()
+                .any(|bounds| bounds.size() == Size::new(expected, expected))
+        );
+    }
+
+    #[test]
+    fn container_geometry_and_button_padding_apply_without_extra_wrappers() {
+        let renderer = renderer();
+        let mut element: Element<'_, ()> = ThemeToggle::new(ThemeMode::System)
+            .metrics(metrics())
+            .container_props(ContainerProps::default().width(70).height(30))
+            .button_props(ButtonProps::default().padding([4, 6]))
+            .into();
+        let mut tree = Tree::new(element.as_widget());
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(400.0, 240.0)),
+        );
+        assert_eq!(node.size(), Size::new(82.0, 38.0));
+        assert!(
+            nodes(&node)
+                .iter()
+                .any(|r| r.size() == Size::new(70.0, 30.0))
+        );
+    }
+
+    #[test]
     fn native_children_control_actual_geometry_without_owning_events_or_disabled() {
         let mut renderer = renderer();
         let viewport = Rectangle::with_size(Size::new(400.0, 240.0));
@@ -395,10 +477,13 @@ mod child_api_tests {
                     &layout::Limits::new(Size::ZERO, viewport.size()),
                 );
                 assert_eq!(node.size(), Size::new(100.0, 54.0));
+                // A fixed native button imposes its padded minimum on the child.
                 assert!(
                     nodes(&node)
                         .iter()
-                        .any(|r| r.size() == Size::new(70.0, 30.0))
+                        .any(|r| r.size() == Size::new(88.0, 46.0)),
+                    "native layout: {:?}",
+                    nodes(&node)
                 );
                 let layout = layout::Layout::new(&node);
                 let cursor = mouse::Cursor::Available(Point::new(50.0, 27.0));

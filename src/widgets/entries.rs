@@ -819,73 +819,133 @@ mod presentation_merge_tests {
 mod child_api_tests {
     use super::*;
     use crate::components::{TextEditorProps, TextOverflow};
-    use iced::advanced::{Shell, clipboard, layout, renderer::Headless, widget::{Operation, Tree}};
+    use iced::advanced::{
+        Shell, clipboard, layout,
+        renderer::Headless,
+        widget::{Operation, Tree},
+    };
     use iced::{Event, Point, Rectangle, Size, mouse};
-    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     fn renderer() -> iced::Renderer {
         iced::futures::executor::block_on(iced::Renderer::new(
-            iced::Font::DEFAULT, iced::Pixels(14.0), Some("tiny-skia"),
-        )).unwrap()
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap()
     }
 
-    fn layout<'a>(row: EntryRow<'a, u8>, renderer: &iced::Renderer)
-        -> (Element<'a, u8>, Tree, layout::Node)
-    {
+    fn layout<'a>(
+        row: EntryRow<'a, u8>,
+        renderer: &iced::Renderer,
+    ) -> (Element<'a, u8>, Tree, layout::Node) {
         let mut element: Element<'a, u8> = row.into();
         let mut tree = Tree::new(&element);
-        let node = element.as_widget_mut().layout(&mut tree, renderer,
-            &layout::Limits::new(Size::ZERO, Size::new(420.0, 800.0)));
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(420.0, 800.0)),
+        );
         (element, tree, node)
     }
 
     fn sizes(node: &layout::Node) -> Vec<Size> {
         let mut result = vec![node.size()];
-        for child in node.children() { result.extend(sizes(child)); }
+        for child in node.children() {
+            result.extend(sizes(child));
+        }
         result
     }
 
     #[derive(Default)]
     struct Texts(Vec<(String, Rectangle)>);
     impl Operation for Texts {
-        fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation)) { operate(self); }
+        fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation)) {
+            operate(self);
+        }
         fn text(&mut self, _: Option<&iced::widget::Id>, bounds: Rectangle, value: &str) {
             self.0.push((value.into(), bounds));
         }
     }
 
-    fn texts(element: &mut Element<'_, u8>, tree: &mut Tree, node: &layout::Node,
-        renderer: &iced::Renderer) -> Texts
-    {
+    fn texts(
+        element: &mut Element<'_, u8>,
+        tree: &mut Tree,
+        node: &layout::Node,
+        renderer: &iced::Renderer,
+    ) -> Texts {
         let mut result = Texts::default();
-        element.as_widget_mut().operate(tree, layout::Layout::new(node), renderer, &mut result);
+        element
+            .as_widget_mut()
+            .operate(tree, layout::Layout::new(node), renderer, &mut result);
         result
     }
 
-    fn draw(element: &Element<'_, u8>, tree: &Tree, node: &layout::Node, renderer: &mut iced::Renderer) {
-        element.as_widget().draw(tree, renderer, &crate::Theme::light(),
-            &iced::advanced::renderer::Style::default(), layout::Layout::new(node),
-            mouse::Cursor::Unavailable, &Rectangle::with_size(Size::new(420.0, 800.0)));
+    fn draw(
+        element: &Element<'_, u8>,
+        tree: &Tree,
+        node: &layout::Node,
+        renderer: &mut iced::Renderer,
+    ) {
+        element.as_widget().draw(
+            tree,
+            renderer,
+            &crate::Theme::light(),
+            &iced::advanced::renderer::Style::default(),
+            layout::Layout::new(node),
+            mouse::Cursor::Unavailable,
+            &Rectangle::with_size(Size::new(420.0, 800.0)),
+        );
     }
 
-    fn styled_text(calls: Arc<AtomicUsize>, width: u16, height: u16) -> TextProps {
-        TextProps::default().width(width).height(height).style(move |_| {
-            calls.fetch_add(1, Ordering::SeqCst);
-            iced::widget::text::Style { color: Some(iced::Color::from_rgb8(31, 47, 63)) }
-        })
+    fn styled_text(calls: Arc<AtomicUsize>, width: u32, height: u32) -> TextProps {
+        TextProps::default()
+            .width(width)
+            .height(height)
+            .style(move |_| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                iced::widget::text::Style {
+                    color: Some(iced::Color::from_rgb8(31, 47, 63)),
+                }
+            })
     }
 
     fn row<'a>(kind: usize, content: &'a iced::widget::text_editor::Content) -> EntryRow<'a, u8> {
         let input = match kind {
-            0 => EntryInput::Text(Entry::new("Hint", "Secret").password(true).on_input(|_| 1).on_submit(2)),
+            0 => EntryInput::Text(
+                Entry::new("Hint", "Secret")
+                    .password(true)
+                    .on_input(|_| 1)
+                    .on_submit(2),
+            ),
             1 => EntryInput::Action(Entry::new("Hint", "Value").on_input(|_| 1)),
             2 => EntryInput::Number(NumberInput::new("42", |_| 1)),
-            3 => EntryInput::Date(DateInput::new("2026-11-08",
-                crate::primitives::date::Date::new(2026, 11, 8).unwrap(), |_| 1)),
-            4 => EntryInput::Switch { active: true, on_toggle: Box::new(|_| 3) },
-            5 => EntryInput::Select { value: "Selected".into(), options: text("Option").into(), multiple: false },
+            3 => EntryInput::Date(DateInput::new(
+                "2026-11-08",
+                crate::primitives::date::Date::new(2026, 11, 8).unwrap(),
+                |_| 1,
+            )),
+            4 => EntryInput::Switch {
+                active: true,
+                on_toggle: Box::new(|_| 3),
+            },
+            5 => EntryInput::Select {
+                value: "Selected".into(),
+                options: text("Option").into(),
+                multiple: false,
+            },
             6 => EntryInput::Multiline(crate::components::text_view(content).on_action(|_| 7)),
-            7 => EntryInput::Custom(button(text("Action")).width(137).height(43).on_press(9).into()),
+            7 => EntryInput::Custom(
+                button(text("Action"))
+                    .width(137)
+                    .height(43)
+                    .on_press(9)
+                    .into(),
+            ),
             _ => unreachable!(),
         };
         EntryRow::new("Label", input)
@@ -897,12 +957,21 @@ mod child_api_tests {
         let content = iced::widget::text_editor::Content::with_text("Retained");
         for kind in 0..8 {
             let (_, _, base) = layout(row(kind, &content), &renderer);
-            let (_, _, default) = layout(EntryRowProps::default().apply(row(kind, &content)), &renderer);
-            let empty = EntryRowProps::default().value_props(TextProps::default())
-                .wrapper_props(InputWrapperProps::default()).text_view_props(TextViewProps::default());
+            let (_, _, default) = layout(
+                EntryRowProps::default().apply(row(kind, &content)),
+                &renderer,
+            );
+            let empty = EntryRowProps::default()
+                .value_props(TextProps::default())
+                .wrapper_props(InputWrapperProps::default())
+                .text_view_props(TextViewProps::default());
             let (_, _, explicit) = layout(empty.apply(row(kind, &content)), &renderer);
             assert_eq!(sizes(&base), sizes(&default), "branch {kind}");
-            assert_eq!(sizes(&base), sizes(&explicit), "branch {kind}, explicit empty");
+            assert_eq!(
+                sizes(&base),
+                sizes(&explicit),
+                "branch {kind}, explicit empty"
+            );
         }
     }
 
@@ -912,24 +981,56 @@ mod child_api_tests {
         for multiple in [false, true] {
             for value in ["", "日本語 🦀 selected"] {
                 let calls = Arc::new(AtomicUsize::new(0));
-                let row = EntryRow::new("Label", EntryInput::Select {
-                    value: value.into(), options: text("Option").into(), multiple,
-                }).value_props(styled_text(calls.clone(), 137, 29));
-                let row = EntryRowProps::default().value_props(TextProps::default().height(37)).apply(row);
+                let row = EntryRow::new(
+                    "Label",
+                    EntryInput::Select {
+                        value: value.into(),
+                        options: text("Option").into(),
+                        multiple,
+                    },
+                )
+                .value_props(styled_text(calls.clone(), 137, 29));
+                let row = EntryRowProps::default()
+                    .value_props(TextProps::default().height(37))
+                    .apply(row);
                 let (mut element, mut tree, node) = layout(row, &renderer);
                 let expected = if value.is_empty() { "Select…" } else { value };
                 let values = texts(&mut element, &mut tree, &node, &renderer);
-                assert_eq!(values.0.iter().find(|(text, _)| text == expected).unwrap().1.size(), Size::new(137.0, 37.0));
+                assert_eq!(
+                    values
+                        .0
+                        .iter()
+                        .find(|(text, _)| text == expected)
+                        .unwrap()
+                        .1
+                        .size(),
+                    Size::new(137.0, 37.0)
+                );
                 draw(&element, &tree, &node, &mut renderer);
                 assert!(calls.load(Ordering::SeqCst) > 0);
-                element.as_widget_mut().update(&mut tree,
+                element.as_widget_mut().update(
+                    &mut tree,
                     &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
-                    layout::Layout::new(&node), mouse::Cursor::Available(Point::new(30.0, 30.0)),
-                    &renderer, &mut clipboard::Null, &mut Shell::new(&mut vec![]),
-                    &Rectangle::with_size(Size::new(420.0, 800.0)));
+                    layout::Layout::new(&node),
+                    mouse::Cursor::Available(Point::new(30.0, 30.0)),
+                    &renderer,
+                    &mut clipboard::Null,
+                    &mut Shell::new(&mut vec![]),
+                    &Rectangle::with_size(Size::new(420.0, 800.0)),
+                );
                 // Opening remains the native popover's policy, not a value-presentation field.
-                assert!(element.as_widget_mut().overlay(&mut tree, layout::Layout::new(&node),
-                    &renderer, &Rectangle::with_size(Size::new(420.0, 800.0)), iced::Vector::ZERO).is_some());
+                assert!(
+                    element
+                        .as_widget_mut()
+                        .overlay(
+                            &mut tree,
+                            layout::Layout::new(&node),
+                            &renderer,
+                            &Rectangle::with_size(Size::new(420.0, 800.0)),
+                            iced::Vector::ZERO
+                        )
+                        .is_some()
+                );
             }
         }
     }
@@ -945,22 +1046,50 @@ mod child_api_tests {
                 let wrapper = InputWrapperProps::default()
                     .description_props(styled_text(description_calls.clone(), 137, 29))
                     .message_props(styled_text(message_calls.clone(), 151, 31));
-                let row = row(kind, &content).description("Help")
+                let row = row(kind, &content)
+                    .description("Help")
                     .validity(Validity::Error("Invalid".into()))
-                    .interaction(Interaction { touched: revealed, submitted: false })
-                    .wrapper_props(wrapper).required(true);
-                let row = EntryRowProps::default().wrapper_props(InputWrapperProps::default()
-                    .description_props(TextProps::default().height(37))
-                    .message_props(TextProps::default().height(41))).apply(row);
+                    .interaction(Interaction {
+                        touched: revealed,
+                        submitted: false,
+                    })
+                    .wrapper_props(wrapper)
+                    .required(true);
+                let row = EntryRowProps::default()
+                    .wrapper_props(
+                        InputWrapperProps::default()
+                            .description_props(TextProps::default().height(37))
+                            .message_props(TextProps::default().height(41)),
+                    )
+                    .apply(row);
                 assert_eq!(row.validity, Validity::Error("Invalid".into()));
                 assert_eq!(row.interaction.revealed(), revealed);
                 assert!(row.required);
                 let (mut element, mut tree, node) = layout(row, &renderer);
                 let values = texts(&mut element, &mut tree, &node, &renderer);
                 let expected = if revealed { "Invalid" } else { "Help" };
-                let size = if revealed { Size::new(151.0, 41.0) } else { Size::new(137.0, 37.0) };
-                assert_eq!(values.0.iter().find(|(text, _)| text == expected).unwrap().1.size(), size, "branch {kind}");
-                assert!(!values.0.iter().any(|(text, _)| text == if revealed { "Help" } else { "Invalid" }));
+                let size = if revealed {
+                    Size::new(151.0, 41.0)
+                } else {
+                    Size::new(137.0, 37.0)
+                };
+                assert_eq!(
+                    values
+                        .0
+                        .iter()
+                        .find(|(text, _)| text == expected)
+                        .unwrap()
+                        .1
+                        .size(),
+                    size,
+                    "branch {kind}"
+                );
+                assert!(
+                    !values
+                        .0
+                        .iter()
+                        .any(|(text, _)| text == if revealed { "Help" } else { "Invalid" })
+                );
                 assert!(values.0.iter().any(|(text, _)| text == "Label *"));
                 draw(&element, &tree, &node, &mut renderer);
                 assert_eq!(description_calls.load(Ordering::SeqCst) > 0, !revealed);
@@ -976,31 +1105,53 @@ mod child_api_tests {
         let (_, _, base) = layout(EntryRow::multiline("Label", &content, |_| 7), &renderer);
         let calls = Arc::new(AtomicUsize::new(0));
         let style_calls = calls.clone();
-        let row = EntryRow::multiline("Label", &content, |_| 7)
-            .text_view_props(TextViewProps::default().editor_props(TextEditorProps::default()
-                .size(28).font(iced::Font::MONOSPACE).style(move |theme, status| {
-                    style_calls.fetch_add(1, Ordering::SeqCst);
-                    crate::styles::text_editor::default(theme, status)
-                })));
-        let row = EntryRowProps::default().text_view_props(TextViewProps::default()
-            .editor_props(TextEditorProps::default().padding(11))).apply(row);
-        assert_eq!(row.text_view_props.editor_props.size, Some(iced::Pixels(28.0)));
-        assert_eq!(row.text_view_props.editor_props.font, Some(iced::Font::MONOSPACE));
+        let row = EntryRow::multiline("Label", &content, |_| 7).text_view_props(
+            TextViewProps::default().editor_props(
+                TextEditorProps::default()
+                    .size(28)
+                    .font(iced::Font::MONOSPACE)
+                    .style(move |theme, status| {
+                        style_calls.fetch_add(1, Ordering::SeqCst);
+                        crate::styles::text_editor::default(theme, status)
+                    }),
+            ),
+        );
+        let row = EntryRowProps::default()
+            .text_view_props(
+                TextViewProps::default().editor_props(TextEditorProps::default().padding(11)),
+            )
+            .apply(row);
+        assert_eq!(
+            row.text_view_props.editor_props.size,
+            Some(iced::Pixels(28.0))
+        );
+        assert_eq!(
+            row.text_view_props.editor_props.font,
+            Some(iced::Font::MONOSPACE)
+        );
         let (mut element, mut tree, node) = layout(row, &renderer);
         assert!(node.size().height > base.size().height);
         draw(&element, &tree, &node, &mut renderer);
         assert!(calls.load(Ordering::SeqCst) > 0);
         fn editor(layout: layout::Layout<'_>) -> Option<Rectangle> {
-            if layout.children().next().is_none() && layout.bounds().height > 80.0 { Some(layout.bounds()) }
-            else { layout.children().find_map(editor) }
+            if layout.children().next().is_none() && layout.bounds().height > 80.0 {
+                Some(layout.bounds())
+            } else {
+                layout.children().find_map(editor)
+            }
         }
         let target = editor(layout::Layout::new(&node)).expect("native multiline editor");
         let mut messages = vec![];
-        element.as_widget_mut().update(&mut tree,
+        element.as_widget_mut().update(
+            &mut tree,
             &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
-            layout::Layout::new(&node), mouse::Cursor::Available(target.center()),
-            &renderer, &mut clipboard::Null, &mut Shell::new(&mut messages),
-            &Rectangle::with_size(Size::new(420.0, 800.0)));
+            layout::Layout::new(&node),
+            mouse::Cursor::Available(target.center()),
+            &renderer,
+            &mut clipboard::Null,
+            &mut Shell::new(&mut messages),
+            &Rectangle::with_size(Size::new(420.0, 800.0)),
+        );
         assert!(messages.contains(&7));
         assert_eq!(content.text(), "One\nTwo\nThree");
     }
@@ -1009,21 +1160,39 @@ mod child_api_tests {
     fn unrelated_branch_actions_survive_wrapper_and_multiline_presentation() {
         let renderer = renderer();
         let content = iced::widget::text_editor::Content::new();
-        let row = EntryRowProps::default().wrapper_props(InputWrapperProps::default()
-            .description_props(TextProps::default().overflow(TextOverflow::Wrap)))
-            .text_view_props(TextViewProps::default().editor_props(TextEditorProps::default().size(28)))
+        let row = EntryRowProps::default()
+            .wrapper_props(
+                InputWrapperProps::default()
+                    .description_props(TextProps::default().overflow(TextOverflow::Wrap)),
+            )
+            .text_view_props(
+                TextViewProps::default().editor_props(TextEditorProps::default().size(28)),
+            )
             .apply(row(7, &content).description("Help"));
         let (mut element, mut tree, node) = layout(row, &renderer);
         fn action(layout: layout::Layout<'_>) -> Option<Rectangle> {
-            if layout.bounds().size() == Size::new(137.0, 43.0) { Some(layout.bounds()) }
-            else { layout.children().find_map(action) }
+            if layout.bounds().size() == Size::new(137.0, 43.0) {
+                Some(layout.bounds())
+            } else {
+                layout.children().find_map(action)
+            }
         }
         let target = action(layout::Layout::new(&node)).unwrap();
         let mut messages = vec![];
-        for event in [mouse::Event::ButtonPressed(mouse::Button::Left), mouse::Event::ButtonReleased(mouse::Button::Left)] {
-            element.as_widget_mut().update(&mut tree, &Event::Mouse(event), layout::Layout::new(&node),
-                mouse::Cursor::Available(target.center()), &renderer, &mut clipboard::Null,
-                &mut Shell::new(&mut messages), &Rectangle::with_size(Size::new(420.0, 800.0)));
+        for event in [
+            mouse::Event::ButtonPressed(mouse::Button::Left),
+            mouse::Event::ButtonReleased(mouse::Button::Left),
+        ] {
+            element.as_widget_mut().update(
+                &mut tree,
+                &Event::Mouse(event),
+                layout::Layout::new(&node),
+                mouse::Cursor::Available(target.center()),
+                &renderer,
+                &mut clipboard::Null,
+                &mut Shell::new(&mut messages),
+                &Rectangle::with_size(Size::new(420.0, 800.0)),
+            );
         }
         assert_eq!(messages, vec![9]);
     }

@@ -252,6 +252,9 @@ impl State {
                 )
                 .push(
                     w::EntryRow::text("Display name", &self.name, Msg::Name)
+                        .wrapper_props(cmp::InputWrapperProps::default()
+                            .description_props(cmp::TextProps::default().overflow(cmp::TextOverflow::Wrap))
+                            .message_props(cmp::TextProps::default().overflow(cmp::TextOverflow::Wrap)))
                         .required(true)
                         .validity(if self.name.trim().is_empty() {
                             Validity::error("Enter a display name.")
@@ -309,7 +312,9 @@ impl State {
                 .push(w::EntryRow::switch("Notifications", self.enabled, Msg::Enabled).metrics(m)),
             group("Selection entries")
                 .description("Select anywhere in the input area; values start at the left edge.")
-                .push(w::EntryRow::select("Team", &OPTIONS, self.selected, Msg::Select).metrics(m))
+                .push(w::EntryRow::select("Team", &OPTIONS, self.selected, Msg::Select)
+                                    .value_props(cmp::TextProps::default().overflow(cmp::TextOverflow::Wrap))
+                                    .metrics(m))
                 .push(
                     w::EntryRow::multiselect(
                         "Responsibilities",
@@ -337,7 +342,10 @@ impl State {
                 .push(self.tag_filter(false, m))
                 .push(self.tag_filter(true, m)),
             group("Growing text")
-                .push(w::EntryRow::multiline("Description", &self.notes, Msg::Notes).metrics(m))
+                .push(w::EntryRow::multiline("Description", &self.notes, Msg::Notes)
+                                    .text_view_props(cmp::TextViewProps::default().editor_props(
+                                        cmp::TextEditorProps::default().padding(m.space_s)))
+                                    .metrics(m))
                 .push(
                     w::EntryRow::new(
                         "Single-line editor",

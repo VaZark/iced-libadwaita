@@ -172,6 +172,14 @@ D D D D D D D D       L L L L L L L L
 
 **Focus.** `[colors] focus-ring` is the color of the indicator (unset: the accent) and `[metrics] focus-style` is `ring` (the default, `focus-ring-width` wide), `dotted` or `none`. iced styles draw a solid line, so `dotted` is a 1px ring; `none` draws no indicator.
 
+### Appearance button geometry
+
+`[theme-toggle] icon-size` is an optional validated length (1–128px). If absent, the appearance button inherits `metrics.icon-size` unchanged; it does not add a built-in offset. The libadwaita config supplies its 18px appearance icon default.
+
+### Classic tab surfaces
+
+A raised `[frame.tab]` selects the classic renderer for the default tab presentation. Its `bg` controls tab faces; the panel uses `[frame.panel] bg`, falling back to the window surface. Set `[tabs] panel-padding` to a validated length (0–512px) to control space inside the page frame independently of tab-label padding. When absent it inherits the supplied metrics' inset. Named tab variants inherit this key through the same per-key cascade.
+
 ## Typed variables and variations
 
 Declare explicit constraints with `Schema::variable`. Its fallback is optional: `None` intentionally leaves a property unset when no valid value is available.

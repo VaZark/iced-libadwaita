@@ -61,7 +61,7 @@ pub use sections::{SectionButton, SectionIcon, section_button, section_icon, sec
 pub use spectrum::{SpectrumBars, spectrum_bars};
 pub use spinner::{Spinner, spinner};
 pub use switch::{Switch, switch};
-pub use theme_toggle::{ThemeMode, ThemeToggle};
+pub use theme_toggle::{ThemeMode, ThemeToggle, ThemeToggleProps};
 pub use tooltip::{TooltipPosition, tooltip};
 
 /// Label, description and validation wrapper for custom input components.

@@ -536,13 +536,23 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
             .bevel_of("frame.panel")
             .unwrap_or((crate::primitives::bevel::BevelStyle::Raised, m.border_width));
         let page = Bevel::new(panel, "frame.panel", page_style, page_width)
-            .padding(self.padding.map_or(m.inset, |p| p.top.max(m.inset)));
+            .padding(self.tab_metric(name, "panel-padding", m.inset));
         iced::widget::stack![
             self.panel_props.clone().unwrap_or_default().apply(
-                container(page).width(Length::Fill).padding(iced::Padding {
-                    top: page_top,
-                    ..iced::Padding::ZERO
-                })
+                container(page)
+                    .width(Length::Fill)
+                    .style(|t: &Theme| iced::widget::container::Style {
+                        background: Some(
+                            t.token_color("frame.panel", "bg")
+                                .unwrap_or(t.semantic.window.bg)
+                                .into()
+                        ),
+                        ..Default::default()
+                    })
+                    .padding(iced::Padding {
+                        top: page_top,
+                        ..iced::Padding::ZERO
+                    })
             ),
             strip,
         ]
@@ -630,6 +640,61 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> From<Tabs<'a, K, M>> for Elem
 #[cfg(test)]
 mod tests {
     use iced::advanced::renderer::Headless;
+
+    #[test]
+    fn classic_tabs_share_panel_surface_and_resolve_panel_padding_from_tokens() {
+        use crate::{Element, Theme};
+        use iced::advanced::{layout, renderer, widget::Tree};
+        use iced::{Color, Point, Rectangle, Size, mouse};
+        let mut renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(11.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        let mut heights = Vec::new();
+        for padding in [0, 9] {
+            let cfg = crate::theme_config::ThemeConfig::builder("classic-tab-regression")
+                .files(false)
+                .toolkit_text(include_str!("../../themes/win95.conf"))
+                .app_text(format!("[tabs]\npanel-padding={padding}px\n"))
+                .build();
+            assert!(cfg.warnings().is_empty(), "{:?}", cfg.warnings());
+            let theme = Theme::light().with_theme_config(&cfg);
+            let tabs = super::Tabs::new(Some(0usize), |_| ())
+                .theme_config(&cfg)
+                .metrics(theme.metrics)
+                .padding(4)
+                .variant(super::TabsVariant::Default)
+                .tab(super::TabItem::new(0usize, " ").panel(|| {
+                    iced::widget::container(iced::widget::space().width(120).height(40)).into()
+                }))
+                .tab(super::TabItem::new(1usize, " ").panel(|| iced::widget::space().into()));
+            let mut element: Element<'_, ()> = tabs.into();
+            let mut tree = Tree::new(&element);
+            let node = element.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, Size::new(160.0, 120.0)),
+            );
+            heights.push(node.size().height);
+            element.as_widget().draw(
+                &tree,
+                &mut renderer,
+                &theme,
+                &renderer::Style::default(),
+                layout::Layout::new(&node),
+                mouse::Cursor::Unavailable,
+                &Rectangle::new(Point::ORIGIN, Size::new(160.0, 120.0)),
+            );
+            let pixels = renderer.screenshot(Size::new(160, 120), 1.0, Color::WHITE);
+            let pixel = |x: usize, y: usize| &pixels[(y * 160 + x) * 4..(y * 160 + x) * 4 + 4];
+            // Blank labels let these samples isolate actual tab/panel fills, not glyphs.
+            assert_eq!(pixel(6, 10), &[212, 208, 200, 255]);
+            assert_eq!(pixel(6, 32), pixel(6, 10));
+        }
+        assert_eq!(heights[1] - heights[0], 18.0);
+    }
 
     fn tokens(text: &str) -> crate::theme_config::Tokens {
         let cfg = crate::theme_config::ThemeConfig::builder("tabs-variant-tests")

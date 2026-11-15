@@ -727,12 +727,23 @@ fn declare_design_tokens(mut s: Schema) -> Schema {
             doc,
         );
     }
+    s = s.variable(
+        "theme-toggle",
+        "icon-size",
+        VariableType::Length {
+            min: Some(1.0),
+            max: Some(128.0),
+        },
+        None,
+        "Appearance icon size, in px (unset: inherited metrics icon-size)",
+    );
     for (section, key, max) in [
         ("tabs", "close-icon-size", 128.0),
         ("tabs", "indicator-height", 32.0),
         ("tabs", "border-width", 32.0),
         ("tabs", "separator-width", 32.0),
         ("tabs", "focus-inset", 64.0),
+        ("tabs", "panel-padding", 512.0),
         ("toolbar", "shadow-height", 128.0),
         ("toolbar", "separator-width", 32.0),
         ("color-picker", "width", 4096.0),

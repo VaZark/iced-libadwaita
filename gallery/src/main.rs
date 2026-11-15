@@ -1294,10 +1294,17 @@ impl Gallery {
         // swaps the header's title for a search entry (an on-select trigger of a
         // `MetaComponent`); the path bar (or the plain title) is its other variant.
         content_bar = content_bar.pack_end(
-            w::ThemeToggle::new(w::ThemeMode::from(iad::utils::scheme_override()))
-                .on_toggle(Message::Appearance)
-                .disabled(!iad::config::current().allow_app_overrides)
-                .metrics(m),
+            w::ThemeToggleProps::default()
+                .tooltip_props(
+                    cmp::TooltipProps::default()
+                        .label_props(cmp::TextProps::default().overflow(cmp::TextOverflow::Wrap)),
+                )
+                .apply(
+                    w::ThemeToggle::new(w::ThemeMode::from(iad::utils::scheme_override()))
+                        .on_toggle(Message::Appearance)
+                        .disabled(!iad::config::current().allow_app_overrides)
+                        .metrics(m),
+                ),
         );
         content_bar = content_bar.pack_end(cmp::tooltip(
             iced::widget::button(

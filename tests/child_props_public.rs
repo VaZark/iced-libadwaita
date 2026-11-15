@@ -268,6 +268,47 @@ fn aggregate_overlays_preserve_submit_busy_policy_and_row_actions() {
 }
 
 #[test]
+fn theme_toggle_and_entry_row_children_are_public_native_props() {
+    let renderer = renderer();
+    let toggle = c::ThemeToggle::new(c::ThemeMode::System)
+        .button_props(ButtonProps::default().width(97).height(43))
+        .on_toggle(|_| ());
+    let props: w::ThemeToggleProps = c::ThemeToggleProps::default()
+        .button_props(ButtonProps::default().height(49))
+        .container_props(ContainerProps::default().clip(true))
+        .tooltip_props(
+            c::TooltipProps::default()
+                .label_props(TextProps::default().overflow(c::TextOverflow::Wrap)),
+        );
+    let mut element: Element<'_, ()> = props.apply(toggle).into();
+    let (_, node) = layout(&mut element, &renderer);
+    assert_eq!(node.size(), Size::new(97.0, 49.0));
+
+    let row = w::EntryRow::new(
+        "Team",
+        w::EntryInput::Select {
+            value: "Selected".into(),
+            options: text("Option").into(),
+            multiple: false,
+        },
+    )
+    .value_props(TextProps::default().width(173));
+    let row = w::EntryRowProps::default()
+        .value_props(TextProps::default().height(37))
+        .wrapper_props(
+            c::InputWrapperProps::default()
+                .description_props(TextProps::default().overflow(c::TextOverflow::Wrap)),
+        )
+        .text_view_props(
+            c::TextViewProps::default().editor_props(c::TextEditorProps::default().padding(0)),
+        )
+        .apply(row);
+    let mut element: Element<'_, ()> = row.into();
+    let (_, node) = layout(&mut element, &renderer);
+    assert!(contains_size(&node, Size::new(173.0, 37.0)));
+}
+
+#[test]
 fn exported_owned_props_are_default_and_clone_from_downstream() {
     // An export smoke test, not evidence that every field reaches every branch.
     macro_rules! exported {
@@ -293,6 +334,8 @@ fn exported_owned_props_are_default_and_clone_from_downstream() {
         c::TextEditorProps,
         c::TextViewProps,
         c::IconToggleButtonProps,
+        c::ThemeToggleProps,
+        w::ThemeToggleProps,
         c::InputWrapperProps,
         c::SearchBarProps,
         c::SectionButtonProps,
