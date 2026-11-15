@@ -63,7 +63,8 @@ pub struct DateRangeInput<'a, M> {
     dialog: bool,
     scrim: bool,
     close_on_outside: bool,
-    window_radius: f32,
+    window_radius: Option<f32>,
+    scrim_shape: Option<super::popover::ScrimShape>,
     revealed: bool,
     spacing: Option<f32>,
     padding: Option<f32>,
@@ -115,7 +116,8 @@ impl<'a, M> DateRangeInput<'a, M> {
             dialog: false,
             scrim: true,
             close_on_outside: true,
-            window_radius: Metrics::desktop().radius_window,
+            window_radius: None,
+            scrim_shape: None,
             revealed: true,
             spacing: None,
             padding: None,
@@ -226,9 +228,23 @@ impl<'a, M> DateRangeInput<'a, M> {
         self.close_on_outside = on;
         self
     }
-    /// Rounds the dialog's fade to the window's corners (`window::State::radius`).
+    /// Explicit uniform parent corners (`window::State::radius`), not metric defaults.
     pub fn window_radius(mut self, r: f32) -> Self {
-        self.window_radius = r;
+        self.window_radius = Some(r);
+        self.scrim_shape = None;
+        self
+    }
+    /// Exact parent scrim geometry, resolved with the current theme/window bounds.
+    /// Without explicit geometry no scrim is painted; modal behavior is unchanged.
+    pub fn scrim_shape(
+        mut self,
+        shape: impl Fn(&Theme, iced::Rectangle) -> (iced::Rectangle, iced::border::Radius)
+        + Send
+        + Sync
+        + 'static,
+    ) -> Self {
+        self.scrim_shape = Some(std::sync::Arc::new(shape));
+        self.window_radius = None;
         self
     }
     /// The gap between the calendar's header, days and Today button, and between the entry and
@@ -416,6 +432,7 @@ impl<'a, M: Clone + 'a> From<DateRangeInput<'a, M>> for Element<'a, M> {
                 scrim: d.scrim,
                 close_on_outside: d.close_on_outside,
                 window_radius: d.window_radius,
+                scrim_shape: d.scrim_shape.clone(),
                 disabled: d.disabled,
                 open_initially: d.open_initially,
                 padding: d.padding,

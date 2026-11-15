@@ -573,6 +573,7 @@ pub struct ColorInput<'a, M> {
     scrim: bool,
     close_on_outside: bool,
     window_radius: Option<f32>,
+    scrim_shape: Option<super::popover::ScrimShape>,
     disabled: bool,
     open_initially: bool,
     spacing: Option<f32>,
@@ -615,6 +616,7 @@ impl<'a, M: Clone + 'a> ColorInput<'a, M> {
             scrim: true,
             close_on_outside: true,
             window_radius: None,
+            scrim_shape: None,
             disabled: false,
             open_initially: false,
             spacing: None,
@@ -657,9 +659,20 @@ impl<'a, M: Clone + 'a> ColorInput<'a, M> {
         self.close_on_outside = on;
         self
     }
-    /// Rounds the dialog's fade to the window's corners (`window::State::radius`).
+    /// Explicit uniform parent corners (`window::State::radius`), not metric defaults.
     pub fn window_radius(mut self, r: f32) -> Self {
         self.window_radius = Some(r);
+        self.scrim_shape = None;
+        self
+    }
+    /// Exact parent scrim geometry, resolved with the current theme/window bounds.
+    /// Without explicit geometry no scrim is painted; modal behavior is unchanged.
+    pub fn scrim_shape(
+        mut self,
+        shape: impl Fn(&Theme, Rectangle) -> (Rectangle, iced::border::Radius) + Send + Sync + 'static,
+    ) -> Self {
+        self.scrim_shape = Some(std::sync::Arc::new(shape));
+        self.window_radius = None;
         self
     }
     pub fn disabled(mut self, on: bool) -> Self {
@@ -720,8 +733,13 @@ impl<'a, M: Clone + 'a> From<ColorInput<'a, M>> for Element<'a, M> {
             .open_initially(i.open_initially)
             .initial_focus(ENTRY_ID)
             .scrim(i.scrim)
-            .close_on_outside(i.close_on_outside)
-            .window_radius(i.window_radius.unwrap_or(m.radius_window));
+            .close_on_outside(i.close_on_outside);
+        if let Some(radius) = i.window_radius {
+            opener = opener.window_radius(radius);
+        }
+        if let Some(shape) = i.scrim_shape {
+            opener = opener.scrim_shape(move |theme, bounds| shape(theme, bounds));
+        }
         if i.dialog {
             opener = opener.presentation(crate::widgets::PopoverPresentation::Dialog);
         }

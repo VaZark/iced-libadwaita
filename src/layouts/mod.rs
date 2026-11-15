@@ -7,6 +7,7 @@ pub mod anchor;
 pub(crate) mod anchored;
 pub mod animation;
 pub(crate) mod bevel;
+pub mod boundary;
 pub(crate) mod clip_window;
 pub(crate) mod container;
 pub(crate) mod content_area;
@@ -14,6 +15,7 @@ pub mod dock;
 pub mod flex;
 pub(crate) mod flow_grid;
 pub(crate) mod motion;
+pub(crate) mod overflow;
 pub mod overlay;
 pub(crate) mod scrolled;
 pub(crate) mod slots;
@@ -28,6 +30,10 @@ pub mod virtualize;
 
 pub use anchored::{Anchored, Indicator};
 pub use bevel::{Bevel, bevel_of, framed};
+pub use boundary::{
+    Boundary, SurfaceIntersection, SurfaceShape, current_boundary, current_surface, with_portal,
+    with_surface,
+};
 pub use clip_window::{Anchor as ClipAnchor, ClipWindow};
 pub use container::{Container, ContainerSize};
 pub use content_area::{ContentArea, content_area};
@@ -39,6 +45,7 @@ pub use motion::{
     DrawerLayer, Entrance, Highlight, PageTransition, PushStack, Reveal, drawer_layer, entrance,
     highlight, layered, page_transition, push_stack, reveal,
 };
+pub use overflow::{Overflow, OverflowMode, overflow};
 pub use overlay::{
     Layer as OverlayLayer, Overlay, closed as overlay_closed, stacked as overlay_stack,
 };

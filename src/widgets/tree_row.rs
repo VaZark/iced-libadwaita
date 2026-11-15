@@ -510,19 +510,54 @@ mod tests {
     fn accordion_uses_full_surface_disclosure_and_keeps_its_selection_rule() {
         use crate::primitives::Selection;
         use crate::widgets::{Accordion, AccordionItem};
-        let renderer = renderer();
+        use iced::advanced::{Renderer as _, Shell, clipboard, layout, renderer, widget::Tree};
+        use iced::{Event, Rectangle, Size, mouse};
+        let mut renderer = self::renderer();
         for (rule, expected) in [
             (Selection::Multiple, vec![2, 1]),
             (Selection::SINGLE, vec![1]),
         ] {
-            let mut element = Accordion::new(&[2u8], |keys| keys)
+            let mut element: Element<'_, Vec<u8>> = Accordion::new(&[2u8], |keys| keys)
                 .selection(rule)
                 .item(AccordionItem::new(1, "First", space()))
                 .into();
-            assert_eq!(
-                click(&mut element, &renderer, iced::Point::new(319.0, 20.0)),
-                vec![expected]
+            let viewport = Rectangle::with_size(Size::new(320.0, 1000.0));
+            let mut tree = Tree::new(&element);
+            let node = element.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport.size()),
             );
+            let layout = layout::Layout::new(&node);
+            // Draw and click the same tree: the Card resolves its themed boundary
+            // at draw time, so the layout-only click helper cannot initialize it.
+            renderer.reset(viewport);
+            element.as_widget().draw(
+                &tree,
+                &mut renderer,
+                &crate::Theme::light(),
+                &renderer::Style::default(),
+                layout,
+                mouse::Cursor::Unavailable,
+                &viewport,
+            );
+            let mut messages = vec![];
+            for event in [
+                mouse::Event::ButtonPressed(mouse::Button::Left),
+                mouse::Event::ButtonReleased(mouse::Button::Left),
+            ] {
+                element.as_widget_mut().update(
+                    &mut tree,
+                    &Event::Mouse(event),
+                    layout,
+                    mouse::Cursor::Available(iced::Point::new(319.0, 20.0)),
+                    &renderer,
+                    &mut clipboard::Null,
+                    &mut Shell::new(&mut messages),
+                    &viewport,
+                );
+            }
+            assert_eq!(messages, vec![expected]);
         }
     }
 

@@ -895,8 +895,7 @@ impl AppShell {
                 parent,
                 self.with_drawer(Shell::Mobile, content),
                 self.show_content
-            )
-            .window_radius(0.0),
+            ),
             self.tab_bar(all),
         ]
         .into()

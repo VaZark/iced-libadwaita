@@ -140,7 +140,12 @@ impl State {
                         .collect(),
                     self.selected.min(2)
                 )
-                .spacing(m.space_s),
+                .spacing(m.space_s)
+                .target_shape(|theme, _, _| {
+                    iad::styles::button::flat(theme, iced::widget::button::Status::Active)
+                        .border
+                        .radius
+                }),
                 ty::body(
                     ["Rendered preview", "Source code", "Recent activity"][self.selected.min(2)]
                 ),

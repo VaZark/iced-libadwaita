@@ -27,6 +27,59 @@ use iced::{Length, Subscription, Task};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
+// The Field and its actual native input share this resolver. The stock styles keep
+// their geometry across statuses; validation changes color, not the control's shape.
+fn field_entry_style(
+    state: cmp::EntryState,
+) -> fn(&iad::Theme, iced::widget::text_input::Status) -> iced::widget::text_input::Style {
+    match state {
+        cmp::EntryState::Normal => iad::styles::text_input::default,
+        cmp::EntryState::Error => iad::styles::text_input::error,
+        cmp::EntryState::Warning => iad::styles::text_input::warning,
+        cmp::EntryState::Success => iad::styles::text_input::success,
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn city_field_geometry_matches_native_style_for_every_entry_state_and_status() {
+    use iced::widget::text_input::Status;
+    for mut theme in [iad::Theme::light(), iad::Theme::dark()] {
+        for radius in [0.0, 12.0, 999.0] {
+            theme.metrics.radius_m = radius;
+            for state in [
+                cmp::EntryState::Normal,
+                cmp::EntryState::Error,
+                cmp::EntryState::Warning,
+                cmp::EntryState::Success,
+            ] {
+                let style = field_entry_style(state);
+                let geometry = style(&theme, Status::Active).border.radius;
+                for status in [
+                    Status::Active,
+                    Status::Hovered,
+                    Status::Focused { is_hovered: false },
+                    Status::Focused { is_hovered: true },
+                    Status::Disabled,
+                ] {
+                    assert_eq!(geometry, style(&theme, status).border.radius);
+                    let expected = match state {
+                        cmp::EntryState::Normal => iad::styles::text_input::default(&theme, status),
+                        cmp::EntryState::Error => iad::styles::text_input::error(&theme, status),
+                        cmp::EntryState::Warning => {
+                            iad::styles::text_input::warning(&theme, status)
+                        }
+                        cmp::EntryState::Success => {
+                            iad::styles::text_input::success(&theme, status)
+                        }
+                    };
+                    assert_eq!(style(&theme, status), expected);
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Place {
     name: &'static str,
@@ -642,20 +695,29 @@ impl State {
             submitted: self.submitted,
         };
         let validity = self.field_validity();
+        let city = self
+            .auto(Which::Field, &self.field, m)
+            .placeholder("Pick a city")
+            .free_text(false)
+            .selected(self.field.picked.as_deref())
+            .revealed(interaction.revealed());
+        let entry_style = field_entry_style(city.text_state());
+        let city = city.entry_props(
+            cmp::EntryProps::default()
+                .input_props(cmp::TextInputProps::default().style(entry_style)),
+        );
         let field = column![
-            Field::new(
-                "City",
-                self.auto(Which::Field, &self.field, m)
-                    .placeholder("Pick a city")
-                    .free_text(false)
-                    .selected(self.field.picked.as_deref())
-                    .revealed(interaction.revealed()),
-            )
-            .required(true)
-            .description("Typing is not enough: choose one of the suggestions.")
-            .validity(validity)
-            .interaction(interaction)
-            .metrics(m),
+            Field::new("City", city)
+                .target_geometry(move |theme, _| Some(
+                    entry_style(theme, iced::widget::text_input::Status::Active)
+                        .border
+                        .radius
+                ))
+                .required(true)
+                .description("Typing is not enough: choose one of the suggestions.")
+                .validity(validity)
+                .interaction(interaction)
+                .metrics(m),
             row![
                 cmp::suggested_button(ty::label("Submit")).on_press(Msg::Submit),
                 cmp::flat_button(ty::label("Reset")).on_press(Msg::Reset),

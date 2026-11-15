@@ -963,7 +963,7 @@ pub fn build<'a>(
             el.map(Message::Widgets)
         }
         Detail::ColorPicker => {
-            let el = g.widgets_demo.color_play(p, m);
+            let el = g.widgets_demo.color_play(p, m, g.surface_radius());
             el.map(Message::Widgets)
         }
         Detail::Timeline => {
@@ -1098,9 +1098,7 @@ pub fn build<'a>(
             stage(el)
         }
         Detail::ShortcutLabel => {
-            stage(
-                row![ty::body("Action"), w::shortcut_label(p.text("keys"))].spacing(m.space_m),
-            )
+            stage(row![ty::body("Action"), w::shortcut_label(p.text("keys"))].spacing(m.space_m))
         }
         Detail::Banner => {
             let mut b = w::banner(p.text("title").to_string()).revealed(p.bool("revealed"));

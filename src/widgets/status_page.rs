@@ -1,5 +1,144 @@
 //! `AdwStatusPage`, `AdwClamp`, `AdwBin`, and `.card`.
 
+#[cfg(test)]
+mod surface_regression_tests {
+    use super::*;
+    use crate::layouts::boundary::{SurfaceShape, current_surface};
+    use iced::advanced::{
+        Renderer as _,
+        layout::{self, Layout},
+        renderer::{self, Headless},
+        widget::{Tree, Widget},
+    };
+    use iced::{Color, Point, Rectangle, Size, mouse};
+    use std::{
+        cell::Cell,
+        rc::Rc,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
+
+    struct Overflow(Rc<Cell<Option<SurfaceShape>>>);
+    impl Widget<(), crate::Theme, iced::Renderer> for Overflow {
+        fn size(&self) -> Size<Length> {
+            Size::new(Length::Fill, Length::Fill)
+        }
+        fn layout(
+            &mut self,
+            _: &mut Tree,
+            _: &iced::Renderer,
+            limits: &layout::Limits,
+        ) -> layout::Node {
+            layout::Node::new(limits.max())
+        }
+        fn draw(
+            &self,
+            _: &Tree,
+            r: &mut iced::Renderer,
+            _: &crate::Theme,
+            _: &renderer::Style,
+            _: Layout<'_>,
+            _: mouse::Cursor,
+            _: &Rectangle,
+        ) {
+            self.0.set(current_surface());
+            r.fill_quad(
+                renderer::Quad {
+                    bounds: Rectangle::with_size(Size::new(80.0, 52.0)),
+                    snap: false,
+                    ..Default::default()
+                },
+                Color::from_rgb(1.0, 0.0, 0.0),
+            );
+        }
+    }
+    fn pixel(image: &[u8], x: usize, y: usize) -> &[u8] {
+        &image[(y * 80 + x) * 4..(y * 80 + x + 1) * 4]
+    }
+    #[test]
+    fn card_final_style_is_resolved_once_shared_with_content_and_border_survives() {
+        let mut renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        let bounds = Rectangle::new(Point::new(4.0, 4.0), Size::new(64.0, 40.0));
+        let view = Rectangle::with_size(Size::new(80.0, 52.0));
+        for radius in [
+            iced::border::Radius::from(0.0),
+            100.0.into(),
+            iced::border::Radius {
+                top_left: 22.0,
+                top_right: 3.0,
+                bottom_left: 0.0,
+                bottom_right: 12.0,
+            },
+        ] {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let count = calls.clone();
+            let seen = Rc::new(Cell::new(None));
+            let mut card: Element<'_, ()> = Card::new(Element::new(Overflow(seen.clone())))
+                .padding(0)
+                .container_props(ContainerProps::default().clip(false).style(move |_| {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    container::Style {
+                        background: Some(Color::from_rgb(0.0, 0.0, 1.0).into()),
+                        border: iced::Border {
+                            radius,
+                            width: 2.0,
+                            color: Color::from_rgb(0.0, 1.0, 0.0),
+                        },
+                        ..Default::default()
+                    }
+                }))
+                .into();
+            let mut tree = Tree::new(&card);
+            let node = card
+                .as_widget_mut()
+                .layout(
+                    &mut tree,
+                    &renderer,
+                    &layout::Limits::new(bounds.size(), bounds.size()),
+                )
+                .move_to(bounds.position());
+            renderer.reset(view);
+            card.as_widget().draw(
+                &tree,
+                &mut renderer,
+                &crate::Theme::light().with_shadows(crate::Shadows::none()),
+                &renderer::Style::default(),
+                Layout::new(&node),
+                mouse::Cursor::Unavailable,
+                &view,
+            );
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+            assert_eq!(seen.get(), Some(SurfaceShape::new(bounds, radius)));
+            let image = renderer.screenshot(Size::new(80, 52), 1.0, Color::BLACK);
+            assert_eq!(pixel(&image, 35, 25), &[255, 0, 0, 255], "content survives");
+            assert_eq!(
+                pixel(&image, 35, 4),
+                &[0, 255, 0, 255],
+                "border is above content"
+            );
+            assert_eq!(
+                pixel(&image, 1, 1),
+                &[0, 0, 0, 255],
+                "overflow clipped, not covered"
+            );
+            if radius.top_left > 0.0 {
+                assert_eq!(
+                    pixel(&image, 4, 4),
+                    &[0, 0, 0, 255],
+                    "rounded excluded corner"
+                );
+            }
+        }
+    }
+}
+
 use crate::Element;
 use crate::components::{ContainerProps, TextProps};
 use crate::styles::{container as sc, text as st};
@@ -33,7 +172,10 @@ pub fn card<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
 /// ```
 ///
 /// Padding applies to each child; use `.padding(0)` for children that pad themselves
-/// (rows, carousels).
+/// (rows, carousels). Content is clipped to the final `container_props` surface,
+/// including custom asymmetric corners; its border and elevation stay outside
+/// the content clip. `container_props.clip` cannot disable this surface boundary.
+/// Child overlays are portals: they escape the Card and own their own surface.
 pub struct Card<'a, M> {
     container_props: ContainerProps,
     child_props: ContainerProps,
@@ -119,18 +261,69 @@ impl<'a, M: 'a> From<Card<'a, M>> for Element<'a, M> {
                     .apply(container(child).padding(c.padding).width(Length::Fill)),
             );
         }
-        crate::components::framed(
-            crate::components::card_shadow(
-                c.container_props.apply(
-                    container(col)
-                        .width(c.width)
-                        .height(c.height)
-                        .clip(true)
-                        .style(sc::card_surface),
-                ),
-            ),
-            "card",
+        // Layout props and the final style resolver have one owner. Native
+        // container clipping is rectangular; Boundary owns the surface invariant
+        // even if presentation props request clip(false).
+        let style = c.container_props.style.clone();
+        let surface = crate::layouts::boundary::Boundary::surface(
+            c.container_props
+                .apply(container(col).width(c.width).height(c.height)),
+            move |theme| {
+                style
+                    .as_ref()
+                    .map_or_else(|| sc::card_surface(theme), |f| f(theme))
+            },
         )
+        .underlay(draw_card_elevation);
+        crate::components::framed(surface, "card")
+    }
+}
+
+// Elevation uses the resolved surface, never a second lookup of the theme radius.
+// All offsets/spread/blur come directly from the configured shadow layers.
+fn draw_card_elevation(
+    renderer: &mut iced::Renderer,
+    theme: &crate::Theme,
+    shape: crate::layouts::boundary::SurfaceShape,
+) {
+    use iced::advanced::Renderer as _;
+    if !theme.shadows.enabled {
+        return;
+    }
+    for layer in &theme.shadows.card.layers {
+        let spread = layer.spread * theme.shadows.scale;
+        let bounds = iced::Rectangle {
+            x: shape.bounds.x - spread,
+            y: shape.bounds.y - spread,
+            width: (shape.bounds.width + 2.0 * spread).max(0.0),
+            height: (shape.bounds.height + 2.0 * spread).max(0.0),
+        };
+        let radius = iced::border::Radius {
+            top_left: (shape.radius.top_left + spread).max(0.0),
+            top_right: (shape.radius.top_right + spread).max(0.0),
+            bottom_left: (shape.radius.bottom_left + spread).max(0.0),
+            bottom_right: (shape.radius.bottom_right + spread).max(0.0),
+        };
+        let outer = crate::layouts::boundary::SurfaceShape::new(bounds, radius);
+        renderer.fill_quad(
+            iced::advanced::renderer::Quad {
+                bounds: outer.bounds,
+                border: iced::Border::default().rounded(outer.radius),
+                shadow: iced::Shadow {
+                    color: iced::Color {
+                        a: (layer.color.a * theme.shadows.intensity).clamp(0.0, 1.0),
+                        ..layer.color
+                    },
+                    offset: iced::Vector::new(
+                        layer.x * theme.shadows.scale,
+                        layer.y * theme.shadows.scale,
+                    ),
+                    blur_radius: layer.blur * theme.shadows.scale,
+                },
+                snap: false,
+            },
+            iced::Color::TRANSPARENT,
+        );
     }
 }
 

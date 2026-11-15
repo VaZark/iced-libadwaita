@@ -14,6 +14,7 @@
 
 use crate::Theme;
 use crate::layouts::animation::{Progress, Spec, Trigger, presets};
+use crate::layouts::boundary::{self, SurfaceShape};
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
 use iced::advanced::widget::{Tree, Widget, tree};
@@ -58,7 +59,31 @@ pub(crate) fn draw_translated<R: iced::advanced::Renderer>(
     f: impl FnOnce(&mut R, &Rectangle),
 ) {
     let view = translated_viewport(bounds, viewport, d);
-    renderer.with_translation(d, |r| f(r, &view));
+    with_translated_surfaces(d, || {
+        renderer.with_translation(d, |r| f(r, &view));
+    });
+}
+
+/// Ancestor shapes are stationary in renderer space, so child-local coordinates
+/// move in the opposite direction. Reinstall the entire stack, not just its tip.
+fn with_translated_surfaces<T>(delta: Vector, f: impl FnOnce() -> T) -> T {
+    fn enter<T>(shapes: &[SurfaceShape], delta: Vector, f: impl FnOnce() -> T) -> T {
+        if let Some((shape, rest)) = shapes.split_first() {
+            let translated = SurfaceShape {
+                bounds: Rectangle {
+                    x: shape.bounds.x - delta.x,
+                    y: shape.bounds.y - delta.y,
+                    ..shape.bounds
+                },
+                ..*shape
+            };
+            boundary::with_surface(translated, || enter(rest, delta, f))
+        } else {
+            f()
+        }
+    }
+    let ancestors = boundary::current_boundary();
+    boundary::with_portal(|| enter(&ancestors.shapes, delta, f))
 }
 
 pub(crate) fn redraw_time(event: &Event) -> Option<Instant> {
@@ -305,13 +330,14 @@ impl<'a, M: 'a> From<Reveal<'a, M>> for Element<'a, M, Theme> {
 // ---------------------------------------------------------------------------
 
 /// The collapsed-sidebar drawer: a pane that slides in from the start edge over a
-/// fading scrim. Always mounted so it animates open *and* closed with libadwaita's
+/// fading scrim when its background geometry is supplied. Always mounted so it
+/// animates open *and* closed with libadwaita's
 /// sidebar spring (damping ratio 1, mass 0.5, stiffness 500).
 pub struct DrawerLayer<'a, M> {
     pane: Element<'a, M, Theme>,
     open: bool,
     width: f32,
-    window_radius: f32,
+    scrim_shape: Option<EffectShape<'a>>,
     on_close: Option<M>,
     spec: Spec,
 }
@@ -325,15 +351,27 @@ pub fn drawer_layer<'a, M>(
         pane: pane.into(),
         open,
         width,
-        window_radius: 0.0,
+        scrim_shape: None,
         on_close: None,
         spec: Spec::Spring(presets::sidebar()),
     }
 }
 
 impl<'a, M> DrawerLayer<'a, M> {
-    pub fn window_radius(mut self, r: f32) -> Self {
-        self.window_radius = r;
+    /// Explicit uniform background geometry, not automatic discovery of the pane or
+    /// window silhouette. Without explicit geometry the nearest scoped parent
+    /// surface supplies the scrim; outside a surface no scrim is painted.
+    pub fn window_radius(self, r: f32) -> Self {
+        self.scrim_shape(move |_, bounds| (bounds, r.into()))
+    }
+
+    /// Exact shape of the background being dimmed (not the sliding pane), resolved
+    /// from its current geometry/style. Unknown backgrounds are left unmasked.
+    pub fn scrim_shape(
+        mut self,
+        shape: impl Fn(&Theme, Rectangle) -> (Rectangle, iced::border::Radius) + 'a,
+    ) -> Self {
+        self.scrim_shape = Some(std::rc::Rc::new(shape));
         self
     }
     pub fn on_close(mut self, msg: M) -> Self {
@@ -451,12 +489,14 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
         if tree.state.downcast_ref::<DrawerState>().progress.shown <= 0.001 && !self.open {
             return None;
         }
+        let p = tree.state.downcast_ref::<DrawerState>().progress.shown;
+        let d = Vector::new(-(1.0 - p) * self.width, 0.0);
         self.pane.as_widget_mut().overlay(
             &mut tree.children[0],
             layout.children().next()?,
             renderer,
-            viewport,
-            translation,
+            &translated_viewport(layout.bounds(), viewport, d),
+            translation + d,
         )
     }
 
@@ -496,15 +536,19 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for DrawerLayer<'a, M> {
             return;
         }
         let bounds = layout.bounds();
-        renderer.fill_quad(
-            Quad {
-                bounds,
-                border: Border::default().rounded(self.window_radius),
-                shadow: Default::default(),
-                snap: false,
-            },
-            Background::Color(scrim(theme, p.min(1.0))),
-        );
+        if let Some(SurfaceShape { bounds, radius }) =
+            background_shape(self.scrim_shape.as_ref(), theme, bounds)
+        {
+            renderer.fill_quad(
+                Quad {
+                    bounds,
+                    border: Border::default().rounded(radius),
+                    shadow: Default::default(),
+                    snap: false,
+                },
+                Background::Color(scrim(theme, p)),
+            );
+        }
         let dx = -(1.0 - p) * self.width;
         draw_translated(
             renderer,
@@ -542,10 +586,30 @@ impl<'a, M: Clone + 'a> From<DrawerLayer<'a, M>> for Element<'a, M, Theme> {
 pub struct Entrance<'a, M> {
     content: Element<'a, M, Theme>,
     offset: Vector,
-    scrim_radius: Option<f32>,
+    surface_scrim: bool,
+    scrim_shape: Option<EffectShape<'a>>,
+    fade_shape: Option<EffectShape<'a>>,
     spec: Spec,
     trigger: Trigger,
     fade: bool,
+}
+
+// Keep the public closure convention while resolving background geometry through
+// the same normalized shape as actual boundaries.
+type EffectShape<'a> =
+    std::rc::Rc<dyn Fn(&Theme, Rectangle) -> (Rectangle, iced::border::Radius) + 'a>;
+
+fn background_shape(
+    explicit: Option<&EffectShape<'_>>,
+    theme: &Theme,
+    bounds: Rectangle,
+) -> Option<SurfaceShape> {
+    explicit
+        .map(|resolve| {
+            let (bounds, radius) = resolve(theme, bounds);
+            SurfaceShape::new(bounds, radius)
+        })
+        .or_else(boundary::current_surface)
 }
 
 /// Stacks an optional overlay layer over `content`. The stack is **always** present, so
@@ -570,7 +634,9 @@ pub fn entrance<'a, M>(
     Entrance {
         content: content.into(),
         offset,
-        scrim_radius: None,
+        surface_scrim: false,
+        scrim_shape: None,
+        fade_shape: None,
         spec: Spec::Spring(presets::sheet(false)),
         trigger: Trigger::Dialog,
         fade: false,
@@ -584,18 +650,72 @@ pub fn fade_cover(progress: f32) -> f32 {
 }
 
 impl<'a, M> Entrance<'a, M> {
-    /// Draws a scrim (rounded to `radius`) behind the content that fades in with it.
-    pub fn scrim(mut self, radius: f32) -> Self {
-        self.scrim_radius = Some(radius);
+    /// Dim the nearest actual parent surface during entrance. Outside a scoped
+    /// surface this paints nothing. Explicit scrim geometry takes precedence.
+    /// This never supplies a foreground fade mask: an arbitrary child's shape
+    /// cannot be inferred from its parent. Plain entrances do not dim by default.
+    pub fn surface_scrim(mut self) -> Self {
+        self.surface_scrim = true;
         self
+    }
+
+    /// Dim the background with a uniform `radius` over the entrance's bounds.
+    /// This never defines the foreground fade shape. Use [`Self::scrim_shape`]
+    /// for independently resolved background bounds and corner radii, or
+    /// [`Self::surface_scrim`] to inherit the actual parent surface.
+    pub fn scrim(self, radius: f32) -> Self {
+        self.scrim_shape(move |_, bounds| (bounds, radius.into()))
+    }
+
+    /// Geometry of the background being dimmed, resolved at draw time. It is independent
+    /// of the foreground fade target. Return its exact bounds and four corner radii;
+    /// reuse the background's geometry resolver rather than duplicating design values.
+    pub fn scrim_shape(
+        mut self,
+        shape: impl Fn(&Theme, Rectangle) -> (Rectangle, iced::border::Radius) + 'a,
+    ) -> Self {
+        self.scrim_shape = Some(std::rc::Rc::new(shape));
+        self
+    }
+
+    /// Exact geometry of the foreground surface being faded, in child coordinates.
+    /// Resolve from the target's current style/layout, including asymmetric corners.
+    /// This is a window-color cover, not true opacity: it is suitable for a filled
+    /// rounded-rectangle surface, not arbitrary transparent content or silhouettes.
+    pub fn fade_shape(
+        mut self,
+        shape: impl Fn(&Theme, Rectangle) -> (Rectangle, iced::border::Radius) + 'a,
+    ) -> Self {
+        self.fade_shape = Some(std::rc::Rc::new(shape));
+        self
+    }
+
+    /// Build an entrance whose fade geometry comes from the very same style callback
+    /// applied to its target container. The current theme resolves both at draw time.
+    /// Use for filled rounded-rectangle surfaces; transparent content and shadows are
+    /// not composited by this approximation. This replaces the container's style.
+    pub fn container(
+        content: iced::widget::Container<'a, M, Theme>,
+        offset: Vector,
+        style: impl Fn(&Theme) -> iced::widget::container::Style + 'a,
+    ) -> Self
+    where
+        M: 'a,
+    {
+        let style = std::rc::Rc::new(style);
+        let target = style.clone();
+        entrance(content.style(move |theme| target(theme)), offset)
+            .fade_shape(move |theme, bounds| (bounds, style(theme).border.radius))
     }
     pub fn spec(mut self, spec: Spec) -> Self {
         self.spec = spec;
         self
     }
-    /// Fades the content in instead of sliding it: it stays where it is and rises out of the
-    /// window colour, as [`PageTransition`] does for a page. (iced has no layer opacity, so the
-    /// fade is the window colour clearing away over the content.)
+    /// Fades a known target surface in instead of sliding it. Iced has no layer opacity,
+    /// so a window-color cover clears away over the exact target geometry. Without a
+    /// [`Self::fade_shape`] or [`Self::container`] geometry,
+    /// this safely shows the content without a mask instead of guessing square corners.
+    /// Input remains blocked until the entrance settles, as with a sliding entrance.
     pub fn fade(mut self) -> Self {
         self.fade = true;
         self.offset = Vector::ZERO;
@@ -730,10 +850,15 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         viewport: &Rectangle,
     ) {
         let p = tree.state.downcast_ref::<EntranceState>().progress.shown;
-        if let Some(radius) = self.scrim_radius {
+        let background = if self.surface_scrim || self.scrim_shape.is_some() {
+            background_shape(self.scrim_shape.as_ref(), theme, layout.bounds())
+        } else {
+            None
+        };
+        if let Some(SurfaceShape { bounds, radius }) = background {
             renderer.fill_quad(
                 Quad {
-                    bounds: layout.bounds(),
+                    bounds,
                     border: Border::default().rounded(radius),
                     shadow: Default::default(),
                     snap: false,
@@ -753,14 +878,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
                 view,
             );
         });
-        if self.fade && p < 0.999 {
+        if let Some(shape) = self.fade_shape.as_ref().filter(|_| self.fade && p < 0.999) {
             // A later layer, so the window colour covers the content's text as well as its quads.
             let bg = theme.semantic.window.bg;
-            let radius = self.scrim_radius.unwrap_or(0.0);
+            let (bounds, radius) = shape(theme, layout.children().next().unwrap().bounds());
             renderer.with_layer(layout.bounds(), |r| {
                 r.fill_quad(
                     Quad {
-                        bounds: layout.bounds(),
+                        bounds,
                         border: Border::default().rounded(radius),
                         shadow: Default::default(),
                         snap: false,
@@ -787,12 +912,15 @@ impl<'a, M: 'a> From<Entrance<'a, M>> for Element<'a, M, Theme> {
 
 /// Fades `content` in whenever `key` changes: the `AdwViewStack` cross-fade (200ms,
 /// ease-out-quad) for switching pages. The page below is not kept, so the new page fades
-/// up out of the window background rather than blending with the old one.
+/// up out of the window background rather than blending with the old one. A cover is
+/// only painted with known target geometry ([`PageTransition::container`] or
+/// [`PageTransition::fade_shape`]); arbitrary content is safely drawn unmasked.
 pub struct PageTransition<'a, M> {
     content: Element<'a, M, Theme>,
     key: u64,
     scroll_key: Option<u64>,
     trigger: Trigger,
+    fade_shape: Option<EffectShape<'a>>,
 }
 
 pub fn page_transition<'a, M>(
@@ -804,10 +932,40 @@ pub fn page_transition<'a, M>(
         key: key.into(),
         scroll_key: None,
         trigger: Trigger::PageChange,
+        fade_shape: None,
     }
 }
 
 impl<'a, M> PageTransition<'a, M> {
+    /// Exact filled surface to cover while fading. Iced has no composited opacity;
+    /// transparent/arbitrary silhouettes cannot be faded this way. Without a known
+    /// shape the content is drawn unmasked; keys, scroll restoration and events work
+    /// independently of this presentation choice.
+    pub fn fade_shape(
+        mut self,
+        shape: impl Fn(&Theme, Rectangle) -> (Rectangle, iced::border::Radius) + 'a,
+    ) -> Self {
+        self.fade_shape = Some(std::rc::Rc::new(shape));
+        self
+    }
+
+    /// Share the actual target container style with its fade geometry resolver.
+    /// Replaces the supplied container's style. Appropriate for filled surfaces;
+    /// this window-color cover does not fade transparent contents or shadows.
+    pub fn container(
+        content: iced::widget::Container<'a, M, Theme>,
+        key: impl Into<u64>,
+        style: impl Fn(&Theme) -> iced::widget::container::Style + 'a,
+    ) -> Self
+    where
+        M: 'a,
+    {
+        let style = std::rc::Rc::new(style);
+        let target = style.clone();
+        page_transition(content.style(move |theme| target(theme)), key)
+            .fade_shape(move |theme, bounds| (bounds, style(theme).border.radius))
+    }
+
     /// Which trigger this fade is (default [`Trigger::PageChange`]); its `[motion]` setting, or
     /// reduced motion, can turn it off.
     pub fn trigger(mut self, t: Trigger) -> Self {
@@ -1049,7 +1207,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         viewport: &Rectangle,
     ) {
         let p = tree.state.downcast_ref::<PageState>().progress.shown;
-        if p >= 0.999 {
+        if p >= 0.999 || self.fade_shape.is_none() {
             return self.content.as_widget().draw(
                 &tree.children[0],
                 renderer,
@@ -1075,11 +1233,13 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
         // Fading the page in = fading the window background out over it. A later layer, so
         // it covers the page's text as well as its quads.
         let bg = theme.semantic.window.bg;
+        let (target_bounds, radius) =
+            self.fade_shape.as_ref().unwrap()(theme, layout.children().next().unwrap().bounds());
         renderer.with_layer(bounds, |r| {
             r.fill_quad(
                 Quad {
-                    bounds,
-                    border: Border::default(),
+                    bounds: target_bounds,
+                    border: Border::default().rounded(radius),
                     shadow: Default::default(),
                     snap: false,
                 },
@@ -1106,11 +1266,13 @@ impl<'a, M: 'a> From<PageTransition<'a, M>> for Element<'a, M, Theme> {
 /// `top` in from the end edge while `root` moves a third of the way out under a fading
 /// shade; popping reverses it, on libadwaita's navigation spring (damping ratio 1,
 /// mass 1, stiffness 1000). Both pages stay mounted so each keeps its state.
+/// Dimming requires known root geometry; arbitrary targets keep their own backing
+/// and shadow with no guessed rectangle added. See [`PushStack::containers`].
 pub struct PushStack<'a, M> {
     root: Element<'a, M, Theme>,
     top: Element<'a, M, Theme>,
     pushed: bool,
-    window_radius: f32,
+    root_shape: Option<EffectShape<'a>>,
 }
 
 pub fn push_stack<'a, M>(
@@ -1122,20 +1284,53 @@ pub fn push_stack<'a, M>(
         root: root.into(),
         top: top.into(),
         pushed,
-        window_radius: 0.0,
+        root_shape: None,
     }
 }
 
 impl<'a, M> PushStack<'a, M> {
-    /// Rounds the opaque backing of the sliding page to the window's corners.
-    pub fn window_radius(mut self, r: f32) -> Self {
-        self.window_radius = r;
+    /// Exact root surface geometry in its untranslated child coordinates. The
+    /// dimmer moves with that target. Without known geometry it is not painted.
+    pub fn root_shape(
+        mut self,
+        shape: impl Fn(&Theme, Rectangle) -> (Rectangle, iced::border::Radius) + 'a,
+    ) -> Self {
+        self.root_shape = Some(std::rc::Rc::new(shape));
         self
+    }
+
+    /// Apply the actual styles to both target containers and derive dimming from
+    /// the root's same style resolver. Each target owns its real background, border
+    /// and shadow, including during motion; no synthetic top backing is added.
+    /// Replaces both supplied containers' styles. Unknown/transparent silhouettes
+    /// need true compositing and should use the unmasked [`push_stack`] instead.
+    pub fn containers(
+        root: iced::widget::Container<'a, M, Theme>,
+        top: iced::widget::Container<'a, M, Theme>,
+        pushed: bool,
+        root_style: impl Fn(&Theme) -> iced::widget::container::Style + 'a,
+        top_style: impl Fn(&Theme) -> iced::widget::container::Style + 'a,
+    ) -> Self
+    where
+        M: 'a,
+    {
+        let style = std::rc::Rc::new(root_style);
+        let target = style.clone();
+        push_stack(
+            root.style(move |theme| target(theme)),
+            top.style(top_style),
+            pushed,
+        )
+        .root_shape(move |theme, bounds| (bounds, style(theme).border.radius))
     }
 }
 
 struct PushState {
     progress: Progress,
+}
+
+fn push_root_translation(width: f32, progress: f32) -> Vector {
+    Vector::new(-width / 3.0 * progress, 0.0)
 }
 
 impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
@@ -1254,18 +1449,29 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
         translation: Vector,
     ) -> Option<iced::advanced::overlay::Element<'b, M, Theme, iced::Renderer>> {
         // Popovers belong to the page being shown: the pushed one past halfway.
-        let top = tree.state.downcast_ref::<PushState>().progress.shown > 0.5;
+        let p = tree.state.downcast_ref::<PushState>().progress.shown;
+        let top = p > 0.5;
+        let d = if p >= 0.999 {
+            Vector::ZERO
+        } else if top {
+            Vector::new(layout.bounds().width * (1.0 - p), 0.0)
+        } else if p > 0.001 {
+            push_root_translation(layout.bounds().width, p)
+        } else {
+            Vector::ZERO
+        };
+        let view = translated_viewport(layout.bounds(), viewport, d);
         let mut kids = layout.children();
         let (root_l, top_l) = (kids.next()?, kids.next()?);
         let (a, b) = tree.children.split_at_mut(1);
         if top {
             self.top
                 .as_widget_mut()
-                .overlay(&mut b[0], top_l, renderer, viewport, translation)
+                .overlay(&mut b[0], top_l, renderer, &view, translation + d)
         } else {
             self.root
                 .as_widget_mut()
-                .overlay(&mut a[0], root_l, renderer, viewport, translation)
+                .overlay(&mut a[0], root_l, renderer, &view, translation + d)
         }
     }
 
@@ -1354,44 +1560,33 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
         }
         // Each part in its own layer: within one layer all quads paint before all text, so the
         // old page's text would show through the new page's backing.
-        let root_shift = Vector::new(-bounds.width / 3.0 * p, 0.0);
+        let root_shift = push_root_translation(bounds.width, p);
         renderer.with_layer(bounds, |r| {
             draw_translated(r, bounds, viewport, root_shift, |r, view| {
                 draw_root(r, view)
             });
         });
-        // The old page dims as the new one covers it.
-        renderer.with_layer(bounds, |r| {
-            r.fill_quad(
-                Quad {
-                    bounds,
-                    border: Border::default().rounded(self.window_radius),
-                    shadow: Default::default(),
-                    snap: false,
-                },
-                Background::Color(scrim(theme, p * 0.5)),
-            );
-        });
+        // Dimming follows the actual root in its translated coordinates, not the
+        // stationary stack rectangle. Unknown targets are never guessed.
+        if let Some(shape) = self.root_shape.as_ref() {
+            let (target_bounds, radius) = shape(theme, root_l.bounds());
+            renderer.with_layer(bounds, |r| {
+                draw_translated(r, bounds, viewport, root_shift, |r, _| {
+                    r.fill_quad(
+                        Quad {
+                            bounds: target_bounds,
+                            border: Border::default().rounded(radius),
+                            shadow: Default::default(),
+                            snap: false,
+                        },
+                        Background::Color(crate::color::alpha(theme.semantic.shade, p)),
+                    );
+                });
+            });
+        }
         let dx = bounds.width * (1.0 - p);
         renderer.with_layer(bounds, |r| {
             draw_translated(r, bounds, viewport, Vector::new(dx, 0.0), |r, view| {
-                // The sliding page is opaque and casts a shadow on the page it covers.
-                r.fill_quad(
-                    Quad {
-                        bounds,
-                        border: Border::default().rounded(self.window_radius),
-                        shadow: iced::Shadow {
-                            color: Color {
-                                a: 0.25,
-                                ..Color::BLACK
-                            },
-                            offset: Vector::new(-2.0, 0.0),
-                            blur_radius: 12.0,
-                        },
-                        snap: false,
-                    },
-                    Background::Color(theme.semantic.window.bg),
-                );
                 draw_top(r, view);
             });
         });
@@ -1737,7 +1932,7 @@ mod highlight_target_tests {
     }
 
     #[test]
-    fn legacy_highlight_still_draws_its_explicit_radius_and_alpha() {
+    fn highlight_draws_its_explicit_radius_and_alpha() {
         let mut renderer = renderer();
         let mut theme = Theme::light();
         theme.semantic.sidebar.fg = Color::BLACK;
@@ -1770,6 +1965,1065 @@ mod highlight_target_tests {
         assert_eq!(pixel(1, 1), &[255, 255, 255, 255]);
         assert!((i16::from(pixel(40, 20)[0]) - 204).abs() <= 1);
         assert_eq!(pixel(90, 20), &[255, 255, 255, 255]);
+    }
+}
+
+#[cfg(test)]
+mod entrance_shape_tests {
+    use super::*;
+    use iced::advanced::{clipboard, renderer::Headless};
+    use iced::widget::{button, container, space};
+
+    fn renderer() -> iced::Renderer {
+        iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer")
+    }
+
+    #[test]
+    fn rendered_fade_uses_current_target_style_for_square_pill_and_asymmetric_corners() {
+        let mut renderer = renderer();
+        let viewport = Rectangle::with_size(Size::new(80.0, 40.0));
+        for asymmetric in [false, true] {
+            let target_style = move |theme: &Theme| iced::widget::container::Style {
+                background: Some(Color::BLACK.into()),
+                border: Border::default().rounded(if asymmetric {
+                    iced::border::Radius {
+                        top_left: theme.metrics.radius_m,
+                        top_right: 0.0,
+                        bottom_right: theme.metrics.radius_m,
+                        bottom_left: 0.0,
+                    }
+                } else {
+                    theme.metrics.radius_m.into()
+                }),
+                ..Default::default()
+            };
+            let mut entrance = Entrance::container(
+                container(space()).width(80).height(40),
+                Vector::ZERO,
+                target_style,
+            )
+            .fade();
+            let mut tree = Tree::new(&entrance as &dyn Widget<(), Theme, iced::Renderer>);
+            let node = entrance.layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport.size()),
+            );
+            // Same view/tree, different current theme: neither style nor effect may cache it.
+            for radius in [0.0, 20.0] {
+                let mut theme = Theme::light();
+                theme.metrics.radius_m = radius;
+                theme.semantic.window.bg = Color::WHITE;
+                for p in [0.0, 0.25, 0.5, 1.0] {
+                    tree.state
+                        .downcast_mut::<EntranceState>()
+                        .progress
+                        .set_immediate(p);
+                    renderer.reset(viewport);
+                    entrance.draw(
+                        &tree,
+                        &mut renderer,
+                        &theme,
+                        &renderer::Style {
+                            text_color: Color::BLACK,
+                        },
+                        Layout::new(&node),
+                        mouse::Cursor::Unavailable,
+                        &viewport,
+                    );
+                    let actual =
+                        renderer.screenshot(Size::new(80, 40), 1.0, Color::from_rgb(0.0, 1.0, 0.0));
+                    // Independent reference raster: the target surface, then a cover with its
+                    // actual four corners. Green exposes any paint outside that silhouette.
+                    renderer.reset(viewport);
+                    let quad = Quad {
+                        bounds: viewport,
+                        border: target_style(&theme).border,
+                        shadow: Default::default(),
+                        snap: false,
+                    };
+                    renderer.fill_quad(quad, Color::BLACK);
+                    renderer.with_layer(viewport, |r| {
+                        r.fill_quad(
+                            quad,
+                            Color {
+                                a: 1.0 - p,
+                                ..Color::WHITE
+                            },
+                        );
+                    });
+                    let expected =
+                        renderer.screenshot(Size::new(80, 40), 1.0, Color::from_rgb(0.0, 1.0, 0.0));
+                    assert_eq!(
+                        actual, expected,
+                        "radius={radius}, asymmetric={asymmetric}, p={p}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn unknown_shape_does_not_paint_a_square_mask_and_scrim_does_not_define_foreground() {
+        let mut renderer = renderer();
+        let viewport = Rectangle::with_size(Size::new(80.0, 40.0));
+        let mut entrance = entrance::<()>(space().width(80).height(40), Vector::ZERO)
+            .scrim_shape(|_, bounds| (bounds, 20.0.into()))
+            .fade();
+        assert!(entrance.fade_shape.is_none());
+        let mut tree = Tree::new(&entrance as &dyn Widget<(), Theme, iced::Renderer>);
+        tree.state
+            .downcast_mut::<EntranceState>()
+            .progress
+            .set_immediate(0.5);
+        let node = entrance.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport.size()),
+        );
+        let mut theme = Theme::light();
+        theme.semantic.shade = Color::TRANSPARENT;
+        renderer.reset(viewport);
+        entrance.draw(
+            &tree,
+            &mut renderer,
+            &theme,
+            &renderer::Style {
+                text_color: Color::BLACK,
+            },
+            Layout::new(&node),
+            mouse::Cursor::Unavailable,
+            &viewport,
+        );
+        let pixels = renderer.screenshot(Size::new(80, 40), 1.0, Color::from_rgb(0.0, 1.0, 0.0));
+        assert!(
+            pixels
+                .chunks_exact(4)
+                .all(|pixel| pixel == [0, 255, 0, 255])
+        );
+        let entrance = entrance.scrim(7.0);
+        assert!(entrance.fade_shape.is_none());
+        let (bounds, radius) = entrance.scrim_shape.unwrap()(&theme, viewport);
+        assert_eq!(bounds, viewport);
+        assert_eq!(radius, 7.0.into());
+    }
+
+    #[test]
+    fn actual_tooltip_overlay_is_forwarded_and_background_scrim_keeps_target_geometry() {
+        let renderer = renderer();
+        let viewport = Rectangle::with_size(Size::new(80.0, 40.0));
+        let content = iced::widget::tooltip(
+            space().width(80).height(40),
+            iced::widget::text("tooltip"),
+            iced::widget::tooltip::Position::Top,
+        );
+        let mut entrance = Entrance::container(container(content), Vector::ZERO, |_| {
+            iced::widget::container::Style {
+                border: Border::default().rounded(iced::border::Radius {
+                    top_left: 20.0,
+                    top_right: 0.0,
+                    bottom_right: 20.0,
+                    bottom_left: 0.0,
+                }),
+                ..Default::default()
+            }
+        })
+        .fade()
+        .scrim(3.0);
+        let theme = Theme::light();
+        assert_eq!(
+            entrance.fade_shape.as_ref().unwrap()(&theme, viewport).1,
+            iced::border::Radius {
+                top_left: 20.0,
+                top_right: 0.0,
+                bottom_right: 20.0,
+                bottom_left: 0.0,
+            }
+        );
+        let mut tree = Tree::new(&entrance as &dyn Widget<(), Theme, iced::Renderer>);
+        let node = entrance.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport.size()),
+        );
+        tree.state
+            .downcast_mut::<EntranceState>()
+            .progress
+            .set_immediate(1.0);
+        entrance.update(
+            &mut tree,
+            &Event::Mouse(mouse::Event::CursorMoved {
+                position: iced::Point::new(40.0, 20.0),
+            }),
+            Layout::new(&node),
+            mouse::Cursor::Available(iced::Point::new(40.0, 20.0)),
+            &renderer,
+            &mut clipboard::Null,
+            &mut Shell::new(&mut vec![]),
+            &viewport,
+        );
+        for p in [1.0, 0.5, 0.0] {
+            tree.state
+                .downcast_mut::<EntranceState>()
+                .progress
+                .set_immediate(p);
+            assert!(
+                entrance
+                    .overlay(
+                        &mut tree,
+                        Layout::new(&node),
+                        &renderer,
+                        &viewport,
+                        Vector::new(5.0, 7.0)
+                    )
+                    .is_some()
+            );
+        }
+    }
+
+    #[test]
+    fn shaped_entrance_preserves_settled_button_events_and_blocks_intermediate_clicks() {
+        let renderer = renderer();
+        let viewport = Rectangle::with_size(Size::new(80.0, 40.0));
+        let mut entrance = Entrance::container(
+            container(button(space()).width(80).height(40).on_press(42)),
+            Vector::ZERO,
+            |theme| iced::widget::container::Style {
+                border: Border::default().rounded(theme.metrics.radius_m),
+                ..Default::default()
+            },
+        )
+        .fade();
+        let mut tree = Tree::new(&entrance as &dyn Widget<i32, Theme, iced::Renderer>);
+        let node = entrance.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport.size()),
+        );
+        for p in [0.5, 1.0] {
+            tree.state
+                .downcast_mut::<EntranceState>()
+                .progress
+                .set_immediate(p);
+            let mut messages = vec![];
+            for event in [
+                mouse::Event::ButtonPressed(mouse::Button::Left),
+                mouse::Event::ButtonReleased(mouse::Button::Left),
+            ] {
+                let mut shell = Shell::new(&mut messages);
+                entrance.update(
+                    &mut tree,
+                    &Event::Mouse(event),
+                    Layout::new(&node),
+                    mouse::Cursor::Available(iced::Point::new(40.0, 20.0)),
+                    &renderer,
+                    &mut clipboard::Null,
+                    &mut shell,
+                    &viewport,
+                );
+                assert!(shell.is_event_captured());
+            }
+            assert_eq!(messages, if p == 1.0 { vec![42] } else { vec![] });
+        }
+    }
+}
+
+#[cfg(test)]
+mod remaining_effect_shape_tests {
+    use super::*;
+    use iced::advanced::{clipboard, renderer::Headless};
+    use iced::widget::{button, container, space, tooltip};
+
+    fn renderer() -> iced::Renderer {
+        iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer")
+    }
+
+    fn viewport() -> Rectangle {
+        Rectangle::with_size(Size::new(120.0, 60.0))
+    }
+    fn pixels(renderer: &mut iced::Renderer) -> Vec<u8> {
+        renderer.screenshot(Size::new(120, 60), 1.0, Color::from_rgb(0.0, 1.0, 0.0))
+    }
+    fn radius(theme: &Theme, asymmetric: bool) -> iced::border::Radius {
+        if asymmetric {
+            iced::border::Radius {
+                top_left: theme.metrics.radius_m,
+                bottom_right: theme.metrics.radius_m,
+                ..Default::default()
+            }
+        } else {
+            theme.metrics.radius_m.into()
+        }
+    }
+    fn surface(theme: &Theme, asymmetric: bool, top: bool) -> iced::widget::container::Style {
+        iced::widget::container::Style {
+            background: Some(if top { Color::BLACK } else { Color::WHITE }.into()),
+            border: Border::default().rounded(radius(theme, asymmetric)),
+            shadow: if top {
+                theme.shadows.dialog().shadow
+            } else {
+                Default::default()
+            },
+            ..Default::default()
+        }
+    }
+    fn quad(bounds: Rectangle, radius: iced::border::Radius) -> Quad {
+        Quad {
+            bounds,
+            border: Border::default().rounded(radius),
+            shadow: Default::default(),
+            snap: false,
+        }
+    }
+    fn draw<M>(
+        widget: &dyn Widget<M, Theme, iced::Renderer>,
+        tree: &Tree,
+        node: &layout::Node,
+        renderer: &mut iced::Renderer,
+        theme: &Theme,
+    ) -> Vec<u8> {
+        renderer.reset(viewport());
+        widget.draw(
+            tree,
+            renderer,
+            theme,
+            &renderer::Style {
+                text_color: Color::BLACK,
+            },
+            Layout::new(node),
+            mouse::Cursor::Unavailable,
+            &viewport(),
+        );
+        pixels(renderer)
+    }
+
+    #[test]
+    fn scoped_background_scrims_use_nearest_actual_surface_without_leaking() {
+        let mut renderer = renderer();
+        let mut theme = Theme::light();
+        theme.semantic.shade = Color {
+            a: 0.3,
+            ..Color::BLACK
+        };
+        let outer = SurfaceShape::new(viewport(), 0.0);
+        for corners in [
+            0.0.into(),
+            25.0.into(),
+            iced::border::Radius {
+                top_left: 25.0,
+                bottom_right: 12.0,
+                ..Default::default()
+            },
+        ] {
+            let target = SurfaceShape::new(
+                Rectangle {
+                    x: 10.0,
+                    y: 5.0,
+                    width: 100.0,
+                    height: 50.0,
+                },
+                corners,
+            );
+            for mut widget in [
+                Element::from(drawer_layer::<()>(space(), true, 20.0)),
+                Element::from(entrance::<()>(space(), Vector::ZERO).surface_scrim().fade()),
+            ] {
+                let mut tree = Tree::new(widget.as_widget());
+                let node = widget.as_widget_mut().layout(
+                    &mut tree,
+                    &renderer,
+                    &layout::Limits::new(Size::ZERO, viewport().size()),
+                );
+                // Both animations use the same intermediate opacity; the empty
+                // foreground must not acquire a window-color fade mask.
+                if tree.tag == tree::Tag::of::<DrawerState>() {
+                    tree.state
+                        .downcast_mut::<DrawerState>()
+                        .progress
+                        .set_immediate(0.5);
+                } else {
+                    tree.state
+                        .downcast_mut::<EntranceState>()
+                        .progress
+                        .set_immediate(0.5);
+                }
+                let actual = boundary::with_surface(outer, || {
+                    boundary::with_surface(target, || {
+                        draw(widget.as_widget(), &tree, &node, &mut renderer, &theme)
+                    })
+                });
+                renderer.reset(viewport());
+                renderer.fill_quad(quad(target.bounds, target.radius), scrim(&theme, 0.5));
+                assert_eq!(actual, pixels(&mut renderer));
+                assert!(boundary::current_surface().is_none());
+                let unscoped = draw(widget.as_widget(), &tree, &node, &mut renderer, &theme);
+                renderer.reset(viewport());
+                assert_eq!(unscoped, pixels(&mut renderer));
+            }
+        }
+    }
+
+    #[test]
+    fn parent_surface_never_supplies_arbitrary_foreground_masks_or_enables_entrance_scrims() {
+        let mut renderer = renderer();
+        let theme = Theme::light();
+        let parent = SurfaceShape::new(viewport(), 30.0);
+        for mut widget in [
+            Element::from(
+                entrance::<()>(
+                    container(space()).width(40).height(20).style(|_| {
+                        iced::widget::container::Style {
+                            background: Some(Color::WHITE.into()),
+                            ..Default::default()
+                        }
+                    }),
+                    Vector::ZERO,
+                )
+                .fade(),
+            ),
+            Element::from(page_transition::<()>(
+                container(space())
+                    .width(40)
+                    .height(20)
+                    .style(|_| iced::widget::container::Style {
+                        background: Some(Color::WHITE.into()),
+                        ..Default::default()
+                    }),
+                0_u64,
+            )),
+        ] {
+            let mut tree = Tree::new(widget.as_widget());
+            let node = widget.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport().size()),
+            );
+            if tree.tag == tree::Tag::of::<EntranceState>() {
+                tree.state
+                    .downcast_mut::<EntranceState>()
+                    .progress
+                    .set_immediate(0.5);
+            } else {
+                tree.state
+                    .downcast_mut::<PageState>()
+                    .progress
+                    .set_immediate(0.5);
+            }
+            let baseline = draw(widget.as_widget(), &tree, &node, &mut renderer, &theme);
+            let scoped = boundary::with_surface(parent, || {
+                draw(widget.as_widget(), &tree, &node, &mut renderer, &theme)
+            });
+            assert_eq!(scoped, baseline);
+        }
+    }
+
+    #[test]
+    fn translated_draw_rebases_all_ancestors_and_restores_nested_scopes() {
+        let mut renderer = renderer();
+        let outer = SurfaceShape::new(viewport(), 10.0);
+        let inner = SurfaceShape::new(
+            Rectangle {
+                x: 10.0,
+                y: 5.0,
+                width: 100.0,
+                height: 50.0,
+            },
+            20.0,
+        );
+        boundary::with_surface(outer, || {
+            boundary::with_surface(inner, || {
+                draw_translated(
+                    &mut renderer,
+                    viewport(),
+                    &viewport(),
+                    Vector::new(17.0, -3.0),
+                    |r, _| {
+                        let shapes = boundary::current_boundary().shapes;
+                        assert_eq!(shapes.len(), 2);
+                        assert_eq!(shapes[0].bounds.x, outer.bounds.x - 17.0);
+                        assert_eq!(shapes[1].bounds.y, inner.bounds.y + 3.0);
+                        assert_eq!(shapes[1].radius, inner.radius);
+                        draw_translated(
+                            r,
+                            viewport(),
+                            &viewport(),
+                            Vector::new(-4.0, 8.0),
+                            |_, _| {
+                                let nearest = boundary::current_surface().unwrap();
+                                assert_eq!(nearest.bounds.x, inner.bounds.x - 13.0);
+                                assert_eq!(nearest.bounds.y, inner.bounds.y - 5.0);
+                                boundary::with_portal(|| {
+                                    assert!(boundary::current_surface().is_none())
+                                });
+                            },
+                        );
+                        assert_eq!(boundary::current_boundary().shapes, shapes);
+                    },
+                );
+                assert_eq!(boundary::current_boundary().shapes, vec![outer, inner]);
+                let panic = std::panic::catch_unwind(|| {
+                    with_translated_surfaces(Vector::new(2.0, 3.0), || panic!("scope probe"))
+                });
+                assert!(panic.is_err());
+                assert_eq!(boundary::current_boundary().shapes, vec![outer, inner]);
+            })
+        });
+        assert!(boundary::current_surface().is_none());
+    }
+
+    #[test]
+    fn translated_scoped_scrim_stays_stationary_in_renderer_space() {
+        let mut renderer = renderer();
+        let theme = Theme::light();
+        let target = SurfaceShape::new(
+            Rectangle {
+                x: 20.0,
+                y: 10.0,
+                width: 80.0,
+                height: 40.0,
+            },
+            20.0,
+        );
+        renderer.reset(viewport());
+        boundary::with_surface(target, || {
+            draw_translated(
+                &mut renderer,
+                viewport(),
+                &viewport(),
+                Vector::new(13.0, 7.0),
+                |r, _| {
+                    let shape = background_shape(None, &theme, viewport()).unwrap();
+                    r.fill_quad(quad(shape.bounds, shape.radius), scrim(&theme, 0.5));
+                },
+            );
+        });
+        let actual = pixels(&mut renderer);
+        renderer.reset(viewport());
+        renderer.fill_quad(quad(target.bounds, target.radius), scrim(&theme, 0.5));
+        assert_eq!(actual, pixels(&mut renderer));
+        let explicit: EffectShape<'_> = std::rc::Rc::new(|_, bounds| (bounds, 0.0.into()));
+        boundary::with_surface(target, || {
+            assert_eq!(
+                background_shape(Some(&explicit), &theme, viewport()),
+                Some(SurfaceShape::new(viewport(), 0.0))
+            );
+        });
+    }
+
+    #[test]
+    fn rendered_page_cover_matches_actual_square_pill_asymmetric_target_and_current_theme() {
+        let mut renderer = renderer();
+        for asymmetric in [false, true] {
+            let mut page = PageTransition::container(
+                container(space()).width(120).height(60),
+                0_u64,
+                move |t| surface(t, asymmetric, false),
+            );
+            let mut tree = Tree::new(&page as &dyn Widget<(), Theme, iced::Renderer>);
+            let node = page.layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport().size()),
+            );
+            for r in [0.0, 30.0] {
+                let mut theme = Theme::light();
+                theme.metrics.radius_m = r;
+                theme.semantic.window.bg = Color::BLACK;
+                for p in [0.0, 0.25, 0.5, 1.0] {
+                    tree.state
+                        .downcast_mut::<PageState>()
+                        .progress
+                        .set_immediate(p);
+                    let actual = draw(&page, &tree, &node, &mut renderer, &theme);
+                    renderer.reset(viewport());
+                    renderer.fill_quad(quad(viewport(), radius(&theme, asymmetric)), Color::WHITE);
+                    renderer.with_layer(viewport(), |r| {
+                        r.fill_quad(
+                            quad(viewport(), radius(&theme, asymmetric)),
+                            Color {
+                                a: 1.0 - p,
+                                ..Color::BLACK
+                            },
+                        )
+                    });
+                    assert_eq!(
+                        actual,
+                        pixels(&mut renderer),
+                        "r={r}, asymmetric={asymmetric}, p={p}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rendered_drawer_scrim_uses_exact_background_bounds_and_current_corners() {
+        let mut renderer = renderer();
+        for asymmetric in [false, true] {
+            let mut drawer =
+                drawer_layer::<()>(space(), true, 20.0).scrim_shape(move |theme, bounds| {
+                    (
+                        Rectangle {
+                            x: bounds.x + 10.0,
+                            y: bounds.y + 5.0,
+                            width: bounds.width - 20.0,
+                            height: bounds.height - 10.0,
+                        },
+                        radius(theme, asymmetric),
+                    )
+                });
+            let mut tree = Tree::new(&drawer as &dyn Widget<(), Theme, iced::Renderer>);
+            let node = drawer.layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport().size()),
+            );
+            for r in [0.0, 25.0] {
+                let mut theme = Theme::light();
+                theme.metrics.radius_m = r;
+                theme.semantic.shade = Color {
+                    a: 0.3,
+                    ..Color::BLACK
+                };
+                for p in [0.0, 0.25, 0.5, 1.0] {
+                    tree.state
+                        .downcast_mut::<DrawerState>()
+                        .progress
+                        .set_immediate(p);
+                    let actual = draw(&drawer, &tree, &node, &mut renderer, &theme);
+                    renderer.reset(viewport());
+                    renderer.fill_quad(
+                        quad(
+                            Rectangle {
+                                x: 10.0,
+                                y: 5.0,
+                                width: 100.0,
+                                height: 50.0,
+                            },
+                            radius(&theme, asymmetric),
+                        ),
+                        Color {
+                            a: 0.6 * p,
+                            ..Color::BLACK
+                        },
+                    );
+                    assert_eq!(
+                        actual,
+                        pixels(&mut renderer),
+                        "r={r}, asymmetric={asymmetric}, p={p}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rendered_push_dimmer_tracks_root_and_native_top_owns_backing_corners_and_shadow() {
+        let mut renderer = renderer();
+        for asymmetric in [false, true] {
+            let mut stack = PushStack::containers(
+                container(space()),
+                container(space()),
+                true,
+                move |t| surface(t, asymmetric, false),
+                move |t| surface(t, !asymmetric, true),
+            );
+
+            let mut tree = Tree::new(&stack as &dyn Widget<(), Theme, iced::Renderer>);
+            let node = stack.layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport().size()),
+            );
+            for r in [0.0, 30.0] {
+                let mut theme = Theme::light();
+                theme.metrics.radius_m = r;
+                theme.semantic.shade = Color {
+                    a: 0.4,
+                    ..Color::BLACK
+                };
+                theme.shadows.dialog =
+                    crate::shadow::Elevation::parse("-4px 0px 6px 0px rgba(0,0,0,0.6)").unwrap();
+                for p in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                    tree.state
+                        .downcast_mut::<PushState>()
+                        .progress
+                        .set_immediate(p);
+                    let actual = draw(&stack, &tree, &node, &mut renderer, &theme);
+                    renderer.reset(viewport());
+                    let root = quad(viewport(), radius(&theme, asymmetric));
+                    let top = Quad {
+                        shadow: theme.shadows.dialog().shadow,
+                        ..quad(viewport(), radius(&theme, !asymmetric))
+                    };
+                    if p == 0.0 {
+                        renderer.fill_quad(root, Color::WHITE);
+                    } else if p == 1.0 {
+                        renderer.fill_quad(top, Color::BLACK);
+                    } else {
+                        let shift = Vector::new(-40.0 * p, 0.0);
+                        renderer.with_layer(viewport(), |r| {
+                            r.with_translation(shift, |r| r.fill_quad(root, Color::WHITE))
+                        });
+                        renderer.with_layer(viewport(), |r| {
+                            r.with_translation(shift, |r| {
+                                r.fill_quad(
+                                    root,
+                                    Color {
+                                        a: 0.4 * p,
+                                        ..Color::BLACK
+                                    },
+                                )
+                            })
+                        });
+                        renderer.with_layer(viewport(), |r| {
+                            r.with_translation(Vector::new(120.0 * (1.0 - p), 0.0), |r| {
+                                r.fill_quad(top, Color::BLACK)
+                            })
+                        });
+                    }
+                    assert_eq!(
+                        actual,
+                        pixels(&mut renderer),
+                        "r={r}, asymmetric={asymmetric}, p={p}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn unknown_targets_are_unmasked_and_drawer_radius_is_explicit() {
+        let mut renderer = renderer();
+        let mut widgets: Vec<Element<'_, (), Theme>> = vec![
+            page_transition(space().width(120).height(60), 0_u64).into(),
+            drawer_layer(space(), true, 20.0).into(),
+            push_stack(space(), space(), true).into(),
+        ];
+        for (index, widget) in widgets.iter_mut().enumerate() {
+            let mut tree = Tree::new(&*widget);
+            let node = widget.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport().size()),
+            );
+            match index {
+                0 => tree
+                    .state
+                    .downcast_mut::<PageState>()
+                    .progress
+                    .set_immediate(0.5),
+                1 => tree
+                    .state
+                    .downcast_mut::<DrawerState>()
+                    .progress
+                    .set_immediate(0.5),
+                _ => tree
+                    .state
+                    .downcast_mut::<PushState>()
+                    .progress
+                    .set_immediate(0.5),
+            }
+            let actual = draw(
+                widget.as_widget(),
+                &tree,
+                &node,
+                &mut renderer,
+                &Theme::light(),
+            );
+            assert!(actual.chunks_exact(4).all(|p| p == [0, 255, 0, 255]));
+        }
+        let theme = Theme::light();
+        let drawer = drawer_layer::<()>(space(), true, 20.0).window_radius(12.0);
+        assert_eq!(
+            drawer.scrim_shape.unwrap()(&theme, viewport()),
+            (viewport(), 12.0.into())
+        );
+    }
+
+    #[test]
+    fn explicit_drawer_radius_and_root_shape_render_with_current_theme_shade() {
+        let mut renderer = renderer();
+        let mut theme = Theme::light();
+        theme.semantic.shade = Color {
+            a: 0.4,
+            ..Color::BLACK
+        };
+
+        let mut drawer = drawer_layer::<()>(space(), true, 20.0).window_radius(25.0);
+        let mut tree = Tree::new(&drawer as &dyn Widget<(), Theme, iced::Renderer>);
+        let node = drawer.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport().size()),
+        );
+        tree.state
+            .downcast_mut::<DrawerState>()
+            .progress
+            .set_immediate(0.5);
+        let actual = draw(&drawer, &tree, &node, &mut renderer, &theme);
+        renderer.reset(viewport());
+        renderer.fill_quad(
+            quad(viewport(), 25.0.into()),
+            Color {
+                a: 0.4,
+                ..Color::BLACK
+            },
+        );
+        assert_eq!(actual, pixels(&mut renderer));
+
+        let mut stack = push_stack::<()>(space(), space(), true).root_shape(|_, b| {
+            (
+                b,
+                iced::border::Radius {
+                    top_left: 30.0,
+                    ..Default::default()
+                },
+            )
+        });
+        let mut tree = Tree::new(&stack as &dyn Widget<(), Theme, iced::Renderer>);
+        let node = stack.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport().size()),
+        );
+        tree.state
+            .downcast_mut::<PushState>()
+            .progress
+            .set_immediate(0.5);
+        let actual = draw(&stack, &tree, &node, &mut renderer, &theme);
+        renderer.reset(viewport());
+        renderer.with_layer(viewport(), |r| {
+            r.with_translation(Vector::new(-20.0, 0.0), |r| {
+                r.fill_quad(
+                    quad(
+                        viewport(),
+                        iced::border::Radius {
+                            top_left: 30.0,
+                            ..Default::default()
+                        },
+                    ),
+                    Color {
+                        a: 0.2,
+                        ..Color::BLACK
+                    },
+                );
+            })
+        });
+
+        assert_eq!(actual, pixels(&mut renderer));
+    }
+
+    struct OverlayProbe(std::rc::Rc<std::cell::Cell<(Vector, Rectangle)>>);
+    impl Widget<(), Theme, iced::Renderer> for OverlayProbe {
+        fn size(&self) -> Size<Length> {
+            Size::new(Length::Fill, Length::Fill)
+        }
+        fn layout(
+            &mut self,
+            _: &mut Tree,
+            _: &iced::Renderer,
+            limits: &layout::Limits,
+        ) -> layout::Node {
+            layout::Node::new(limits.max())
+        }
+        fn draw(
+            &self,
+            _: &Tree,
+            _: &mut iced::Renderer,
+            _: &Theme,
+            _: &renderer::Style,
+            _: Layout<'_>,
+            _: mouse::Cursor,
+            _: &Rectangle,
+        ) {
+        }
+        fn overlay<'b>(
+            &'b mut self,
+            _: &'b mut Tree,
+            _: Layout<'b>,
+            _: &iced::Renderer,
+            viewport: &Rectangle,
+            translation: Vector,
+        ) -> Option<iced::advanced::overlay::Element<'b, (), Theme, iced::Renderer>> {
+            self.0.set((translation, *viewport));
+            None
+        }
+    }
+
+    #[test]
+    fn drawer_and_push_overlay_translation_matches_visible_target_including_overshoot() {
+        let renderer = renderer();
+        let seen = std::rc::Rc::new(std::cell::Cell::new((Vector::ZERO, Rectangle::default())));
+        let probe = || Element::new(OverlayProbe(seen.clone()));
+        let mut drawer = drawer_layer(probe(), true, 40.0);
+        let mut tree = Tree::new(&drawer as &dyn Widget<(), Theme, iced::Renderer>);
+        let node = drawer.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport().size()),
+        );
+        tree.state
+            .downcast_mut::<DrawerState>()
+            .progress
+            .set_immediate(0.5);
+        drawer.overlay(
+            &mut tree,
+            Layout::new(&node),
+            &renderer,
+            &viewport(),
+            Vector::new(5.0, 7.0),
+        );
+        assert_eq!(
+            seen.get(),
+            (
+                Vector::new(-15.0, 7.0),
+                Rectangle {
+                    x: 20.0,
+                    ..viewport()
+                }
+            )
+        );
+
+        let mut stack = push_stack(probe(), probe(), true);
+        let mut tree = Tree::new(&stack as &dyn Widget<(), Theme, iced::Renderer>);
+        let node = stack.layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport().size()),
+        );
+        for (p, dx) in [
+            (0.0, 0.0),
+            (0.25, -10.0),
+            (0.75, 30.0),
+            (1.0, 0.0),
+            (1.1, 0.0),
+        ] {
+            tree.state
+                .downcast_mut::<PushState>()
+                .progress
+                .set_immediate(p);
+            stack.overlay(
+                &mut tree,
+                Layout::new(&node),
+                &renderer,
+                &viewport(),
+                Vector::new(5.0, 7.0),
+            );
+            assert_eq!(
+                seen.get(),
+                (
+                    Vector::new(5.0 + dx, 7.0),
+                    Rectangle {
+                        x: -dx,
+                        ..viewport()
+                    }
+                ),
+                "p={p}"
+            );
+        }
+    }
+
+    fn interactive(message: i32) -> Element<'static, i32, Theme> {
+        tooltip(
+            button(space()).width(120).height(60).on_press(message),
+            iced::widget::text("tip"),
+            tooltip::Position::Top,
+        )
+        .into()
+    }
+
+    #[test]
+    fn actual_buttons_and_tooltip_overlays_keep_layout_and_forwarding_rules() {
+        let renderer = renderer();
+        let mut widgets: Vec<Element<'_, i32, Theme>> = vec![
+            page_transition(interactive(1), 0_u64).into(),
+            drawer_layer(interactive(2), true, 120.0)
+                .scrim_shape(|_, b| (b, 30.0.into()))
+                .into(),
+            push_stack(interactive(3), interactive(4), false).into(),
+        ];
+        for (index, widget) in widgets.iter_mut().enumerate() {
+            let mut tree = Tree::new(&*widget);
+            let node = widget.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport().size()),
+            );
+            assert_eq!(node.size(), viewport().size());
+            for p in [0.0, 1.0, 0.25, 0.75] {
+                match index {
+                    0 => tree
+                        .state
+                        .downcast_mut::<PageState>()
+                        .progress
+                        .set_immediate(p),
+                    1 => tree
+                        .state
+                        .downcast_mut::<DrawerState>()
+                        .progress
+                        .set_immediate(p),
+                    _ => tree
+                        .state
+                        .downcast_mut::<PushState>()
+                        .progress
+                        .set_immediate(p),
+                }
+                let mut messages = vec![];
+                for event in [
+                    mouse::Event::CursorMoved {
+                        position: iced::Point::new(60.0, 30.0),
+                    },
+                    mouse::Event::ButtonPressed(mouse::Button::Left),
+                    mouse::Event::ButtonReleased(mouse::Button::Left),
+                ] {
+                    widget.as_widget_mut().update(
+                        &mut tree,
+                        &Event::Mouse(event),
+                        Layout::new(&node),
+                        mouse::Cursor::Available(iced::Point::new(60.0, 30.0)),
+                        &renderer,
+                        &mut clipboard::Null,
+                        &mut Shell::new(&mut messages),
+                        &viewport(),
+                    );
+                }
+                let expected = match index {
+                    0 => vec![1],
+                    1 if p == 1.0 => vec![2],
+                    2 if p == 0.0 => vec![3],
+                    2 if p == 1.0 => vec![4],
+                    _ => vec![],
+                };
+                assert_eq!(messages, expected, "family={index}, p={p}");
+                // At this point each shown target has opened a real native tooltip.
+                if index != 1 || p > 0.0 {
+                    assert!(
+                        widget
+                            .as_widget_mut()
+                            .overlay(
+                                &mut tree,
+                                Layout::new(&node),
+                                &renderer,
+                                &viewport(),
+                                Vector::new(5.0, 7.0)
+                            )
+                            .is_some(),
+                        "family={index}, p={p}"
+                    );
+                }
+            }
+        }
     }
 }
 

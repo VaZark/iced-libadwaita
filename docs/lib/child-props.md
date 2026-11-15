@@ -21,6 +21,16 @@ Values, content, callbacks, IDs, password mode, validation decisions, disabled/o
 
 `TextProps::apply_to_text` configures a native `Text` without a wrapper. `TextProps::apply` additionally implements explicit `Clip`/`Grow` adapters. `Wrap` uses word-or-glyph wrapping; `Clip` clips drawing, not the source string; `Grow` releases horizontal layout constraints, not ancestor clipping. There is no builder-time overflow detection or global forced wrapping. On `apply_to_text`, `Clip`/`Grow` only disable wrapping: use `apply` for their full behavior.
 
+## Surface ownership and effect geometry
+
+Default props and empty nested props are no-ops: they retain existing presentation and parent-owned state, events and validation. An explicitly supplied style callback replaces the style, so geometry consumers must use that final resolver rather than reconstructing defaults.
+
+`Card::container_props` supplies its final surface style to `layouts::boundary::Boundary::surface`. Painting, content clipping, border and elevation share the resolved `SurfaceShape`; `clip(false)` cannot disable this structural boundary. The ancestor stack follows traversal of the actual iced tree, restores between siblings, and intersects nested boundaries for clipping and hit testing. It is not a persistent global geometry tree. Child overlays explicitly escape as portals and own their own surfaces. See [motion](motion.md) for local radius caching, conservative 1-logical-pixel clipping and repeated-draw costs.
+
+An ancestor's shape is not a child's shape. For target effects, share effective style/geometry through `Entrance::container`, `PageTransition::container`, `PushStack::containers`, `FloatingIndicator::target_shape`, or `InputWrapper::target_style` / `target_geometry`. The container motion adapters install their supplied styles; the indicator and validation resolvers only describe an already configured target. Include controlled status and current theme in that resolution. Unknown arbitrary targets receive no guessed foreground mask, highlight or validation ring; field messages and controlled behavior still work. Inline field frames are wrapper-owned geometry, not inferred control geometry.
+
+`PopoverProps::scrim_shape` describes the background separately from foreground effects; `window_radius` supplies explicit uniform corners. Default props preserve an existing resolver. Known-shape fades remain window-color cover approximations, not true opacity for transparent content or shadows. Geometry APIs require actual target properties rather than compatibility assumptions.
+
 ## Inventory and evidence
 
 **E** = public `Default + Clone` export smoke coverage; **B** = actual public construction/conversion; **R** = observable layout/tree/event assertion. E alone is neither a forwarding test nor proof that all fields are useful.
@@ -80,7 +90,7 @@ Deterministic downstream evidence covers all nine aggregates with customized bas
 
 - **MERGE-EXCLUDED-1 resolved:** `EntryRowProps::apply` merges label/button/popover/input fields. Regressions verify partial overlays retain earlier dimensions, explicit `false`/zero override, controlled state remains intact, and empty optional input props stay absent. The additional EntryRow presentation gaps below remain open. Navigation uses fresh-child helpers/direct setters rather than this aggregate `apply` path.
 - **MERGE-COVERAGE-1:** The other optional adapters now use native merges, but most have only existing default/native-forwarding unit coverage, not a new per-field regression for every branch. Next checks: all affected optional families under non-default baselines, style evaluation at draw time, responsive variants, and empty/loading/error/disabled branches. Do not infer exhaustive audit completion from the nine representative native text checks.
-- **HELPER-COVERAGE-1:** Public `*_with_props` invocation and branch coverage remains incomplete. These are fresh-child forwarding tests, not aggregate-reset bugs. Gallery/toy adoption, workspace validation and screenshots remain parent follow-ups; no demo or effect-shape files were changed.
+- **HELPER-COVERAGE-1:** Public `*_with_props` invocation and branch coverage remains incomplete. These are fresh-child forwarding tests, not aggregate-reset bugs. Gallery adoption and broader validation remain separate follow-ups; helper coverage is not exhaustive.
 
 ## Parent-owned integration findings
 
@@ -103,7 +113,7 @@ cargo test --lib --offline nested_props_tests
 cargo test --lib --offline
 ```
 
-Latest child-API integration validation: full workspace passes, including **1015 library tests**, **22 downstream props tests**, **9 gallery tests** and **21 toy tests**. The gallery appearance control and entry examples exercise the new public APIs. No new screenshot acceptance is claimed.
+Historical child-API integration validation recorded **1015 library tests**, **22 downstream props tests** and **9 gallery tests** passing; these counts do not validate the current boundary/effect implementation. The gallery appearance control and entry examples exercise the new public APIs. No new screenshot acceptance is claimed.
 
 Earlier PROPS-MERGE validation in the actual working tree: downstream suite **21 passed / 0 ignored**; focused native-props suite **14 passed**; focused nested-props suite **13 passed**; full library suite **997 passed / 0 ignored**. Scoped `rustfmt` ran only on changed Rust files; scoped `dprint` validates this document. Library-test warnings remain (float fallback and navigation test dead-code warnings); compilation/interaction-layout tests are not visual acceptance. The formerly ignored EntryInputProps regression remains enabled.
 

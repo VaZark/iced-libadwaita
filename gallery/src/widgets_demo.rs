@@ -172,7 +172,12 @@ impl State {
 
     // -- Color picker
 
-    pub fn color_play<'a>(&'a self, p: &Playground, m: Metrics) -> Element<'a, Msg> {
+    pub fn color_play<'a>(
+        &'a self,
+        p: &Playground,
+        m: Metrics,
+        window_radius: f32,
+    ) -> Element<'a, Msg> {
         let formats = ColorFormat::ALL;
         let format = formats[p.choice("format")];
         let as_input = p.choice("kind") == 1;
@@ -181,6 +186,7 @@ impl State {
             let mut i = ColorInput::new(self.color, &self.color_text, Msg::ColorText, Msg::Color)
                 .alpha(p.bool("alpha"))
                 .dialog(p.bool("dialog"))
+                .window_radius(window_radius)
                 .scrim(p.bool("scrim"))
                 .metrics(m);
             if swatches {

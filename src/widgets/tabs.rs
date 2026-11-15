@@ -330,6 +330,19 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
             .map(|i| (self.on_change)(self.items[i].key.clone()))
     }
 
+    fn tab_style(
+        &self,
+        active: bool,
+        variant: TabsVariant,
+    ) -> crate::components::props::ButtonStyle {
+        self.tab_button_props.style.clone().unwrap_or_else(|| {
+            std::sync::Arc::new(move |theme, status| match variant {
+                TabsVariant::Pills if active => sb::suggested_pill(theme, status),
+                _ => sb::flat(theme, status),
+            })
+        })
+    }
+
     /// One tab's button, in the look of the variant.
     fn tab_button(
         &self,
@@ -337,6 +350,7 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
         active: bool,
         name: &str,
         variant: TabsVariant,
+        status: Option<std::rc::Rc<std::cell::Cell<button::Status>>>,
     ) -> Element<'a, M> {
         let m = &self.metrics;
         let item = &self.items[i];
@@ -361,13 +375,20 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
                     .unwrap_or(iced::Padding::from([m.space_xs, m.space_m])),
             )
             .on_press_maybe(self.press(i));
+        let style = self.tab_style(active, variant);
         let title: Element<'a, M> = self
             .tab_button_props
-            .apply(match variant {
-                TabsVariant::Pills if active => b.style(sb::suggested_pill),
-                _ => b.style(sb::flat),
-            })
+            .apply(b)
+            .style(move |theme, status| style(theme, status))
             .into();
+        let title = match status {
+            Some(status) => iced::Element::new(TabButtonTarget {
+                content: title,
+                enabled: !item.disabled,
+                status,
+            }),
+            None => title,
+        };
         match self.close_button(i, name) {
             Some(close) => row![title, close].align_y(Vertical::Center).into(),
             None => title,
@@ -378,11 +399,33 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
         let m = &self.metrics;
         let active = self.active_index();
         if variant == TabsVariant::Floating {
-            let tabs = (0..self.items.len())
-                .map(|i| self.tab_button(i, active == Some(i), name, variant))
+            let statuses: Vec<_> = self
+                .items
+                .iter()
+                .map(|_| std::rc::Rc::new(std::cell::Cell::new(button::Status::Disabled)))
                 .collect();
-            return FloatingIndicator::new(tabs, active.unwrap_or(0))
+            let tabs = (0..self.items.len())
+                .map(|i| {
+                    self.tab_button(
+                        i,
+                        active == Some(i),
+                        name,
+                        variant,
+                        Some(statuses[i].clone()),
+                    )
+                })
+                .collect();
+            let styles: Vec<_> = (0..self.items.len())
+                .map(|i| self.tab_style(active == Some(i), variant))
+                .collect();
+
+            let closable: Vec<_> = (0..self.items.len())
+                .map(|i| self.close_button(i, name).is_some())
+                .collect();
+            return FloatingIndicator::new(tabs, active.unwrap_or(usize::MAX))
                 .spacing(self.spacing.unwrap_or(m.space_xs))
+                .target_bounds(move |i, child| floating_title_bounds(closable[i], child))
+                .target_shape(move |theme, i, _| styles[i](theme, statuses[i].get()).border.radius)
                 .into();
         }
         let width = if self.grow {
@@ -393,7 +436,7 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
         let mut tabs = row![].spacing(self.spacing.unwrap_or(m.space_xs));
         for i in 0..self.items.len() {
             let on = active == Some(i);
-            let button = self.tab_button(i, on, name, variant);
+            let button = self.tab_button(i, on, name, variant, None);
             let tab: Element<'a, M> = match variant {
                 TabsVariant::Default => {
                     let line = container(space().height(self.tab_metric(
@@ -585,6 +628,188 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> Tabs<'a, K, M> {
     }
 }
 
+// Iced keeps Button::status private. Mirror its input status at the same redraw
+// boundary so the indicator can resolve the identical style before the button draws.
+struct TabButtonTarget<'a, M> {
+    content: Element<'a, M>,
+    enabled: bool,
+    status: std::rc::Rc<std::cell::Cell<button::Status>>,
+}
+
+#[derive(Default)]
+struct TabButtonState {
+    pressed: bool,
+}
+
+impl TabButtonState {
+    fn update(&mut self, event: &iced::Event, over: bool, enabled: bool) -> button::Status {
+        use iced::{Event, mouse, touch};
+        match event {
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
+            | Event::Touch(touch::Event::FingerPressed { .. })
+                if enabled && over =>
+            {
+                self.pressed = true;
+            }
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+            | Event::Touch(touch::Event::FingerLifted { .. })
+            | Event::Touch(touch::Event::FingerLost { .. }) => self.pressed = false,
+            _ => {}
+        }
+        if !enabled {
+            button::Status::Disabled
+        } else if over && self.pressed {
+            button::Status::Pressed
+        } else if over {
+            button::Status::Hovered
+        } else {
+            button::Status::Active
+        }
+    }
+}
+
+impl<'a, M: 'a> iced::advanced::Widget<M, Theme, iced::Renderer> for TabButtonTarget<'a, M> {
+    fn tag(&self) -> iced::advanced::widget::tree::Tag {
+        iced::advanced::widget::tree::Tag::of::<TabButtonState>()
+    }
+    fn state(&self) -> iced::advanced::widget::tree::State {
+        iced::advanced::widget::tree::State::new(TabButtonState::default())
+    }
+    fn children(&self) -> Vec<iced::advanced::widget::Tree> {
+        vec![iced::advanced::widget::Tree::new(&self.content)]
+    }
+    fn diff(&self, tree: &mut iced::advanced::widget::Tree) {
+        tree.diff_children(&[&self.content]);
+    }
+    fn size(&self) -> iced::Size<Length> {
+        self.content.as_widget().size()
+    }
+    fn size_hint(&self) -> iced::Size<Length> {
+        self.content.as_widget().size_hint()
+    }
+    fn layout(
+        &mut self,
+        tree: &mut iced::advanced::widget::Tree,
+        renderer: &iced::Renderer,
+        limits: &iced::advanced::layout::Limits,
+    ) -> iced::advanced::layout::Node {
+        self.content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits)
+    }
+    fn update(
+        &mut self,
+        tree: &mut iced::advanced::widget::Tree,
+        event: &iced::Event,
+        layout: iced::advanced::Layout<'_>,
+        cursor: iced::mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn iced::advanced::Clipboard,
+        shell: &mut iced::advanced::Shell<'_, M>,
+        viewport: &iced::Rectangle,
+    ) {
+        let captured = shell.is_event_captured();
+        self.content.as_widget_mut().update(
+            &mut tree.children[0],
+            event,
+            layout,
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
+        if !captured {
+            let status = tree.state.downcast_mut::<TabButtonState>().update(
+                event,
+                cursor.is_over(layout.bounds()),
+                self.enabled,
+            );
+            if matches!(
+                event,
+                iced::Event::Window(iced::window::Event::RedrawRequested(_))
+            ) {
+                self.status.set(status);
+            }
+        }
+    }
+    fn draw(
+        &self,
+        tree: &iced::advanced::widget::Tree,
+        renderer: &mut iced::Renderer,
+        theme: &Theme,
+        style: &iced::advanced::renderer::Style,
+        layout: iced::advanced::Layout<'_>,
+        cursor: iced::mouse::Cursor,
+        viewport: &iced::Rectangle,
+    ) {
+        self.content.as_widget().draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            layout,
+            cursor,
+            viewport,
+        );
+    }
+    fn operate(
+        &mut self,
+        tree: &mut iced::advanced::widget::Tree,
+        layout: iced::advanced::Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn iced::advanced::widget::Operation,
+    ) {
+        self.content
+            .as_widget_mut()
+            .operate(&mut tree.children[0], layout, renderer, operation);
+    }
+    fn mouse_interaction(
+        &self,
+        tree: &iced::advanced::widget::Tree,
+        layout: iced::advanced::Layout<'_>,
+        cursor: iced::mouse::Cursor,
+        viewport: &iced::Rectangle,
+        renderer: &iced::Renderer,
+    ) -> iced::mouse::Interaction {
+        self.content.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout,
+            cursor,
+            viewport,
+            renderer,
+        )
+    }
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut iced::advanced::widget::Tree,
+        layout: iced::advanced::Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &iced::Rectangle,
+        translation: iced::Vector,
+    ) -> Option<iced::advanced::overlay::Element<'b, M, Theme, iced::Renderer>> {
+        self.content.as_widget_mut().overlay(
+            &mut tree.children[0],
+            layout,
+            renderer,
+            viewport,
+            translation,
+        )
+    }
+}
+
+fn floating_title_bounds(closable: bool, child: iced::advanced::Layout<'_>) -> iced::Rectangle {
+    if closable {
+        child
+            .children()
+            .next()
+            .expect("closable tab title")
+            .bounds()
+    } else {
+        child.bounds()
+    }
+}
+
 fn tab_presentation(name: &str) -> TabsVariant {
     match name {
         "outline" => TabsVariant::Outline,
@@ -640,6 +865,182 @@ impl<'a, K: Clone + PartialEq + 'a, M: Clone + 'a> From<Tabs<'a, K, M>> for Elem
 #[cfg(test)]
 mod tests {
     use iced::advanced::renderer::Headless;
+
+    #[test]
+    fn floating_indicator_and_title_resolve_identical_hover_press_and_disabled_styles() {
+        use super::*;
+        use iced::advanced::{layout, renderer, widget::Tree};
+        use iced::{Event, Point, Rectangle, Size, mouse};
+        let mut renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(11.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        for disabled in [false, true] {
+            let calls = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
+            let observed = calls.clone();
+            let tabs = Tabs::new(Some(0), |_| ())
+                .variant(TabsVariant::Floating)
+                .tab_button_props(ButtonProps::default().style(move |theme, status| {
+                    observed.lock().unwrap().push(status);
+                    let radius = match status {
+                        button::Status::Active | button::Status::Disabled => 0.0.into(),
+                        button::Status::Hovered => 100.0.into(),
+                        button::Status::Pressed => iced::border::Radius {
+                            top_left: theme.metrics.radius_m,
+                            top_right: 0.0,
+                            bottom_right: 3.0,
+                            bottom_left: 7.0,
+                        },
+                    };
+                    button::Style {
+                        border: iced::Border::default().rounded(radius),
+                        ..button::Style::default()
+                    }
+                }))
+                .tab(TabItem::new(0, "Title").disabled(disabled));
+            let mut element = tabs.tab_list("floating", TabsVariant::Floating);
+            let mut tree = Tree::new(&element);
+            let viewport = Rectangle::with_size(Size::new(500.0, 100.0));
+            let node = element.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport.size()),
+            );
+            let layout = layout::Layout::new(&node);
+            let mut messages = vec![];
+            for (event, cursor, expected) in [
+                (
+                    Event::Mouse(mouse::Event::CursorMoved {
+                        position: Point::new(2.0, 2.0),
+                    }),
+                    mouse::Cursor::Available(Point::new(2.0, 2.0)),
+                    button::Status::Hovered,
+                ),
+                (
+                    Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                    mouse::Cursor::Available(Point::new(2.0, 2.0)),
+                    button::Status::Pressed,
+                ),
+                (
+                    Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+                    mouse::Cursor::Available(Point::new(2.0, 2.0)),
+                    button::Status::Hovered,
+                ),
+                (
+                    Event::Mouse(mouse::Event::CursorLeft),
+                    mouse::Cursor::Unavailable,
+                    button::Status::Active,
+                ),
+            ] {
+                for event in [
+                    event,
+                    Event::Window(iced::window::Event::RedrawRequested(
+                        std::time::Instant::now(),
+                    )),
+                ] {
+                    element.as_widget_mut().update(
+                        &mut tree,
+                        &event,
+                        layout,
+                        cursor,
+                        &renderer,
+                        &mut iced::advanced::clipboard::Null,
+                        &mut iced::advanced::Shell::new(&mut messages),
+                        &viewport,
+                    );
+                }
+                calls.lock().unwrap().clear();
+                element.as_widget().draw(
+                    &tree,
+                    &mut renderer,
+                    &Theme::light(),
+                    &renderer::Style::default(),
+                    layout,
+                    cursor,
+                    &viewport,
+                );
+                let expected = if disabled {
+                    button::Status::Disabled
+                } else {
+                    expected
+                };
+                assert_eq!(*calls.lock().unwrap(), vec![expected, expected]);
+            }
+            assert_eq!(messages.len(), usize::from(!disabled));
+        }
+    }
+
+    #[test]
+    fn floating_shape_uses_the_same_current_theme_button_style() {
+        use super::*;
+        let props = ButtonProps::default().style(|theme, _| button::Style {
+            border: iced::Border::default().rounded(iced::border::Radius {
+                top_left: theme.metrics.radius_m,
+                top_right: 0.0,
+                bottom_right: theme.metrics.radius_m * 2.0,
+                bottom_left: 1.0,
+            }),
+            ..button::Style::default()
+        });
+        let tabs = Tabs::new(Some(0), |_| ()).tab_button_props(props.clone());
+        let shared = tabs.tab_style(true, TabsVariant::Floating);
+        assert!(std::sync::Arc::ptr_eq(
+            &shared,
+            props.style.as_ref().unwrap()
+        ));
+        for radius in [0.0, 5.0, 30.0] {
+            let mut theme = Theme::light();
+            theme.metrics.radius_m = radius;
+            let actual = shared(&theme, button::Status::Active).border.radius;
+            assert_eq!(actual.top_left, radius);
+            assert_eq!(actual.top_right, 0.0);
+            assert_eq!(actual.bottom_right, radius * 2.0);
+        }
+        let default = Tabs::new(Some(0), |_| ()).tab_style(true, TabsVariant::Floating);
+        let theme = Theme::light();
+        assert_eq!(
+            default(&theme, button::Status::Active).border.radius,
+            sb::flat(&theme, button::Status::Active).border.radius
+        );
+    }
+
+    #[test]
+    fn floating_closable_target_is_title_not_row_or_close_button() {
+        use super::*;
+        use iced::Size;
+        use iced::advanced::{layout, widget::Tree};
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(11.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        let tabs = Tabs::new(Some(0), |_| ())
+            .variant(TabsVariant::Floating)
+            .tab_button_props(ButtonProps::default().height(iced::Length::Fixed(20.0)))
+            .close_button_props(ButtonProps::default().height(iced::Length::Fixed(60.0)))
+            .on_close(|_| ())
+            .tab(TabItem::new(0, "Title").closable(true))
+            .tab(TabItem::new(1, "Plain"));
+        let mut element = tabs.tab_list("floating", TabsVariant::Floating);
+        let mut tree = Tree::new(&element);
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(500.0, 100.0)),
+        );
+        let layout = layout::Layout::new(&node);
+        let closable = layout.children().next().unwrap();
+        let target = floating_title_bounds(true, closable);
+        assert_eq!(target.height, 20.0);
+        assert_eq!(closable.bounds().height, 60.0);
+        assert_eq!(target.y, 20.0);
+        assert!(target.width < closable.bounds().width);
+        let plain = layout.children().nth(1).unwrap();
+        assert_eq!(floating_title_bounds(false, plain), plain.bounds());
+    }
 
     #[test]
     fn classic_tabs_share_panel_surface_and_resolve_panel_padding_from_tokens() {

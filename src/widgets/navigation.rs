@@ -1317,9 +1317,10 @@ impl<'a, M: Clone + 'a> NavigationSplitView<'a, M> {
                         .height(Length::Fill),
                 )
                 .into();
-            return crate::layouts::push_stack(first, v.content, v.show_content)
-                .window_radius(r)
-                .into();
+            // Both pages may carry custom surface props or arbitrary transparent
+            // content. Let those targets own their backing/shape instead of guessing
+            // a window-shaped dimmer and opaque backing for them.
+            return crate::layouts::push_stack(first, v.content, v.show_content).into();
         }
         // Beside the content or as a drawer, one widget moves the sidebar between the two on the
         // same spring: crossing the collapse breakpoint slides it out of the layout (or in),
@@ -2352,9 +2353,9 @@ mod local_variant_tests {
 
     #[test]
     fn local_density_cards_keep_subtitles_and_activation() {
-        use iced::advanced::{Shell, clipboard};
+        use iced::advanced::{Shell, clipboard, renderer as renderer_style};
         use iced::{Event, mouse};
-        let renderer = renderer();
+        let mut renderer = renderer();
         let config = config(RULES);
         let mut element: Element<'_, ()> = SidebarList::new([
             SidebarItem::new("First", ()).subtitle("Description"),
@@ -2383,6 +2384,18 @@ mod local_variant_tests {
             &layout::Limits::new(Size::ZERO, Size::new(419.0, 500.0)),
         );
         let layout = layout::Layout::new(&node);
+        let viewport = Rectangle::with_size(Size::new(419.0, 500.0));
+        // Resolve the Card's actual themed surface before targeting pointer input.
+        renderer.reset(viewport);
+        element.as_widget().draw(
+            &tree,
+            &mut renderer,
+            &Theme::light(),
+            &renderer_style::Style::default(),
+            layout,
+            mouse::Cursor::Unavailable,
+            &viewport,
+        );
         let mut messages = vec![];
         for event in [
             mouse::Event::ButtonPressed(mouse::Button::Left),
@@ -2396,7 +2409,7 @@ mod local_variant_tests {
                 &renderer,
                 &mut clipboard::Null,
                 &mut Shell::new(&mut messages),
-                &Rectangle::with_size(Size::new(419.0, 500.0)),
+                &viewport,
             );
         }
         assert_eq!(messages, vec![()]);

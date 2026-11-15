@@ -834,7 +834,7 @@ impl Gallery {
             ]
             .spacing(m.group_spacing)
             .into(),
-            Detail::Entries => self.entries.view(m).map(Message::Entries),
+            Detail::Entries => self.entries.view(m, self.surface_radius()).map(Message::Entries),
             Detail::PreferencesGroup => column![
                 self.preferences_demo(),
             ]

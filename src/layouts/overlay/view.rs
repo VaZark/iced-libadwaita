@@ -58,8 +58,10 @@ impl<'a, M: Clone + 'a> Overlay<'a, M> {
             fade: false,
         }
     }
-    /// Fades the layer in instead of sliding it (default off): it rises out of the window colour
-    /// where it stands, as a page does when it changes.
+    /// Keeps the layer stationary instead of sliding it (default off). The background
+    /// scrim still fades. An arbitrary layer has no discoverable silhouette, so no
+    /// window-sized foreground mask is painted; wrap a known surface with
+    /// [`crate::layouts::Entrance::container`] for a shape-derived fade.
     pub fn fade(mut self, on: bool) -> Self {
         self.fade = on;
         self
@@ -171,7 +173,8 @@ impl<'a, M: Clone + 'a> From<Overlay<'a, M>> for Element<'a, M> {
             entrance = entrance.fade();
         }
         if o.rules.scrim {
-            entrance = entrance.scrim(o.window_radius);
+            let radius = o.window_radius;
+            entrance = entrance.scrim_shape(move |_, bounds| (bounds, radius.into()));
         }
         focus_return(
             crate::layouts::layered(o.base, Some(Element::from(entrance))),

@@ -60,6 +60,7 @@ use iced::keyboard::{self, key::Named};
 use iced::widget::canvas;
 use iced::widget::{button, container, row, space, text};
 use iced::{Event, Length, Point, Rectangle, Size, Vector, mouse};
+use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -379,6 +380,7 @@ pub(crate) struct Widgeted<'a, T, M> {
     entry: Element<'a, M>,
     /// The popover's rows, or its single notice.
     items: Vec<Element<'a, M>>,
+    option_highlight: Rc<Cell<Option<usize>>>,
     labels: Vec<String>,
     choices: &'a [T],
     on_select: Option<Box<dyn Fn(T) -> M + 'a>>,
@@ -449,6 +451,7 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> Autocomplete<'a, T, M> {
         let item_padding = a
             .item_padding
             .unwrap_or(iced::Padding::from([m.space_s, m.space_m]));
+        let option_highlight = Rc::new(Cell::new(None));
         let (body, items): (Body, Vec<Element<'a, M>>) = match l.status() {
             _ if !enabled => (Body::None, Vec::new()),
             Status::Idle => (Body::None, Vec::new()),
@@ -474,15 +477,24 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> Autocomplete<'a, T, M> {
                 let rows = results
                     .iter()
                     .zip(&labels)
-                    .map(|(t, label)| {
+                    .enumerate()
+                    .map(|(i, (t, label))| {
                         let content: Element<'a, M> = match &a.item {
                             Some(f) => f(t),
                             None => a
                                 .label_props
                                 .apply(text(label.clone()).wrapping(text::Wrapping::None)),
                         };
+                        let highlight = option_highlight.clone();
+                        let option_style = a.option_props.style.clone();
                         a.option_props
                             .apply(container(content).padding(item_padding).width(Length::Fill))
+                            .style(move |theme| {
+                                let target = option_style
+                                    .as_ref()
+                                    .map_or_else(|| sc::transparent(theme), |style| style(theme));
+                                option_selection_style(target, theme, highlight.get() == Some(i))
+                            })
                             .into()
                     })
                     .collect::<Vec<_>>();
@@ -506,6 +518,7 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> Autocomplete<'a, T, M> {
         let w = Widgeted {
             entry: Element::from(a.entry_props.apply(e)),
             items,
+            option_highlight,
             labels,
             choices: results,
             on_select: a.on_select,
@@ -716,6 +729,7 @@ impl<'a, T: Clone + 'a, M: 'a> Widget<M, Theme, iced::Renderer> for Widgeted<'a,
         };
         Some(overlay::Element::new(Box::new(Popover {
             items: &mut self.items,
+            option_highlight: &self.option_highlight,
             trees: item_trees,
             body: self.body,
             labels: &self.labels,
@@ -733,6 +747,7 @@ impl<'a, T: Clone + 'a, M: 'a> Widget<M, Theme, iced::Renderer> for Widgeted<'a,
 
 struct Popover<'a, 'b, T, M> {
     items: &'b mut [Element<'a, M>],
+    option_highlight: &'b Cell<Option<usize>>,
     trees: &'b mut [Tree],
     body: Body,
     labels: &'b [String],
@@ -855,22 +870,9 @@ impl<'a, 'b, T: Clone + 'a, M: 'a> overlay::Overlay<M, Theme, iced::Renderer>
                 bg,
             );
         }
-        let hl = self.highlight.index().filter(|_| self.selectable());
+        self.option_highlight
+            .set(self.highlight.index().filter(|_| self.selectable()));
         for (child, i) in layout.children().zip(self.first()..) {
-            if hl == Some(i) {
-                let st = sb::menu_item(false)(theme, button::Status::Hovered);
-                if let Some(bg) = st.background {
-                    renderer.fill_quad(
-                        Quad {
-                            bounds: child.bounds(),
-                            border: st.border,
-                            shadow: iced::Shadow::default(),
-                            snap: false,
-                        },
-                        bg,
-                    );
-                }
-            }
             self.items[i].as_widget().draw(
                 &self.trees[i],
                 renderer,
@@ -1004,6 +1006,39 @@ impl<'a, 'b, T: Clone + 'a, M: 'a> overlay::Overlay<M, Theme, iced::Renderer>
     }
 }
 
+// Compose into the target fill rather than drawing an underlay that an opaque option hides.
+// Only the tint comes from the menu style; all geometry remains owned by the option.
+fn option_selection_style(
+    mut target: container::Style,
+    theme: &Theme,
+    highlighted: bool,
+) -> container::Style {
+    if !highlighted {
+        return target;
+    }
+    if let Some(iced::Background::Color(tint)) =
+        sb::menu_item(false)(theme, button::Status::Hovered).background
+    {
+        target.background = Some(match target.background {
+            None => iced::Background::Color(tint),
+            Some(iced::Background::Color(fill)) => {
+                iced::Background::Color(crate::color::composite_over(tint, fill))
+            }
+            Some(iced::Background::Gradient(iced::Gradient::Linear(mut gradient))) => {
+                if gradient.stops.iter().all(Option::is_none) {
+                    iced::Background::Color(tint)
+                } else {
+                    for stop in gradient.stops.iter_mut().flatten() {
+                        stop.color = crate::color::composite_over(tint, stop.color);
+                    }
+                    iced::Background::Gradient(iced::Gradient::Linear(gradient))
+                }
+            }
+        });
+    }
+    target
+}
+
 #[cfg(test)]
 mod typed_props_tests {
     use super::*;
@@ -1015,6 +1050,241 @@ mod typed_props_tests {
         lookup.input("query".to_owned(), now);
         lookup.poll(now).unwrap();
         lookup
+    }
+
+    fn key(key: Named) -> Event {
+        Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(key),
+            modified_key: keyboard::Key::Named(key),
+            physical_key: keyboard::key::Physical::Unidentified(
+                keyboard::key::NativeCode::Unidentified,
+            ),
+            location: keyboard::Location::Standard,
+            modifiers: keyboard::Modifiers::empty(),
+            text: None,
+            repeat: false,
+        })
+    }
+
+    fn custom_option(theme: &Theme, shape: usize) -> container::Style {
+        let r = theme.metrics.radius_m;
+        container::Style {
+            background: Some(theme.semantic.window.bg.into()),
+            text_color: Some(theme.semantic.window.fg),
+            border: iced::Border {
+                radius: match shape {
+                    0 => 0.0.into(),
+                    1 => r.into(),
+                    _ => iced::border::Radius {
+                        top_left: r,
+                        top_right: 0.0,
+                        bottom_left: r / 2.0,
+                        bottom_right: 0.0,
+                    },
+                },
+                width: 2.0,
+                color: theme.semantic.window.fg,
+            },
+            shadow: iced::Shadow {
+                color: iced::Color::from_rgba(0.0, 0.0, 0.0, 0.2),
+                offset: Vector::new(1.0, 2.0),
+                blur_radius: 3.0,
+            },
+            snap: false,
+        }
+    }
+
+    #[test]
+    fn selection_composition_preserves_target_fields_and_gradient_stops() {
+        for theme in [Theme::light(), Theme::dark()] {
+            for shape in 0..3 {
+                let target = custom_option(&theme, shape);
+                assert_eq!(option_selection_style(target, &theme, false), target);
+                let selected = option_selection_style(target, &theme, true);
+                assert_eq!(selected.border, target.border);
+                assert_eq!(selected.shadow, target.shadow);
+                assert_eq!(selected.text_color, target.text_color);
+                assert_eq!(selected.snap, target.snap);
+                assert_ne!(selected.background, target.background);
+            }
+            let gradient = iced::gradient::Linear::new(iced::Radians(0.7))
+                .add_stop(0.0, iced::Color::WHITE)
+                .add_stop(1.0, iced::Color::BLACK);
+            let target = container::Style {
+                background: Some(gradient.into()),
+                ..custom_option(&theme, 2)
+            };
+            let Some(iced::Background::Color(tint)) =
+                sb::menu_item(false)(&theme, button::Status::Hovered).background
+            else {
+                panic!("menu highlight must supply a tint");
+            };
+            let Some(iced::Background::Gradient(iced::Gradient::Linear(selected))) =
+                option_selection_style(target, &theme, true).background
+            else {
+                panic!("selection must preserve the gradient");
+            };
+            assert_eq!(selected.angle, gradient.angle);
+            for (before, after) in gradient.stops.iter().zip(selected.stops) {
+                assert_eq!(
+                    after,
+                    before.map(|stop| iced::gradient::ColorStop {
+                        color: crate::color::composite_over(tint, stop.color),
+                        ..stop
+                    })
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn keyboard_selection_renders_actual_square_pill_asymmetric_options_in_current_theme() {
+        use iced::advanced::overlay::Overlay as _;
+        use iced::advanced::renderer::Headless;
+        let mut renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer");
+        let mut lookup = loading();
+        lookup.complete(
+            lookup.latest_id(),
+            Ok(vec!["First".into(), "Second".into()]),
+        );
+        let bounds = Size::new(240.0, 180.0);
+        let viewport = Rectangle::with_size(bounds);
+        let screenshot_size = Size::new(240, 180);
+        let clear = iced::Color::from_rgb(0.0, 1.0, 0.0);
+        for shape in 0..3 {
+            let mut widget = Autocomplete::new("unpicked", &lookup, |s| s)
+                .on_select(|s| s)
+                .free_text(false)
+                .item(|_| space().into())
+                .option_props(
+                    ContainerProps::default()
+                        .height(40)
+                        .padding(0)
+                        .style(move |theme| custom_option(theme, shape)),
+                )
+                .into_widget();
+            let mut trees: Vec<_> = widget
+                .items
+                .iter()
+                .map(|el| Tree::new(el.as_widget()))
+                .collect();
+            let mut open = true;
+            let mut highlight = Highlight::default();
+            let mut picked = None;
+            let mut popover = Popover {
+                items: &mut widget.items,
+                option_highlight: &widget.option_highlight,
+                trees: &mut trees,
+                body: widget.body,
+                labels: &widget.labels,
+                choices: widget.choices,
+                on_select: widget.on_select.as_deref(),
+                open: &mut open,
+                highlight: &mut highlight,
+                picked: &mut picked,
+                anchor: Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 24.0)),
+                max_rows: 8,
+                metrics: widget.metrics,
+            };
+            let mut messages = Vec::new();
+            for (key, expected_index) in [
+                (Named::ArrowDown, 0),
+                (Named::ArrowDown, 1),
+                (Named::ArrowUp, 0),
+            ] {
+                let node = popover.layout(&renderer, bounds);
+                let mut shell = Shell::new(&mut messages);
+                popover.update(
+                    &self::key(key),
+                    Layout::new(&node),
+                    mouse::Cursor::Unavailable,
+                    &renderer,
+                    &mut iced::advanced::clipboard::Null,
+                    &mut shell,
+                );
+                assert!(shell.is_event_captured());
+                assert_eq!(popover.highlight.index(), Some(expected_index));
+                assert!(messages.is_empty());
+                let node = popover.layout(&renderer, bounds);
+                // Reuse the same option tree: both the target style and tint must use
+                // the draw-time theme, not the theme from construction or a prior draw.
+                for mut theme in [Theme::light(), Theme::dark()] {
+                    theme.metrics.radius_m = if theme.is_dark() { 12.0 } else { 20.0 };
+                    theme.metrics.radius_menu = 7.0;
+                    renderer.reset(viewport);
+                    popover.draw(
+                        &mut renderer,
+                        &theme,
+                        &renderer::Style {
+                            text_color: iced::Color::BLACK,
+                        },
+                        Layout::new(&node),
+                        mouse::Cursor::Unavailable,
+                    );
+                    let actual = renderer.screenshot(screenshot_size, 1.0, clear);
+                    renderer.reset(viewport);
+                    let surface = sc::popover(&theme);
+                    renderer.fill_quad(
+                        Quad {
+                            bounds: Layout::new(&node).bounds(),
+                            border: surface.border,
+                            shadow: surface.shadow,
+                            snap: false,
+                        },
+                        surface.background.unwrap(),
+                    );
+                    let Some(iced::Background::Color(tint)) =
+                        sb::menu_item(false)(&theme, button::Status::Hovered).background
+                    else {
+                        panic!("highlight tint");
+                    };
+                    for (i, child) in Layout::new(&node).children().enumerate() {
+                        let target = custom_option(&theme, shape);
+                        let fill = if i == expected_index {
+                            crate::color::composite_over(tint, theme.semantic.window.bg)
+                        } else {
+                            theme.semantic.window.bg
+                        };
+                        renderer.fill_quad(
+                            Quad {
+                                bounds: child.bounds(),
+                                border: target.border,
+                                shadow: target.shadow,
+                                snap: target.snap,
+                            },
+                            fill,
+                        );
+                    }
+                    assert_eq!(
+                        actual,
+                        renderer.screenshot(screenshot_size, 1.0, clear),
+                        "shape={shape}, index={expected_index}, theme={:?}",
+                        theme.scheme
+                    );
+                }
+            }
+            let node = popover.layout(&renderer, bounds);
+            let mut shell = Shell::new(&mut messages);
+            popover.update(
+                &key(Named::Enter),
+                Layout::new(&node),
+                mouse::Cursor::Unavailable,
+                &renderer,
+                &mut iced::advanced::clipboard::Null,
+                &mut shell,
+            );
+            assert!(shell.is_event_captured());
+            assert_eq!(messages, ["First"]);
+            assert!(!open);
+            assert_eq!(picked.as_deref(), Some("First"));
+            assert_eq!(widget.value, "unpicked");
+            assert_eq!(widget.choices, &["First", "Second"]);
+        }
     }
 
     #[test]

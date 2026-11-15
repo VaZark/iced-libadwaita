@@ -1211,6 +1211,14 @@ impl Gallery {
         iad::windows::csd()
     }
 
+    fn surface_radius(&self) -> f32 {
+        if Self::csd() {
+            self.win.radius(&self.metrics())
+        } else {
+            0.0
+        }
+    }
+
     fn root(&self, size: iced::Size) -> IcedElement<'_, Message, Theme> {
         let m = self.metrics();
         let csd = Self::csd();
@@ -1428,13 +1436,14 @@ impl Gallery {
         };
 
         // Switching pages fades the new one in (as a parent page, the push slide does that job).
-        let page = lay::page_transition(
-            page,
+        let page = lay::PageTransition::container(
+            container(page),
             if collapsed && self.sidebar_mode == w::CollapsedSidebar::ParentPage {
                 0
             } else {
                 self.view_key()
             },
+            style::container::window,
         )
         .scroll_key(self.view_key());
         // The toast is placed in the whole window or only the content area (the shared

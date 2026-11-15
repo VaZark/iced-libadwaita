@@ -176,6 +176,7 @@ fn surface<'a, M: 'a>(
     container(super::rows::row_frame(content, &m))
         .padding(padding)
         .width(Length::Fill)
+        .style(surface::row_style)
         .into()
 }
 impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
@@ -197,6 +198,7 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                 .width(Length::Fill)
                 .into()
         };
+        let mut geometry = surface::Geometry::Row;
         let content =
             match e.input {
                 EntryInput::Text(input) | EntryInput::Action(input) => {
@@ -246,6 +248,11 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                 EntryInput::Switch { active, on_toggle } => {
                     let toggle = on_toggle(!active);
                     let sw = crate::components::switch(active).on_toggle(on_toggle);
+                    let (target, style) =
+                        surface::Geometry::button(e.button_props.style.clone().unwrap_or_else(
+                            || std::sync::Arc::new(crate::styles::button::list_row),
+                        ));
+                    geometry = target;
                     e.button_props
                         .apply(
                             button(surface(
@@ -265,6 +272,7 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                             .style(crate::styles::button::list_row)
                             .on_press(toggle),
                         )
+                        .style(move |theme, status| style(theme, status))
                         .into()
                 }
                 EntryInput::Select {
@@ -284,18 +292,42 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                     ]
                     .align_y(iced::Alignment::Center)
                     .spacing(e.value_spacing.unwrap_or(m.space_s));
+                    let appearance = e.dropdown_props.appearance.unwrap_or(if e.flat {
+                        super::PopoverAppearance::Flat
+                    } else {
+                        super::PopoverAppearance::Row
+                    });
+                    let (target, style) = surface::Geometry::button(
+                        e.dropdown_props.style.clone().unwrap_or_else(|| {
+                            std::sync::Arc::new(move |theme, status| {
+                                use super::PopoverAppearance;
+                                match appearance {
+                                    PopoverAppearance::Button => {
+                                        crate::styles::button::default(theme, status)
+                                    }
+                                    PopoverAppearance::Flat => {
+                                        crate::styles::button::flat(theme, status)
+                                    }
+                                    PopoverAppearance::Row => {
+                                        crate::styles::button::list_row(theme, status)
+                                    }
+                                    PopoverAppearance::Linked(position) => {
+                                        crate::styles::button::linked(position)(theme, status)
+                                    }
+                                }
+                            })
+                        }),
+                    );
+                    geometry = target;
                     e.dropdown_props
                         .apply(
                             super::Popover::new(surface(trigger, m, pad), options)
                                 .width(Length::Fill)
                                 .padding(0)
-                                .appearance(if e.flat {
-                                    super::PopoverAppearance::Flat
-                                } else {
-                                    super::PopoverAppearance::Row
-                                })
+                                .appearance(appearance)
                                 .keep_open(multiple),
                         )
+                        .style(move |theme, status| style(theme, status))
                         .into()
                 }
             };
@@ -307,9 +339,10 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                 crate::primitives::validation::Presentation::Invalid
                     | crate::primitives::validation::Presentation::Warning
             );
-        let content = surface::outlined(content, focus_ring, m);
+        let content = surface::outlined(content, focus_ring, m, geometry.clone());
         let mut wrapper = InputWrapper::new("", content)
             .hide_label()
+            .target_geometry(move |theme, _| geometry.resolve(theme))
             .validity(e.validity)
             .interaction(e.interaction)
             .metrics(m);
@@ -812,6 +845,377 @@ mod presentation_merge_tests {
             .entry_props(EntryProps::default())
             .apply(row);
         assert!(row.entry_props.is_none());
+    }
+}
+
+#[cfg(test)]
+mod validation_geometry_tests {
+    use super::*;
+    use crate::Theme;
+    use iced::advanced::{
+        Renderer as _, Shell, clipboard,
+        layout::{self, Layout},
+        renderer::{self, Headless, Quad},
+        widget::Tree,
+    };
+    use iced::{Border, Color, Event, Point, Rectangle, Size, Vector, mouse};
+
+    fn renderer() -> iced::Renderer {
+        iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer")
+    }
+    fn viewport() -> Rectangle {
+        Rectangle::with_size(Size::new(360.0, 240.0))
+    }
+    fn metrics() -> Metrics {
+        Metrics {
+            radius_m: 1.0,
+            focus_ring_width: 3.0,
+            ..Metrics::default()
+        }
+    }
+    fn prepare<'a>(
+        row: EntryRow<'a, u8>,
+        renderer: &iced::Renderer,
+    ) -> (Element<'a, u8>, Tree, layout::Node) {
+        let mut element: Element<'a, u8> = row.metrics(metrics()).into();
+        let mut tree = Tree::new(&element);
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            renderer,
+            &layout::Limits::new(Size::ZERO, viewport().size()),
+        );
+        (element, tree, node)
+    }
+    fn draw(
+        element: &Element<'_, u8>,
+        tree: &Tree,
+        node: &layout::Node,
+        renderer: &mut iced::Renderer,
+        theme: &Theme,
+        cursor: mouse::Cursor,
+    ) {
+        renderer.reset(viewport());
+        element.as_widget().draw(
+            tree,
+            renderer,
+            theme,
+            &renderer::Style::default(),
+            Layout::new(node),
+            cursor,
+            &viewport(),
+        );
+    }
+    fn pixels(renderer: &mut iced::Renderer, theme: &Theme, height: usize) -> Vec<u8> {
+        renderer.screenshot(Size::new(360, 240), 1.0, theme.semantic.window.bg)[..height * 360 * 4]
+            .to_vec()
+    }
+    fn control_bounds(node: &layout::Node) -> Rectangle {
+        Layout::new(node)
+            .children()
+            .next()
+            .unwrap()
+            .children()
+            .next()
+            .unwrap()
+            .bounds()
+    }
+    fn update(
+        element: &mut Element<'_, u8>,
+        tree: &mut Tree,
+        node: &layout::Node,
+        renderer: &iced::Renderer,
+        cursor: mouse::Cursor,
+        events: &[mouse::Event],
+    ) -> Vec<u8> {
+        let mut messages = vec![];
+        for event in events {
+            element.as_widget_mut().update(
+                tree,
+                &Event::Mouse(event.clone()),
+                Layout::new(node),
+                cursor,
+                renderer,
+                &mut clipboard::Null,
+                &mut Shell::new(&mut messages),
+                &viewport(),
+            );
+        }
+        element.as_widget_mut().update(
+            tree,
+            &Event::Window(iced::window::Event::RedrawRequested(
+                std::time::Instant::now(),
+            )),
+            Layout::new(node),
+            cursor,
+            renderer,
+            &mut clipboard::Null,
+            &mut Shell::new(&mut messages),
+            &viewport(),
+        );
+        messages
+    }
+    fn validation(row: EntryRow<'_, u8>, reveal: bool) -> EntryRow<'_, u8> {
+        row.validity(Validity::error("Bad value"))
+            .interaction(Interaction {
+                touched: reveal,
+                submitted: false,
+            })
+    }
+
+    #[test]
+    fn validation_encloses_all_eight_full_row_surfaces_with_current_theme_geometry() {
+        let mut renderer = renderer();
+        let content = iced::widget::text_editor::Content::with_text("Notes");
+        for flat in [false, true] {
+            for kind in 0..8 {
+                let row = || {
+                    EntryRow::new(
+                        "Label",
+                        match kind {
+                            0 => EntryInput::Text(
+                                Entry::new("", "Ada")
+                                    .left_section(text("prefix"))
+                                    .right_section(text("suffix"))
+                                    .on_input(|_| 1),
+                            ),
+                            1 => EntryInput::Action(Entry::new("", "Action").on_input(|_| 1)),
+                            2 => EntryInput::Number(NumberInput::new("12", |_| 1)),
+                            3 => EntryInput::Date(DateInput::new(
+                                "2026-11-08",
+                                crate::primitives::date::Date::new(2026, 11, 8).unwrap(),
+                                |_| 1,
+                            )),
+                            4 => EntryInput::Switch {
+                                active: true,
+                                on_toggle: Box::new(|_| 1),
+                            },
+                            5 => EntryInput::Select {
+                                value: "Selected".into(),
+                                options: text("Option").into(),
+                                multiple: false,
+                            },
+                            6 => EntryInput::Multiline(crate::components::text_view(&content)),
+                            _ => EntryInput::Custom(
+                                container(text("Custom"))
+                                    .style(|_| container::Style {
+                                        border: Border::default().rounded(999.0),
+                                        ..Default::default()
+                                    })
+                                    .into(),
+                            ),
+                        },
+                    )
+                    .flat(flat)
+                };
+                let (baseline, base_tree, base_node) = prepare(validation(row(), false), &renderer);
+                let (element, tree, node) = prepare(validation(row(), true), &renderer);
+                let bounds = control_bounds(&node);
+                assert_eq!(bounds, control_bounds(&base_node));
+                // Same built rows are redrawn with different themes, not rebuilt with copied metrics.
+                for radius in [0.0, 12.0, 999.0] {
+                    let mut theme = Theme::light();
+                    theme.metrics.radius_m = radius;
+                    let expected_radius = match kind {
+                        4 => {
+                            crate::styles::button::list_row(&theme, button::Status::Active)
+                                .border
+                                .radius
+                        }
+                        5 if flat => {
+                            crate::styles::button::flat(&theme, button::Status::Active)
+                                .border
+                                .radius
+                        }
+                        5 => {
+                            crate::styles::button::list_row(&theme, button::Status::Active)
+                                .border
+                                .radius
+                        }
+                        _ => surface::row_style(&theme).border.radius,
+                    };
+                    draw(
+                        &element,
+                        &tree,
+                        &node,
+                        &mut renderer,
+                        &theme,
+                        mouse::Cursor::Unavailable,
+                    );
+                    let actual = pixels(&mut renderer, &theme, bounds.height as usize);
+                    draw(
+                        &baseline,
+                        &base_tree,
+                        &base_node,
+                        &mut renderer,
+                        &theme,
+                        mouse::Cursor::Unavailable,
+                    );
+                    renderer.fill_quad(
+                        Quad {
+                            bounds,
+                            border: Border {
+                                width: 3.0,
+                                color: theme.semantic.error.color,
+                                radius: expected_radius,
+                            },
+                            ..Quad::default()
+                        },
+                        Color::TRANSPARENT,
+                    );
+                    assert_eq!(
+                        actual,
+                        pixels(&mut renderer, &theme, bounds.height as usize),
+                        "kind={kind} flat={flat} radius={radius}"
+                    );
+                }
+            }
+        }
+    }
+
+    fn custom_style(theme: &Theme, status: button::Status) -> button::Style {
+        let radius = match status {
+            button::Status::Active => 0.0.into(),
+            button::Status::Hovered => 999.0.into(),
+            _ => iced::border::Radius {
+                top_left: theme.metrics.radius_m,
+                top_right: 0.0,
+                bottom_left: 0.0,
+                bottom_right: 4.0,
+            },
+        };
+        button::Style {
+            background: Some(Color::BLACK.into()),
+            border: Border::default().rounded(radius),
+            ..crate::styles::button::list_row(theme, status)
+        }
+    }
+
+    #[test]
+    fn switch_and_select_validation_follow_custom_actual_active_hover_pressed_and_open_styles() {
+        let mut renderer = renderer();
+        for select in [false, true] {
+            for phase in 0..3 {
+                let row = || {
+                    if select {
+                        EntryRow::new(
+                            "Select",
+                            EntryInput::Select {
+                                value: "Value".into(),
+                                options: text("Option").into(),
+                                multiple: false,
+                            },
+                        )
+                        .dropdown_props(
+                            super::super::popover::PopoverProps::default().style(custom_style),
+                        )
+                    } else {
+                        EntryRow::switch("Switch", false, |_| 7).button_props(
+                            crate::components::ButtonProps::default().style(custom_style),
+                        )
+                    }
+                };
+                let (mut baseline, mut base_tree, base_node) =
+                    prepare(validation(row(), false), &renderer);
+                let (mut element, mut tree, node) = prepare(validation(row(), true), &renderer);
+                let bounds = control_bounds(&node);
+                let point = Point::new(20.0, bounds.height / 2.0);
+                let cursor = if phase == 0 {
+                    mouse::Cursor::Unavailable
+                } else {
+                    mouse::Cursor::Available(point)
+                };
+                let mut events = vec![mouse::Event::CursorMoved {
+                    position: if phase == 0 {
+                        Point::new(500.0, 500.0)
+                    } else {
+                        point
+                    },
+                }];
+                if phase == 2 {
+                    events.push(mouse::Event::ButtonPressed(mouse::Button::Left));
+                    if select {
+                        events.push(mouse::Event::ButtonReleased(mouse::Button::Left));
+                    }
+                }
+                update(
+                    &mut baseline,
+                    &mut base_tree,
+                    &base_node,
+                    &renderer,
+                    cursor,
+                    &events,
+                );
+                update(&mut element, &mut tree, &node, &renderer, cursor, &events);
+                for radius in [8.0, 19.0] {
+                    let mut theme = Theme::light();
+                    theme.metrics.radius_m = radius;
+                    let status = match phase {
+                        0 => button::Status::Active,
+                        1 => button::Status::Hovered,
+                        _ => button::Status::Pressed,
+                    };
+                    draw(&element, &tree, &node, &mut renderer, &theme, cursor);
+                    let actual = pixels(&mut renderer, &theme, bounds.height as usize);
+                    draw(
+                        &baseline,
+                        &base_tree,
+                        &base_node,
+                        &mut renderer,
+                        &theme,
+                        cursor,
+                    );
+                    renderer.fill_quad(
+                        Quad {
+                            bounds,
+                            border: Border {
+                                color: theme.semantic.error.color,
+                                width: 3.0,
+                                radius: custom_style(&theme, status).border.radius,
+                            },
+                            ..Quad::default()
+                        },
+                        Color::TRANSPARENT,
+                    );
+                    assert!(
+                        actual == pixels(&mut renderer, &theme, bounds.height as usize),
+                        "select={select}, phase={phase}, theme radius={radius}"
+                    );
+                }
+                if phase == 2 {
+                    if select {
+                        assert!(
+                            element
+                                .as_widget_mut()
+                                .overlay(
+                                    &mut tree,
+                                    Layout::new(&node),
+                                    &renderer,
+                                    &viewport(),
+                                    Vector::new(5.0, 7.0)
+                                )
+                                .is_some()
+                        );
+                    } else {
+                        assert_eq!(
+                            update(
+                                &mut element,
+                                &mut tree,
+                                &node,
+                                &renderer,
+                                cursor,
+                                &[mouse::Event::ButtonReleased(mouse::Button::Left)]
+                            ),
+                            [7]
+                        );
+                    }
+                }
+            }
+        }
     }
 }
 

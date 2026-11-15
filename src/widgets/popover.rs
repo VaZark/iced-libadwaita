@@ -122,6 +122,9 @@ pub enum Align {
     End,
 }
 
+pub(crate) type ScrimShape =
+    std::sync::Arc<dyn Fn(&Theme, Rectangle) -> (Rectangle, iced::border::Radius) + Send + Sync>;
+
 /// Presentation-only overrides for a nested [`Popover`]. Values, events, disabled
 /// state, focus, dismissal, and keep-open policy remain owned by its parent.
 #[derive(Clone, Default)]
@@ -136,6 +139,8 @@ pub struct PopoverProps {
     pub popover_width: Option<f32>,
     pub fit_content: Option<bool>,
     pub window_radius: Option<f32>,
+    /// Exact parent geometry, resolved with the current theme and window bounds at draw time.
+    pub scrim_shape: Option<ScrimShape>,
     pub style: Option<crate::components::props::ButtonStyle>,
 }
 impl PopoverProps {
@@ -175,8 +180,19 @@ impl PopoverProps {
         self.fit_content = Some(value.into());
         self
     }
+    /// Legacy explicit uniform parent corners. Does not discover window state.
     pub fn window_radius(mut self, value: f32) -> Self {
         self.window_radius = Some(value);
+        self.scrim_shape = None;
+        self
+    }
+    /// Exact background bounds and corners; share the actual parent's geometry resolver.
+    pub fn scrim_shape(
+        mut self,
+        shape: impl Fn(&Theme, Rectangle) -> (Rectangle, iced::border::Radius) + Send + Sync + 'static,
+    ) -> Self {
+        self.scrim_shape = Some(std::sync::Arc::new(shape));
+        self.window_radius = None;
         self
     }
     pub fn style(
@@ -217,6 +233,10 @@ impl PopoverProps {
         }
         if let Some(v) = self.window_radius {
             widget = widget.window_radius(v);
+        }
+        if let Some(shape) = &self.scrim_shape {
+            widget.scrim_shape = Some(shape.clone());
+            widget.window_radius = None;
         }
         if let Some(style) = self.style.clone() {
             widget.style = Some(style);
@@ -264,7 +284,19 @@ pub struct Popover<'a, M> {
     bounds: PopoverBounds,
     scrim: bool,
     close_on_outside: bool,
-    window_radius: f32,
+    window_radius: Option<f32>,
+    scrim_shape: Option<ScrimShape>,
+}
+
+fn resolve_scrim_shape(
+    shape: Option<&ScrimShape>,
+    radius: Option<f32>,
+    theme: &Theme,
+    bounds: Rectangle,
+) -> Option<(Rectangle, iced::border::Radius)> {
+    shape
+        .map(|shape| shape(theme, bounds))
+        .or_else(|| radius.map(|r| (bounds, r.into())))
 }
 
 fn context_key(event: &Event) -> bool {
@@ -435,7 +467,8 @@ impl<'a, M: 'a> Popover<'a, M> {
             bounds: popover_bounds(),
             scrim: true,
             close_on_outside: true,
-            window_radius: m.radius_window,
+            window_radius: None,
+            scrim_shape: None,
         }
     }
     pub(crate) fn context_trigger(mut self) -> Self {
@@ -511,9 +544,23 @@ impl<'a, M: 'a> Popover<'a, M> {
         self.close_on_outside = on;
         self
     }
-    /// Rounds that fade to the window's corners (`window::State::radius`).
+    /// Legacy explicit uniform parent corners (`window::State::radius`).
+    /// Without this or [`Self::scrim_shape`], no scrim is painted: arbitrary
+    /// windows have no known silhouette. Modal input and dismissal are unchanged.
     pub fn window_radius(mut self, r: f32) -> Self {
-        self.window_radius = r;
+        self.window_radius = Some(r);
+        self.scrim_shape = None;
+        self
+    }
+    /// Exact geometry of the parent being dimmed, resolved at draw time with the
+    /// current theme and window bounds. Return its actual bounds and four corners;
+    /// reuse the parent's resolver rather than guessing floating-window metrics.
+    pub fn scrim_shape(
+        mut self,
+        shape: impl Fn(&Theme, Rectangle) -> (Rectangle, iced::border::Radius) + Send + Sync + 'static,
+    ) -> Self {
+        self.scrim_shape = Some(std::sync::Arc::new(shape));
+        self.window_radius = None;
         self
     }
     pub fn presentation(mut self, p: Presentation) -> Self {
@@ -932,6 +979,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
             scrim: self.scrim,
             close_on_outside: self.close_on_outside,
             window_radius: self.window_radius,
+            scrim_shape: self.scrim_shape.clone(),
             // A full-window page ignores the content area.
             area: (self.bounds == PopoverBounds::Content
                 && self.presentation == Presentation::Popover)
@@ -961,7 +1009,8 @@ struct PopoverOverlay<'a, 'b, M> {
     window: Size,
     scrim: bool,
     close_on_outside: bool,
-    window_radius: f32,
+    window_radius: Option<f32>,
+    scrim_shape: Option<ScrimShape>,
     /// The content area it is kept inside, in window coordinates; `None`: the window.
     area: Option<Rectangle>,
 }
@@ -1094,11 +1143,18 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
             iced::Vector::new(0.0, -8.0 * (1.0 - p))
         };
         let rules = self.rules();
-        if rules.scrim_amount(p) > 0.0 {
+        if rules.scrim_amount(p) > 0.0
+            && let Some((bounds, radius)) = resolve_scrim_shape(
+                self.scrim_shape.as_ref(),
+                self.window_radius,
+                theme,
+                Rectangle::with_size(self.window),
+            )
+        {
             renderer.fill_quad(
                 Quad {
-                    bounds: Rectangle::with_size(self.window),
-                    border: iced::Border::default().rounded(self.window_radius),
+                    bounds,
+                    border: iced::Border::default().rounded(radius),
                     shadow: Shadow::default(),
                     snap: false,
                 },
@@ -1968,6 +2024,473 @@ mod spacing_params {
 }
 
 #[cfg(test)]
+mod scrim_geometry_tests {
+    use super::*;
+    use iced::advanced::{clipboard, renderer::Headless};
+    use std::sync::{Arc, Mutex};
+
+    fn renderer() -> iced::Renderer {
+        iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer")
+    }
+
+    fn viewport() -> Rectangle {
+        Rectangle::with_size(Size::new(640.0, 640.0))
+    }
+
+    fn pixels(renderer: &mut iced::Renderer) -> Vec<u8> {
+        renderer.screenshot(Size::new(640, 640), 1.0, iced::Color::WHITE)
+    }
+
+    fn dialog() -> Popover<'static, u8> {
+        Popover::new(
+            iced::widget::space(),
+            button(iced::widget::space())
+                .width(40)
+                .height(40)
+                .on_press(7),
+        )
+        .presentation(Presentation::Dialog)
+        .open_initially(true)
+        .keep_open(true)
+    }
+
+    fn draw_overlay(
+        element: &mut Element<'_, u8>,
+        tree: &mut Tree,
+        node: &layout::Node,
+        renderer: &mut iced::Renderer,
+        theme: &Theme,
+        settle: bool,
+    ) -> Vec<u8> {
+        let viewport = viewport();
+        let mut overlay = element
+            .as_widget_mut()
+            .overlay(
+                tree,
+                Layout::new(node),
+                renderer,
+                &viewport,
+                iced::Vector::ZERO,
+            )
+            .expect("open dialog overlay");
+        let node = overlay.as_overlay_mut().layout(renderer, viewport.size());
+        if settle {
+            let now = std::time::Instant::now();
+            for time in [now, now + std::time::Duration::from_secs(1)] {
+                overlay.as_overlay_mut().update(
+                    &Event::Window(iced::window::Event::RedrawRequested(time)),
+                    Layout::new(&node),
+                    mouse::Cursor::Unavailable,
+                    renderer,
+                    &mut clipboard::Null,
+                    &mut Shell::new(&mut Vec::new()),
+                );
+            }
+        }
+        renderer.reset(viewport);
+        overlay.as_overlay().draw(
+            renderer,
+            theme,
+            &renderer::Style {
+                text_color: iced::Color::BLACK,
+            },
+            Layout::new(&node),
+            mouse::Cursor::Unavailable,
+        );
+        pixels(renderer)
+    }
+
+    #[test]
+    fn rendered_scrim_tracks_actual_square_pill_asymmetric_bounds_current_theme_and_state() {
+        let mut renderer = renderer();
+        let shape_state = Arc::new(Mutex::new(false));
+        let state = shape_state.clone();
+        // Keep the same widget, tree and resolver across parent-state/theme changes.
+        let p = Popover::<u8>::new(iced::widget::space(), iced::widget::space())
+            .presentation(Presentation::Dialog)
+            .open_initially(true)
+            .scrim_shape(move |theme, bounds| {
+                let bounds = Rectangle {
+                    x: 11.0,
+                    y: 17.0,
+                    width: bounds.width - 22.0,
+                    height: 80.0,
+                };
+                let radius = if *state.lock().unwrap() {
+                    iced::border::Radius {
+                        top_left: theme.metrics.radius_m,
+                        bottom_right: 7.0,
+                        ..Default::default()
+                    }
+                } else {
+                    theme.metrics.radius_m.into()
+                };
+                (bounds, radius)
+            });
+        let mut element: Element<'_, u8> = p.into();
+        let mut tree = Tree::new(&element);
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport().size()),
+        );
+        for asymmetric in [false, true, false] {
+            *shape_state.lock().unwrap() = asymmetric;
+            for radius in [0.0, 40.0] {
+                let mut theme = Theme::light();
+                theme.metrics.radius_m = radius;
+                for progress in [0.25, 0.5, 1.0] {
+                    tree.state
+                        .downcast_mut::<State>()
+                        .appear
+                        .set_immediate(progress);
+                    let actual =
+                        draw_overlay(&mut element, &mut tree, &node, &mut renderer, &theme, false);
+                    renderer.reset(viewport());
+                    let radius = if asymmetric {
+                        iced::border::Radius {
+                            top_left: radius,
+                            bottom_right: 7.0,
+                            ..Default::default()
+                        }
+                    } else {
+                        radius.into()
+                    };
+                    renderer.fill_quad(
+                        Quad {
+                            bounds: Rectangle {
+                                x: 11.0,
+                                y: 17.0,
+                                width: 618.0,
+                                height: 80.0,
+                            },
+                            border: iced::Border::default().rounded(radius),
+                            shadow: Shadow::default(),
+                            snap: false,
+                        },
+                        crate::layouts::motion::scrim(&theme, progress),
+                    );
+                    assert_eq!(
+                        actual,
+                        pixels(&mut renderer),
+                        "asymmetric={asymmetric}, progress={progress}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn props_are_noop_by_default_and_last_explicit_geometry_builder_wins() {
+        let theme = Theme::light();
+        let bounds = viewport();
+        let original = dialog().scrim_shape(|_, b| {
+            (
+                b,
+                iced::border::Radius {
+                    top_left: 1.0,
+                    top_right: 2.0,
+                    bottom_right: 3.0,
+                    bottom_left: 4.0,
+                },
+            )
+        });
+        let before = original.scrim_shape.clone().unwrap();
+        let result = PopoverProps::default().apply(original);
+        assert!(Arc::ptr_eq(&before, result.scrim_shape.as_ref().unwrap()));
+        let legacy = result.window_radius(0.0);
+        assert!(legacy.scrim_shape.is_none());
+        assert_eq!(
+            resolve_scrim_shape(None, legacy.window_radius, &theme, bounds),
+            Some((bounds, 0.0.into()))
+        );
+        let props = PopoverProps::default()
+            .window_radius(19.0)
+            .scrim_shape(|t, b| (b, t.metrics.radius_m.into()));
+        let result = props.apply(legacy);
+        assert_eq!(result.window_radius, None);
+        assert_eq!(
+            resolve_scrim_shape(result.scrim_shape.as_ref(), None, &theme, bounds),
+            Some((bounds, theme.metrics.radius_m.into()))
+        );
+        let props = props.window_radius(3.0);
+        assert!(props.scrim_shape.is_none());
+        let result = props.apply(result);
+        assert!(result.scrim_shape.is_none());
+        assert_eq!(result.window_radius, Some(3.0));
+        assert_eq!(resolve_scrim_shape(None, None, &theme, bounds), None);
+    }
+
+    fn input(kind: usize, props: PopoverProps, scrim: bool) -> Element<'static, u8> {
+        use crate::primitives::{color_picker::Hsva, date::Date};
+        let date = Date::new(2026, 11, 8).unwrap();
+        let metrics = Metrics {
+            radius_window: 73.0,
+            ..Metrics::default()
+        };
+        match kind {
+            0 => crate::widgets::DateInput::new("2026-11-08", date, |_| 1)
+                .metrics(metrics)
+                .dialog(true)
+                .open_initially(true)
+                .scrim(scrim)
+                .dropdown_props(props)
+                .into(),
+            1 => crate::widgets::DateRangeInput::new("", date, |_| 1)
+                .metrics(metrics)
+                .dialog(true)
+                .open_initially(true)
+                .scrim(scrim)
+                .dropdown_props(props)
+                .into(),
+            _ => crate::widgets::ColorInput::new(Hsva::BLACK, "", |_| 1, |_| 2)
+                .metrics(metrics)
+                .dialog(true)
+                .open_initially(true)
+                .scrim(scrim)
+                .dropdown_props(props)
+                .into(),
+        }
+    }
+
+    #[test]
+    fn date_range_color_never_guess_metric_corners_and_forward_current_shape_props() {
+        let mut renderer = renderer();
+        for kind in 0..3 {
+            let mut render = |props, scrim| {
+                let mut element = input(kind, props, scrim);
+                let mut tree = Tree::new(&element);
+                let node = element.as_widget_mut().layout(
+                    &mut tree,
+                    &renderer,
+                    &layout::Limits::new(Size::ZERO, viewport().size()),
+                );
+                draw_overlay(
+                    &mut element,
+                    &mut tree,
+                    &node,
+                    &mut renderer,
+                    &Theme::light(),
+                    true,
+                )
+            };
+            let baseline = render(PopoverProps::default(), false);
+            assert_eq!(
+                baseline,
+                render(PopoverProps::default(), true),
+                "unknown parent kind={kind}"
+            );
+            assert_ne!(
+                baseline,
+                render(PopoverProps::default().window_radius(0.0), true),
+                "explicit square kind={kind}"
+            );
+            let calls = Arc::new(Mutex::new(Vec::new()));
+            let recorded = calls.clone();
+            let mut element = input(
+                kind,
+                PopoverProps::default().scrim_shape(move |t, bounds| {
+                    recorded.lock().unwrap().push((t.metrics.radius_m, bounds));
+                    (bounds, t.metrics.radius_m.into())
+                }),
+                true,
+            );
+            let mut tree = Tree::new(&element);
+            let node = element.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport().size()),
+            );
+            for radius in [0.0, 31.0, 0.0] {
+                let mut theme = Theme::light();
+                theme.metrics.radius_m = radius;
+                draw_overlay(&mut element, &mut tree, &node, &mut renderer, &theme, true);
+                assert_eq!(calls.lock().unwrap().last(), Some(&(radius, viewport())));
+            }
+        }
+    }
+
+    #[test]
+    fn input_shape_builders_override_legacy_radius_without_metric_fallback() {
+        use crate::primitives::{color_picker::Hsva, date::Date};
+        let mut renderer = renderer();
+        for kind in 0..3 {
+            let calls = Arc::new(Mutex::new(Vec::new()));
+            let recorded = calls.clone();
+            let shape = move |theme: &Theme, bounds: Rectangle| {
+                recorded
+                    .lock()
+                    .unwrap()
+                    .push((theme.metrics.radius_m, bounds));
+                (bounds, theme.metrics.radius_m.into())
+            };
+            let date = Date::new(2026, 11, 8).unwrap();
+            let metrics = Metrics {
+                radius_window: 91.0,
+                ..Metrics::default()
+            };
+            let mut element: Element<'_, u8> = match kind {
+                0 => crate::widgets::DateInput::new("", date, |_| 1)
+                    .dialog(true)
+                    .open_initially(true)
+                    .window_radius(88.0)
+                    .scrim_shape(shape)
+                    .metrics(metrics)
+                    .into(),
+                1 => crate::widgets::DateRangeInput::new("", date, |_| 1)
+                    .dialog(true)
+                    .open_initially(true)
+                    .window_radius(88.0)
+                    .scrim_shape(shape)
+                    .metrics(metrics)
+                    .into(),
+                _ => crate::widgets::ColorInput::new(Hsva::BLACK, "", |_| 1, |_| 2)
+                    .dialog(true)
+                    .open_initially(true)
+                    .window_radius(88.0)
+                    .scrim_shape(shape)
+                    .metrics(metrics)
+                    .into(),
+            };
+            let mut tree = Tree::new(&element);
+            let node = element.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport().size()),
+            );
+            for radius in [0.0, 23.0] {
+                let mut theme = Theme::light();
+                theme.metrics.radius_m = radius;
+                draw_overlay(&mut element, &mut tree, &node, &mut renderer, &theme, true);
+                assert_eq!(calls.lock().unwrap().last(), Some(&(radius, viewport())));
+            }
+        }
+    }
+
+    #[test]
+    fn modal_capture_content_activation_outside_and_escape_do_not_depend_on_geometry() {
+        let renderer = renderer();
+        for geometry in 0..3 {
+            for close_on_outside in [false, true] {
+                let p = dialog().close_on_outside(close_on_outside);
+                let mut p = match geometry {
+                    0 => p,
+                    1 => p.window_radius(0.0),
+                    _ => p.scrim_shape(|_, b| {
+                        (
+                            b,
+                            iced::border::Radius {
+                                top_left: 0.0,
+                                top_right: 12.0,
+                                bottom_right: 24.0,
+                                bottom_left: 36.0,
+                            },
+                        )
+                    }),
+                };
+                let mut tree = Tree::new(&p as &dyn Widget<u8, Theme, iced::Renderer>);
+                let node = p.layout(
+                    &mut tree,
+                    &renderer,
+                    &layout::Limits::new(Size::ZERO, viewport().size()),
+                );
+                tree.state.downcast_mut::<State>().appear.set_immediate(1.0);
+                {
+                    let mut overlay = p
+                        .overlay(
+                            &mut tree,
+                            Layout::new(&node),
+                            &renderer,
+                            &viewport(),
+                            iced::Vector::ZERO,
+                        )
+                        .unwrap();
+                    let node = overlay
+                        .as_overlay_mut()
+                        .layout(&renderer, viewport().size());
+                    let center = Layout::new(&node)
+                        .children()
+                        .next()
+                        .unwrap()
+                        .bounds()
+                        .center();
+                    let mut messages = vec![];
+                    for event in [
+                        mouse::Event::ButtonPressed(mouse::Button::Left),
+                        mouse::Event::ButtonReleased(mouse::Button::Left),
+                    ] {
+                        overlay.as_overlay_mut().update(
+                            &Event::Mouse(event),
+                            Layout::new(&node),
+                            mouse::Cursor::Available(center),
+                            &renderer,
+                            &mut clipboard::Null,
+                            &mut Shell::new(&mut messages),
+                        );
+                    }
+                    assert_eq!(messages, vec![7]);
+                    let mut shell = Shell::new(&mut messages);
+                    overlay.as_overlay_mut().update(
+                        &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                        Layout::new(&node),
+                        mouse::Cursor::Available(Point::new(1.0, 1.0)),
+                        &renderer,
+                        &mut clipboard::Null,
+                        &mut shell,
+                    );
+                    assert!(
+                        shell.is_event_captured(),
+                        "modal background remains blocked"
+                    );
+                }
+                assert_eq!(tree.state.downcast_ref::<State>().open, !close_on_outside);
+                if !close_on_outside {
+                    let mut overlay = p
+                        .overlay(
+                            &mut tree,
+                            Layout::new(&node),
+                            &renderer,
+                            &viewport(),
+                            iced::Vector::ZERO,
+                        )
+                        .unwrap();
+                    let node = overlay
+                        .as_overlay_mut()
+                        .layout(&renderer, viewport().size());
+                    let mut messages = vec![];
+                    let mut shell = Shell::new(&mut messages);
+                    let event = Event::Keyboard(keyboard::Event::KeyPressed {
+                        key: keyboard::Key::Named(Named::Escape),
+                        modified_key: keyboard::Key::Named(Named::Escape),
+                        physical_key: keyboard::key::Physical::Unidentified(
+                            keyboard::key::NativeCode::Unidentified,
+                        ),
+                        location: keyboard::Location::Standard,
+                        modifiers: keyboard::Modifiers::default(),
+                        text: None,
+                        repeat: false,
+                    });
+                    overlay.as_overlay_mut().update(
+                        &event,
+                        Layout::new(&node),
+                        mouse::Cursor::Unavailable,
+                        &renderer,
+                        &mut clipboard::Null,
+                        &mut shell,
+                    );
+                }
+                assert!(!tree.state.downcast_ref::<State>().open);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod typed_props_tests {
     use super::*;
     use iced::advanced::Widget;
@@ -2015,7 +2538,7 @@ mod typed_props_tests {
         assert_eq!(result.offset, 11.0);
         assert_eq!(result.padding, Padding::from(7));
         assert!(result.fit_content && result.disabled && result.keep_open);
-        assert_eq!(result.window_radius, 19.0);
+        assert_eq!(result.window_radius, Some(19.0));
         assert_eq!(
             (result.style.unwrap())(&Theme::default(), button::Status::Active).text_color,
             iced::Color::BLACK

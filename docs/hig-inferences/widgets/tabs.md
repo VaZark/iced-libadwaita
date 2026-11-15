@@ -15,4 +15,4 @@ A row of tabs and the panel of the active one.
 
 ## iced mapping
 
-`primitives::tabs` is pure and unit tested; `widget::Tabs` builds the list from iced buttons (and a `FloatingIndicator` for the floating variant). Not included: arrow-key navigation (iced has no focus model for it), vertical orientation, and keeping the panels of inactive tabs mounted.
+`primitives::tabs` is pure; `widgets::Tabs` builds the list from iced buttons (and a `FloatingIndicator` for the floating variant). The floating highlight shares the title button's final style resolver, including `tab_button_props`, current theme and native button status. It follows the title's full rectangle and four corners, not the row's maximum height or a separate control-radius default; a sibling close button is outside that target. With no active tab there is no floating highlight. Default child props preserve existing presentation and controlled activation/close behavior. Not included: arrow-key navigation (iced has no focus model for it), vertical orientation, and keeping the panels of inactive tabs mounted.
