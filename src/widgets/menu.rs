@@ -431,11 +431,19 @@ impl<M> Menu<M> {
 /// How wide a menu's popover is.
 const POPOVER_WIDTH: f32 = 260.0;
 
+/// Native menu trigger presentation, without event or open-state policy.
+#[derive(Clone, Default)]
+pub struct MenuProps {
+    pub popover: PopoverProps,
+    pub trigger: ContainerProps,
+}
+
 /// `GtkMenuButton`: an icon button that opens a [`Menu`].
 pub struct MenuButton<M> {
     combobox_props: PopoverProps,
     trigger_props: ContainerProps,
     icon: IconSource,
+    text_trigger: Option<String>,
     menu: Menu<M>,
     presentation: MenuPresentation,
     tooltip: Option<String>,
@@ -451,6 +459,7 @@ pub fn menu_button<M>(icon: impl Into<IconSource>, menu: Menu<M>) -> MenuButton<
         combobox_props: Default::default(),
         trigger_props: Default::default(),
         icon: icon.into(),
+        text_trigger: None,
         menu,
         presentation: MenuPresentation::Dropdown,
         tooltip: None,
@@ -467,6 +476,16 @@ pub fn primary_menu<M>(menu: Menu<M>) -> MenuButton<M> {
 }
 
 impl<M> MenuButton<M> {
+    /// Use a text-only, flat trigger, as in a conventional menubar.
+    pub fn text_trigger(mut self, label: impl Into<String>) -> Self {
+        self.text_trigger = Some(label.into());
+        self
+    }
+    pub fn props(mut self, props: MenuProps) -> Self {
+        self.combobox_props = props.popover;
+        self.trigger_props = props.trigger;
+        self
+    }
     pub fn combobox_props(mut self, props: PopoverProps) -> Self {
         self.combobox_props = props;
         self
@@ -829,7 +848,11 @@ fn back_row<'a, M: Clone + 'a>(menu: &Menu<M>, parent: usize, request: &Request)
 }
 
 /// The content of a dropdown whose menu has submenus: one page per menu, sliding as rows ask.
-fn pages_content<'a, M: Clone + 'a>(menu: &Menu<M>, width: f32, initial: usize) -> Element<'a, M> {
+pub(crate) fn pages_content<'a, M: Clone + 'a>(
+    menu: &Menu<M>,
+    width: f32,
+    initial: usize,
+) -> Element<'a, M> {
     fn collect<'m, M>(m: &'m Menu<M>, out: &mut Vec<&'m Menu<M>>) {
         out.push(m);
         for s in m.subs() {
@@ -989,9 +1012,13 @@ fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M>
 impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
     fn from(b: MenuButton<M>) -> Self {
         let m = Metrics::desktop();
+        let trigger_content: Element<'a, M> = match b.text_trigger {
+            Some(label) => text(label).into(),
+            None => b.icon.view(m.icon_size),
+        };
         let trigger = b
             .trigger_props
-            .apply(container(b.icon.view(m.icon_size)).center(Length::Fixed(m.button_min_height)));
+            .apply(container(trigger_content).center_y(Length::Fixed(m.button_min_height)));
         let (content, presentation) = match b.presentation {
             MenuPresentation::Dropdown if b.menu.has_submenu() => (
                 pages_content(&b.menu, POPOVER_WIDTH, b.open_page),

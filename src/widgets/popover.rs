@@ -244,6 +244,7 @@ impl PopoverSurfaceProps {
 }
 
 pub struct Popover<'a, M> {
+    context_trigger: bool,
     style: Option<crate::components::props::ButtonStyle>,
     trigger: Element<'a, M>,
     popover: Element<'a, M>,
@@ -265,7 +266,45 @@ pub struct Popover<'a, M> {
     window_radius: f32,
 }
 
+fn context_key(event: &Event) -> bool {
+    matches!(
+        event,
+        Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(Named::ContextMenu),
+            ..
+        })
+    ) || matches!(event, Event::Keyboard(keyboard::Event::KeyPressed { key: keyboard::Key::Named(Named::F10), modifiers, .. }) if modifiers.shift() && !modifiers.control() && !modifiers.alt() && !modifiers.logo())
+}
+
+struct TargetFocus(bool);
+impl iced::advanced::widget::Operation for TargetFocus {
+    fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn iced::advanced::widget::Operation)) {
+        operate(self);
+    }
+    fn focusable(
+        &mut self,
+        _: Option<&iced::advanced::widget::Id>,
+        _: Rectangle,
+        state: &mut dyn iced::advanced::widget::operation::Focusable,
+    ) {
+        self.0 |= state.is_focused();
+    }
+}
+impl iced::advanced::widget::operation::Focusable for State {
+    fn is_focused(&self) -> bool {
+        self.focused
+    }
+    fn focus(&mut self) {
+        self.focused = true;
+    }
+    fn unfocus(&mut self) {
+        self.focused = false;
+    }
+}
+
 struct State {
+    focused: bool,
+    pointer: Option<Point>,
     open: bool,
     /// The content was on screen since it was last reset: closing it puts it back as new, so a
     /// menu that was left on a submenu opens on its first page again.
@@ -282,6 +321,8 @@ impl State {
             1.0
         };
         Self {
+            focused: false,
+            pointer: None,
             open,
             shown: open,
             appear: crate::layouts::animation::Progress::new(start),
@@ -305,6 +346,7 @@ impl<'a, M: 'a> Popover<'a, M> {
     pub fn new(trigger: impl Into<Element<'a, M>>, content: impl Into<Element<'a, M>>) -> Self {
         let m = Metrics::desktop();
         Self {
+            context_trigger: false,
             style: None,
             trigger: trigger.into(),
             popover: content.into(),
@@ -327,6 +369,11 @@ impl<'a, M: 'a> Popover<'a, M> {
             window_radius: m.radius_window,
         }
     }
+    pub(crate) fn context_trigger(mut self) -> Self {
+        self.context_trigger = true;
+        self
+    }
+
     pub fn props(self, props: PopoverProps) -> Self {
         props.apply(self)
     }
@@ -505,7 +552,28 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
         tree.diff_children(&[self.trigger.as_widget(), self.popover.as_widget()]);
     }
 
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn iced::advanced::widget::Operation,
+    ) {
+        if self.context_trigger {
+            operation.focusable(None, layout.bounds(), tree.state.downcast_mut::<State>());
+        }
+        self.trigger.as_widget_mut().operate(
+            &mut tree.children[0],
+            layout.children().next().unwrap(),
+            renderer,
+            operation,
+        );
+    }
+
     fn size(&self) -> Size<Length> {
+        if self.context_trigger {
+            return self.trigger.as_widget().size();
+        }
         Size::new(self.width, Length::Shrink)
     }
 
@@ -515,7 +583,8 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
         renderer: &iced::Renderer,
         limits: &layout::Limits,
     ) -> layout::Node {
-        layout::padded(limits, self.width, Length::Shrink, self.padding, |limits| {
+        let size = self.size();
+        layout::padded(limits, size.width, size.height, self.padding, |limits| {
             self.trigger
                 .as_widget_mut()
                 .layout(&mut tree.children[0], renderer, limits)
@@ -528,11 +597,54 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
         event: &Event,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
-        _: &iced::Renderer,
-        _: &mut dyn Clipboard,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, M>,
-        _: &Rectangle,
+        viewport: &Rectangle,
     ) {
+        if self.context_trigger {
+            let mut focus = TargetFocus(false);
+            self.trigger.as_widget_mut().operate(
+                &mut tree.children[0],
+                layout.children().next().unwrap(),
+                renderer,
+                &mut focus,
+            );
+            let state = tree.state.downcast_mut::<State>();
+            let inside = cursor.is_over(layout.bounds()) && cursor.is_over(*viewport);
+            if matches!(
+                event,
+                Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
+            ) {
+                state.focused = inside;
+            }
+            let pointer = matches!(
+                event,
+                Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right))
+            ) && inside;
+            let keyboard = (state.focused || focus.0) && context_key(event);
+            if !self.disabled && (pointer || keyboard) {
+                state.pointer = if pointer { cursor.position() } else { None };
+                if !state.open {
+                    state.toggle();
+                }
+                shell.capture_event();
+                shell.invalidate_layout();
+                shell.request_redraw();
+                return;
+            }
+            self.trigger.as_widget_mut().update(
+                &mut tree.children[0],
+                event,
+                layout.children().next().unwrap(),
+                cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
+            );
+            return;
+        }
         let state = tree.state.downcast_mut::<State>();
         if self.disabled {
             state.open = false;
@@ -573,6 +685,18 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
         cursor: mouse::Cursor,
         viewport: &Rectangle,
     ) {
+        if self.context_trigger {
+            self.trigger.as_widget().draw(
+                &tree.children[0],
+                renderer,
+                theme,
+                style,
+                layout.children().next().unwrap(),
+                cursor,
+                viewport,
+            );
+            return;
+        }
         let open = tree.state.downcast_ref::<State>().open;
         let status = if open {
             button::Status::Pressed
@@ -639,10 +763,20 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
         }
         state.shown = true;
         let b = layout.bounds();
-        let anchor = Rectangle {
-            x: b.x + translation.x,
-            y: b.y + translation.y,
-            ..b
+        let anchor = if self.context_trigger {
+            let p = state.pointer.unwrap_or(Point::new(b.x, b.y + b.height));
+            Rectangle {
+                x: p.x + translation.x,
+                y: p.y + translation.y,
+                width: 0.0,
+                height: 0.0,
+            }
+        } else {
+            Rectangle {
+                x: b.x + translation.x,
+                y: b.y + translation.y,
+                ..b
+            }
         };
         Some(overlay::Element::new(Box::new(PopoverOverlay {
             content: &mut self.popover,
@@ -769,14 +903,18 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
         let max_h = if sideways {
             region.height - 2.0 * MARGIN
         } else {
-            below.max(above).max(80.0)
+            below
+                .max(above)
+                .max(0.0)
+                .min((region.height - 2.0 * MARGIN).max(0.0))
         };
         // Items fill their container, so the popover needs a defined width:
         // the trigger's width unless the popover asks for another.
         let w = self
             .min_width
             .unwrap_or(self.anchor.width)
-            .clamp(120.0, (region.width - 2.0 * MARGIN).max(120.0));
+            .max(0.0)
+            .min((region.width - 2.0 * MARGIN).max(0.0));
         let w = if sideways {
             w.min(left.max(right).max(120.0))
         } else {

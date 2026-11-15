@@ -1,51 +1,170 @@
-//! Windows 7: an Explorer window. Navigation pane (tree), a details list, a search box, a
-//! command bar, a preview pane and a notification.
-
-use crate::common::*;
+//! Windows 7 All Programs Start menu scene, not an unrelated Explorer window.
+use crate::{common::*, design::px};
 use iad::components as cmp;
 use iad::{Icon, Metrics};
-use iced::widget::{column, container, row, space};
+use iced::widget::{column, container, row, scrollable, space};
 use iced::{Alignment, Length};
 use iced_adaptive_design as iad;
-use iad::widgets as w;
-
-pub const TITLE: &str = "Libraries - Documents";
-const FILES: [(&str, &str, &str, &str); 6] = [
-    ("Budget 2011.xlsx", "9/14/2011", "Microsoft Excel", "84 KB"),
-    ("Holiday.jpg", "8/2/2011", "JPEG image", "2.4 MB"),
-    ("Notes.txt", "7/30/2011", "Text Document", "3 KB"),
-    ("Report.docx", "7/12/2011", "Microsoft Word", "212 KB"),
-    ("Song.mp3", "6/20/2011", "MP3 Format Sound", "4.1 MB"),
-    ("Setup.exe", "6/1/2011", "Application", "18 MB"),
+pub const TITLE: &str = "Windows 7 — Start";
+fn g(key: &str) -> f32 {
+    px("toy.win7", key)
+}
+pub const PROGRAMS: &[&str] = &[
+    "Google Chrome",
+    "Google Drive",
+    "Google Earth",
+    "Gtk+",
+    "Maintenance",
+    "Malwarebytes' Anti-Malware",
+    "Microsoft Lync",
+    "Microsoft Office",
+    "Microsoft Access 2010",
+    "Microsoft Excel 2010",
+    "Microsoft InfoPath Designer 2010",
+    "Microsoft InfoPath Filler 2010",
+    "Microsoft OneNote 2010",
+    "Microsoft Outlook 2010",
+    "Microsoft PowerPoint 2010",
+    "Microsoft Project 2010",
+    "Microsoft Publisher 2010",
+    "Microsoft SharePoint Workspace 2010",
+    "Microsoft Visio 2010",
+    "Microsoft Word 2010",
 ];
-
+pub fn filtered_programs(query: &str) -> impl Iterator<Item = (usize, &'static str)> + '_ {
+    PROGRAMS
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(move |(_, name)| matches_query(name, query))
+}
 pub fn view(t: &Toy) -> El<'_> {
     let m = Metrics::desktop();
-    let commands = row![
-        cmp::raised_button(cmp::typography::label("Organize")).on_press(Msg::Status("Organize".into())),
-        cmp::raised_button(cmp::typography::label("Share with")).on_press(Msg::Status("Share".into())),
-        cmp::raised_button(cmp::typography::label("New folder")).on_press(Msg::Toast(Some("Folder created".into()))),
-        space().width(Length::Fill),
-        cmp::search_bar(t.text.as_str(), Msg::Text).placeholder("Search Documents").width(220),
-    ]
-    .spacing(m.space_s)
-    .align_y(Alignment::Center)
-    .padding(m.space_s);
-    let header = row![caption("Name"), space().width(Length::Fill), caption("Date modified"), caption("Type"), caption("Size")].spacing(m.gap).padding([m.space_xxs, m.space_m]);
-    let rows = column(FILES.iter().enumerate().map(|(i, (n, d, ty, sz))| {
-        let line = row![Icon::Document.view(16.0), label(*n), space().width(Length::Fill), label(*d), label(*ty), label(*sz)]
-            .spacing(m.gap)
-            .align_y(Alignment::Center);
-        let b = if i == t.pick { cmp::raised_button(line) } else { cmp::flat_button(line) };
-        El::from(b.width(Length::Fill).on_press(Msg::Pick(i)))
+    let programs = column(filtered_programs(&t.text).map(|(i, name)| {
+        let line = row![Icon::Document.view(m.icon_size), label(name)].spacing(m.space_xs);
+        let content = container(line).padding(iced::Padding {
+            left: if i >= 8 {
+                g("program-indent")
+            } else {
+                g("program-padding")
+            },
+            ..iced::Padding::ZERO
+        });
+        let button = if i == t.pick {
+            cmp::variant_button(content, "opaque")
+        } else {
+            cmp::flat_button(content)
+        };
+        El::from(
+            button
+                .width(Length::Fill)
+                .height(g("program-row-height"))
+                .padding(0)
+                .on_press(Msg::Launch(i)),
+        )
     }));
-    let list = column![El::from(header), pane(rows)];
-    let preview = container(w::card(column![Icon::Document.view(48.0), label(FILES[t.pick.min(5)].0), caption(FILES[t.pick.min(5)].2)].spacing(m.space_s).align_x(Alignment::Center)))
-        .width(190);
-    let body = row![container(nav_tree(t)).width(200).padding(m.space_s), El::from(list.width(Length::Fill)), container(preview).padding(m.space_s)].height(Length::Fill);
-    let content = column![El::from(commands), El::from(body), status_bar(t.status.clone(), format!("{} items", FILES.len()))];
-    let dialog: El<'_> = w::AlertDialog::new("Delete File").body("Are you sure you want to move this file to the Recycle Bin?")
-        .response("No", w::ResponseAppearance::Default, Msg::Dialog(false))
-        .response("Yes", w::ResponseAppearance::Destructive, Msg::Dialog(false)).into();
-    window(t, TITLE, overlays(t, content.into(), dialog))
+    let left = container(column![
+        scrollable(programs).height(Length::Fill),
+        cmp::flat_button(label("◂   Back"))
+            .width(Length::Fill)
+            .height(g("program-row-height"))
+            .on_press(Msg::Start(false)),
+        container(
+            cmp::entry("Search programs and files", &t.text)
+                .on_input(Msg::Text)
+                .width(Length::Fill)
+        )
+        .padding(m.space_m)
+        .height(g("search-height")),
+    ])
+    .width(g("programs-width"))
+    .height(Length::Fill)
+    .clip(true)
+    .style(iad::styles::container::view);
+    let places = column(
+        [
+            "Documents",
+            "Pictures",
+            "Music",
+            "Recent Items",
+            "Computer",
+            "Network",
+            "Control Panel",
+            "Devices and Printers",
+            "Default Programs",
+        ]
+        .map(|name| {
+            El::from(
+                cmp::variant_button(label(name), "link")
+                    .width(Length::Fill)
+                    .height(g("place-row-height"))
+                    .on_press(Msg::Status(format!("Open {name}"))),
+            )
+        }),
+    );
+    let right = column![
+        container(
+            column![
+                Icon::Home.view(g("user-icon-size")),
+                label("Thibault, David")
+            ]
+            .spacing(m.space_s)
+            .align_x(Alignment::Center)
+        )
+        .height(g("user-height"))
+        .center_x(Length::Fill),
+        places,
+        space().height(Length::Fill),
+        cmp::raised_button(label("Shut down ▸")).on_press(Msg::Status("Shutdown preview only — no host action".into())),
+    ]
+    .width(Length::Fill)
+    .padding(m.space_s);
+    let menu = container(row![left, right])
+        .padding(g("menu-padding"))
+        .width(g("menu-width"))
+        .height(g("menu-height"))
+        .style(move |theme: &iad::Theme| container::Style {
+            background: Some(theme.surface_background("start-menu", theme.semantic.sidebar.bg)),
+            text_color: Some(theme.semantic.sidebar.fg),
+            border: iced::Border {
+                color: theme.semantic.headerbar.bg,
+                width: m.border_width,
+                radius: g("menu-radius").into(),
+            },
+            ..Default::default()
+        });
+    let taskbar = container(
+        row![
+            cmp::variant_button(Icon::Home.view(g("desktop-icon-size")), "suggested")
+                .width(g("task-button-width"))
+                .on_press(Msg::Start(!t.start_open)),
+            cmp::flat_button(Icon::Search.view(g("desktop-icon-size")))
+                .on_press(Msg::Status("Internet Explorer".into())),
+            cmp::flat_button(Icon::Folder.view(g("desktop-icon-size")))
+                .on_press(Msg::Status("Windows Explorer".into())),
+            space().width(Length::Fill),
+            caption(t.status.clone()),
+        ]
+        .align_y(Alignment::Center)
+        .spacing(m.space_m),
+    )
+    .height(g("taskbar-height"))
+    .width(Length::Fill)
+    .style(move |theme: &iad::Theme| container::Style {
+        background: Some(theme.surface_background("taskbar", theme.semantic.headerbar.bg)),
+        ..Default::default()
+    });
+    let mut desktop = column![space().height(Length::Fill)];
+    if t.start_open {
+        desktop = desktop.push(menu);
+    }
+    let content = container(column![desktop.height(Length::Fill), taskbar])
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(move |theme: &iad::Theme| container::Style {
+            background: Some(theme.surface_background("desktop", theme.semantic.window.bg)),
+            ..Default::default()
+        })
+        .into();
+    content
 }

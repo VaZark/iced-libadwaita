@@ -1,86 +1,157 @@
-//! Windows XP: "My Computer". A task pane with collapsible groups, an address bar, drives with
-//! usage bars, tabs, and a green Start-style button (the theme's `suggested` variant).
-
-use crate::common::*;
+//! Luna My Computer, matching the supplied maximized 1024px reference (without desktop taskbar).
+use crate::{common::*, design::px};
 use iad::components as cmp;
 use iad::widgets as w;
 use iad::{Icon, Metrics};
 use iced::widget::{column, container, row, space};
 use iced::{Alignment, Length};
 use iced_adaptive_design as iad;
-
 pub const TITLE: &str = "My Computer";
-const DRIVES: [(&str, f32, &str); 3] = [
-    ("Local Disk (C:)", 0.62, "15.2 GB free of 40 GB"),
-    ("DVD Drive (D:)", 0.0, "No disc"),
-    ("Backup (E:)", 0.88, "4.8 GB free of 40 GB"),
+fn g(key: &str) -> f32 {
+    px("toy.winxp", key)
+}
+pub const SECTIONS: &[(&str, &[&str])] = &[
+    (
+        "Files Stored on This Computer",
+        &["Shared Documents", "FarazHashmi’s Documents"],
+    ),
+    ("Hard Disk Drives", &["WindowsXp (C:)"]),
+    ("Devices with Removable Storage", &["CD Drive (D:)"]),
+    ("Network Drives", &["material on 'vboxsrv' (E:)"]),
 ];
 
 pub fn view(t: &Toy) -> El<'_> {
     let m = Metrics::desktop();
-    let address = row![
-        label("Address"),
-        cmp::entry("", "My Computer").width(Length::Fill),
-        cmp::variant_button(cmp::typography::label("Go"), "suggested").on_press(Msg::Status("Go".into())),
+    let menus = row(
+        ["File", "Edit", "View", "Favorites", "Tools", "Help"].map(|name| {
+            El::from(cmp::flat_button(label(name)).on_press(Msg::Status(format!("{name} menu"))))
+        }),
+    )
+    .height(g("menu-height"))
+    .align_y(Alignment::Center);
+    let tool = |icon: Icon, name: &'static str| {
+        El::from(
+            cmp::flat_button(
+                row![icon.view(g("command-icon-size")), label(name)].spacing(m.space_s),
+            )
+            .on_press(Msg::Status(name.into())),
+        )
+    };
+    let toolbar = row![
+        tool(Icon::GoPrevious, "Back"),
+        tool(Icon::GoNext, ""),
+        tool(Icon::GoUp, ""),
+        tool(Icon::Search, "Search"),
+        tool(Icon::Folder, "Folders")
     ]
     .spacing(m.space_s)
-    .align_y(Alignment::Center)
-    .padding(m.space_s);
-    let group = |i: usize, title: &'static str, items: [&'static str; 3]| -> El<'_> {
-        let head = cmp::flat_button(heading(title)).width(Length::Fill).on_press(Msg::Open(i));
-        let body = column(items.map(|s| El::from(cmp::variant_button(label(s), "link").on_press(Msg::Status(s.into()))))).spacing(m.space_xs);
-        w::card(w::Collapsible::new(head, body, t.open[i])).into()
-    };
-    let task = column![
-        group(0, "System Tasks", ["View system information", "Add or remove programs", "Change a setting"]),
-        group(1, "Other Places", ["My Network Places", "My Documents", "Control Panel"]),
-        group(2, "Details", ["Local Disk (C:)", "File System: NTFS", "Free space 15.2 GB"]),
-    ]
-    .spacing(m.gap)
-    .width(220);
-    let drives = row(DRIVES.iter().enumerate().map(|(i, (name, used, note))| {
-        let b = column![
-            Icon::Folder.view(32.0),
-            label(*name),
-            cmp::progress_bar(0.0..=1.0, *used),
-            caption(*note),
-        ]
-        .spacing(m.space_xs)
-        .width(170);
-        let card = w::card(b);
-        El::from(cmp::flat_button(card).on_press(Msg::Pick(i)))
-    }))
-    .spacing(m.gap);
-    let tabs = w::Tabs::new(Some(t.tab), Msg::Tab)
-        .variant(w::TabsVariant::Outline)
-        .tab(w::TabItem::new(0usize, "Hard Disk Drives").panel(move || drives_panel(t)))
-        .tab(w::TabItem::new(1usize, "Devices with Removable Storage").panel(|| label("No removable storage")));
-    let _ = drives;
-    let main = column![Element::from(tabs)].spacing(m.gap).padding(m.inset).width(Length::Fill);
-    let start = row![
-        cmp::variant_button(cmp::typography::label("start"), "suggested").on_press(Msg::Toast(Some("Start menu".into()))),
-        space().width(Length::Fill),
-        label("12:00 PM"),
-    ]
-    .padding(m.space_xs)
+    .height(g("toolbar-height"))
     .align_y(Alignment::Center);
-    let body = row![container(task).padding(m.inset), main].height(Length::Fill);
-    let content = column![El::from(address), El::from(body), El::from(container(start).style(iad::styles::container::headerbar).width(Length::Fill)), status_bar(t.status.clone(), "3 objects")];
-    let dialog: El<'_> = w::AlertDialog::new("Safely remove hardware?").body("Windows can now safely remove the device.")
-        .response("OK", w::ResponseAppearance::Suggested, Msg::Dialog(false)).into();
+    let address = row![
+        label("Address"),
+        cmp::entry("My Computer", &t.text)
+            .on_input(Msg::Text)
+            .width(Length::Fill),
+        cmp::variant_button(label("Go"), "suggested").on_press(Msg::Status("My Computer".into()))
+    ]
+    .spacing(m.space_s)
+    .height(g("address-height"))
+    .align_y(Alignment::Center);
+    let group = |index: usize, title: &'static str, links: &[&'static str]| -> El<'_> {
+        let head = cmp::flat_button(row![
+            heading(title),
+            space().width(Length::Fill),
+            label(if t.open[index] { "⌃" } else { "⌄" })
+        ])
+        .width(Length::Fill)
+        .on_press(Msg::Open(index));
+        let body = container(
+            column(links.iter().map(|name| {
+                El::from(
+                    cmp::variant_button(label(*name), "link")
+                        .padding(0)
+                        .height(g("task-row-height"))
+                        .on_press(Msg::Status((*name).into())),
+                )
+            }))
+            .spacing(m.space_xxs),
+        )
+        .padding(g("task-body-padding"));
+        container(w::Collapsible::new(head, body, t.open[index]))
+            .width(Length::Fill)
+            .style(iad::styles::container::card)
+            .into()
+    };
+    let tasks = column![
+        group(
+            0,
+            "System Tasks",
+            &[
+                "View system information",
+                "Add or remove programs",
+                "Change a setting"
+            ]
+        ),
+        group(
+            1,
+            "Other Places",
+            &[
+                "My Network Places",
+                "My Documents",
+                "Shared Documents",
+                "Control Panel"
+            ]
+        ),
+        group(2, "Details", &["My Computer", "System Folder"]),
+    ]
+    .spacing(g("task-gap"));
+    let mut index = 0;
+    let groups = column(SECTIONS.iter().map(|(title, names)| {
+        let title_bar = container(heading(*title))
+            .height(g("section-height"))
+            .padding([m.space_xs, m.space_m])
+            .width(Length::Fill);
+        let items = row(names.iter().map(|name| {
+            let id = index;
+            index += 1;
+            let content = row![Icon::Folder.view(g("item-icon-size")), label(*name)]
+                .spacing(m.space_s)
+                .align_y(Alignment::Center);
+            let button = if id == t.pick {
+                cmp::variant_button(content, "opaque")
+            } else {
+                cmp::flat_button(content)
+            };
+            El::from(
+                button
+                    .width(g("item-width"))
+                    .height(g("item-height"))
+                    .on_press(Msg::Pick(id)),
+            )
+        }));
+        El::from(column![title_bar, items])
+    }));
+    let body = row![
+        container(tasks)
+            .width(g("sidebar-width"))
+            .height(Length::Fill)
+            .padding(g("task-padding"))
+            .clip(true)
+            .style(iad::styles::container::sidebar),
+        container(iced::widget::scrollable(groups))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .clip(true)
+            .style(iad::styles::container::view),
+    ]
+    .height(Length::Fill);
+    let dialog = w::AlertDialog::new("System information")
+        .body("This is a safe preview. No programs are installed or removed.")
+        .response("OK", w::ResponseAppearance::Default, Msg::Dialog(false))
+        .into();
+    let mut content = column![menus, toolbar, address, body];
+    if t.status != "Ready" {
+        content = content.push(status_bar(t.status.clone(), "Preview only"));
+    }
     window(t, TITLE, overlays(t, content.into(), dialog))
-}
-
-fn drives_panel(t: &Toy) -> El<'_> {
-    let m = Metrics::desktop();
-    row(DRIVES.iter().enumerate().map(|(i, (name, used, note))| {
-        let selected = i == t.pick;
-        let b = column![Icon::Folder.view(32.0), label(*name), cmp::progress_bar(0.0..=1.0, *used), caption(*note)]
-            .spacing(m.space_xs)
-            .width(170);
-        let btn = if selected { cmp::raised_button(b) } else { cmp::flat_button(b) };
-        El::from(btn.on_press(Msg::Pick(i)))
-    }))
-    .spacing(m.gap)
-    .into()
 }

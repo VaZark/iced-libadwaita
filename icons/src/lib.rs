@@ -15,6 +15,10 @@ pub mod common {
     pub const ADD: &str = include_str!("../svg/common/add.svg");
     pub const DELETE: &str = include_str!("../svg/common/delete.svg");
     pub const EDIT: &str = include_str!("../svg/common/edit.svg");
+    /// An originally drawn disk: save the current document.
+    pub const SAVE: &str = include_str!("../svg/common/save.svg");
+    /// An originally drawn disk with a pencil: save under a new name.
+    pub const SAVE_AS: &str = include_str!("../svg/common/save-as.svg");
     pub const FILTER: &str = include_str!("../svg/common/filter.svg");
     pub const FULLSCREEN_EXIT: &str = include_str!("../svg/common/fullscreen-exit.svg");
     pub const FULLSCREEN: &str = include_str!("../svg/common/fullscreen.svg");
@@ -203,6 +207,8 @@ pub fn all() -> impl Iterator<Item = (&'static str, &'static str)> {
         ("common/compass", common::COMPASS),
         ("common/sparkle", common::SPARKLE),
         ("common/compact", common::COMPACT),
+        ("common/save", common::SAVE),
+        ("common/save-as", common::SAVE_AS),
         ("media/shuffle", media::SHUFFLE),
         ("media/repeat", media::REPEAT),
         ("media/queue", media::QUEUE),
@@ -271,9 +277,15 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for (name, svg) in all() {
             assert!(seen.insert(name), "{name} listed twice");
-            assert!(svg.starts_with("<svg ") && svg.trim_end().ends_with("</svg>"), "{name}");
+            assert!(
+                svg.starts_with("<svg ") && svg.trim_end().ends_with("</svg>"),
+                "{name}"
+            );
             assert!(svg.contains(r#"viewBox="0 0 16 16""#), "{name}: not 16x16");
-            assert!(!svg.contains("currentColor"), "{name}: fixed colour is #000, recoloured by the toolkit");
+            assert!(
+                !svg.contains("currentColor"),
+                "{name}: fixed colour is #000, recoloured by the toolkit"
+            );
         }
         assert!(seen.len() >= 70, "found only {}", seen.len());
     }
@@ -282,5 +294,8 @@ mod tests {
     fn lookup_by_name() {
         assert_eq!(get("app/pin"), Some(app::PIN));
         assert_eq!(get("app/nope"), None);
+        assert_eq!(get("common/save"), Some(common::SAVE));
+        assert_eq!(get("common/save-as"), Some(common::SAVE_AS));
+        assert_ne!(common::SAVE, common::SAVE_AS);
     }
 }

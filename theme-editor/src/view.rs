@@ -1,6 +1,6 @@
-//! The window: a header bar, the themes list, the tokens and the live preview.
+//! Section-first editor with a theme picker and external gallery/toy launchers.
 //!
-//! The shell follows the organiser apps: a `NavigationSplitView` with the list on the side and a
+//! The shell follows the organiser apps: a `NavigationSplitView` with sections on the side and a
 //! `toolbar_view` for the content, boxed groups of rows, toasts for what happened, shortcuts shown
 //! in the menu, and an empty state where there is nothing to list.
 
@@ -13,17 +13,37 @@ use iced::widget::{column, container, responsive, row, scrollable, space, text};
 use iced::{Alignment, Length};
 use iced_adaptive_design as iad;
 
-/// Below this window width the themes list is a drawer.
+/// Below this window width the section list is a drawer.
 const SIDEBAR_COLLAPSES: f32 = 820.0;
-/// From this content width the preview sits beside the tokens; narrower, it replaces them.
-const PREVIEW_BESIDE: f32 = 940.0;
-/// Below this width the sections are a dropdown above the tokens, not a list beside them.
-const SECTIONS_BESIDE: f32 = 620.0;
+/// Editor-local overflow policy; shared dropdown defaults remain unchanged.
+pub(crate) fn theme_item_props(max_width: f32) -> w::DropdownItemProps {
+    w::DropdownItemProps::default()
+        .label_props(
+            cmp::TextProps::default()
+                .overflow(cmp::TextOverflow::Wrap)
+                .width(Length::Fill),
+        )
+        .container_props(
+            cmp::ContainerProps::default()
+                .width(Length::Fill)
+                .max_width(max_width),
+        )
+        .button_props(cmp::ButtonProps::default().width(Length::Fill))
+}
 
 impl Editor {
     pub(crate) fn view(&self) -> Element<'_, Msg> {
         let chrome = iad::windows::Chrome::new(self.win);
         let body: Element<'_, Msg> = responsive(move |size| self.shell(size.width)).into();
+        let body = if self.theme_picker {
+            w::dialog(
+                body,
+                self.theme_picker_view(),
+                Some(Msg::ThemePicker(false)),
+            )
+        } else {
+            body
+        };
         let framed = chrome.frame(body, Msg::Window);
         let menu = self.main_menu();
         let framed = Shortcuts::new()
@@ -70,6 +90,7 @@ impl Editor {
             .section([
                 item("New", Msg::New, Some("Ctrl+N"), true),
                 item("Open…", Msg::Open, Some("Ctrl+O"), true),
+                item("Choose theme…", Msg::ThemePicker(true), None, true),
             ])
             .section([
                 item("Save", Msg::Save, Some("Ctrl+S"), true),
@@ -112,41 +133,68 @@ impl Editor {
 
     /// "Try it out": the gallery, then a toy window per design language.
     fn try_menu(&self, m: iad::Metrics) -> Element<'_, Msg> {
-        let mut items: Vec<Element<'_, Msg>> = vec![w::menu_item(
-            "Gallery (every component)",
-            false,
-            Msg::TryOut("gallery".into()),
-        )];
-        items.extend(self.toys.iter().map(|t| {
-            w::menu_item(
-                format!("{} window", t.label),
-                false,
-                Msg::TryOut(t.name.clone()),
-            )
-        }));
-        let trigger = container(
-            row![
-                cmp::typography::label("Try it out"),
-                Icon::GoDown.view(m.icon_size)
-            ]
-            .spacing(m.space_s)
-            .align_y(Alignment::Center),
+        let actions = std::iter::once(
+            w::SplitAction::new("gallery".to_string(), "Open Gallery").icon(Icon::Play),
         )
-        .padding(m.button_padding)
-        .center_y(Length::Fixed(m.button_min_height))
-        .style(|t: &iad::Theme| iced::widget::container::Style {
-            background: Some(
-                iad::color::alpha(t.semantic.window.fg, t.semantic.opacity.control).into(),
-            ),
-            border: iced::Border {
-                radius: t.metrics.radius_m.into(),
-                ..Default::default()
-            },
-            text_color: Some(t.semantic.window.fg),
-            ..Default::default()
-        });
-        w::Popover::new(trigger, w::popover(items, 360.0))
-            .popover_width(260.0)
+        .chain(self.toys.iter().map(|t| {
+            w::SplitAction::new(t.name.clone(), format!("Open {} window", t.label))
+                .icon(Icon::Window)
+        }));
+        w::SplitButtonAction::new(
+            actions,
+            self.launch_target.clone(),
+            Msg::LaunchTarget,
+            Msg::TryOut,
+        )
+        .metrics(m)
+        .label_props(
+            cmp::TextProps::default()
+                .overflow(cmp::TextOverflow::Wrap)
+                .width(Length::Fixed(m.sidebar_width)),
+        )
+        .option_props(theme_item_props(m.sidebar_width))
+        .into()
+    }
+
+    fn theme_picker_view(&self) -> Element<'_, Msg> {
+        responsive(move |size| self.theme_picker_at(size)).into()
+    }
+
+    pub(crate) fn theme_picker_at(&self, size: iced::Size) -> Element<'_, Msg> {
+        let m = iad::Metrics::desktop();
+        let width = m.clamp_maximum.min((size.width - 2.0 * m.space_m).max(0.0));
+        let height = m
+            .clamp_maximum
+            .min((size.height - 2.0 * m.space_m).max(0.0));
+        let picker = container(
+            column![
+                row![
+                    text("Choose a theme"),
+                    space().width(Length::Fill),
+                    cmp::icon_button(Icon::WindowClose).on_press(Msg::ThemePicker(false))
+                ]
+                .align_y(Alignment::Center),
+                self.files_pane(m, (width - m.page_padding.x()).max(0.0)),
+                row![
+                    cmp::flat_button(cmp::typography::label("New")).on_press(Msg::New),
+                    cmp::flat_button(cmp::typography::label("Open…")).on_press(Msg::Open),
+                    cmp::flat_button(cmp::typography::label("Add folder…"))
+                        .on_press(Msg::AddFolder),
+                    cmp::icon_button(Icon::Reset).on_press(Msg::Refresh),
+                ]
+                .spacing(m.space_s)
+                .wrap(),
+            ]
+            .spacing(m.space_m),
+        )
+        .padding(m.page_padding)
+        .width(Length::Fixed(width))
+        .height(Length::Fixed(height))
+        .clip(true)
+        .style(iad::styles::container::card);
+        container(picker)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
             .into()
     }
 
@@ -160,27 +208,11 @@ impl Editor {
 
         let side_head = w::header_bar()
             .chrome(&chrome.edges(true, false), Msg::Window)
-            .title("Themes");
-        let side = w::toolbar_view(self.files_pane(m))
-            .top_bar(side_head)
-            .bottom_bar(
-                row![
-                    cmp::flat_button(cmp::typography::label("New")).on_press(Msg::New),
-                    cmp::flat_button(cmp::typography::label("Open…")).on_press(Msg::Open),
-                    space().width(Length::Fill),
-                    cmp::tooltip(
-                        cmp::icon_button(Icon::FolderOpen).on_press(Msg::AddFolder),
-                        "Add a folder of themes",
-                        TooltipPosition::Top,
-                    ),
-                ]
-                .spacing(m.space_xs)
-                .padding(m.space_xs)
-                .align_y(Alignment::Center),
-            );
+            .title("Sections");
+        let side = w::toolbar_view(self.sections_pane(m)).top_bar(side_head);
 
         let content_width = if collapsed { width } else { width * 0.74 };
-        let content = w::toolbar_view(self.main_pane(content_width, m))
+        let content = w::toolbar_view(self.main_pane(content_width, collapsed, m))
             .top_bar(self.header(collapsed, &chrome, m));
 
         w::NavigationSplitView::new(side, content)
@@ -215,9 +247,12 @@ impl Editor {
         if collapsed {
             bar = bar.pack_start(cmp::tooltip(
                 cmp::icon_button(Icon::Sidebar).on_press(Msg::Drawer(true)),
-                "The themes",
+                "Show sections",
                 TooltipPosition::Bottom,
             ));
+        }
+        if !collapsed {
+            bar = bar.pack_start(self.try_menu(m));
         }
         bar = bar
             .pack_end(
@@ -225,11 +260,28 @@ impl Editor {
                     .tooltip("Menu")
                     .window_radius(chrome.radius()),
             )
-            .pack_end(self.try_menu(m))
-            .pack_end(cmp::raised_button(cmp::typography::label("Save as")).on_press(Msg::SaveAs))
             .pack_end(
-                cmp::raised_button(cmp::typography::label("Save"))
-                    .on_press_maybe((self.dirty() || self.path.is_none()).then_some(Msg::Save)),
+                cmp::flat_button(cmp::typography::label("Themes…"))
+                    .on_press(Msg::ThemePicker(true)),
+            )
+            .pack_end(
+                cmp::raised_button(
+                    row![
+                        Icon::SaveAs.view(m.icon_size),
+                        cmp::typography::label("Save as")
+                    ]
+                    .spacing(m.space_s)
+                    .align_y(Alignment::Center),
+                )
+                .on_press(Msg::SaveAs),
+            )
+            .pack_end(
+                cmp::raised_button(
+                    row![Icon::Save.view(m.icon_size), cmp::typography::label("Save")]
+                        .spacing(m.space_s)
+                        .align_y(Alignment::Center),
+                )
+                .on_press_maybe((self.dirty() || self.path.is_none()).then_some(Msg::Save)),
             );
         bar.into()
     }
@@ -237,13 +289,41 @@ impl Editor {
     // ------------------------------------------------------------ the list
 
     /// The theme files: a filter, then the registered ones, the folders and the recent files.
-    fn files_pane(&self, m: iad::Metrics) -> Element<'_, Msg> {
+    pub(crate) fn theme_option(
+        &self,
+        preset: &crate::files::Preset,
+        width: f32,
+    ) -> Element<'_, Msg> {
+        let active = self
+            .path
+            .as_deref()
+            .map(crate::files::canon)
+            .is_some_and(|path| path == crate::files::canon(&preset.path));
+        let path = match &preset.target {
+            Some(target) => format!("{} → {}", preset.path.display(), target.display()),
+            None => preset.path.display().to_string(),
+        };
+        let label = format!(
+            "{}{}{}\n{path}",
+            if active { self.dot() } else { "" },
+            preset.name,
+            if preset.is_default { " · default" } else { "" }
+        );
+        w::menu_item_with_props(
+            label,
+            active,
+            Msg::Pick(preset.path.clone()),
+            theme_item_props(width),
+        )
+    }
+
+    fn files_pane(&self, m: iad::Metrics, width: f32) -> Element<'_, Msg> {
         let filter = cmp::entry("Filter themes", self.files_filter.as_str())
             .left_section(iad::icon::EntryIcon::Search.view(16.0))
-            .on_input(Msg::FilesFilter);
+            .on_input(Msg::FilesFilter)
+            .width(Length::Fill);
         let q = self.files_filter.trim().to_lowercase();
-        let open = self.path.as_deref().map(crate::files::canon);
-        let dot = self.dot();
+
         let mut list = column![].spacing(m.space_xxs).width(Length::Fill);
         let mut group = "";
         let mut shown = 0;
@@ -268,41 +348,9 @@ impl Editor {
                         .style(iad::styles::text::dim),
                 );
             }
-            let active = open.as_deref() == Some(crate::files::canon(&preset.path).as_path());
-            let mut title = row![text(format!(
-                "{}{}",
-                if active { dot } else { "" },
-                preset.name
-            ))]
-            .spacing(m.space_xs);
-            if preset.is_default {
-                title = title.push(space().width(Length::Fill)).push(
-                    text("default")
-                        .size(m.space_m)
-                        .style(iad::styles::text::dim),
-                );
-            }
-            let mut label = column![title].width(Length::Fill);
-            if let Some(target) = &preset.target {
-                label = label.push(
-                    text(format!("→ {}", target.display()))
-                        .size(m.space_m - 1.0)
-                        .style(iad::styles::text::dim),
-                );
-            }
-            let button = if active {
-                cmp::raised_button(label)
-            } else {
-                cmp::flat_button(label)
-            };
-            list = list.push(cmp::tooltip(
-                button
-                    .on_press(Msg::Pick(preset.path.clone()))
-                    .width(Length::Fill),
-                preset.path.display().to_string(),
-                TooltipPosition::Right,
-            ));
+            list = list.push(self.theme_option(preset, (width - 2.0 * m.space_s).max(0.0)));
         }
+
         let body: Element<'_, Msg> = if shown == 0 {
             w::status_page()
                 .icon(Icon::Folder.view(48.0))
@@ -330,33 +378,34 @@ impl Editor {
 
     // ------------------------------------------------------------ the tokens
 
-    /// The controls, then the tokens, then (wide enough) the preview.
-    fn main_pane(&self, width: f32, m: iad::Metrics) -> Element<'_, Msg> {
-        let beside = width >= PREVIEW_BESIDE;
-        let controls = self.controls(width, beside, m);
-        let tokens = self.tokens_area(if beside { width * 0.58 } else { width }, m);
-        let body: Element<'_, Msg> = if beside {
-            row![
-                container(tokens).width(Length::FillPortion(3)),
-                container(self.preview_pane(m)).width(Length::FillPortion(2)),
-            ]
-            .spacing(m.space_m)
-            .height(Length::Fill)
-            .into()
-        } else if self.show_preview {
-            self.preview_pane(m)
-        } else {
-            tokens
-        };
-        column![controls, body]
+    /// Token controls and editing, with an independent external-preview scheme selector.
+    fn main_pane(&self, width: f32, collapsed: bool, m: iad::Metrics) -> Element<'_, Msg> {
+        let controls = self.controls(width, m);
+        let body = self.tokens_area(m);
+        let scheme = cmp::toggle_group(
+            crate::toys::LaunchScheme::ALL
+                .iter()
+                .map(|s| cmp::ToggleItem::new(*s, s.label()))
+                .collect(),
+            Some(self.launch_scheme),
+            Msg::LaunchScheme,
+        );
+        let mut launcher = row![text("Launch appearance"), scheme]
+            .spacing(m.space_s)
+            .align_y(Alignment::Center);
+        if collapsed {
+            launcher = launcher.push(self.try_menu(m));
+        }
+        let launcher = launcher.wrap();
+        column![controls, body, launcher]
             .spacing(m.space_s)
             .padding(m.space_s)
             .height(Length::Fill)
             .into()
     }
 
-    /// Variant, search, "modified only", copy from base, and the preview switch when it is hidden.
-    fn controls(&self, _width: f32, beside: bool, m: iad::Metrics) -> Element<'_, Msg> {
+    /// Scheme token variation, search, modified-only filter, and copy from base.
+    fn controls(&self, _width: f32, m: iad::Metrics) -> Element<'_, Msg> {
         let variants = cmp::toggle_group(
             Variant::ALL
                 .iter()
@@ -369,15 +418,28 @@ impl Editor {
             .left_section(iad::icon::EntryIcon::Search.view(16.0))
             .on_input(Msg::Search)
             .width(Length::Fill);
+        let overrides = if self.variant == Variant::Base {
+            cmp::switch(false)
+        } else {
+            cmp::switch(self.overrides_only).on_toggle(Msg::OverridesOnly)
+        };
         let mut bar = row![
-            variants,
-            search,
             row![
                 text("Modified only").size(m.space_m + 1.0),
                 cmp::switch(self.modified_only).on_toggle(Msg::ModifiedOnly),
             ]
             .spacing(m.space_xs)
             .align_y(Alignment::Center),
+            cmp::tooltip(
+                row![text("Overrides only").size(m.space_m + 1.0), overrides]
+                    .spacing(m.space_xs).align_y(Alignment::Center),
+                if self.variant == Variant::Base {
+                    "Choose Light or Dark to show only tokens explicitly set in that scheme."
+                } else {
+                    "Only values explicitly set in the active scheme; inherited base values are hidden."
+                },
+                TooltipPosition::Bottom,
+            ),
         ]
         .spacing(m.space_m)
         .align_y(Alignment::Center);
@@ -389,49 +451,31 @@ impl Editor {
                 TooltipPosition::Bottom,
             ));
         }
-        if !beside {
-            bar = bar.push(
-                row![
-                    text("Preview").size(m.space_m + 1.0),
-                    cmp::switch(self.show_preview).on_toggle(Msg::ShowPreview),
-                ]
-                .spacing(m.space_xs)
+        column![
+            row![variants, search]
+                .spacing(m.space_m)
                 .align_y(Alignment::Center),
-            );
-        }
-        bar.into()
+            bar.wrap()
+        ]
+        .spacing(m.space_s)
+        .into()
     }
 
-    /// The sections (with how many tokens each sets) and the page of tokens.
-    fn tokens_area(&self, width: f32, m: iad::Metrics) -> Element<'_, Msg> {
+    /// The token page occupies the content pane, without an embedded preview.
+    fn tokens_area(&self, m: iad::Metrics) -> Element<'_, Msg> {
         let page = scrollable(
             container(self.page(m))
                 .padding([m.space_s, m.space_m])
                 .max_width(m.clamp_maximum + 160.0),
         )
+        .id(iced::widget::Id::new(crate::tokens::TOKENS_SCROLL))
         .width(Length::Fill)
         .height(Length::Fill);
-        if width < SECTIONS_BESIDE {
-            let labels: Vec<String> = self
-                .sections
-                .iter()
-                .map(|s| crate::tokens::section_label(s))
-                .collect();
-            let dropdown = iced::widget::pick_list(
-                labels,
-                Some(crate::tokens::section_label(&self.section)),
-                |label| {
-                    self.sections
-                        .iter()
-                        .find(|s| crate::tokens::section_label(s) == label)
-                        .map_or(Msg::Noop, |s| Msg::Section(s.clone()))
-                },
-            );
-            return column![container(dropdown).padding([0.0, m.space_s]), page]
-                .spacing(m.space_xs)
-                .into();
-        }
-        let list = column(self.sections.iter().map(|s| {
+        page.into()
+    }
+
+    fn sections_pane(&self, m: iad::Metrics) -> Element<'_, Msg> {
+        let list = column(self.section_choices().map(|s| {
             let n = self.set_count(s);
             let mut label = row![text(crate::tokens::section_label(s))]
                 .spacing(m.space_xs)
@@ -443,77 +487,18 @@ impl Editor {
                         .style(iad::styles::text::dim),
                 );
             }
-            let button = if *s == self.section && self.search.trim().is_empty() {
+            let button = if s == self.effective_section() {
                 cmp::raised_button(label)
             } else {
                 cmp::flat_button(label)
             };
             button
-                .on_press(Msg::Section(s.clone()))
+                .on_press(Msg::Section(s.to_string()))
                 .width(Length::Fill)
                 .into()
         }))
         .spacing(m.space_xxs)
-        .width(Length::Fixed(172.0));
-        row![scrollable(list).height(Length::Fill), page]
-            .spacing(m.space_s)
-            .height(Length::Fill)
-            .into()
-    }
-
-    // ------------------------------------------------------------ the preview
-
-    fn preview_pane(&self, m: iad::Metrics) -> Element<'_, Msg> {
-        let schemes = cmp::toggle_group(
-            vec![
-                cmp::ToggleItem::new(false, "Light"),
-                cmp::ToggleItem::new(true, "Dark"),
-            ],
-            Some(self.preview_dark),
-            Msg::PreviewDark,
-        );
-        let scale = self.preview.scale();
-        let widths = row![
-            text(format!("Layout width: {:.0} px", self.preview_width)),
-            iced::widget::slider(
-                m.icon_size..=scale.xxl,
-                self.preview_width,
-                Msg::PreviewWidth
-            ),
-        ]
-        .spacing(m.space_s)
-        .align_y(Alignment::Center);
-        let frame = container(
-            iced::widget::scrollable(self.preview.view_at(self.preview_width)).direction(
-                iced::widget::scrollable::Direction::Horizontal(
-                    iced::widget::scrollable::Scrollbar::default(),
-                ),
-            ),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .clip(true)
-        .style(|t: &iad::Theme| iced::widget::container::Style {
-            border: iced::Border {
-                color: t.semantic.window.fg.scale_alpha(0.2),
-                width: 1.0,
-                radius: 8.0.into(),
-            },
-            ..Default::default()
-        });
-        column![
-            row![
-                text("Live preview").size(m.space_m + 2.0),
-                space().width(Length::Fill),
-                schemes,
-            ]
-            .align_y(Alignment::Center),
-            widths,
-            text("Named widget variants are independent of Light / Dark scheme overrides."),
-            frame,
-        ]
-        .spacing(m.space_xs)
-        .height(Length::Fill)
-        .into()
+        .width(Length::Fill);
+        scrollable(list).height(Length::Fill).into()
     }
 }

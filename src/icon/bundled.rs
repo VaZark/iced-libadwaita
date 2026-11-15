@@ -14,6 +14,8 @@ impl Icon {
             Self::DialogInformation => iad_icons::common::INFORMATION,
             Self::HelpAbout => iad_icons::common::INFORMATION,
             Self::Edit => iad_icons::common::EDIT,
+            Self::Save => iad_icons::common::SAVE,
+            Self::SaveAs => iad_icons::common::SAVE_AS,
             Self::ViewMore => iad_icons::common::VIEW_MORE,
             Self::Play => iad_icons::common::PLAY,
             Self::Pause => iad_icons::common::PAUSE,
@@ -93,6 +95,23 @@ impl Icon {
 mod tests {
     use super::*;
     use crate::IconSource;
+    #[test]
+    fn save_icons_are_registered_with_distinct_bundled_artwork() {
+        for (icon, name, source) in [
+            (Icon::Save, "document-save", iad_icons::common::SAVE),
+            (Icon::SaveAs, "document-save-as", iad_icons::common::SAVE_AS),
+        ] {
+            assert_eq!(Icon::ALL.iter().filter(|&&value| value == icon).count(), 1);
+            assert_eq!(icon.name(), name);
+            assert_eq!(icon.system_name().unwrap(), format!("{name}-symbolic"));
+            assert_eq!(icon.bundled_source(), source);
+            assert!(matches!(IconSource::from(icon), IconSource::Svg(handle)
+                if handle == iced::widget::svg::Handle::from_memory(source.as_bytes())));
+            let _view = icon.view(16.0);
+        }
+        assert_ne!(Icon::Save.bundled_source(), Icon::SaveAs.bundled_source());
+    }
+
     #[test]
     fn bundled_defaults_fit_and_render_at_control_sizes() {
         for icon in Icon::ALL {

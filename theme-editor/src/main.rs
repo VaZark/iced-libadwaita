@@ -1,11 +1,12 @@
 //! The theme editor: opens, edits and saves theme files with a control for each token by its type,
-//! previews them live, and starts the gallery or a toy window of a design language with the
+//! starts the gallery or a toy window of a design language with the
 //! values being edited.
 //!
 //! `theme-editor [FILE]`. The editor's own look is `themes/libadwaita.conf`, so editing never
 //! changes the tool itself.
 
 mod files;
+#[cfg(test)]
 mod preview;
 mod tokens;
 mod toys;
@@ -105,6 +106,7 @@ struct Editor {
     search: String,
     files_filter: String,
     modified_only: bool,
+    overrides_only: bool,
     collapsed: BTreeSet<(String, String)>,
     // -- undo
     undo: Vec<BTreeMap<Addr, String>>,
@@ -118,15 +120,14 @@ struct Editor {
     // -- the window
     win: iad::windows::State,
     drawer: bool,
-    preview: preview::Preview,
-    preview_dark: bool,
-    preview_width: f32,
-    /// On a narrow window the preview replaces the tokens.
-    show_preview: bool,
+    theme_picker: bool,
+    launch_scheme: toys::LaunchScheme,
+    launch_target: String,
 }
 
 #[derive(Debug, Clone)]
 enum Msg {
+    #[cfg(test)]
     Noop,
     Pick(PathBuf),
     New,
@@ -149,6 +150,7 @@ enum Msg {
     Search(String),
     FilesFilter(String),
     ModifiedOnly(bool),
+    OverridesOnly(bool),
     Undo,
     Redo,
     Open,
@@ -160,10 +162,10 @@ enum Msg {
     TryOut(String),
     DismissToast,
     Drawer(bool),
-    PreviewDark(bool),
-    PreviewWidth(f32),
+    ThemePicker(bool),
+    LaunchScheme(toys::LaunchScheme),
+    LaunchTarget(String),
     Rule(String, usize, Option<(Option<String>, Option<String>)>),
-    ShowPreview(bool),
     /// A window button or edge of the chrome.
     Window(iad::windows::Action),
     WindowChanged,
@@ -217,6 +219,7 @@ impl Editor {
             search: String::new(),
             files_filter: String::new(),
             modified_only: false,
+            overrides_only: false,
             collapsed: BTreeSet::new(),
             undo: Vec::new(),
             redo: Vec::new(),
@@ -226,12 +229,16 @@ impl Editor {
             bins,
             win: iad::windows::State::default(),
             drawer: false,
-            preview: preview::Preview::build("", false),
-            preview_dark: false,
-            preview_width: iad::breakpoints::Breakpoints::default().md,
-            show_preview: false,
+            theme_picker: false,
+            launch_scheme: toys::LaunchScheme::System,
+            launch_target: "gallery".into(),
         };
-        if let Some(s) = e.state.section.clone().filter(|s| e.sections.contains(s)) {
+        if let Some(s) = e
+            .state
+            .section
+            .clone()
+            .filter(|s| e.section_choices().any(|id| id == s))
+        {
             e.section = s;
         }
         if let Some(v) = e.state.variant {
@@ -243,7 +250,7 @@ impl Editor {
         }
         if let Some(s) = std::env::var("THEME_EDITOR_SECTION")
             .ok()
-            .filter(|s| e.sections.contains(s))
+            .filter(|s| e.section_choices().any(|id| id == s))
         {
             e.section = s;
         }
@@ -252,7 +259,9 @@ impl Editor {
         }
         e.rescan();
         e.refresh();
-        e.refresh_preview();
+        if iad::dev::Switches::from_env().screenshot.is_some() {
+            e.theme_picker = std::env::var_os("THEME_EDITOR_PICKER").is_some();
+        }
         // Reopening the last file is not news.
         e.toast = None;
         let boot = if iad::dev::Switches::from_env().screenshot.is_some() {
@@ -564,14 +573,6 @@ impl Editor {
             .find(|s| s.section == section && s.key == key)
     }
 
-    /// The preview follows the values and the scheme chosen for it.
-    fn refresh_preview(&mut self) {
-        let text = self.generate();
-        if self.preview.source != text || self.preview.dark != self.preview_dark {
-            self.preview = preview::Preview::build(&text, self.preview_dark);
-        }
-    }
-
     // --------------------------------------------------------------- undo
 
     fn clear_history(&mut self) {
@@ -755,7 +756,10 @@ impl Editor {
     /// its own: the file being edited is never touched.
     fn try_out(&mut self, kind: &str) {
         let text = self.generate();
-        match self.runner.launch(kind, &text, &self.bins) {
+        match self
+            .runner
+            .launch_with_scheme(kind, &text, &self.bins, self.launch_scheme)
+        {
             Ok(_) => {
                 let what = if kind == "gallery" {
                     "the gallery".to_string()
@@ -774,42 +778,61 @@ impl Editor {
     // ------------------------------------------------------------ update
 
     fn update(&mut self, msg: Msg) -> Task<Msg> {
+        let reset_scroll = matches!(
+            &msg,
+            Msg::Section(_)
+                | Msg::Variant(_)
+                | Msg::Search(_)
+                | Msg::ModifiedOnly(_)
+                | Msg::OverridesOnly(_)
+        );
         let task = self.apply(msg);
-        self.refresh_preview();
-        task
+        if reset_scroll {
+            Task::batch([
+                task,
+                iced::widget::operation::snap_to(
+                    iced::widget::Id::new(tokens::TOKENS_SCROLL),
+                    iced::widget::scrollable::RelativeOffset { x: 0.0, y: 0.0 },
+                ),
+            ])
+        } else {
+            task
+        }
     }
 
     fn apply(&mut self, msg: Msg) -> Task<Msg> {
         match msg {
+            #[cfg(test)]
             Msg::Noop => {}
-            Msg::PreviewWidth(width) => {
-                if width.is_finite() && width > 0.0 {
-                    self.preview_width = width;
-                }
-            }
+            Msg::ThemePicker(open) => self.theme_picker = open,
+            Msg::LaunchScheme(scheme) => self.launch_scheme = scheme,
+            Msg::LaunchTarget(target) => self.launch_target = target,
             Msg::Rule(section, index, edit) => self.edit_rule(section, index, edit),
             Msg::Section(s) => {
+                if !self.section_choices().any(|id| id == s) {
+                    return Task::none();
+                }
                 self.section = s;
                 self.drawer = false;
                 self.persist();
             }
             Msg::Variant(v) => {
                 self.variant = v;
-                // The preview shows the scheme being edited.
-                match v {
-                    Variant::Light => self.preview_dark = false,
-                    Variant::Dark => self.preview_dark = true,
-                    Variant::Base => {}
+                if v == Variant::Base {
+                    self.overrides_only = false;
                 }
                 self.last_edit = None;
                 self.refresh();
                 self.persist();
             }
             Msg::Pick(path) => {
-                self.drawer = false;
                 self.pick(Target::File(path));
+                self.theme_picker = self.pending.is_some();
             }
-            Msg::New => self.pick(Target::New),
+            Msg::New => {
+                self.pick(Target::New);
+                self.theme_picker = self.pending.is_some();
+            }
             Msg::Register => self.registry_op(Registry::Register),
             Msg::Unregister => self.registry_op(Registry::Unregister),
             Msg::SetDefault => self.registry_op(Registry::Default),
@@ -892,9 +915,11 @@ impl Editor {
             Msg::Search(s) => self.search = s,
             Msg::FilesFilter(s) => self.files_filter = s,
             Msg::ModifiedOnly(on) => self.modified_only = on,
+            Msg::OverridesOnly(on) => self.overrides_only = on && self.variant != Variant::Base,
             Msg::Undo => self.undo(),
             Msg::Redo => self.redo(),
             Msg::Open => {
+                self.theme_picker = false;
                 let directory = self
                     .path
                     .as_ref()
@@ -957,8 +982,6 @@ impl Editor {
             Msg::TryOut(kind) => self.try_out(&kind),
             Msg::DismissToast => self.toast = None,
             Msg::Drawer(open) => self.drawer = open,
-            Msg::PreviewDark(dark) => self.preview_dark = dark,
-            Msg::ShowPreview(on) => self.show_preview = on,
             Msg::Window(a) => return iced::window::oldest().and_then(move |id| a.perform(id)),
             Msg::WindowChanged => return iad::windows::refresh().map(Msg::WindowState),
             Msg::WindowState(state) => self.win = state,

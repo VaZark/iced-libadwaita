@@ -28,12 +28,16 @@ fn prefix(key: &str) -> String {
     key.split('-').next().unwrap_or(key).to_string()
 }
 
+pub(crate) const ALL_SECTIONS: &str = "all";
+pub(crate) const TOKENS_SCROLL: &str = "theme-editor-tokens";
+
 /// Keep persisted section IDs stable while presenting readable names.
 pub(crate) fn section_label(section: &str) -> String {
     if let Some((widget, variant)) = section.split_once('.') {
         return format!("{} · widget variant: {variant}", section_label(widget));
     }
     match section {
+        ALL_SECTIONS => "All".into(),
         "tree" => "Tree · hierarchy geometry".into(),
         "tree-row" => "Tree rows · nested settings".into(),
         "navigation" => "Navigation · sidebars & drawers".into(),
@@ -196,6 +200,38 @@ impl Editor {
         groups
     }
 
+    pub(crate) fn section_choices(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(ALL_SECTIONS).chain(self.sections.iter().map(String::as_str))
+    }
+
+    /// The active scheme must explicitly set the token, even if equal to its base value.
+    pub(crate) fn is_override(&self, spec: &Spec) -> bool {
+        self.variant != Variant::Base
+            && self
+                .values
+                .contains_key(&(self.section_of(&spec.section), spec.key.clone()))
+    }
+
+    pub(crate) fn effective_section(&self) -> &str {
+        if !self.search.trim().is_empty() {
+            ALL_SECTIONS
+        } else {
+            &self.section
+        }
+    }
+
+    pub(crate) fn page_sections(&self) -> Vec<&str> {
+        if self.effective_section() == ALL_SECTIONS {
+            self.sections.iter().map(String::as_str).collect()
+        } else {
+            self.sections
+                .iter()
+                .filter(|s| **s == self.section)
+                .map(String::as_str)
+                .collect()
+        }
+    }
+
     /// Whether the file sets the token in any variant.
     pub(crate) fn is_set_anywhere(&self, spec: &Spec) -> bool {
         ["", "light:", "dark:"].iter().any(|p| {
@@ -208,12 +244,22 @@ impl Editor {
     pub(crate) fn set_count(&self, section: &str) -> usize {
         self.specs
             .iter()
-            .filter(|s| s.section == section && self.is_set_anywhere(s))
+            .filter(|s| section == ALL_SECTIONS || s.section == section)
+            .filter(|s| {
+                if self.overrides_only {
+                    self.is_override(s)
+                } else {
+                    self.is_set_anywhere(s)
+                }
+            })
             .count()
     }
 
     /// Whether the search and the "modified only" switch let `spec` show.
     pub(crate) fn visible(&self, spec: &Spec) -> bool {
+        if self.overrides_only && !self.is_override(spec) {
+            return false;
+        }
         if self.modified_only && !self.is_set_anywhere(spec) {
             return false;
         }
@@ -238,15 +284,8 @@ impl Editor {
 
     /// The page: the tokens of the current section, or of every section when searching.
     pub(crate) fn page(&self, m: iad::Metrics) -> Element<'_, Msg> {
-        let searching = !self.search.trim().is_empty();
-        let sections: Vec<&String> = if searching {
-            self.sections.iter().collect()
-        } else {
-            self.sections
-                .iter()
-                .filter(|s| **s == self.section)
-                .collect()
-        };
+        let multiple_sections = self.effective_section() == ALL_SECTIONS;
+        let sections = self.page_sections();
         let mut page = column![].spacing(m.group_spacing);
         if let Variant::Light | Variant::Dark = self.variant {
             page = page.push(
@@ -266,7 +305,7 @@ impl Editor {
                     continue;
                 }
                 any = true;
-                page = page.push(self.group(section, &title, specs, searching, m));
+                page = page.push(self.group(section, &title, specs, multiple_sections, m));
             }
         }
         if !any {
@@ -274,7 +313,9 @@ impl Editor {
                 w::status_page()
                     .icon(Icon::Search.view(48.0))
                     .title("No tokens match")
-                    .description(if self.modified_only {
+                    .description(if self.overrides_only {
+                                            "No explicit overrides match in this scheme. Turn off “Overrides only” to include inherited base values."
+                                        } else if self.modified_only {
                         "This file sets nothing that matches. Turn off “Modified only” to see every token."
                     } else {
                         "Try another word: the search looks at names, descriptions and sections."
@@ -294,9 +335,13 @@ impl Editor {
         m: iad::Metrics,
     ) -> Element<'a, Msg> {
         let key = (section.to_string(), title.to_string());
-        let folded = self.collapsed.contains(&key);
+        let folded = self.search.trim().is_empty() && self.collapsed.contains(&key);
         let heading = if searching {
-            format!("{} · {}", section_label(section), words(title))
+            if title == "general" {
+                section_label(section)
+            } else {
+                format!("{} · {}", section_label(section), words(title))
+            }
         } else {
             if title == "general" {
                 section_label(section)

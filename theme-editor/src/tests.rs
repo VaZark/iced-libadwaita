@@ -116,11 +116,6 @@ fn preview_width_rules_use_local_tokens_and_inclusive_breakpoints() {
     assert_eq!(p.selected("tabs", boundary), "outline");
     let _ = p.view_at(boundary - 1.0);
     let _ = p.view_at(boundary);
-    let mut e = editor();
-    let _ = e.update(Msg::PreviewWidth(boundary));
-    assert_eq!(e.preview_width, boundary);
-    let _ = e.update(Msg::PreviewWidth(f32::NAN));
-    assert_eq!(e.preview_width, boundary);
 }
 
 #[test]
@@ -228,6 +223,148 @@ fn tabs_and_toolbar_preview_use_local_rules_and_geometry_without_global_writes()
         &global_config,
         &iad::config::current()
     ));
+}
+
+#[test]
+fn overrides_only_excludes_base_and_other_scheme_values_and_combines_filters() {
+    let mut e = with_text(
+        "[colors]\nwindow-bg=#112233\nwindow-fg=#ffffff\n[light:colors]\nwindow-bg=#112233\n[dark:colors]\nwindow-fg=#111111\n[dark:metrics]\nradius-m=9\n",
+    );
+    let visible = |e: &Editor, section, key| e.visible(e.spec(section, key).unwrap());
+    let _ = e.update(Msg::Variant(Variant::Light));
+    let _ = e.update(Msg::OverridesOnly(true));
+    assert!(
+        visible(&e, "colors", "window-bg"),
+        "an explicit value equal to base is still an override"
+    );
+    assert!(
+        !visible(&e, "colors", "window-fg"),
+        "base is inherited, dark does not count"
+    );
+    assert!(!visible(&e, "metrics", "radius-m"));
+    let _ = e.update(Msg::ModifiedOnly(true));
+    assert!(visible(&e, "colors", "window-bg"));
+    let _ = e.update(Msg::Search("radius".into()));
+    assert!(!visible(&e, "colors", "window-bg"));
+    let _ = e.update(Msg::Variant(Variant::Dark));
+    assert!(e.overrides_only);
+    assert!(visible(&e, "metrics", "radius-m"));
+    let _ = e.update(Msg::Search(String::new()));
+    assert!(visible(&e, "colors", "window-fg"));
+    assert!(!visible(&e, "colors", "window-bg"));
+    let _ = e.update(Msg::OverridesOnly(false));
+    assert!(
+        visible(&e, "colors", "window-bg"),
+        "modified-only still includes base values"
+    );
+}
+
+#[test]
+fn resetting_an_override_updates_filter_results_without_removing_the_base() {
+    let mut e = with_text("[colors]\nwindow-bg=#112233\n[dark:colors]\nwindow-bg=#445566\n");
+    let _ = e.update(Msg::Section(tokens::ALL_SECTIONS.into()));
+    let _ = e.update(Msg::Variant(Variant::Dark));
+    let _ = e.update(Msg::OverridesOnly(true));
+    assert_eq!(e.set_count("colors"), 1);
+    let _ = e.update(Msg::Reset("colors".into(), "window-bg".into()));
+    let spec = e.spec("colors", "window-bg").unwrap();
+    assert!(!e.visible(spec));
+    assert_eq!(e.shown(spec), ("#112233".into(), false));
+    assert_eq!(e.set_count("colors"), 0);
+    let _ = e.update(Msg::Undo);
+    assert!(e.visible(e.spec("colors", "window-bg").unwrap()));
+    assert!(e.overrides_only);
+    assert_eq!(e.set_count(tokens::ALL_SECTIONS), 1);
+}
+
+#[test]
+fn base_disables_and_clears_overrides_only() {
+    let mut e = editor();
+    let _ = e.update(Msg::OverridesOnly(true));
+    assert!(!e.overrides_only);
+    let _ = e.update(Msg::Variant(Variant::Dark));
+    let _ = e.update(Msg::OverridesOnly(true));
+    assert!(e.overrides_only);
+    let _ = e.update(Msg::Variant(Variant::Base));
+    assert!(!e.overrides_only);
+    let _ = e.view();
+}
+
+#[test]
+fn all_page_visits_each_schema_token_once_without_changing_saved_values() {
+    let mut e = with_text("[colors]\nwindow-bg=#112233\n[dark:metrics]\nradius-m=9\n");
+    let before = e.generate();
+    assert_eq!(
+        e.section_choices()
+            .filter(|s| *s == tokens::ALL_SECTIONS)
+            .count(),
+        1
+    );
+    let scroll = e.update(Msg::Section(tokens::ALL_SECTIONS.into()));
+    assert!(
+        scroll.units() > 0,
+        "All navigation resets the token scroll position"
+    );
+    let mut addresses = Vec::new();
+    for section in e.page_sections() {
+        for (_, specs) in e.groups_of(section) {
+            for spec in specs {
+                addresses.push((spec.section.clone(), spec.key.clone()));
+            }
+        }
+    }
+    let unique: BTreeSet<_> = addresses.iter().collect();
+    assert_eq!(addresses.len(), e.specs.len());
+    assert_eq!(unique.len(), addresses.len());
+    assert_eq!(e.generate(), before);
+    assert!(!e.sections.iter().any(|s| s == tokens::ALL_SECTIONS));
+    let _ = e.view();
+    let _ = e.update(Msg::Section("tabs".into()));
+    assert_eq!(e.page_sections(), vec!["tabs"]);
+    let _ = e.update(Msg::Search("radius".into()));
+    assert_eq!(e.effective_section(), tokens::ALL_SECTIONS);
+    assert_eq!(e.page_sections().len(), e.sections.len());
+    let _ = e.update(Msg::Search(String::new()));
+    assert_eq!(e.effective_section(), "tabs");
+    let _ = e.update(Msg::Section("not-a-section".into()));
+    assert_eq!(e.section, "tabs");
+}
+
+#[test]
+fn all_search_and_override_filters_share_the_same_single_page() {
+    let mut e = with_text(
+        "[metrics]\nradius-m=7\n[dark:metrics]\nradius-m=9\n[dark:colors]\nwindow-bg=#112233\n",
+    );
+    let _ = e.update(Msg::Section(tokens::ALL_SECTIONS.into()));
+    let _ = e.update(Msg::Variant(Variant::Dark));
+    let _ = e.update(Msg::OverridesOnly(true));
+    let _ = e.update(Msg::ModifiedOnly(true));
+    let scroll = e.update(Msg::Search("radius-m".into()));
+    assert!(scroll.units() > 0);
+    let shown: Vec<_> = e
+        .page_sections()
+        .into_iter()
+        .flat_map(|section| e.groups_of(section))
+        .flat_map(|(_, specs)| specs)
+        .filter(|spec| e.visible(spec))
+        .collect();
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].section, "metrics");
+    assert_eq!(shown[0].key, "radius-m");
+    assert_eq!(e.set_count(tokens::ALL_SECTIONS), 2);
+    let _ = e.page(iad::Metrics::desktop());
+}
+
+#[test]
+fn all_navigation_is_remembered_across_runs() {
+    let d = temp_dir("all-section-state");
+    let state = d.join("state.conf");
+    let mut e = Editor::with(Some(state.clone()), None).0;
+    let _ = e.update(Msg::Section(tokens::ALL_SECTIONS.into()));
+    let restored = Editor::with(Some(state), None).0;
+    assert_eq!(restored.section, tokens::ALL_SECTIONS);
+    assert_eq!(restored.page_sections().len(), restored.sections.len());
+    std::fs::remove_dir_all(d).unwrap();
 }
 
 fn editor() -> Editor {
@@ -396,6 +533,184 @@ fn save_without_a_path_asks_where_instead_of_writing() {
     let task = e.update(Msg::Save);
     assert!(task.units() > 0, "Save as opens the file dialog");
     assert!(e.path.is_none() && e.dirty());
+}
+
+#[test]
+fn launch_choices_are_independent_of_scheme_token_editing() {
+    let mut e = editor();
+    assert_eq!(e.launch_scheme, toys::LaunchScheme::System);
+    assert_eq!(e.launch_target, "gallery");
+    let _ = e.update(Msg::LaunchTarget("win95".into()));
+    let _ = e.update(Msg::LaunchScheme(toys::LaunchScheme::Dark));
+    let _ = e.update(Msg::Variant(Variant::Light));
+    assert_eq!(e.launch_target, "win95");
+    assert_eq!(e.launch_scheme, toys::LaunchScheme::Dark);
+    assert!(
+        !e.runner.running("win95"),
+        "choosing an action must not launch it"
+    );
+    let _ = e.update(Msg::ThemePicker(true));
+    let _ = e.view();
+    let _ = e.update(Msg::ThemePicker(false));
+    let _ = e.update(Msg::Section("tabs".into()));
+    assert_eq!(e.section, "tabs");
+    assert!(!e.drawer);
+}
+
+#[test]
+fn theme_picker_bounds_and_wraps_long_names_and_paths_at_narrow_widths() {
+    use iced::advanced::{layout, renderer::Headless, widget::Tree};
+    let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+        iced::Font::DEFAULT,
+        iced::Pixels(14.0),
+        Some("tiny-skia"),
+    ))
+    .unwrap();
+    let mut e = editor();
+    e.presets = vec![Preset {
+        group: "Folders",
+        name: "夜空のテーマ العربية Ελληνικά हिन्दी café 🎨 AnUnbrokenVeryLongThemeName".repeat(16),
+        path: PathBuf::from(format!("/themes/{}.conf", "long-directory-name".repeat(24))),
+        target: Some(PathBuf::from(format!(
+            "/linked/{}.conf",
+            "another-long-name".repeat(24)
+        ))),
+        is_default: true,
+    }];
+    fn assert_horizontal_bounds(node: &layout::Node, parent_x: f32, width: f32) {
+        let bounds = node.bounds();
+        let x = parent_x + bounds.x;
+        assert!(
+            x >= -0.1 && x + bounds.width <= width + 0.1,
+            "picker child overflows: x={x}, width={}, viewport={width}",
+            bounds.width
+        );
+        for child in node.children() {
+            assert_horizontal_bounds(child, x, width);
+        }
+    }
+    let short = Preset {
+        group: "Folders",
+        name: "Theme".into(),
+        path: "/themes/theme.conf".into(),
+        target: None,
+        is_default: false,
+    };
+    for width in [320.0, 480.0, 760.0] {
+        let props = crate::view::theme_item_props(width);
+        assert_eq!(
+            props.label.overflow,
+            Some(iad::components::TextOverflow::Wrap)
+        );
+        assert_eq!(props.container.max_width.unwrap().0, width);
+        let measure = |mut element: iad::Element<'_, Msg>| {
+            let mut state = Tree::new(&element);
+            element.as_widget_mut().layout(
+                &mut state,
+                &renderer,
+                &layout::Limits::new(iced::Size::ZERO, iced::Size::new(width, f32::INFINITY)),
+            )
+        };
+        let long_layout = measure(e.theme_option(&e.presets[0], width));
+        let short_layout = measure(e.theme_option(&short, width));
+        assert_horizontal_bounds(&long_layout, 0.0, width);
+        assert!(
+            long_layout.size().height > short_layout.size().height,
+            "multilingual option must grow vertically rather than overflow or truncate"
+        );
+        let size = iced::Size::new(width, 480.0);
+        let mut element = e.theme_picker_at(size);
+        let mut state = Tree::new(&element);
+        let node = element.as_widget_mut().layout(
+            &mut state,
+            &renderer,
+            &layout::Limits::new(iced::Size::ZERO, size),
+        );
+        assert_horizontal_bounds(&node, 0.0, width);
+        assert!(node.size().height <= size.height);
+    }
+}
+
+#[test]
+fn theme_picker_keeps_unsaved_confirmation_accessible() {
+    let d = temp_dir("picker-confirm");
+    let target = d.join("other.conf");
+    std::fs::write(&target, "[metrics]\nradius-m=2\n").unwrap();
+    let mut e = editor();
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let _ = e.update(Msg::ThemePicker(true));
+    let _ = e.update(Msg::Pick(target.clone()));
+    assert!(e.theme_picker && e.pending.is_some() && e.dirty());
+    let _ = e.update(Msg::Pick(target.clone()));
+    assert!(!e.theme_picker && e.pending.is_none());
+    assert_eq!(e.path, Some(target));
+    std::fs::remove_dir_all(d).unwrap();
+}
+
+#[test]
+fn launch_scheme_overwrites_or_removes_preexisting_child_overrides() {
+    for scheme in toys::LaunchScheme::ALL {
+        let mut command = std::process::Command::new("sh");
+        command
+            .env("TOYS_SCHEME", "dark")
+            .env("GALLERY_SCHEME", "light");
+        scheme.apply_environment(&mut command);
+        let environment: BTreeMap<_, _> = command.get_envs().collect();
+        let expected = match scheme {
+            toys::LaunchScheme::System => None,
+            toys::LaunchScheme::Light => Some(std::ffi::OsStr::new("light")),
+            toys::LaunchScheme::Dark => Some(std::ffi::OsStr::new("dark")),
+        };
+        for key in ["TOYS_SCHEME", "GALLERY_SCHEME"] {
+            assert_eq!(environment[std::ffi::OsStr::new(key)], expected);
+        }
+    }
+}
+
+#[test]
+fn gallery_and_toys_receive_launch_scheme_only_in_child_environment() {
+    let d = temp_dir("launch-schemes");
+    let inherited_toys = std::env::var_os("TOYS_SCHEME");
+    let inherited_gallery = std::env::var_os("GALLERY_SCHEME");
+    let mut runner = toys::Runner::default();
+    for kind in ["gallery", "win95"] {
+        for scheme in toys::LaunchScheme::ALL {
+            let output = d.join(format!("{kind}-{}", scheme.label()));
+            let bin = script(
+                &d,
+                "capture-scheme",
+                &format!(
+                    "printf 'toys=%s\\ngallery=%s\\n' \"${{TOYS_SCHEME-unset}}\" \"${{GALLERY_SCHEME-unset}}\" > {0}.tmp\nif [ -n \"${{ICED_ADAPTIVE_DESIGN_CONFIG-}}\" ]; then cat \"$ICED_ADAPTIVE_DESIGN_CONFIG\" >> {0}.tmp; fi\nmv {0}.tmp {0}",
+                    output.display()
+                ),
+            );
+            let bins = toys::Bins {
+                gallery: Some(bin.clone()),
+                toys: Some(bin),
+            };
+            runner
+                .launch_with_scheme(kind, "[metrics]\nradius-m=7\n", &bins, scheme)
+                .unwrap();
+            let seen = wait_for(&output);
+            match scheme {
+                toys::LaunchScheme::System => {
+                    assert!(seen.starts_with("toys=unset\ngallery=unset\n"))
+                }
+                toys::LaunchScheme::Light => assert!(
+                    seen.starts_with("toys=light\ngallery=light\n")
+                        && seen.contains("color-scheme=light")
+                ),
+                toys::LaunchScheme::Dark => assert!(
+                    seen.starts_with("toys=dark\ngallery=dark\n")
+                        && seen.contains("color-scheme=dark")
+                ),
+            }
+        }
+    }
+    assert_eq!(std::env::var_os("TOYS_SCHEME"), inherited_toys);
+    assert_eq!(std::env::var_os("GALLERY_SCHEME"), inherited_gallery);
+    drop(runner);
+    std::fs::remove_dir_all(d).unwrap();
 }
 
 // -------------------------------------------------------- try it out
@@ -1109,42 +1424,6 @@ fn a_gradient_is_edited_by_angle_stops_and_colors() {
     );
 }
 
-// ------------------------------------------------------------------- preview
-
-#[test]
-fn editing_a_scheme_variant_previews_that_scheme() {
-    let mut e = editor();
-    let _ = e.update(Msg::Variant(Variant::Dark));
-    assert!(e.preview.dark);
-    let _ = e.update(Msg::Variant(Variant::Light));
-    assert!(!e.preview.dark);
-    let _ = e.update(Msg::PreviewDark(true));
-    let _ = e.update(Msg::Variant(Variant::Base));
-    assert!(e.preview.dark, "the base leaves the preview as chosen");
-}
-
-#[test]
-fn the_preview_follows_the_values_and_the_scheme() {
-    let mut e = editor();
-    let before = e.preview.theme.semantic.window.bg;
-    let _ = e.update(Msg::Input(
-        "colors".into(),
-        "window-bg".into(),
-        "#336699".into(),
-    ));
-    assert_ne!(e.preview.theme.semantic.window.bg, before);
-    assert_eq!(
-        iad::color::to_hex(e.preview.theme.semantic.window.bg),
-        "#336699"
-    );
-    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "13".into()));
-    assert_eq!(e.preview.metrics.radius_m, 13.0);
-    let _ = e.update(Msg::PreviewDark(true));
-    assert!(e.preview.dark && e.preview.theme.scheme.is_dark());
-    // The editor's own chrome keeps its fixed look.
-    assert_ne!(e.theme.semantic.window.bg, iad::color::hex(0x336699));
-}
-
 #[test]
 fn the_main_menu_has_the_shortcuts_and_disables_what_does_not_apply() {
     let e = editor();
@@ -1174,7 +1453,7 @@ fn the_views_build_in_every_mode() {
     let _ = e.view();
     e.search = "radius".into();
     let _ = e.view();
-    e.show_preview = true;
+    e.theme_picker = true;
     e.variant = Variant::Dark;
     let _ = e.view();
     e.toast = Some(Notice {

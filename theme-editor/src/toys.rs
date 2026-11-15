@@ -6,6 +6,46 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::{Child, Command};
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum LaunchScheme {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+impl LaunchScheme {
+    pub(crate) const ALL: [Self; 3] = [Self::System, Self::Light, Self::Dark];
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::System => "System",
+            Self::Light => "Light",
+            Self::Dark => "Dark",
+        }
+    }
+    /// Set only the child process environment; System clears inherited launch overrides.
+    pub(crate) fn apply_environment(self, command: &mut Command) {
+        for key in ["TOYS_SCHEME", "GALLERY_SCHEME"] {
+            match self.value() {
+                Some(value) => {
+                    command.env(key, value);
+                }
+                None => {
+                    command.env_remove(key);
+                }
+            }
+        }
+    }
+
+    fn value(self) -> Option<&'static str> {
+        match self {
+            Self::System => None,
+            Self::Light => Some("light"),
+            Self::Dark => Some("dark"),
+        }
+    }
+}
+
 /// The design languages a `theme-toys` build is asked about when it cannot be run for its list.
 pub(crate) const FALLBACK: [(&str, &str); 5] = [
     ("win95", "Windows 95"),
@@ -154,11 +194,22 @@ pub(crate) struct Runner {
 impl Runner {
     /// Writes `theme_text` to a temp file of its own and starts `kind` with `IAD_THEME` pointing
     /// at it. Returns the temp file's path.
+    #[cfg(test)]
     pub(crate) fn launch(
         &mut self,
         kind: &str,
         theme_text: &str,
         bins: &Bins,
+    ) -> Result<PathBuf, String> {
+        self.launch_with_scheme(kind, theme_text, bins, LaunchScheme::System)
+    }
+
+    pub(crate) fn launch_with_scheme(
+        &mut self,
+        kind: &str,
+        theme_text: &str,
+        bins: &Bins,
+        scheme: LaunchScheme,
     ) -> Result<PathBuf, String> {
         if let Some(mut old) = self.children.remove(kind) {
             let _ = old.kill();
@@ -170,8 +221,26 @@ impl Runner {
         ));
         std::fs::write(&file, theme_text)
             .map_err(|e| format!("Could not write {}: {e}", file.display()))?;
-        let child = command(kind, bins)
-            .env("IAD_THEME", &file)
+        let mut cmd = command(kind, bins);
+        cmd.env("IAD_THEME", &file);
+        scheme.apply_environment(&mut cmd);
+        if let Some(value) = scheme.value() {
+            // Gallery consumes the shared desktop configuration; toys additionally expose
+            // a process-local override so even opt-out toy themes can be forced.
+            let config_file = file.with_extension("desktop.conf");
+            let mut config = String::new();
+            for path in iced_adaptive_design::config::Config::search_paths() {
+                if let Ok(text) = std::fs::read_to_string(path) {
+                    config.push_str(&text);
+                    config.push('\n');
+                }
+            }
+            config.push_str(&format!("\n[appearance]\ncolor-scheme={value}\n"));
+            std::fs::write(&config_file, config)
+                .map_err(|e| format!("Could not write launch configuration: {e}"))?;
+            cmd.env("ICED_ADAPTIVE_DESIGN_CONFIG", &config_file);
+        }
+        let child = cmd
             .spawn()
             .map_err(|e| format!("Could not start {kind}: {e}"))?;
         self.children.insert(kind.to_string(), child);
