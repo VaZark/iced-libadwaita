@@ -158,13 +158,13 @@ impl Theme {
     #[must_use]
     pub fn with_theme_config(mut self, cfg: &crate::theme_config::ThemeConfig) -> Self {
         let scheme = self.scheme;
-        let resolved =
-            cfg.for_policy(crate::config::current().allow_app_overrides)
-                .with_variation(cfg.active_variation().unwrap_or(if scheme.is_dark() {
-                    "dark"
-                } else {
-                    "light"
-                }));
+        let resolved = cfg
+            .for_policy(crate::config::current().allow_app_overrides)
+            .with_variation(cfg.active_variation().unwrap_or(if scheme.is_dark() {
+                "dark"
+            } else {
+                "light"
+            }));
         let cfg = &resolved;
         self = self.with_palette(|p| cfg.apply_to_palette(p, scheme));
         // Text on colored fills is what the theme says (`*-fg`), unless it asks for contrast.
@@ -892,7 +892,9 @@ mod header_tests {
         // A bright fill gets dark text; turning it off restores the palette's white. It is
         // off unless the theme asks for it.
         assert!(!Theme::light().auto_contrast);
-        let t = Theme::light().with_auto_contrast(true).accent(AccentColor::Yellow);
+        let t = Theme::light()
+            .with_auto_contrast(true)
+            .accent(AccentColor::Yellow);
         assert_eq!(t.semantic.accent.fg, crate::color::DARK_TEXT);
         let off = t.with_auto_contrast(false);
         assert_eq!(off.semantic.accent.fg, iced::Color::WHITE);
@@ -929,10 +931,13 @@ mod header_tests {
 
     #[test]
     fn a_tint_moves_the_color_towards_its_own_color_and_keeps_the_alpha() {
-        let grey = |t: Theme| t.with_palette(|p| p.window_bg_color = iced::Color::from_rgb(0.5, 0.5, 0.5));
+        let grey =
+            |t: Theme| t.with_palette(|p| p.window_bg_color = iced::Color::from_rgb(0.5, 0.5, 0.5));
         let plain = grey(Theme::light()).with_transparency(0.5);
         let red = iced::Color::from_rgba(1.0, 0.0, 0.0, 0.3);
-        let tinted = grey(Theme::light()).with_transparency(0.5).with_tint(Some(red));
+        let tinted = grey(Theme::light())
+            .with_transparency(0.5)
+            .with_tint(Some(red));
         let (a, b) = (plain.semantic.window.bg, tinted.semantic.window.bg);
         assert_eq!(a.a, b.a, "transparency is kept");
         assert!(b.r > a.r && b.g < a.g, "towards red, not the accent");

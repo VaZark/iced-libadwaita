@@ -9,10 +9,10 @@
 
 use crate::primitives::pixmap::{Pixel, PixelMap};
 use crate::{Element, Theme};
+use iced::advanced::Renderer as _;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
 use iced::advanced::widget::{Tree, Widget};
-use iced::advanced::Renderer as _;
 use iced::{Color, Length, Point, Rectangle, Size, mouse};
 
 /// See the [module](self).
@@ -55,7 +55,12 @@ impl<M> Widget<M, Theme, iced::Renderer> for Pixels {
         Size::new(Length::Fixed(s.width), Length::Fixed(s.height))
     }
 
-    fn layout(&mut self, _tree: &mut Tree, _renderer: &iced::Renderer, _limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &mut self,
+        _tree: &mut Tree,
+        _renderer: &iced::Renderer,
+        _limits: &layout::Limits,
+    ) -> layout::Node {
         layout::Node::new(self.map.size())
     }
 

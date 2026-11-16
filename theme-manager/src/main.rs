@@ -1,15 +1,15 @@
-//! The theme editor: opens, edits and saves theme files with a control for each token by its type,
-//! starts the gallery or a toy window of a design language with the
-//! values being edited.
+//! The theme manager: edits and saves theme files with a control for each token by its type, ships
+//! the default set of themes and chooses the global theme every app picks up.
 //!
-//! `theme-editor [FILE]`. The editor's own look is `themes/libadwaita.conf`, so editing never
-//! changes the tool itself.
+//! `theme-manager [FILE]` opens the manager; `theme-manager gallery [ARGS]` runs the gallery.
+//! The manager's own look is `themes/libadwaita.conf`, so editing never changes the tool itself.
 
+mod bundled;
 mod files;
+mod page;
 #[cfg(test)]
 mod preview;
 mod tokens;
-mod toys;
 mod view;
 
 #[cfg(test)]
@@ -17,34 +17,44 @@ mod tests;
 
 use files::*;
 use iad::theme_config::{Inheritance, Schema, Spec, Value, VariableType};
-use iced::{Subscription, Task};
+use iad::widgets as w;
+use iced::Task;
 use iced_adaptive_design as iad;
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokens::GradEdit;
 
-const LIBADWAITA: &str = include_str!("../../themes/libadwaita.conf");
 /// The editor's own look is libadwaita's, with a neutral primary color: it has no blue buttons.
-const NEUTRAL_PRIMARY: &str = "\n[colors]\nprimary=#3d3d44\nprimary-fg=#ffffff\n[dark:colors]\nprimary=#d0d0d8\nprimary-fg=#1d1d20\n";
+const NEUTRAL_PRIMARY: &str = "\n[menu]\npopover-max-height=560px\n[colors]\nprimary=#3d3d44\nprimary-fg=#ffffff\n[dark:colors]\nprimary=#d0d0d8\nprimary-fg=#1d1d20\n";
+/// DECISION (user, 2026-11-16): the app id stays `org.iad.ThemeEditor`.
 const APP_ID: &str = "org.iad.ThemeEditor";
 /// How many edits undo goes back.
 const UNDO_MAX: usize = 100;
 
 fn main() -> iced::Result {
+    // DECISION (user, 2026-11-16): the gallery is part of this app: `theme-manager gallery` runs it
+    // and the window can start it too. It has no desktop entry of its own.
+    if std::env::args_os().nth(1).is_some_and(|a| a == "gallery") {
+        return iced_adaptive_design_gallery::run();
+    }
     // The editor's look never depends on the file being edited or on the desktop.
     let own = iad::theme_config::ThemeConfig::builder(APP_ID)
         .files(false)
         .inheritance(Inheritance::OptOut)
-        .app_text(format!("{LIBADWAITA}{NEUTRAL_PRIMARY}"))
+        .app_text(format!(
+            "{}{NEUTRAL_PRIMARY}",
+            bundled::text("libadwaita").unwrap_or_default()
+        ))
         .build();
     iad::config::install(iad::config::Config::default().with_theme_config(&own));
     iad::dev::Switches::from_env().apply();
     iced::application(Editor::new, Editor::update, Editor::view)
         .title(Editor::title)
         .theme(Editor::theme)
-        .subscription(Editor::subscription)
         .window(iced::window::Settings {
             size: window_size(),
+            // Token rows are one line from this width (see `page`); below it some would wrap.
+            min_size: Some(iced::Size::new(page::MIN_WIDTH, 360.0)),
             ..iad::windows::settings_for(APP_ID)
         })
         .settings(iced::Settings {
@@ -113,16 +123,23 @@ struct Editor {
     redo: Vec<BTreeMap<Addr, String>>,
     /// The token the last edit changed: typing in it again does not add an undo step.
     last_edit: Option<Addr>,
-    // -- trying it out
-    runner: toys::Runner,
-    bins: toys::Bins,
-    toys: Vec<toys::Toy>,
+    /// The bundled theme the values were opened from while they have no file of their own.
+    source: Option<&'static str>,
+    /// The running gallery started from the window, and the program that starts it.
+    gallery: Option<std::process::Child>,
+    /// `dirty()` for the values it was last computed for: regenerating the file text is too slow
+    /// to repeat for every widget on every frame (a window resize draws many).
+    /// How far the token page is scrolled: the blocks near it are the ones built.
+    tokens_view: iad::layouts::virtualize::Viewport,
+    dirty_cache: std::cell::Cell<Option<(u64, bool)>>,
+    /// The color scheme the gallery starts in: the desktop's (System), Light or Dark.
+    launch_mode: w::ThemeMode,
+    exe: Option<PathBuf>,
     // -- the window
-    win: iad::windows::State,
     drawer: bool,
     theme_picker: bool,
-    launch_scheme: toys::LaunchScheme,
-    launch_target: String,
+    /// Screenshots only (`THEME_EDITOR_MENU`): the main menu starts open.
+    menu_open: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -133,7 +150,15 @@ enum Msg {
     New,
     Register,
     Unregister,
-    SetDefault,
+    SetGlobal,
+    /// The token page was scrolled or resized.
+    TokensScrolled(iad::layouts::virtualize::Viewport),
+    /// Run the gallery with the values being edited.
+    Gallery,
+    /// The scheme the gallery starts in.
+    LaunchMode(w::ThemeMode),
+    ClearGlobal,
+    PickBundled(&'static str),
     AddFolder,
     FolderAdded(Option<PathBuf>),
     Refresh,
@@ -153,23 +178,19 @@ enum Msg {
     OverridesOnly(bool),
     Undo,
     Redo,
+    /// Drop every unsaved change (undoable).
+    Discard,
     Open,
     Opened(Option<PathBuf>),
     Save,
     SaveAs,
     SavedAs(Option<PathBuf>),
-    /// Try the values out in the gallery (`gallery`) or a toy window (its name).
-    TryOut(String),
     DismissToast,
     Drawer(bool),
     ThemePicker(bool),
-    LaunchScheme(toys::LaunchScheme),
-    LaunchTarget(String),
     Rule(String, usize, Option<(Option<String>, Option<String>)>),
     /// A window button or edge of the chrome.
     Window(iad::windows::Action),
-    WindowChanged,
-    WindowState(iad::windows::State),
     /// Development screenshots (`iad::dev`).
     Shot(Option<iced::window::Id>),
     Captured(Result<PathBuf, String>),
@@ -197,7 +218,6 @@ impl Editor {
             }
         }
         let theme = iad::Theme::from_config(&iad::config::current());
-        let bins = toys::Bins::from_env();
         let mut e = Self {
             theme,
             specs,
@@ -224,14 +244,15 @@ impl Editor {
             undo: Vec::new(),
             redo: Vec::new(),
             last_edit: None,
-            runner: toys::Runner::default(),
-            toys: toys::list_toys(&bins),
-            bins,
-            win: iad::windows::State::default(),
+            source: None,
+            gallery: None,
+            tokens_view: iad::layouts::virtualize::Viewport::new(page::FIRST_VIEW),
+            dirty_cache: std::cell::Cell::new(None),
+            launch_mode: w::ThemeMode::System,
+            exe: std::env::current_exe().ok(),
             drawer: false,
             theme_picker: false,
-            launch_scheme: toys::LaunchScheme::System,
-            launch_target: "gallery".into(),
+            menu_open: false,
         };
         if let Some(s) = e
             .state
@@ -261,6 +282,7 @@ impl Editor {
         e.refresh();
         if iad::dev::Switches::from_env().screenshot.is_some() {
             e.theme_picker = std::env::var_os("THEME_EDITOR_PICKER").is_some();
+            e.menu_open = std::env::var_os("THEME_EDITOR_MENU").is_some();
         }
         // Reopening the last file is not news.
         e.toast = None;
@@ -278,7 +300,7 @@ impl Editor {
             .as_ref()
             .and_then(|p| p.file_name())
             .map_or("Untitled".to_string(), |n| n.to_string_lossy().into_owned());
-        format!("{}{name} - Theme editor", self.dot())
+        format!("{}{name} - Theme manager", self.dot())
     }
 
     fn theme(&self) -> iad::Theme {
@@ -286,7 +308,21 @@ impl Editor {
     }
 
     fn dirty(&self) -> bool {
-        self.generate() != self.clean
+        use std::hash::{Hash, Hasher};
+        // The text is a function of the values, so the values and the saved text tell whether
+        // the answer is still the one computed.
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.values.hash(&mut hasher);
+        self.clean.hash(&mut hasher);
+        let key = hasher.finish();
+        match self.dirty_cache.get() {
+            Some((k, dirty)) if k == key => dirty,
+            _ => {
+                let dirty = self.generate() != self.clean;
+                self.dirty_cache.set(Some((key, dirty)));
+                dirty
+            }
+        }
     }
 
     /// "● " when there are unsaved changes, nothing otherwise.
@@ -327,6 +363,7 @@ impl Editor {
                 self.notify(message, false);
                 self.remember(&path);
                 self.path = Some(path);
+                self.source = None;
                 self.pending = None;
                 self.clear_history();
                 self.rescan();
@@ -335,10 +372,34 @@ impl Editor {
         }
     }
 
+    /// A copy of a bundled theme with no file of its own: Save asks where to write it, so the
+    /// bundled text itself is never changed.
+    fn load_bundled(&mut self, key: &'static str) {
+        let Some(text) = bundled::text(key) else {
+            return;
+        };
+        self.values = iad::config::parse_keyfile(text).into_iter().collect();
+        self.path = None;
+        self.state.last_file = None;
+        self.source = Some(key);
+        self.clean = self.generate();
+        self.pending = None;
+        self.clear_history();
+        self.notify(
+            format!(
+                "Opened the bundled {} theme. Save as writes your own copy.",
+                bundled::name_of(text, key)
+            ),
+            false,
+        );
+        self.persist();
+    }
+
     /// An empty theme with no file: Save asks where to write it.
     fn new_theme(&mut self) {
         self.values.clear();
         self.path = None;
+        self.source = None;
         self.state.last_file = None;
         self.clean = self.generate();
         self.pending = None;
@@ -380,6 +441,11 @@ impl Editor {
         {
             return;
         }
+        if matches!(target, Target::Bundled(k) if self.path.is_none() && self.source == Some(k))
+            && !self.dirty()
+        {
+            return;
+        }
         if self.dirty() && self.pending.as_ref() != Some(&target) {
             self.notify("● unsaved changes: click again to discard", true);
             self.pending = Some(target);
@@ -389,6 +455,7 @@ impl Editor {
         match target {
             Target::New => self.new_theme(),
             Target::File(path) => self.load(path),
+            Target::Bundled(key) => self.load_bundled(key),
         }
         self.refresh();
     }
@@ -458,6 +525,7 @@ impl Editor {
                 self.notify(format!("Saved {}", file_name(&path)), false);
                 self.remember(&path);
                 self.path = Some(path);
+                self.source = None;
                 self.pending = None;
                 self.rescan();
                 true
@@ -740,8 +808,6 @@ impl Editor {
                 .map(|l| format!("Registered {} -> {}", l.display(), file.display())),
             Registry::Unregister => unregister(&dir, &file)
                 .map(|n| format!("Unregistered {} symlink(s) of {}", n, file.display())),
-            Registry::Default => set_default(&dir, &file)
-                .map(|l| format!("{} is the default theme ({})", file.display(), l.display())),
         };
         match done {
             Ok(s) => self.notify(s, false),
@@ -750,28 +816,97 @@ impl Editor {
         self.rescan();
     }
 
-    // ------------------------------------------------------------ try it out
+    // ------------------------------------------------------------ the global theme
 
-    /// Starts the gallery or a toy window with the values as they are now, from a temp file of
-    /// its own: the file being edited is never touched.
-    fn try_out(&mut self, kind: &str) {
-        let text = self.generate();
-        match self
-            .runner
-            .launch_with_scheme(kind, &text, &self.bins, self.launch_scheme)
-        {
-            Ok(_) => {
-                let what = if kind == "gallery" {
-                    "the gallery".to_string()
-                } else {
-                    format!("the {kind} window")
-                };
+    /// Whether the open theme is the one `default.conf` points at (a bundled theme counts when the
+    /// global file holds its text).
+    fn is_global(&self) -> bool {
+        let Some(target) = self.registry().and_then(default_target) else {
+            return false;
+        };
+        match (&self.path, self.source) {
+            (Some(file), _) => canon(file) == target,
+            (None, Some(key)) => {
+                std::fs::read_to_string(target).ok().as_deref() == bundled::text(key)
+            }
+            (None, None) => false,
+        }
+    }
+
+    /// Makes the open theme the global one, which every app picks up. Unsaved changes are not
+    /// applied: they are saved first.
+    fn set_global(&mut self) {
+        let Some(dir) = self.registry().map(PathBuf::from) else {
+            self.notify("There is no theme directory to install into", true);
+            return;
+        };
+        if self.dirty() {
+            self.notify(
+                "Save the changes first: the global theme is a saved file",
+                true,
+            );
+            return;
+        }
+        let done = match (self.path.clone(), self.source) {
+            (Some(file), _) => set_default(&dir, &file).map(|_| file_name(&file)),
+            (None, Some(key)) => set_global_bundled(&dir, key).map(|_| file_name(Path::new(key))),
+            (None, None) => Err("Save the theme to a file first".to_string()),
+        };
+        match done {
+            Ok(name) => self.notify(format!("{name} is now the global theme"), false),
+            Err(e) => self.notify(e, true),
+        }
+        self.rescan();
+    }
+
+    /// Removes the global theme; apps go back to the bare look (or their own base theme).
+    fn clear_global(&mut self) {
+        let Some(dir) = self.registry().map(PathBuf::from) else {
+            return;
+        };
+        match clear_global(&dir) {
+            Ok(()) => self.notify("No global theme: apps use their own base look", false),
+            Err(e) => self.notify(e, true),
+        }
+        self.rescan();
+    }
+
+    // ------------------------------------------------------------ the gallery
+
+    /// Runs `theme-manager gallery` with the values as they are now (unsaved edits included),
+    /// through `IAD_THEME` pointing at a temp file of its own: the open file is never touched. A
+    /// gallery started before is closed first.
+    fn open_gallery(&mut self) {
+        let Some(exe) = self.exe.clone() else {
+            self.notify("Cannot find the program to start the gallery", true);
+            return;
+        };
+        let file =
+            std::env::temp_dir().join(format!("iad-theme-manager-{}.conf", std::process::id()));
+        if let Err(e) = std::fs::write(&file, self.generate()) {
+            self.notify(format!("Could not write {}: {e}", file.display()), true);
+            return;
+        }
+        if let Some(mut old) = self.gallery.take() {
+            let _ = old.kill();
+            let _ = old.wait();
+        }
+        let mut command = std::process::Command::new(exe);
+        command.arg("gallery").env("IAD_THEME", &file);
+        match self.launch_mode.scheme_override() {
+            Some(scheme) if scheme.is_dark() => command.env("GALLERY_SCHEME", "dark"),
+            Some(_) => command.env("GALLERY_SCHEME", "light"),
+            None => command.env_remove("GALLERY_SCHEME"),
+        };
+        match command.spawn() {
+            Ok(child) => {
+                self.gallery = Some(child);
                 self.notify(
-                    format!("Tried it out: {what} runs with these values from a temp file (nothing saved). Press again to restart it with new ones."),
+                    "The gallery shows these values (nothing saved). Press again to restart it with new ones.",
                     false,
                 );
             }
-            Err(e) => self.notify(e, true),
+            Err(e) => self.notify(format!("Could not start the gallery: {e}"), true),
         }
     }
 
@@ -788,6 +923,7 @@ impl Editor {
         );
         let task = self.apply(msg);
         if reset_scroll {
+            self.scroll_to_top();
             Task::batch([
                 task,
                 iced::widget::operation::snap_to(
@@ -805,8 +941,6 @@ impl Editor {
             #[cfg(test)]
             Msg::Noop => {}
             Msg::ThemePicker(open) => self.theme_picker = open,
-            Msg::LaunchScheme(scheme) => self.launch_scheme = scheme,
-            Msg::LaunchTarget(target) => self.launch_target = target,
             Msg::Rule(section, index, edit) => self.edit_rule(section, index, edit),
             Msg::Section(s) => {
                 if !self.section_choices().any(|id| id == s) {
@@ -835,7 +969,15 @@ impl Editor {
             }
             Msg::Register => self.registry_op(Registry::Register),
             Msg::Unregister => self.registry_op(Registry::Unregister),
-            Msg::SetDefault => self.registry_op(Registry::Default),
+            Msg::SetGlobal => self.set_global(),
+            Msg::Gallery => self.open_gallery(),
+            Msg::TokensScrolled(view) => self.scrolled(view.offset, view.height),
+            Msg::LaunchMode(mode) => self.launch_mode = mode,
+            Msg::ClearGlobal => self.clear_global(),
+            Msg::PickBundled(key) => {
+                self.pick(Target::Bundled(key));
+                self.theme_picker = self.pending.is_some();
+            }
             Msg::Refresh => self.rescan(),
             Msg::AddFolder => {
                 return Task::perform(
@@ -918,6 +1060,17 @@ impl Editor {
             Msg::OverridesOnly(on) => self.overrides_only = on && self.variant != Variant::Base,
             Msg::Undo => self.undo(),
             Msg::Redo => self.redo(),
+            Msg::Discard => {
+                let saved: BTreeMap<Addr, String> = iad::config::parse_keyfile(&self.clean)
+                    .into_iter()
+                    .collect();
+                if saved != self.values {
+                    self.checkpoint(None);
+                    self.values = saved;
+                    self.refresh();
+                    self.notify("Unsaved changes dropped", false);
+                }
+            }
             Msg::Open => {
                 self.theme_picker = false;
                 let directory = self
@@ -979,12 +1132,9 @@ impl Editor {
                 }
                 self.save_as_to(path);
             }
-            Msg::TryOut(kind) => self.try_out(&kind),
             Msg::DismissToast => self.toast = None,
             Msg::Drawer(open) => self.drawer = open,
             Msg::Window(a) => return iced::window::oldest().and_then(move |id| a.perform(id)),
-            Msg::WindowChanged => return iad::windows::refresh().map(Msg::WindowState),
-            Msg::WindowState(state) => self.win = state,
             Msg::Shot(Some(id)) => {
                 if let Some(shot) = iad::dev::Switches::from_env().capture(id) {
                     return shot.map(Msg::Captured);
@@ -999,10 +1149,6 @@ impl Editor {
             }
         }
         Task::none()
-    }
-
-    fn subscription(&self) -> Subscription<Msg> {
-        iad::windows::changes().map(|_| Msg::WindowChanged)
     }
 }
 

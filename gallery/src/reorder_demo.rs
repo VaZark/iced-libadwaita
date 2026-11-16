@@ -253,14 +253,10 @@ impl State {
         .spacing(m.space_m)
         .into();
 
-        if p.bool("hint") {
-        }
-        if p.bool("search") {
-        }
-        if p.bool("plain") {
-        }
-        if p.changed("spacing") {
-        }
+        if p.bool("hint") {}
+        if p.bool("search") {}
+        if p.bool("plain") {}
+        if p.changed("spacing") {}
         p.view(m, preview, Msg::ParentPlay)
     }
 }

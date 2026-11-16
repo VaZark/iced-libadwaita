@@ -94,11 +94,11 @@ let size = theme.token_number("cover", "size");
 
 The [theme toys](../../theme-toys/README.md#theme-resolution) use this pattern for four canonical targets: `win95`, `winxp`, `win7`, `mate` (modern MATE). `gnome2` is a compatibility alias only. Each embeds its own complete `theme-toys/themes/<target>.conf` base, including native styling and app-owned scene geometry. An optional `IAD_THEME` file is read as an overlay, not a replacement base. Without one the bundled base applies; installed `default.conf` files are not consulted. Invalid entries fall back through the validated cascade. Scene-fit checks can reject overlay geometry while retaining native theme edits; see the toy guide for limits and the special handling of `IAD_THEME=none`.
 
-### Editing and trying a theme
+### Editing and applying a theme
 
-Run `cargo run -p iced-adaptive-design-theme-editor -- [FILE]`. Sections are the primary sidebar; the selected theme opens a picker for registered files, folders and recents. **All** groups every token on one searchable page. **Modified only** filters unsaved changes; **Overrides only** filters explicit active Light/Dark entries, excluding inherited Base values, and is unavailable for Base.
+The [theme manager](../../theme-manager/README.md) (`cargo run -p iced-adaptive-design-theme-manager -- [FILE]`) edits theme files by section. The selected theme opens a picker for registered files, the bundled set, folders and recents. **All** groups every token on one searchable page. **Modified only** filters unsaved changes; **Overrides only** filters explicit active Light/Dark entries, excluding inherited Base values, and is unavailable for Base.
 
-**Save** updates the current file, following symlinks. **Save as** writes a copy, switches subsequent saves to it and auto-registers it for other apps. Registration failure is reported independently of a successful save. There is no embedded live preview: the split **Try it out** action launches Gallery or one of the four toys with current values in a temporary `IAD_THEME` file. Launch appearance **System / Light / Dark** is independent of the scheme being edited; System clears inherited `TOYS_SCHEME` / `GALLERY_SCHEME` overrides. See the [editor guide](../../theme-editor/README.md) for the workflow.
+**Save** updates the current file, following symlinks. **Save as** writes a copy, switches subsequent saves to it and auto-registers it for other apps. **Use as global theme** (in the theme dialog) makes `default.conf` in the user theme directory point at the open theme (a bundled theme is installed there first); **Remove global theme** in the same dialog removes it. There is no embedded preview; the header's play button starts the gallery with the current values (a temp `IAD_THEME` file, nothing saved), and `theme-manager gallery` runs it with the global theme.
 
 For a standalone gallery launch, use `IAD_THEME=path.conf cargo run -p iced-adaptive-design-gallery`.
 

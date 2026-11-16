@@ -1,16 +1,17 @@
 [package]
-name = "iced-adaptive-design-theme-editor"
+name = "iced-adaptive-design-theme-manager"
 version = "0.1.0"
 edition = "2024"
-description = "Opens, edits and saves iced-adaptive-design theme files"
+description = "Manages the global iced-adaptive-design theme: edits, saves and applies theme files"
 publish = false
 
 [dependencies]
+iced-adaptive-design-gallery = { path = "../gallery" }
 iced-adaptive-design = { path = ".." }
 # Wayland only on Linux: no `x11` feature (see the gallery).
 iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "crisp", "web-colors", "thread-pool", "linux-theme-detection", "wayland", "advanced", "svg", "image", "tokio", "canvas"] }
 rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 
 [[bin]]
-name = "theme-editor"
+name = "theme-manager"
 path = "src/main.rs"

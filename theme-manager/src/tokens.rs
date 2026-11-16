@@ -83,11 +83,19 @@ impl Editor {
             })
             .collect();
         let variants = declared_variants(&spec.section);
-        let mut controls =
-            column![text("Minimum width → widget variant (not color scheme)")].spacing(m.space_xs);
-        if !valid_rules(&spec.section, raw) {
-            controls = controls.push(text("Invalid rules: choose declared variants and unique breakpoints, or remove the invalid rows."));
-        }
+        // One line, invalid or not: the page is virtualized and a rule's height must not depend on
+        // the width or on the state (see `page::row_height`).
+        let heading = if valid_rules(&spec.section, raw) {
+            "Minimum width → widget variant (not color scheme)"
+        } else {
+            "Invalid rules: choose declared variants and unique breakpoints"
+        };
+        let mut controls = column![
+            cmp::TextProps::default()
+                .overflow(cmp::TextOverflow::Clip)
+                .apply(text(heading))
+        ]
+        .spacing(m.space_xs);
         for (index, (class, variant)) in entries.iter().enumerate() {
             let classes: Vec<String> = RULE_CLASSES
                 .iter()
@@ -282,51 +290,16 @@ impl Editor {
             .collect()
     }
 
-    /// The page: the tokens of the current section, or of every section when searching.
-    pub(crate) fn page(&self, m: iad::Metrics) -> Element<'_, Msg> {
-        let multiple_sections = self.effective_section() == ALL_SECTIONS;
-        let sections = self.page_sections();
-        let mut page = column![].spacing(m.group_spacing);
-        if let Variant::Light | Variant::Dark = self.variant {
-            page = page.push(
-                text(format!(
-                    "Editing the {} variant: values here win over the base on that color scheme.",
-                    self.variant.label().to_lowercase()
-                ))
-                .size(m.space_m + 1.0)
-                .style(iad::styles::text::dim),
-            );
-        }
-        let mut any = false;
-        for section in sections {
-            for (title, specs) in self.groups_of(section) {
-                let specs: Vec<&Spec> = specs.into_iter().filter(|s| self.visible(s)).collect();
-                if specs.is_empty() {
-                    continue;
-                }
-                any = true;
-                page = page.push(self.group(section, &title, specs, multiple_sections, m));
-            }
-        }
-        if !any {
-            page = page.push(
-                w::status_page()
-                    .icon(Icon::Search.view(48.0))
-                    .title("No tokens match")
-                    .description(if self.overrides_only {
-                                            "No explicit overrides match in this scheme. Turn off “Overrides only” to include inherited base values."
-                                        } else if self.modified_only {
-                        "This file sets nothing that matches. Turn off “Modified only” to see every token."
-                    } else {
-                        "Try another word: the search looks at names, descriptions and sections."
-                    }),
-            );
-        }
-        page.into()
+    /// Whether the group is folded to its heading (never while searching).
+    pub(crate) fn is_folded(&self, section: &str, title: &str) -> bool {
+        self.search.trim().is_empty()
+            && self
+                .collapsed
+                .contains(&(section.to_string(), title.to_string()))
     }
 
     /// A group of rows with its reset and fold buttons.
-    fn group<'a>(
+    pub(crate) fn group<'a>(
         &'a self,
         section: &str,
         title: &str,
@@ -335,7 +308,7 @@ impl Editor {
         m: iad::Metrics,
     ) -> Element<'a, Msg> {
         let key = (section.to_string(), title.to_string());
-        let folded = self.search.trim().is_empty() && self.collapsed.contains(&key);
+        let folded = self.is_folded(section, title);
         let heading = if searching {
             if title == "general" {
                 section_label(section)
@@ -369,23 +342,28 @@ impl Editor {
             },
             iad::components::TooltipPosition::Bottom,
         ));
-        if folded {
-            return row![
-                text(heading).size(m.space_m + 2.0),
+        // The heading has a height of its own and every row one of its own (`page::row_height`),
+        // so the group is as tall as `page::group_height` says whatever the font: the page is
+        // virtualized and has to know the heights without laying anything out.
+        let head = container(
+            row![
+                iad::Typography::desktop().heading(heading),
                 space().width(Length::Fill),
                 buttons
             ]
-            .align_y(Alignment::Center)
-            .into();
+            .align_y(Alignment::Center),
+        )
+        .width(Length::Fill)
+        .center_y(Length::Fixed(m.button_min_height));
+        if folded {
+            return head.into();
         }
-        let mut g = w::preferences_group()
-            .title(heading)
-            .header_suffix(buttons)
-            .metrics(m);
-        for spec in specs {
-            g = g.push(self.token_row(spec, m));
-        }
-        g.into()
+        let mut rows = specs.into_iter().map(|spec| self.token_row(spec, m));
+        let Some(first) = rows.next() else {
+            return head.into();
+        };
+        let card = rows.fold(w::Card::new(first).padding(0), |card, row| card.push(row));
+        column![head, card].spacing(m.space_m).into()
     }
 
     /// One token: a dot when the file sets it, its name, description, and a control for its type.
@@ -485,7 +463,10 @@ impl Editor {
                 ..Default::default()
             })
             .into();
-        w::ActionRow::new(spec.key.as_str())
+        // One line each, in a box of the height `page::row_height` gives it.
+        let row = w::ActionRow::new(spec.key.as_str())
+            .label_props(cmp::TextProps::default().overflow(cmp::TextOverflow::Clip))
+            .subtitle_props(cmp::TextProps::default().overflow(cmp::TextOverflow::Clip))
             .subtitle(format!("{}  (default {default})", spec.doc))
             .prefix(dot)
             .suffix(
@@ -493,7 +474,10 @@ impl Editor {
                     .spacing(m.space_s)
                     .align_y(Alignment::Center),
             )
-            .metrics(m)
+            .metrics(m);
+        container(row)
+            .width(Length::Fill)
+            .center_y(Length::Fixed(self.row_height(spec)))
             .into()
     }
 

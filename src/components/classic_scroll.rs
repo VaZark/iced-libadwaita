@@ -118,7 +118,10 @@ impl Operation for ScrollTo {
     ) {
         if !self.1 {
             self.1 = true;
-            state.scroll_to(AbsoluteOffset { x: None, y: Some(self.0.max(0.0)) });
+            state.scroll_to(AbsoluteOffset {
+                x: None,
+                y: Some(self.0.max(0.0)),
+            });
         }
     }
 }
@@ -154,7 +157,12 @@ impl<'a, M: 'a> ClassicScroll<'a, M> {
         self
     }
 
-    fn probe(&mut self, tree: &mut Tree, layout: Layout<'_>, renderer: &iced::Renderer) -> Option<Info> {
+    fn probe(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+    ) -> Option<Info> {
         let mut probe = Probe(None);
         self.content
             .as_widget_mut()
@@ -162,7 +170,13 @@ impl<'a, M: 'a> ClassicScroll<'a, M> {
         probe.0
     }
 
-    fn scroll_to(&mut self, tree: &mut Tree, layout: Layout<'_>, renderer: &iced::Renderer, y: f32) {
+    fn scroll_to(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        y: f32,
+    ) {
         let mut op = ScrollTo(y, false);
         self.content
             .as_widget_mut()
@@ -181,7 +195,10 @@ struct Geometry {
 fn geometry(bar: Rectangle, arrows: bool, info: Option<Info>) -> Geometry {
     let end = if arrows { bar.width } else { 0.0 };
     let up = Rectangle::new(bar.position(), Size::new(bar.width, end));
-    let down = Rectangle::new(Point::new(bar.x, bar.y + bar.height - end), Size::new(bar.width, end));
+    let down = Rectangle::new(
+        Point::new(bar.x, bar.y + bar.height - end),
+        Size::new(bar.width, end),
+    );
     let track = Rectangle::new(
         Point::new(bar.x, bar.y + end),
         Size::new(bar.width, (bar.height - 2.0 * end).max(0.0)),
@@ -193,7 +210,12 @@ fn geometry(bar: Rectangle, arrows: bool, info: Option<Info>) -> Geometry {
         let y = track.y + (i.offset / range).clamp(0.0, 1.0) * (track.height - h);
         Rectangle::new(Point::new(bar.x, y), Size::new(bar.width, h))
     });
-    Geometry { up, down, track, thumb }
+    Geometry {
+        up,
+        down,
+        track,
+        thumb,
+    }
 }
 
 impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for ClassicScroll<'a, M> {
@@ -201,7 +223,12 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for ClassicScroll<'a, M> {
         tree::Tag::of::<State>()
     }
     fn state(&self) -> tree::State {
-        tree::State::new(State { info: None, grab: None, held: None, track: None })
+        tree::State::new(State {
+            info: None,
+            grab: None,
+            held: None,
+            track: None,
+        })
     }
     fn children(&self) -> Vec<Tree> {
         vec![Tree::new(&self.content)]
@@ -214,16 +241,31 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for ClassicScroll<'a, M> {
         Size::new(s.width, s.height)
     }
 
-    fn layout(&mut self, tree: &mut Tree, renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
         let bar = self.width;
         let inner = limits.shrink(Size::new(bar, 0.0));
-        let node = self.content.as_widget_mut().layout(&mut tree.children[0], renderer, &inner);
+        let node = self
+            .content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, &inner);
         let size = Size::new(node.size().width + bar, node.size().height);
-        let node = layout::Node::with_children(limits.resolve(Length::Fill, Length::Fill, size), vec![node]);
+        let node = layout::Node::with_children(
+            limits.resolve(Length::Fill, Length::Fill, size),
+            vec![node],
+        );
         let child = node.children()[0].clone();
         let info = self.probe(tree, Layout::new(&child), renderer);
         let size = node.size();
-        let geo = geometry(Rectangle::new(Point::ORIGIN, Size::new(bar, size.height)), self.arrows, info);
+        let geo = geometry(
+            Rectangle::new(Point::ORIGIN, Size::new(bar, size.height)),
+            self.arrows,
+            info,
+        );
         let state = tree.state.downcast_mut::<State>();
         state.info = info;
         if self.dither {
@@ -263,13 +305,19 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for ClassicScroll<'a, M> {
         );
         let geo = geometry(bar, self.arrows, info);
         if self.dither {
-            ensure_track(tree.state.downcast_mut::<State>(), geo.track.width, geo.track.height);
+            ensure_track(
+                tree.state.downcast_mut::<State>(),
+                geo.track.width,
+                geo.track.height,
+            );
         }
         let Some(i) = info else { return };
         let range = (i.content - i.viewport).max(0.0);
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
-                let Some(p) = cursor.position_over(bar) else { return };
+                let Some(p) = cursor.position_over(bar) else {
+                    return;
+                };
                 let target = if self.arrows && geo.up.contains(p) {
                     tree.state.downcast_mut::<State>().held = Some(Part::Up);
                     Some(i.offset - LINE)
@@ -281,7 +329,11 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for ClassicScroll<'a, M> {
                     None
                 } else if let Some(t) = geo.thumb {
                     // A press on the track pages towards it.
-                    Some(if p.y < t.y { i.offset - i.viewport } else { i.offset + i.viewport })
+                    Some(if p.y < t.y {
+                        i.offset - i.viewport
+                    } else {
+                        i.offset + i.viewport
+                    })
                 } else {
                     None
                 };
@@ -357,7 +409,15 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for ClassicScroll<'a, M> {
         viewport: &Rectangle,
     ) {
         let child = layout.children().next().expect("a content layout");
-        self.content.as_widget().draw(&tree.children[0], renderer, theme, style, child, cursor, viewport);
+        self.content.as_widget().draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            child,
+            cursor,
+            viewport,
+        );
         let state = tree.state.downcast_ref::<State>();
         let bounds = layout.bounds();
         let bar = Rectangle::new(
@@ -367,7 +427,12 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for ClassicScroll<'a, M> {
         let geo = geometry(bar, self.arrows, state.info);
         let fill_rect = |renderer: &mut iced::Renderer, r: Rectangle, color: Color| {
             renderer.fill_quad(
-                Quad { bounds: r, border: iced::Border::default(), shadow: iced::Shadow::default(), snap: true },
+                Quad {
+                    bounds: r,
+                    border: iced::Border::default(),
+                    shadow: iced::Shadow::default(),
+                    snap: true,
+                },
                 color,
             );
         };
@@ -375,7 +440,9 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for ClassicScroll<'a, M> {
         let dark = track_colors()[1];
         match state.track.as_ref().filter(|_| self.dither) {
             Some((_, _, handle)) => renderer.draw_image(
-                img::Image::new(handle.clone()).filter_method(img::FilterMethod::Nearest).snap(true),
+                img::Image::new(handle.clone())
+                    .filter_method(img::FilterMethod::Nearest)
+                    .snap(true),
                 geo.track,
                 geo.track,
             ),
@@ -383,10 +450,12 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for ClassicScroll<'a, M> {
         }
         // The buttons and the thumb: bevelled boxes.
         let boxed = |renderer: &mut iced::Renderer, r: Rectangle, section: &str, pressed: bool| {
-            let (style, width) = crate::components::bevel_of(section)
-                .unwrap_or((bevel::BevelStyle::Raised, 2.0));
+            let (style, width) =
+                crate::components::bevel_of(section).unwrap_or((bevel::BevelStyle::Raised, 2.0));
             let style = if pressed { style.pressed() } else { style };
-            let face = theme.token_color(section, "bg").unwrap_or(theme.semantic.window.bg);
+            let face = theme
+                .token_color(section, "bg")
+                .unwrap_or(theme.semantic.window.bg);
             fill_rect(renderer, r, face);
             let colors = theme.bevel_colors(section);
             for e in bevel::edges(style, bevel::rings(width), r.size()) {
@@ -412,7 +481,10 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for ClassicScroll<'a, M> {
                     for run in glyph.runs() {
                         fill_rect(
                             renderer,
-                            Rectangle::new(Point::new(ox + run.x as f32, oy + run.y as f32), Size::new(run.width as f32, 1.0)),
+                            Rectangle::new(
+                                Point::new(ox + run.x as f32, oy + run.y as f32),
+                                Size::new(run.width as f32, 1.0),
+                            ),
                             ink(()),
                         );
                     }
@@ -430,8 +502,10 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for ClassicScroll<'a, M> {
 fn track_colors() -> [Color; 2] {
     let cfg = crate::theme_config::current();
     [
-        cfg.color("scrollbar", "track-light").unwrap_or(Color::WHITE),
-        cfg.color("scrollbar", "track-dark").unwrap_or_else(|| crate::color::hex(0xc0c0c0)),
+        cfg.color("scrollbar", "track-light")
+            .unwrap_or(Color::WHITE),
+        cfg.color("scrollbar", "track-dark")
+            .unwrap_or_else(|| crate::color::hex(0xc0c0c0)),
     ]
 }
 
@@ -444,7 +518,11 @@ fn ensure_track(state: &mut State, width: f32, height: f32) {
         return;
     }
     let colors = track_colors().map(rgba8);
-    if state.track.as_ref().is_some_and(|(size, c, _)| *size == (w, h) && *c == colors) {
+    if state
+        .track
+        .as_ref()
+        .is_some_and(|(size, c, _)| *size == (w, h) && *c == colors)
+    {
         return;
     }
     let handle = img::Handle::from_rgba(w, h, pixmap::dither_rgba(w, h, colors[0], colors[1]));
@@ -466,7 +544,12 @@ impl<'a, M: 'a> From<ClassicScroll<'a, M>> for Element<'a, M> {
 mod tests {
     use super::*;
 
-    const BAR: Rectangle = Rectangle { x: 100.0, y: 10.0, width: 16.0, height: 200.0 };
+    const BAR: Rectangle = Rectangle {
+        x: 100.0,
+        y: 10.0,
+        width: 16.0,
+        height: 200.0,
+    };
 
     #[test]
     fn the_bar_is_arrow_track_arrow() {
@@ -481,7 +564,13 @@ mod tests {
 
     #[test]
     fn the_thumb_is_the_visible_share_of_the_track_and_moves_with_the_offset() {
-        let info = |offset| Some(Info { viewport: 100.0, content: 400.0, offset });
+        let info = |offset| {
+            Some(Info {
+                viewport: 100.0,
+                content: 400.0,
+                offset,
+            })
+        };
         let top = geometry(BAR, true, info(0.0)).thumb.unwrap();
         assert_eq!((top.y, top.height), (26.0, 42.0));
         let bottom = geometry(BAR, true, info(300.0)).thumb.unwrap();
@@ -489,12 +578,32 @@ mod tests {
         let mid = geometry(BAR, true, info(150.0)).thumb.unwrap();
         assert!(mid.y > top.y && mid.y < bottom.y);
         // Content that fits has no thumb.
-        assert!(geometry(BAR, true, Some(Info { viewport: 100.0, content: 100.0, offset: 0.0 })).thumb.is_none());
+        assert!(
+            geometry(
+                BAR,
+                true,
+                Some(Info {
+                    viewport: 100.0,
+                    content: 100.0,
+                    offset: 0.0
+                })
+            )
+            .thumb
+            .is_none()
+        );
     }
 
     #[test]
     fn the_thumb_is_never_smaller_than_the_bar_is_wide() {
-        let g = geometry(BAR, true, Some(Info { viewport: 10.0, content: 100000.0, offset: 0.0 }));
+        let g = geometry(
+            BAR,
+            true,
+            Some(Info {
+                viewport: 10.0,
+                content: 100000.0,
+                offset: 0.0,
+            }),
+        );
         assert_eq!(g.thumb.unwrap().height, 16.0);
     }
 
@@ -502,6 +611,10 @@ mod tests {
     fn an_unset_theme_gets_the_stock_scrolled_window() {
         assert!(!classic_scrollbar());
         let _: Element<'_, ()> = themed_scrolled(iced::widget::space());
-        let _: Element<'_, ()> = ClassicScroll::new(iced::widget::space()).width(16.0).arrows(true).dither(true).into();
+        let _: Element<'_, ()> = ClassicScroll::new(iced::widget::space())
+            .width(16.0)
+            .arrows(true)
+            .dither(true)
+            .into();
     }
 }

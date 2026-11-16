@@ -324,10 +324,7 @@ mod tests {
     #[test]
     fn scale_and_intensity_apply() {
         let a = themed().dialog();
-        let b = themed()
-            .with_scale(2.0)
-            .with_intensity(0.5)
-            .dialog();
+        let b = themed().with_scale(2.0).with_intensity(0.5).dialog();
         assert_eq!(b.shadow.blur_radius, a.shadow.blur_radius * 2.0);
         assert!(b.shadow.color.a < a.shadow.color.a);
     }

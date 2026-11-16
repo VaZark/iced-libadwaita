@@ -44,6 +44,8 @@ impl Variant {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Preset {
     pub(crate) group: &'static str,
+    /// The key of the bundled theme this entry stands for; `path` is empty then.
+    pub(crate) bundled: Option<&'static str>,
     pub(crate) name: String,
     pub(crate) path: PathBuf,
     /// Where the entry points, when the file is a symlink.
@@ -56,6 +58,7 @@ pub(crate) struct Preset {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Target {
     File(PathBuf),
+    Bundled(&'static str),
     New,
 }
 
@@ -277,7 +280,10 @@ pub(crate) fn list_presets(
     let default = dirs.iter().find_map(|d| default_target(d));
     let mut out: Vec<Preset> = Vec::new();
     let mut seen: Vec<PathBuf> = Vec::new();
-    let mut add = |group: &'static str, files: Vec<PathBuf>| {
+    let add = |out: &mut Vec<Preset>,
+               seen: &mut Vec<PathBuf>,
+               group: &'static str,
+               files: Vec<PathBuf>| {
         for f in files {
             let key = canon(&f);
             if seen.contains(&key) {
@@ -285,6 +291,7 @@ pub(crate) fn list_presets(
             }
             out.push(Preset {
                 group,
+                bundled: None,
                 name: theme_name(&f),
                 target: is_link(&f).then(|| key.clone()),
                 is_default: default.as_ref() == Some(&key),
@@ -294,6 +301,8 @@ pub(crate) fn list_presets(
         }
     };
     add(
+        &mut out,
+        &mut seen,
         "Registered",
         dirs.iter()
             .flat_map(|d| scan_folder(d))
@@ -301,12 +310,32 @@ pub(crate) fn list_presets(
             .collect(),
     );
     if let Some(d) = &default {
-        add("Registered", vec![d.clone()]);
+        add(&mut out, &mut seen, "Registered", vec![d.clone()]);
+    }
+    // A bundled theme already installed unchanged is listed once, as the installed file.
+    let installed: Vec<String> = out
+        .iter()
+        .filter_map(|p| std::fs::read_to_string(&p.path).ok())
+        .collect();
+    for (key, text) in crate::bundled::BUNDLED {
+        if installed.iter().any(|t| t == text) {
+            continue;
+        }
+        out.push(Preset {
+            group: "Bundled",
+            bundled: Some(key),
+            name: crate::bundled::name_of(text, key),
+            path: PathBuf::new(),
+            target: None,
+            is_default: false,
+        });
     }
     for folder in folders {
-        add("Folders", scan_folder(folder));
+        add(&mut out, &mut seen, "Folders", scan_folder(folder));
     }
     add(
+        &mut out,
+        &mut seen,
         "Recent",
         recent.iter().filter(|p| p.is_file()).cloned().collect(),
     );
@@ -318,5 +347,37 @@ pub(crate) fn list_presets(
 pub(crate) enum Registry {
     Register,
     Unregister,
-    Default,
+}
+
+/// Makes the bundled theme `key` the global theme: its text is installed as `<key>.conf` in `dir`
+/// (an installed file of that name with other text is the user's and is never overwritten), and
+/// `default.conf` points at it.
+pub(crate) fn set_global_bundled(dir: &std::path::Path, key: &str) -> Result<PathBuf, String> {
+    let text = crate::bundled::text(key).ok_or_else(|| format!("no bundled theme {key}"))?;
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let file = dir.join(format!("{key}.conf"));
+    match std::fs::read_to_string(&file) {
+        Ok(existing) if existing == text => {}
+        Ok(_) => {
+            return Err(format!(
+                "{} already exists with other values: open it to use it, or remove it first",
+                file.display()
+            ));
+        }
+        Err(_) => std::fs::write(&file, text).map_err(|e| format!("{}: {e}", file.display()))?,
+    }
+    set_default(dir, &file)
+}
+
+/// Removes the global theme: `default.conf` in `dir`, when it is a symlink. Apps then show the
+/// bare toolkit look (or their own base theme).
+pub(crate) fn clear_global(dir: &std::path::Path) -> Result<(), String> {
+    let link = dir.join("default.conf");
+    if std::fs::symlink_metadata(&link).is_err() {
+        return Err("there is no global theme".into());
+    }
+    if !is_link(&link) {
+        return Err(format!("{} is a regular file: not removed", link.display()));
+    }
+    std::fs::remove_file(&link).map_err(|e| format!("{}: {e}", link.display()))
 }

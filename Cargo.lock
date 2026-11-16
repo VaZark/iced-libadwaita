@@ -1437,11 +1437,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "iced-adaptive-design-theme-editor"
+name = "iced-adaptive-design-theme-manager"
 version = "0.1.0"
 dependencies = [
  "iced",
  "iced-adaptive-design",
+ "iced-adaptive-design-gallery",
  "rfd",
 ]
 

@@ -32,7 +32,7 @@ use iad::components::typography as ty;
 use iad::layouts::transition::{Budgets, Command, Event, Outcome};
 use iad::styles as style;
 use iad::{components as cmp, layouts as lay, widgets as w};
-use iced::widget::{column, container, row, scrollable, text};
+use iced::widget::{column, container, row, text};
 use iced::{Length, Subscription, Task};
 use iced_adaptive_design as iad;
 use std::time::{Duration, Instant};
@@ -799,7 +799,7 @@ impl AppShell {
         .padding(16)
         .max_width(720);
         // Centered in the content area, so it stays put when a pane slides in or out beside it.
-        container(scrollable(container(body).center_x(Length::Fill)).width(Length::Fill))
+        container(lay::scrolled_window(container(body).center_x(Length::Fill)).width(Length::Fill))
             .style(self.rounded_bottom(style::container::view, edges))
             .width(Length::Fill)
             .height(Length::Fill)

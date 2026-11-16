@@ -16,7 +16,7 @@ use iad::primitives::tree as t;
 use iad::primitives::tree::{Effect as TreeEffect, Event as TreeEvent, TreeNode, TreeState};
 use iad::widgets::{DragMode, TREE_ROW_HEIGHT, Tree};
 use iad::{Element, Icon, Metrics};
-use iced::widget::{column, row, scrollable};
+use iced::widget::{column, row};
 use iced::{Length, Task};
 use std::time::Duration;
 
@@ -336,7 +336,7 @@ impl State {
         let range = self.vp.window(total, TREE_ROW_HEIGHT, 4);
         column![
             ty::caption(format!("{total} rows, {} built", range.len())),
-            scrollable(
+            iad::layouts::scrolled_window(
                 Tree::new(&self.big, &self.big_tree)
                     .window(range)
                     .icons(icon_for)

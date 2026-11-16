@@ -8,10 +8,10 @@
 
 use crate::primitives::{bevel, pixmap};
 use crate::{Element, Theme};
+use iced::advanced::Renderer as _;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
 use iced::advanced::widget::{Tree, Widget};
-use iced::advanced::Renderer as _;
 use iced::{Length, Point, Rectangle, Size, mouse};
 use std::ops::RangeInclusive;
 
@@ -40,7 +40,11 @@ pub struct ProgressBlocks {
 impl ProgressBlocks {
     pub fn new(range: RangeInclusive<f32>, value: f32) -> Self {
         let (lo, hi) = (*range.start(), *range.end());
-        let fraction = if hi > lo { ((value - lo) / (hi - lo)).clamp(0.0, 1.0) } else { 0.0 };
+        let fraction = if hi > lo {
+            ((value - lo) / (hi - lo)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         Self {
             fraction,
             height: crate::Metrics::desktop().progress_height,
@@ -67,7 +71,12 @@ impl<M> Widget<M, Theme, iced::Renderer> for ProgressBlocks {
         Size::new(self.width, Length::Fixed(self.height))
     }
 
-    fn layout(&mut self, _tree: &mut Tree, _renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+    fn layout(
+        &mut self,
+        _tree: &mut Tree,
+        _renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
         layout::atomic(limits, self.width, Length::Fixed(self.height))
     }
 
@@ -95,7 +104,9 @@ impl<M> Widget<M, Theme, iced::Renderer> for ProgressBlocks {
         };
         let frame = "frame.progress";
         // The trough: its fill, then its sunken frame.
-        let fill = theme.token_color(frame, "bg").unwrap_or(theme.semantic.window.bg);
+        let fill = theme
+            .token_color(frame, "bg")
+            .unwrap_or(theme.semantic.window.bg);
         quad(renderer, Rectangle::new(Point::ORIGIN, bounds.size()), fill);
         let rings = crate::components::bevel_of(frame);
         let ring_px = rings.map_or(0.0, |(_, w)| bevel::rings(w) as f32);
@@ -112,7 +123,11 @@ impl<M> Widget<M, Theme, iced::Renderer> for ProgressBlocks {
         let gap = theme.token_number("progress", "block-gap").unwrap_or(2.0);
         let color = theme.semantic.accent.bg;
         for (x, w) in pixmap::progress_blocks(inner_w, self.fraction, block, gap) {
-            quad(renderer, Rectangle::new(Point::new(inset + x, inset), Size::new(w, inner_h)), color);
+            quad(
+                renderer,
+                Rectangle::new(Point::new(inset + x, inset), Size::new(w, inner_h)),
+                color,
+            );
         }
     }
 }

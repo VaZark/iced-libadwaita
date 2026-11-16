@@ -640,7 +640,11 @@ fn row_content<'a, M: Clone + 'a>(
         .as_ref()
         .map(|i| (item.icon_side.unwrap_or(side), i.view(m.icon_size).into()));
 
-    let mut lbl = crate::components::typography::label(item.label.clone()).width(Length::Fill);
+    // A long label flows onto the next line and grows the row, rather than running under the
+    // accelerator, the mark or the scrollbar.
+    let mut lbl = crate::components::typography::label(item.label.clone())
+        .width(Length::Fill)
+        .wrapping(text::Wrapping::WordOrGlyph);
     if item.destructive {
         lbl = lbl.style(st::destructive);
     }
@@ -707,6 +711,16 @@ fn row_content<'a, M: Clone + 'a>(
         .extend(switch.map(Element::from));
     r = r.extend(trail);
     r.into()
+}
+
+/// A menu row's height with one line of text.
+const MENU_ROW_HEIGHT: f32 = 32.0;
+
+/// `content` at least `min` high: it grows when a label wraps, instead of keeping a fixed height.
+fn min_height<'a, M: 'a>(content: Element<'a, M>, min: f32) -> Element<'a, M> {
+    row![space().height(min.max(0.0)), content]
+        .align_y(Vertical::Center)
+        .into()
 }
 
 /// What choosing the item sends. A submenu row sends nothing: it opens a page.
@@ -782,20 +796,13 @@ fn dropdown_items<'a, M: Clone + 'a>(
             out.push(separator(air));
         }
         for item in section {
-            let content = container(row_content(
-                item,
-                menu.icon_side,
-                menu.check_style,
-                slots,
-                false,
-                gap,
-            ));
-            let content =
-                if item.label_props.overflow == Some(crate::components::TextOverflow::Wrap) {
-                    content.padding([m.space_s, pad_x])
-                } else {
-                    content.padding([0.0, pad_x]).center_y(Length::Fixed(32.0))
-                };
+            // One line is `MENU_ROW_HEIGHT` high; a wrapped label grows the row.
+            let pad_y = m.space_s;
+            let content = container(min_height(
+                row_content(item, menu.icon_side, menu.check_style, slots, false, gap),
+                MENU_ROW_HEIGHT - 2.0 * pad_y,
+            ))
+            .padding([pad_y, pad_x]);
             let content = item.container_props.apply(content);
             let content = if item.disabled {
                 content
@@ -966,21 +973,11 @@ fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M,
             .iter()
             .filter(|i| !matches!(i.kind, Kind::Submenu { .. }))
             .map(|item| -> Element<'a, M> {
-                let content = container(row_content(
-                    item,
-                    menu.icon_side,
-                    menu.check_style,
-                    slots,
-                    true,
-                    gap,
+                let content = container(min_height(
+                    row_content(item, menu.icon_side, menu.check_style, slots, true, gap),
+                    m.row_min_height - m.row_padding.y(),
                 ))
                 .padding(m.row_padding);
-                let content =
-                    if item.label_props.overflow == Some(crate::components::TextOverflow::Wrap) {
-                        content
-                    } else {
-                        content.center_y(Length::Fixed(m.row_min_height))
-                    };
                 let row_button = button(item.container_props.apply(content))
                     .padding(0)
                     .width(Length::Fill)
@@ -1113,6 +1110,45 @@ impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Height of `menu`'s popover content laid out in `width`.
+    fn popover_height(menu: &Menu<u8>, width: f32) -> f32 {
+        use iced::advanced::{layout, renderer::Headless, widget::Tree};
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        let mut element: Element<'_, u8> = popover_content(menu, 2000.0);
+        let mut state = Tree::new(&element);
+        element
+            .as_widget_mut()
+            .layout(
+                &mut state,
+                &renderer,
+                &layout::Limits::new(iced::Size::ZERO, iced::Size::new(width, f32::INFINITY)),
+            )
+            .size()
+            .height
+    }
+
+    #[test]
+    fn a_long_label_wraps_and_grows_its_row_while_a_short_one_keeps_one_line() {
+        let short = Menu::<u8>::new("M").section([MenuItem::action("Save", 1)]);
+        let long = Menu::<u8>::new("M").section([MenuItem::action(
+            "Register this theme for every application on this computer",
+            1,
+        )]);
+        let one = popover_height(&short, 200.0);
+        let many = popover_height(&long, 200.0);
+        assert!(
+            many > one + 20.0,
+            "a long label must flow to more lines, not clip: {one} vs {many}"
+        );
+        // One line is the standard row: it does not depend on the width.
+        assert_eq!(popover_height(&short, 200.0), popover_height(&short, 400.0));
+    }
 
     #[test]
     fn a_menu_takes_its_gaps_and_padding() {

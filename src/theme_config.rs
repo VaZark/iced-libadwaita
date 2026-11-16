@@ -1693,6 +1693,7 @@ metrics! {
     "checkbox-size", "Checkbox size", |m| m.checkbox_size, |m, v| m.checkbox_size = v;
     "scrollbar-slider-width", "Visible scrollbar slider width", |m| m.scrollbar_slider_width, |m, v| m.scrollbar_slider_width = v;
     "scrollbar-margin", "Gap between scrollbar slider and edge", |m| m.scrollbar_margin, |m, v| m.scrollbar_margin = v;
+    "scrollbar-gutter", "Room between content and a scrollbar beside it", |m| m.scrollbar_gutter, |m, v| m.scrollbar_gutter = v;
     "progress-height", "Progress bar thickness", |m| m.progress_height, |m, v| m.progress_height = v;
     "list-spacing", "Space between list rows", |m| m.list_spacing, |m, v| m.list_spacing = v;
     "headerbar-padding-y", "Header bar vertical padding", |m| m.headerbar_padding.top, |m, v| { m.headerbar_padding.top = v; m.headerbar_padding.bottom = v };

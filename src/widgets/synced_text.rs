@@ -16,7 +16,7 @@ use crate::Element;
 use crate::components::typography as ty;
 use crate::primitives::synced::{self, Line};
 use crate::styles::text as st;
-use iced::widget::{Id, column, container, scrollable};
+use iced::widget::{Id, column, container};
 use iced::{Alignment, Length, Task};
 
 /// See the [module](self).
@@ -150,7 +150,7 @@ impl<'a, M: Clone + 'a> From<SyncedText<'a, M>> for Element<'a, M> {
                 )
                 .into()
         });
-        scrollable(
+        crate::layouts::scrolled_window(
             column(rows)
                 .spacing(s.spacing.unwrap_or(m.space_xxs))
                 .padding(

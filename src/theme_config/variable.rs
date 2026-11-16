@@ -152,8 +152,10 @@ impl VariableType {
             Self::Gradient => super::Gradient::parse(raw).map(Value::Gradient),
             Self::Font => {
                 let name = raw.trim();
-                (!name.is_empty() && name.chars().count() <= 64 && !name.chars().any(char::is_control))
-                    .then(|| Value::Text(name.into()))
+                (!name.is_empty()
+                    && name.chars().count() <= 64
+                    && !name.chars().any(char::is_control))
+                .then(|| Value::Text(name.into()))
             }
             Self::String {
                 values,

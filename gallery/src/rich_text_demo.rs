@@ -168,8 +168,10 @@ impl Gallery {
         self.page_frame(
             column![
                 self.group("Every element").push(w::card(full)),
-                self.group("Compact, first blocks only").push(w::card(compact)),
-                self.group("Tag groups, read only").push(w::card(tag_groups())),
+                self.group("Compact, first blocks only")
+                    .push(w::card(compact)),
+                self.group("Tag groups, read only")
+                    .push(w::card(tag_groups())),
             ]
             .spacing(m.group_spacing),
         )

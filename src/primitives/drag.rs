@@ -214,16 +214,31 @@ mod tests {
     fn the_copy_is_on_a_row_only_when_it_covers_most_of_it() {
         let row = (100.0, 40.0);
         // Same height, almost exactly over it: inside.
-        assert_eq!(Targets::Edges.place_of_ghost(row, (102.0, 40.0)), Some(Place::Inside));
+        assert_eq!(
+            Targets::Edges.place_of_ghost(row, (102.0, 40.0)),
+            Some(Place::Inside)
+        );
         // Half a row up: its middle is in the upper half, so before.
-        assert_eq!(Targets::Edges.place_of_ghost(row, (84.0, 40.0)), Some(Place::Before));
+        assert_eq!(
+            Targets::Edges.place_of_ghost(row, (84.0, 40.0)),
+            Some(Place::Before)
+        );
         // Half a row down: after.
-        assert_eq!(Targets::Edges.place_of_ghost(row, (118.0, 40.0)), Some(Place::After));
+        assert_eq!(
+            Targets::Edges.place_of_ghost(row, (118.0, 40.0)),
+            Some(Place::After)
+        );
         // Its middle is not over the row at all.
         assert_eq!(Targets::Edges.place_of_ghost(row, (20.0, 40.0)), None);
         // A reorder-only list has no inside.
-        assert_eq!(Targets::Between.place_of_ghost(row, (102.0, 40.0)), Some(Place::After));
-        assert_eq!(Targets::Between.place_of_ghost(row, (90.0, 40.0)), Some(Place::Before));
+        assert_eq!(
+            Targets::Between.place_of_ghost(row, (102.0, 40.0)),
+            Some(Place::After)
+        );
+        assert_eq!(
+            Targets::Between.place_of_ghost(row, (90.0, 40.0)),
+            Some(Place::Before)
+        );
     }
 
     #[test]

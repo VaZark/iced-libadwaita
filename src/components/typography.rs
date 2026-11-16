@@ -57,12 +57,12 @@ impl Typography {
         themed(text(content).size(self.caption))
     }
     pub fn monospace<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
-        text(content).size(self.monospace).font(
-            crate::theme_config::monospace_font().unwrap_or(Font {
+        text(content)
+            .size(self.monospace)
+            .font(crate::theme_config::monospace_font().unwrap_or(Font {
                 family: Family::Monospace,
                 ..Font::DEFAULT
-            }),
-        )
+            }))
     }
     /// `.dim-label` body text.
     pub fn dim_label<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {

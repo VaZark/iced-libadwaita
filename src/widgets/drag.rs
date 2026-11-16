@@ -12,14 +12,14 @@
 //! the drag has started the source's content is told the pointer left, so it never also sees the
 //! release as a click.
 
+use iced::advanced::Renderer as _;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Quad};
-use iced::advanced::Renderer as _;
 use iced::advanced::widget::{Operation, Tree, Widget, tree};
 use iced::advanced::{Clipboard, Shell, overlay};
 use iced::{
-    Background, Border, Color, Element, Event, Length, Padding, Point, Rectangle, Shadow, Size, Transformation,
-    Vector, mouse,
+    Background, Border, Color, Element, Event, Length, Padding, Point, Rectangle, Shadow, Size,
+    Transformation, Vector, mouse,
 };
 
 use crate::Theme;
@@ -368,9 +368,16 @@ fn draw_label(
     };
     let measured = <iced::Renderer as text::Renderer>::Paragraph::with_text(content).min_bounds();
     let pad = Size::new(10.0, 5.0);
-    let size = Size::new(measured.width + 2.0 * pad.width, measured.height + 2.0 * pad.height);
-    let x = (at.x + 14.0).min(window.x + window.width - size.width - 4.0).max(4.0);
-    let y = (at.y + 22.0).min(window.y + window.height - size.height - 4.0).max(4.0);
+    let size = Size::new(
+        measured.width + 2.0 * pad.width,
+        measured.height + 2.0 * pad.height,
+    );
+    let x = (at.x + 14.0)
+        .min(window.x + window.width - size.width - 4.0)
+        .max(4.0);
+    let y = (at.y + 22.0)
+        .min(window.y + window.height - size.height - 4.0)
+        .max(4.0);
     let pill = Rectangle::new(Point::new(x, y), size);
     let accent = theme.semantic.accent;
     renderer.fill_quad(

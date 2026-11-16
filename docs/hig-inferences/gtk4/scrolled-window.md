@@ -34,4 +34,4 @@ scrolledwindow[.frame]
 
 ## iced mapping
 
-`scrolled_window(content)` (vertical, overlay Adwaita scrollbar), `.horizontal()` and `.both()`. `PreferencesPage`, the gallery pages and popover menus use it.
+`scrolled_window(content)` (vertical, Adwaita scrollbar beside the content with `scrollbar_gutter` between), `.horizontal()` and `.both()`. `PreferencesPage`, the gallery pages and popover menus use it.

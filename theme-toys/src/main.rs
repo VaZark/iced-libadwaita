@@ -1,6 +1,6 @@
 //! Theme toys: one small window per design language (Windows 95, XP, 7, MATE 1.26),
 //! drawn with the library's widgets and styled only by the theme in effect (`IAD_THEME=<file>`;
-//! with none, the bare look). The theme editor launches them to try a theme.
+//! with none, the bare look).
 //!
 //! ```text
 //! theme-toys <win95|winxp|win7|mate>

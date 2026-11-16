@@ -60,7 +60,12 @@ pub fn dialog(theme: &Theme) -> Style {
     Style {
         border: r.border(theme.metrics.radius_window),
         shadow: r.shadow,
-        ..surface_named(theme, "dialog", theme.semantic.dialog, theme.metrics.radius_window)
+        ..surface_named(
+            theme,
+            "dialog",
+            theme.semantic.dialog,
+            theme.metrics.radius_window,
+        )
     }
 }
 
@@ -70,7 +75,12 @@ pub fn popover(theme: &Theme) -> Style {
     Style {
         border: r.border(theme.metrics.radius_popover),
         shadow: r.shadow,
-        ..surface_named(theme, "popover", theme.semantic.popover, theme.metrics.radius_popover)
+        ..surface_named(
+            theme,
+            "popover",
+            theme.semantic.popover,
+            theme.metrics.radius_popover,
+        )
     }
 }
 

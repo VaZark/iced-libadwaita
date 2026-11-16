@@ -112,7 +112,12 @@ pub struct Sides {
 }
 
 impl Sides {
-    pub const ALL: Sides = Sides { top: true, left: true, bottom: true, right: true };
+    pub const ALL: Sides = Sides {
+        top: true,
+        left: true,
+        bottom: true,
+        right: true,
+    };
 
     /// The sides a `border-edges` value names (`all`, `no-bottom`, `no-top`, `no-left`,
     /// `no-right`); all of them for anything else.
@@ -141,20 +146,34 @@ pub fn edges_with(style: BevelStyle, rings: u8, size: Size, sides: Sides) -> Vec
         if iw <= 1.0 || ih <= 1.0 {
             break;
         }
-        let rect = |x: f32, y: f32, w: f32, h: f32| Rectangle::new(iced::Point::new(x, y), Size::new(w, h));
+        let rect = |x: f32, y: f32, w: f32, h: f32| {
+            Rectangle::new(iced::Point::new(x, y), Size::new(w, h))
+        };
         if sides.top {
             let width = if sides.right { iw - 1.0 } else { iw };
-            out.push(Edge { rect: rect(k, k, width, 1.0), tone: tl });
+            out.push(Edge {
+                rect: rect(k, k, width, 1.0),
+                tone: tl,
+            });
         }
         if sides.left {
             let height = if sides.bottom { ih - 1.0 } else { ih };
-            out.push(Edge { rect: rect(k, k, 1.0, height), tone: tl });
+            out.push(Edge {
+                rect: rect(k, k, 1.0, height),
+                tone: tl,
+            });
         }
         if sides.bottom {
-            out.push(Edge { rect: rect(k, h - k - 1.0, iw, 1.0), tone: br });
+            out.push(Edge {
+                rect: rect(k, h - k - 1.0, iw, 1.0),
+                tone: br,
+            });
         }
         if sides.right {
-            out.push(Edge { rect: rect(w - k - 1.0, k, 1.0, ih), tone: br });
+            out.push(Edge {
+                rect: rect(w - k - 1.0, k, 1.0, ih),
+                tone: br,
+            });
         }
     }
     out
@@ -182,7 +201,10 @@ pub fn tone_at(style: BevelStyle, rings: u8, size: Size, x: f32, y: f32) -> Opti
 mod tests {
     use super::*;
 
-    const S: Size = Size { width: 10.0, height: 8.0 };
+    const S: Size = Size {
+        width: 10.0,
+        height: 8.0,
+    };
 
     #[test]
     fn parse_names_the_drawn_styles_only() {
@@ -231,9 +253,18 @@ mod tests {
 
     #[test]
     fn a_window_frame_is_a_light_gray_outer_ring_and_a_white_inner_one() {
-        assert_eq!(tone_at(BevelStyle::Window, 2, S, 0.0, 0.0), Some(Tone::LightInner));
-        assert_eq!(tone_at(BevelStyle::Window, 2, S, 1.0, 1.0), Some(Tone::Light));
-        assert_eq!(tone_at(BevelStyle::Window, 2, S, 9.0, 7.0), Some(Tone::Dark));
+        assert_eq!(
+            tone_at(BevelStyle::Window, 2, S, 0.0, 0.0),
+            Some(Tone::LightInner)
+        );
+        assert_eq!(
+            tone_at(BevelStyle::Window, 2, S, 1.0, 1.0),
+            Some(Tone::Light)
+        );
+        assert_eq!(
+            tone_at(BevelStyle::Window, 2, S, 9.0, 7.0),
+            Some(Tone::Dark)
+        );
     }
 
     #[test]
@@ -241,7 +272,10 @@ mod tests {
         assert_eq!(BevelStyle::Raised.pressed(), BevelStyle::Sunken);
         assert_eq!(BevelStyle::Sunken.pressed(), BevelStyle::Raised);
         assert_eq!(BevelStyle::Etched.pressed(), BevelStyle::Etched);
-        assert_eq!((rings(0.5), rings(1.0), rings(2.0), rings(5.0)), (1, 1, 2, 2));
+        assert_eq!(
+            (rings(0.5), rings(1.0), rings(2.0), rings(5.0)),
+            (1, 1, 2, 2)
+        );
     }
 
     #[test]
@@ -250,7 +284,10 @@ mod tests {
         assert!(!s.bottom && s.top && s.left && s.right);
         let e = edges_with(BevelStyle::Raised, 1, Size::new(10.0, 8.0), s);
         assert_eq!(e.len(), 3);
-        let left = e.iter().find(|e| e.rect.width == 1.0 && e.rect.x == 0.0).unwrap();
+        let left = e
+            .iter()
+            .find(|e| e.rect.width == 1.0 && e.rect.x == 0.0)
+            .unwrap();
         assert_eq!(left.rect.height, 8.0);
         assert!(e.iter().all(|e| e.rect.y + e.rect.height <= 8.0));
         // Nothing is drawn on the bottom row except the sides' last pixel.

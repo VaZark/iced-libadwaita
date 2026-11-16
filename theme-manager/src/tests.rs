@@ -1,7 +1,5 @@
 use super::*;
 
-#[path = "regression_tests.rs"]
-mod regressions;
 use std::os::unix::fs::symlink;
 
 #[test]
@@ -395,6 +393,14 @@ fn temp_dir(tag: &str) -> PathBuf {
     d
 }
 
+/// The listed theme files, without the bundled entries every list has.
+fn file_presets(dirs: &[PathBuf], folders: &[PathBuf], recent: &[PathBuf]) -> Vec<Preset> {
+    list_presets(dirs, folders, recent)
+        .into_iter()
+        .filter(|p| p.bundled.is_none())
+        .collect()
+}
+
 fn read(p: &std::path::Path) -> String {
     std::fs::read_to_string(p).unwrap()
 }
@@ -536,28 +542,6 @@ fn save_without_a_path_asks_where_instead_of_writing() {
 }
 
 #[test]
-fn launch_choices_are_independent_of_scheme_token_editing() {
-    let mut e = editor();
-    assert_eq!(e.launch_scheme, toys::LaunchScheme::System);
-    assert_eq!(e.launch_target, "gallery");
-    let _ = e.update(Msg::LaunchTarget("win95".into()));
-    let _ = e.update(Msg::LaunchScheme(toys::LaunchScheme::Dark));
-    let _ = e.update(Msg::Variant(Variant::Light));
-    assert_eq!(e.launch_target, "win95");
-    assert_eq!(e.launch_scheme, toys::LaunchScheme::Dark);
-    assert!(
-        !e.runner.running("win95"),
-        "choosing an action must not launch it"
-    );
-    let _ = e.update(Msg::ThemePicker(true));
-    let _ = e.view();
-    let _ = e.update(Msg::ThemePicker(false));
-    let _ = e.update(Msg::Section("tabs".into()));
-    assert_eq!(e.section, "tabs");
-    assert!(!e.drawer);
-}
-
-#[test]
 fn theme_picker_bounds_and_wraps_long_names_and_paths_at_narrow_widths() {
     use iced::advanced::{layout, renderer::Headless, widget::Tree};
     let renderer = iced::futures::executor::block_on(iced::Renderer::new(
@@ -568,6 +552,7 @@ fn theme_picker_bounds_and_wraps_long_names_and_paths_at_narrow_widths() {
     .unwrap();
     let mut e = editor();
     e.presets = vec![Preset {
+        bundled: None,
         group: "Folders",
         name: "夜空のテーマ العربية Ελληνικά हिन्दी café 🎨 AnUnbrokenVeryLongThemeName".repeat(16),
         path: PathBuf::from(format!("/themes/{}.conf", "long-directory-name".repeat(24))),
@@ -592,6 +577,7 @@ fn theme_picker_bounds_and_wraps_long_names_and_paths_at_narrow_widths() {
     e.path = Some(e.presets[0].path.clone());
     let short = Preset {
         group: "Folders",
+        bundled: None,
         name: "Theme".into(),
         path: "/themes/theme.conf".into(),
         target: None,
@@ -657,218 +643,6 @@ fn theme_picker_keeps_unsaved_confirmation_accessible() {
     assert_eq!(e.path, Some(target));
     std::fs::remove_dir_all(d).unwrap();
 }
-
-#[test]
-fn launch_scheme_overwrites_or_removes_preexisting_child_overrides() {
-    for scheme in toys::LaunchScheme::ALL {
-        let mut command = std::process::Command::new("sh");
-        command
-            .env("TOYS_SCHEME", "dark")
-            .env("GALLERY_SCHEME", "light");
-        scheme.apply_environment(&mut command);
-        let environment: BTreeMap<_, _> = command.get_envs().collect();
-        let expected = match scheme {
-            toys::LaunchScheme::System => None,
-            toys::LaunchScheme::Light => Some(std::ffi::OsStr::new("light")),
-            toys::LaunchScheme::Dark => Some(std::ffi::OsStr::new("dark")),
-        };
-        for key in ["TOYS_SCHEME", "GALLERY_SCHEME"] {
-            assert_eq!(environment[std::ffi::OsStr::new(key)], expected);
-        }
-    }
-}
-
-#[test]
-fn gallery_and_toys_receive_launch_scheme_only_in_child_environment() {
-    let d = temp_dir("launch-schemes");
-    let inherited_toys = std::env::var_os("TOYS_SCHEME");
-    let inherited_gallery = std::env::var_os("GALLERY_SCHEME");
-    let mut runner = toys::Runner::default();
-    for kind in ["gallery", "win95"] {
-        for scheme in toys::LaunchScheme::ALL {
-            let output = d.join(format!("{kind}-{}", scheme.label()));
-            let bin = script(
-                &d,
-                "capture-scheme",
-                &format!(
-                    "printf 'toys=%s\\ngallery=%s\\n' \"${{TOYS_SCHEME-unset}}\" \"${{GALLERY_SCHEME-unset}}\" > {0}.tmp\nif [ -n \"${{ICED_ADAPTIVE_DESIGN_CONFIG-}}\" ]; then cat \"$ICED_ADAPTIVE_DESIGN_CONFIG\" >> {0}.tmp; fi\nmv {0}.tmp {0}",
-                    output.display()
-                ),
-            );
-            let bins = toys::Bins {
-                gallery: Some(bin.clone()),
-                toys: Some(bin),
-            };
-            runner
-                .launch_with_scheme(kind, "[metrics]\nradius-m=7\n", &bins, scheme)
-                .unwrap();
-            let seen = wait_for(&output);
-            match scheme {
-                toys::LaunchScheme::System => {
-                    assert!(seen.starts_with("toys=unset\ngallery=unset\n"))
-                }
-                toys::LaunchScheme::Light => assert!(
-                    seen.starts_with("toys=light\ngallery=light\n")
-                        && seen.contains("color-scheme=light")
-                ),
-                toys::LaunchScheme::Dark => assert!(
-                    seen.starts_with("toys=dark\ngallery=dark\n")
-                        && seen.contains("color-scheme=dark")
-                ),
-            }
-        }
-    }
-    assert_eq!(std::env::var_os("TOYS_SCHEME"), inherited_toys);
-    assert_eq!(std::env::var_os("GALLERY_SCHEME"), inherited_gallery);
-    drop(runner);
-    std::fs::remove_dir_all(d).unwrap();
-}
-
-// -------------------------------------------------------- try it out
-
-/// An executable shell script in `dir`.
-fn script(dir: &std::path::Path, name: &str, body: &str) -> PathBuf {
-    use std::os::unix::fs::PermissionsExt;
-    let path = dir.join(name);
-    std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-    path
-}
-
-/// Waits for a file a started program writes.
-fn wait_for(path: &std::path::Path) -> String {
-    for _ in 0..100 {
-        if let Ok(t) = std::fs::read_to_string(path) {
-            if !t.is_empty() {
-                return t;
-            }
-        }
-        std::thread::sleep(std::time::Duration::from_millis(30));
-    }
-    panic!("{} never appeared", path.display());
-}
-
-#[test]
-fn try_it_out_runs_the_gallery_on_a_temp_file_and_leaves_the_original_alone() {
-    let d = temp_dir("try");
-    let f = d.join("orig.conf");
-    std::fs::write(&f, "[metrics]\nradius-m=1\n").unwrap();
-    let mut e = editor();
-    e.load(f.clone());
-    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
-    let out = d.join("gallery.out");
-    e.bins.gallery = Some(script(
-        &d,
-        "gallery.sh",
-        &format!(
-            "echo \"$IAD_THEME\" > {o}.tmp; cat \"$IAD_THEME\" >> {o}.tmp; mv {o}.tmp {o}",
-            o = out.display()
-        ),
-    ));
-    e.try_out("gallery");
-    let seen = wait_for(&out);
-    assert!(seen.contains("radius-m=7"), "the unsaved value: {seen}");
-    assert!(seen.contains("iad-theme-editor-"), "a temp file of its own");
-    assert_eq!(
-        read(&f),
-        "[metrics]\nradius-m=1\n",
-        "the original is untouched"
-    );
-    assert!(e.dirty() && e.path == Some(f));
-    assert!(e.status.starts_with("Tried it out"), "{}", e.status);
-    let _ = std::fs::remove_dir_all(d);
-}
-
-#[test]
-fn a_toy_window_starts_with_its_name_and_the_unsaved_values() {
-    let d = temp_dir("toy");
-    let mut e = editor();
-    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "3".into()));
-    let out = d.join("toy.out");
-    e.bins.toys = Some(script(
-        &d,
-        "theme-toys.sh",
-        &format!(
-            "echo \"$@\" > {o}.tmp; cat \"$IAD_THEME\" >> {o}.tmp; mv {o}.tmp {o}",
-            o = out.display()
-        ),
-    ));
-    let _ = e.update(Msg::TryOut("win95".into()));
-    let seen = wait_for(&out);
-    assert!(seen.starts_with("win95"), "{seen}");
-    assert!(seen.contains("radius-m=3"), "{seen}");
-    assert!(e.dirty() && e.path.is_none(), "nothing was saved");
-    let _ = std::fs::remove_dir_all(d);
-}
-
-#[test]
-fn starting_a_toy_again_replaces_the_old_window() {
-    let d = temp_dir("again");
-    let mut runner = toys::Runner::default();
-    let bins = toys::Bins {
-        gallery: None,
-        toys: Some(script(&d, "t.sh", "sleep 30")),
-    };
-    runner.launch("again", "", &bins).unwrap();
-    assert!(runner.running("again"));
-    runner
-        .launch("again", "[metrics]\nradius-m=1\n", &bins)
-        .unwrap();
-    assert!(runner.running("again"), "the new one runs");
-    assert!(!runner.running("other"), "other kinds are not started");
-    drop(runner);
-    let _ = std::fs::remove_dir_all(d);
-}
-
-#[test]
-fn the_toy_list_normalizes_stale_installs_or_uses_the_canonical_four() {
-    let d = temp_dir("list");
-    let bins = toys::Bins {
-        gallery: None,
-        toys: Some(script(
-            &d,
-            "t.sh",
-            "printf 'win95  Windows 95\\nmac: Mac OS\\n# a comment\\ngnome2\\nmate: Stale label\\nunknown: Unknown\\nwin95: Duplicate\\n'",
-        )),
-    };
-    let toys = toys::list_toys(&bins);
-    assert_eq!(
-        toys.iter()
-            .map(|t| (t.name.as_str(), t.label.as_str()))
-            .collect::<Vec<_>>(),
-        [("win95", "Windows 95"), ("mate", "MATE")]
-    );
-    let fixed = toys::list_toys(&toys::Bins::default());
-    assert_eq!(
-        fixed.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(),
-        ["win95", "winxp", "win7", "mate"]
-    );
-    let broken = toys::Bins {
-        gallery: None,
-        toys: Some(script(&d, "bad.sh", "exit 3")),
-    };
-    assert_eq!(toys::list_toys(&broken), toys::fallback());
-    for (name, output) in [
-        ("removed", "mac: Mac OS"),
-        ("empty", ""),
-        ("invalid", "not/a/target"),
-    ] {
-        let bins = toys::Bins {
-            gallery: None,
-            toys: Some(script(&d, name, &format!("printf '%s' '{output}'"))),
-        };
-        assert_eq!(toys::list_toys(&bins), toys::fallback());
-    }
-    let alias = toys::Bins {
-        gallery: None,
-        toys: Some(script(&d, "alias", "printf 'gnome2: GNOME 2'")),
-    };
-    assert_eq!(toys::list_toys(&alias)[0].name, "mate");
-    assert_eq!(toys::list_toys(&alias)[0].label, "MATE");
-    let _ = std::fs::remove_dir_all(d);
-}
-
-// ------------------------------------------------------- registering
 
 #[test]
 fn register_makes_a_symlink_and_replaces_an_old_one() {
@@ -939,7 +713,7 @@ fn set_as_default_points_default_conf_at_the_file_and_the_list_tags_it() {
     register(&data, &b).unwrap();
     set_default(&data, &a).unwrap();
     assert_eq!(default_target(&data), Some(canon(&a)));
-    let list = list_presets(&[data.clone()], &[], &[]);
+    let list = file_presets(&[data.clone()], &[], &[]);
     assert_eq!(list.len(), 2, "default.conf is not a third entry");
     let tagged: Vec<_> = list
         .iter()
@@ -949,7 +723,7 @@ fn set_as_default_points_default_conf_at_the_file_and_the_list_tags_it() {
     assert_eq!(tagged, ["Alpha"]);
     // Replaced by another file.
     set_default(&data, &b).unwrap();
-    let list = list_presets(&[data.clone()], &[], &[]);
+    let list = file_presets(&[data.clone()], &[], &[]);
     assert_eq!(
         list.iter()
             .filter(|p| p.is_default)
@@ -978,7 +752,7 @@ fn a_default_that_is_not_registered_still_shows_up_tagged() {
     let f = d.join("far.conf");
     std::fs::write(&f, "").unwrap();
     set_default(&data, &f).unwrap();
-    let list = list_presets(&[data], &[], &[]);
+    let list = file_presets(&[data], &[], &[]);
     assert_eq!(list.len(), 1);
     assert!(list[0].is_default && list[0].group == "Registered");
     let _ = std::fs::remove_dir_all(d);
@@ -1002,7 +776,7 @@ fn the_registry_buttons_report_in_the_status_line_and_rescan() {
             .iter()
             .any(|p| p.group == "Registered" && p.name == "T")
     );
-    let _ = e.update(Msg::SetDefault);
+    let _ = e.update(Msg::SetGlobal);
     assert!(e.presets.iter().any(|p| p.is_default));
     let _ = e.update(Msg::Unregister);
     assert!(!is_registered(&data, &f));
@@ -1012,10 +786,24 @@ fn the_registry_buttons_report_in_the_status_line_and_rescan() {
 // ------------------------------------------------------------- list
 
 #[test]
-fn a_clean_environment_lists_nothing() {
+fn a_clean_environment_lists_only_the_bundled_themes() {
     let d = temp_dir("empty");
-    assert!(list_presets(&[d.clone()], &[], &[]).is_empty());
-    assert!(editor().presets.is_empty());
+    assert!(file_presets(&[d.clone()], &[], &[]).is_empty());
+    let bundled: Vec<_> = list_presets(&[d.clone()], &[], &[])
+        .into_iter()
+        .filter_map(|p| p.bundled)
+        .collect();
+    assert_eq!(
+        bundled,
+        [
+            "libadwaita",
+            "cosmic",
+            "bubblegum",
+            "solarized",
+            "synthwave",
+            "terminal"
+        ]
+    );
     let _ = std::fs::remove_dir_all(d);
 }
 
@@ -1032,7 +820,7 @@ fn the_list_has_the_registered_files_the_folders_and_the_recent_ones() {
     let far = temp_dir("recent").join("far.conf");
     std::fs::write(&far, "").unwrap();
     register(&data, &folder.join("plain.conf")).unwrap();
-    let list = list_presets(
+    let list = file_presets(
         &[data.clone()],
         &[folder.clone()],
         &[far.clone(), folder.join("mine.conf"), d.join("gone.conf")],
@@ -1485,4 +1273,375 @@ fn the_views_build_in_every_mode() {
         error: true,
     });
     let _ = e.view();
+}
+
+// ------------------------------------------------- bundled themes and the global theme
+
+#[test]
+fn the_bundled_themes_are_valid_and_match_the_themes_directory() {
+    for (key, text) in crate::bundled::BUNDLED {
+        let report = Schema::toolkit().validate(text);
+        assert!(report.errors.is_empty(), "{key}: {:?}", report.errors);
+        assert_eq!(
+            read(
+                &PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../themes"))
+                    .join(format!("{key}.conf"))
+            ),
+            text
+        );
+        let parsed = iad::config::parse_keyfile(text);
+        assert_eq!(
+            parsed
+                .get(&("theme".to_string(), "key".to_string()))
+                .map(String::as_str),
+            Some(key),
+            "the file's own key names it"
+        );
+    }
+}
+
+#[test]
+fn toy_reference_themes_are_not_bundled() {
+    for toy in ["win95", "winxp", "win7", "mate", "gnome2"] {
+        assert!(crate::bundled::text(toy).is_none(), "{toy}");
+    }
+}
+
+#[test]
+fn opening_a_bundled_theme_gives_an_unsaved_copy_that_never_writes_the_bundle() {
+    let d = temp_dir("bundled-open");
+    let mut e = editor();
+    e.theme_dirs = vec![d.join("data")];
+    let _ = e.update(Msg::PickBundled("terminal"));
+    assert!(e.path.is_none() && e.source == Some("terminal") && !e.dirty());
+    assert!(e.generate().contains("name=Terminal"));
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "9".into()));
+    assert!(e.dirty());
+    // Switching to another bundled theme asks first, then discards.
+    let _ = e.update(Msg::PickBundled("cosmic"));
+    assert_eq!(e.source, Some("terminal"));
+    let _ = e.update(Msg::PickBundled("cosmic"));
+    assert_eq!(e.source, Some("cosmic"));
+    // Save as gives it a file of its own and forgets the bundle.
+    assert!(e.save_to(d.join("mine.conf")));
+    assert!(e.source.is_none() && e.path == Some(d.join("mine.conf")));
+    assert!(read(&d.join("mine.conf")).contains("name=COSMIC"));
+    assert_eq!(
+        crate::bundled::text("cosmic").unwrap(),
+        include_str!("../../themes/cosmic.conf")
+    );
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn a_bundled_theme_becomes_the_global_theme_through_a_copy_and_a_default_link() {
+    let d = temp_dir("bundled-global");
+    let data = d.join("data");
+    let mut e = editor();
+    e.theme_dirs = vec![data.clone()];
+    let _ = e.update(Msg::PickBundled("solarized"));
+    assert!(!e.is_global());
+    let _ = e.update(Msg::SetGlobal);
+    assert!(e.is_global(), "{}", e.status);
+    assert!(is_link(&data.join("default.conf")));
+    assert_eq!(
+        read(&data.join("solarized.conf")),
+        crate::bundled::text("solarized").unwrap()
+    );
+    assert_eq!(
+        canon(&data.join("default.conf")),
+        canon(&data.join("solarized.conf"))
+    );
+    // Installed unchanged, it is listed once: as the installed file.
+    let list = list_presets(&[data.clone()], &[], &[]);
+    assert!(!list.iter().any(|p| p.bundled == Some("solarized")));
+    assert!(list.iter().any(|p| p.name == "Solarized" && p.is_default));
+    // Removing the global theme removes only the link.
+    let _ = e.update(Msg::ClearGlobal);
+    assert!(!e.is_global() && !data.join("default.conf").exists());
+    assert!(data.join("solarized.conf").is_file());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn an_installed_file_with_other_values_is_never_overwritten_by_a_bundled_theme() {
+    let d = temp_dir("bundled-keep");
+    let data = d.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("terminal.conf"), "[metrics]\nradius-m=1\n").unwrap();
+    let err = set_global_bundled(&data, "terminal").unwrap_err();
+    assert!(err.contains("already exists"), "{err}");
+    assert_eq!(read(&data.join("terminal.conf")), "[metrics]\nradius-m=1\n");
+    assert!(!data.join("default.conf").exists());
+    assert!(set_global_bundled(&data, "nope").is_err());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn clearing_the_global_theme_refuses_a_regular_file_and_a_missing_one() {
+    let d = temp_dir("clear-global");
+    assert!(clear_global(&d).is_err());
+    std::fs::write(d.join("default.conf"), "").unwrap();
+    assert!(clear_global(&d).unwrap_err().contains("regular file"));
+    assert!(d.join("default.conf").is_file());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn setting_the_global_theme_needs_saved_values() {
+    let d = temp_dir("global-dirty");
+    let data = d.join("data");
+    let f = d.join("t.conf");
+    std::fs::write(&f, "[theme]\nname=T\nkey=t\n").unwrap();
+    let mut e = editor();
+    e.theme_dirs = vec![data.clone()];
+    let _ = e.update(Msg::SetGlobal);
+    assert!(
+        e.status.contains("Save the theme"),
+        "untitled: {}",
+        e.status
+    );
+    e.load(f.clone());
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let _ = e.update(Msg::SetGlobal);
+    assert!(e.status.contains("Save the changes"), "{}", e.status);
+    assert!(!data.join("default.conf").exists());
+    assert!(e.save_to(f.clone()));
+    let _ = e.update(Msg::SetGlobal);
+    assert!(e.is_global() && canon(&data.join("default.conf")) == canon(&f));
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn the_views_build_for_a_bundled_global_and_an_untitled_theme() {
+    let d = temp_dir("views-global");
+    let mut e = editor();
+    e.theme_dirs = vec![d.join("data")];
+    e.rescan();
+    let _ = e.view();
+    let _ = e.update(Msg::PickBundled("libadwaita"));
+    let _ = e.view();
+    let _ = e.update(Msg::SetGlobal);
+    let _ = e.update(Msg::ThemePicker(true));
+    let _ = e.view();
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn the_gallery_starts_with_the_unsaved_values_in_a_temp_file_and_restarts() {
+    use std::os::unix::fs::PermissionsExt;
+    let d = temp_dir("gallery");
+    let out = d.join("seen");
+    let exe = d.join("fake.sh");
+    std::fs::write(
+        &exe,
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$1\" > {0}.tmp\nprintf 'scheme=%s\\n' \"${{GALLERY_SCHEME-unset}}\" >> {0}.tmp\ncat \"$IAD_THEME\" >> {0}.tmp\nmv {0}.tmp {0}\nsleep 30\n",
+            out.display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let f = d.join("t.conf");
+    std::fs::write(&f, "[metrics]\nradius-m=1\n").unwrap();
+    let mut e = editor();
+    e.exe = Some(exe);
+    e.load(f.clone());
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let _ = e.update(Msg::Gallery);
+    assert!(e.gallery.is_some(), "{}", e.status);
+    let mut seen = String::new();
+    for _ in 0..100 {
+        if let Ok(t) = std::fs::read_to_string(&out) {
+            seen = t;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(
+        seen.starts_with("gallery\n") && seen.contains("radius-m=7"),
+        "{seen}"
+    );
+    assert_eq!(
+        read(&f),
+        "[metrics]\nradius-m=1\n",
+        "the open file is untouched"
+    );
+    // The chosen scheme reaches the new gallery, and only it.
+    let _ = e.update(Msg::LaunchMode(w::ThemeMode::Dark));
+    let _ = std::fs::remove_file(&out);
+    let _ = e.update(Msg::Gallery);
+    let mut seen = String::new();
+    for _ in 0..100 {
+        if let Ok(t) = std::fs::read_to_string(&out) {
+            seen = t;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(seen.contains("scheme=dark\n"), "{seen}");
+    // Again: the old one is closed, a new one runs.
+    let first = e.gallery.as_ref().unwrap().id();
+    let _ = e.update(Msg::Gallery);
+    assert_ne!(e.gallery.as_ref().unwrap().id(), first);
+    let _ = e.gallery.take().unwrap().kill();
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn a_missing_program_is_reported_not_started() {
+    let mut e = editor();
+    e.exe = Some(PathBuf::from("/nonexistent/theme-manager"));
+    let _ = e.update(Msg::Gallery);
+    assert!(e.gallery.is_none() && e.status.contains("Could not start"));
+}
+
+#[test]
+fn dirty_is_cached_for_the_values_and_follows_every_change() {
+    let mut e = editor();
+    assert!(!e.dirty() && !e.dirty());
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    assert!(e.dirty(), "an edit is noticed through the cache");
+    assert!(e.dirty());
+    let _ = e.update(Msg::Undo);
+    assert!(!e.dirty(), "undo back to the saved text is clean again");
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let d = temp_dir("dirty-cache");
+    assert!(e.save_to(d.join("t.conf")));
+    assert!(!e.dirty(), "saving makes the new text the clean one");
+    let _ = std::fs::remove_dir_all(d);
+}
+
+/// Lays `block`'s group out at `width` and returns its height.
+fn laid_out_height(
+    e: &Editor,
+    section: &str,
+    title: &str,
+    specs: Vec<&iad::theme_config::Spec>,
+    width: f32,
+) -> f32 {
+    use iced::advanced::{layout, renderer::Headless, widget::Tree};
+    let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+        iced::Font::DEFAULT,
+        iced::Pixels(14.0),
+        Some("tiny-skia"),
+    ))
+    .unwrap();
+    let mut element = e.group(section, title, specs, false, iad::Metrics::desktop());
+    let mut state = Tree::new(&element);
+    element
+        .as_widget_mut()
+        .layout(
+            &mut state,
+            &renderer,
+            &layout::Limits::new(iced::Size::ZERO, iced::Size::new(width, f32::INFINITY)),
+        )
+        .size()
+        .height
+}
+
+fn assert_heights_match(e: &Editor, width: f32) {
+    for section in e.sections.clone() {
+        for (title, specs) in e.groups_of(&section) {
+            let estimate = e.group_height(&section, &title, &specs);
+            let real = laid_out_height(e, &section, &title, specs, width);
+            assert!(
+                (estimate - real).abs() < 0.6,
+                "[{section}] {title} at {width}px: computed {estimate}, laid out {real}"
+            );
+        }
+    }
+}
+
+#[test]
+fn block_heights_match_the_real_layout() {
+    let mut e = editor();
+    // The window is at least 560px wide, and tokens are one line at any width from there.
+    for width in [crate::page::MIN_WIDTH, 900.0, 1400.0] {
+        assert_heights_match(&e, width);
+    }
+    // A gradient adds a preview, an angle and a row per stop.
+    let grad = e
+        .specs
+        .iter()
+        .find(|s| s.ty.kind() == iad::theme_config::Kind::Gradient)
+        .cloned()
+        .unwrap();
+    for stops in [2usize, 3, 8] {
+        let list: Vec<String> = (0..stops)
+            .map(|i| format!("#{:02x}0000 {}%", i * 20, i * 100 / (stops - 1)))
+            .collect();
+        e.values.insert(
+            (grad.section.clone(), grad.key.clone()),
+            format!("linear-gradient(90deg, {})", list.join(", ")),
+        );
+        e.refresh();
+        assert_heights_match(&e, 760.0);
+    }
+    // Breakpoint rules add a row per rule.
+    let rules: Vec<(String, String)> = e
+        .specs
+        .iter()
+        .filter(|s| s.key == "breakpoint-rules")
+        .map(|s| (s.section.clone(), s.key.clone()))
+        .collect();
+    for raw in [
+        "xs:compact",
+        "xs:compact,sm:medium",
+        "xs:compact,sm:medium,md:compact",
+        // All six breakpoints: no more rules to add, so no button.
+        "xs:compact,sm:medium,md:compact,lg:compact,xl:compact,xxl:compact",
+        // Invalid rules show the same one-line heading.
+        "bogus:nothing",
+    ] {
+        for at in &rules {
+            e.values.insert(at.clone(), raw.to_string());
+        }
+        e.refresh();
+        assert_heights_match(&e, 760.0);
+    }
+    // A folded group is its heading.
+    let (section, title) = {
+        let s = e.sections[0].clone();
+        (s.clone(), e.groups_of(&s)[0].0.clone())
+    };
+    e.collapsed.insert((section, title));
+    assert_heights_match(&e, 760.0);
+}
+
+#[test]
+fn only_the_blocks_near_the_view_are_built_and_the_page_keeps_its_height() {
+    let mut e = editor();
+    let _ = e.update(Msg::Section("all".into()));
+    let m = iad::Metrics::desktop();
+    let gap = m.group_spacing;
+    let (count, total, top) = {
+        let blocks = e.blocks();
+        let total: f32 =
+            blocks.iter().map(|b| b.height).sum::<f32>() + gap * (blocks.len() - 1) as f32;
+        (blocks.len(), total, e.built(&blocks, gap))
+    };
+    assert!(total > 5000.0, "the All page is long: {total}");
+    assert_eq!(top.start, 0);
+    assert!(top.len() < count / 2, "{top:?} of {count}");
+    // Scrolled to the end, the last block is built and the first is not.
+    let _ = e.update(Msg::TokensScrolled(iad::layouts::virtualize::Viewport {
+        offset: total - 800.0,
+        height: 800.0,
+    }));
+    let end = {
+        let blocks = e.blocks();
+        e.built(&blocks, gap)
+    };
+    assert_eq!(end.end, count);
+    assert!(end.start > 0 && end.len() < count / 2, "{end:?} of {count}");
+    let _ = e.page(m);
+    // A new page starts at the top again.
+    let _ = e.update(Msg::Section("colors".into()));
+    assert_eq!(e.tokens_view.offset, 0.0);
+    // A short page is built whole.
+    let _ = e.update(Msg::Search("accent-fg".into()));
+    let blocks = e.blocks();
+    assert!(!blocks.is_empty());
+    assert_eq!(e.built(&blocks, gap), 0..blocks.len());
 }

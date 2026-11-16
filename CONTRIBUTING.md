@@ -6,7 +6,7 @@ Stable Rust (edition 2024) and the system libraries iced needs on Linux (Wayland
 
 ```text
 cargo build                       # the library only
-cargo build --workspace           # library, gallery, theme editor, toys, workspace tools
+cargo build --workspace           # library, gallery, theme manager, toys, workspace tools
 cargo test
 cargo clippy --all-targets --workspace
 cargo xtask man                   # build man pages in target/man/
@@ -28,7 +28,7 @@ Local pre-commit hooks: dprint formats JSON, Markdown and TOML; `cargo fmt --all
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/`                 | the library, in layers (see DESIGN.md): `layouts/`, `primitives/` (headless rules), `binds/`, `components/`, `metas/`, `widgets/`, `styles/`, `windows/`, theme, config |
 | `gallery/`             | the gallery, a separate crate                                                                                                                                           |
-| `theme-editor/`        | section-first theme editor, theme picker, registration and external gallery/toy launches                                                                                |
+| `theme-manager/`       | installable app: bundled themes, the global theme, section-first token editor; `theme-manager gallery` runs the gallery                                                                               |
 | `theme-toys/`          | four reference scenes: `win95`, `winxp`, `win7`, `mate`; independent validated bases and optional overlays                                                              |
 | `themes/`              | toolkit theme files: libadwaita, COSMIC, `win95`, `winxp`, `win7`, `mate` (`gnome2` compatibility alias) and additional palettes                                        |
 | `xtask/`               | repository tasks                                                                                                                                                        |
@@ -68,16 +68,16 @@ ln -s "$PWD/themes/cosmic.conf" ~/.local/share/iad/themes/default.conf
 
 For the standard theme loader, an unreadable `IAD_THEME` path prints a warning and falls through to those directories. `Inheritance::OptOut` skips automatic theme discovery; apps can still supply explicit validated theme layers. The toys use this for their own bundled bases plus an optional `IAD_THEME` overlay; see [theme toys](theme-toys/README.md#theme-resolution).
 
-### Theme editor
+### Theme manager
 
-Run `cargo run -p iced-adaptive-design-theme-editor -- [FILE]`.
+Run `cargo run -p iced-adaptive-design-theme-manager -- [FILE]`.
 
 - The **primary sidebar selects token sections**. **All** groups every token on one searchable page. The selected theme in the header opens a **picker dialog** with registered files, added folders and recent files; long names and paths wrap within bounded widths.
 - **Modified only** filters unsaved changes. **Overrides only** shows explicit entries in the active Light/Dark scheme, not inherited Base values; it is unavailable for Base. Typed controls edit values, **Reset** removes an explicit entry, and Light/Dark edits write `[light:*]` / `[dark:*]` sections. **Copy from Base** fills the active scheme from Base. **Ctrl+Z** and **Ctrl+Shift+Z** undo and redo.
-- **Save** updates the current file, following symlinks; an untitled file opens Save as. **Save as** writes a copy, makes it the current file for subsequent saves, and auto-registers it in `$XDG_DATA_HOME/iad/themes/` (normally with a `<name>.conf` symlink, unnecessary if already registered or saved there). A registration failure is reported separately: the saved copy remains current. **Register**, **Unregister** and **Use as the default theme** are available in the main menu.
-- There is **no embedded live preview**. **Try it out** uses a split launch action: run the selected target or choose Gallery, `win95`, `winxp`, `win7` or `mate`. Launch appearance **System / Light / Dark** is independent of the scheme being edited; System removes inherited `TOYS_SCHEME` and `GALLERY_SCHEME` overrides. Current values, including unsaved edits, go to a separate temporary file through `IAD_THEME`; relaunching a target replaces its previous process without saving the open theme. `IAD_GALLERY` / `IAD_TOYS` select executables, otherwise the editor uses sibling binaries or workspace `cargo run`.
+- **Save** updates the current file, following symlinks; an untitled file opens Save as. **Save as** writes a copy, makes it the current file for subsequent saves, and auto-registers it in `$XDG_DATA_HOME/iad/themes/` (normally with a `<name>.conf` symlink, unnecessary if already registered or saved there). A registration failure is reported separately: the saved copy remains current. **Register for all apps** and **Unregister** are in the main menu.
+- There is **no embedded preview**: the header's play button starts the gallery with the current values (a temp `IAD_THEME` file, nothing saved); `theme-manager gallery` runs it with the global theme. **Use globally** links `default.conf` in `$XDG_DATA_HOME/iad/themes/` to the open theme (bundled themes are installed there first); **Remove global theme** in the same dialog removes it. Six themes are bundled (`libadwaita`, `cosmic`, `bubblegum`, `solarized`, `synthwave`, `terminal`); toy themes are not.
 
-The editor remembers the open file, folders, recents, section and variant in `~/.config/iad-theme-editor/state.conf`. See the [editor guide](theme-editor/README.md) and [toy resolution and validation limits](theme-toys/README.md).
+The editor remembers the open file, folders, recents, section and variant in `~/.config/iad-theme-editor/state.conf`. See the [theme manager guide](theme-manager/README.md) and [toy resolution and validation limits](theme-toys/README.md).
 
 A new toolkit token goes in `Schema::toolkit()` (`src/theme_config.rs`) with a type and bounds. Prefer typed numbers (`Length`, `Percentage`) and enum strings. Add its intended libadwaita value to `themes/libadwaita.conf`, run schema tests, then inspect relevant gallery states; compilation alone does not establish visual acceptance.
 

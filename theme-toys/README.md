@@ -1,6 +1,6 @@
 # Reference-driven theme toys
 
-Four interactive reference scenes: `win95` (Windows Classic), `winxp`, `win7`, and `mate` (modern MATE 1.26). `gnome2` remains a **CLI compatibility alias for `mate`**, not a fifth selectable design. The [editor's split launcher](../theme-editor/README.md) offers these four targets alongside Gallery, with independent System / Light / Dark launch appearance.
+Four interactive reference scenes: `win95` (Windows Classic), `winxp`, `win7`, and `mate` (modern MATE 1.26). `gnome2` remains a **CLI compatibility alias for `mate`**, not a fifth selectable design.
 
 ```sh
 TOYS_SCHEME=light cargo run -p iced-adaptive-design-theme-toys -- winxp
@@ -12,7 +12,7 @@ cargo run -p iced-adaptive-design-theme-toys -- --list
 
 Each toy embeds its complete independent base from `theme-toys/themes/<target>.conf`. It builds with `Inheritance::OptOut`, `.files(false)`, the base as `.toolkit_text(...)` and an optional overlay as `.app_text(...)`. It installs `Config::default()` with that resolved theme config, rather than loading the shared desktop config or an installed `default.conf`. Both layers use the combined toolkit/app schema.
 
-When present, `IAD_THEME` is explicitly read as an **overlay path**, including the editor's temporary file of current unsaved values. Valid overlay entries override the base; invalid entries warn and fall back. An unreadable path warns and leaves the base in use. In this toy-specific path, `IAD_THEME=none` is treated as a filename, not as the standard loader's bare-theme sentinel: omit `IAD_THEME` to use the base. No per-app theme file is read or regenerated.
+When present, `IAD_THEME` is explicitly read as an **overlay path**. Valid overlay entries override the base; invalid entries warn and fall back. An unreadable path warns and leaves the base in use. In this toy-specific path, `IAD_THEME=none` is treated as a filename, not as the standard loader's bare-theme sentinel: omit `IAD_THEME` to use the base. No per-app theme file is read or regenerated.
 
 Scene values have individual schema bounds. If resolved scene geometry fails the cross-property fit check, the toy discards overlay `toy.*` sections and rebuilds with base geometry while retaining native palette, typography and widget edits. These checks are not proof that every rendered child fits at every font size.
 

@@ -408,7 +408,7 @@ impl State {
                             .padding(8),
                         ));
                     }
-                    iced::widget::scrollable(cards).into()
+                    iad::layouts::scrolled_window(cards).into()
                 });
             container(Element::from(table))
                 .width(Length::Fixed(width))

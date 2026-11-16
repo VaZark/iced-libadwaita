@@ -76,7 +76,7 @@ Large or remote data, on one page: tables (responsive, sorting and pagination, a
 
 ## Look and window pages
 
-The gallery has no theming controls: its look is the theme file (`IAD_THEME=path.conf`, else the installed default; edit one in the theme editor, which can start the gallery with it). Layout > **Window & sidebar** has the menu presentation, the mobile sidebar (drawer or parent page), sidebar row padding and the path bar title. Layout > **Motion** has the animations switch and an easing/spring player.
+The gallery has no theming controls: its look is the theme file (`IAD_THEME=path.conf`, else the installed default; edit one in the theme manager, which can make it the global theme; `theme-manager gallery` runs this gallery). Layout > **Window & sidebar** has the menu presentation, the mobile sidebar (drawer or parent page), sidebar row padding and the path bar title. Layout > **Motion** has the animations switch and an easing/spring player.
 
 ## Committed-widget coverage audit
 

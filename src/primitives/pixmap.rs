@@ -73,7 +73,11 @@ impl PixelMap {
 
     /// Width in pixels.
     pub fn width(&self) -> u32 {
-        self.rows.iter().map(|r| r.chars().count()).max().unwrap_or(0) as u32
+        self.rows
+            .iter()
+            .map(|r| r.chars().count())
+            .max()
+            .unwrap_or(0) as u32
     }
     /// Height in pixels.
     pub fn height(&self) -> u32 {
@@ -102,7 +106,12 @@ impl PixelMap {
                 match (start, p) {
                     (Some((_, a)), Some(b)) if a == b => {}
                     (Some((sx, a)), _) => {
-                        out.push(Run { x: sx, y: y as u32, width: x - sx, pixel: a });
+                        out.push(Run {
+                            x: sx,
+                            y: y as u32,
+                            width: x - sx,
+                            pixel: a,
+                        });
                         start = p.map(|b| (x, b));
                     }
                     (None, Some(b)) => start = Some((x, b)),
@@ -111,7 +120,12 @@ impl PixelMap {
                 x += 1;
             }
             if let Some((sx, a)) = start {
-                out.push(Run { x: sx, y: y as u32, width: x - sx, pixel: a });
+                out.push(Run {
+                    x: sx,
+                    y: y as u32,
+                    width: x - sx,
+                    pixel: a,
+                });
             }
         }
         out
@@ -212,24 +226,11 @@ pub fn window_glyph(name: &str) -> Option<PixelMap> {
         ],
         // Two overlapping boxes.
         "restore" => &[
-            "..XXXXXX",
-            "..XXXXXX",
-            "..X....X",
-            "XXXXXX.X",
-            "XXXXXX.X",
-            "X....XXX",
-            "X....X..",
-            "X....X..",
-            "XXXXXX..",
+            "..XXXXXX", "..XXXXXX", "..X....X", "XXXXXX.X", "XXXXXX.X", "X....XXX", "X....X..",
+            "X....X..", "XXXXXX..",
         ],
         "close" => &[
-            "XX....XX",
-            ".XX..XX.",
-            "..XXXX..",
-            "...XX...",
-            "..XXXX..",
-            ".XX..XX.",
-            "XX....XX",
+            "XX....XX", ".XX..XX.", "..XXXX..", "...XX...", "..XXXX..", ".XX..XX.", "XX....XX",
         ],
         _ => return None,
     };
@@ -275,18 +276,46 @@ pub fn radio_box(size: u32) -> PixelMap {
     if size == 12 {
         // Where the outer and inner rings and the fill are, per row: `(outer, inner, fill)` spans.
         const OUTER: [&[(u32, u32)]; 12] = [
-            &[(4, 7)], &[(2, 3), (8, 9)], &[(1, 1), (10, 10)], &[(0, 0), (11, 11)],
-            &[(0, 0), (11, 11)], &[(0, 0), (11, 11)], &[(0, 0), (11, 11)], &[(0, 0), (11, 11)],
-            &[(0, 0), (11, 11)], &[(1, 1), (10, 10)], &[(2, 3), (8, 9)], &[(4, 7)],
+            &[(4, 7)],
+            &[(2, 3), (8, 9)],
+            &[(1, 1), (10, 10)],
+            &[(0, 0), (11, 11)],
+            &[(0, 0), (11, 11)],
+            &[(0, 0), (11, 11)],
+            &[(0, 0), (11, 11)],
+            &[(0, 0), (11, 11)],
+            &[(0, 0), (11, 11)],
+            &[(1, 1), (10, 10)],
+            &[(2, 3), (8, 9)],
+            &[(4, 7)],
         ];
         const INNER: [&[(u32, u32)]; 12] = [
-            &[], &[(4, 7)], &[(2, 3), (8, 9)], &[(1, 1), (10, 10)],
-            &[(1, 1), (10, 10)], &[(1, 1), (10, 10)], &[(1, 1), (10, 10)], &[(1, 1), (10, 10)],
-            &[(1, 1), (10, 10)], &[(2, 3), (8, 9)], &[(4, 7)], &[],
+            &[],
+            &[(4, 7)],
+            &[(2, 3), (8, 9)],
+            &[(1, 1), (10, 10)],
+            &[(1, 1), (10, 10)],
+            &[(1, 1), (10, 10)],
+            &[(1, 1), (10, 10)],
+            &[(1, 1), (10, 10)],
+            &[(1, 1), (10, 10)],
+            &[(2, 3), (8, 9)],
+            &[(4, 7)],
+            &[],
         ];
         const FILL: [&[(u32, u32)]; 12] = [
-            &[], &[], &[(4, 7)], &[(2, 9)], &[(2, 9)], &[(2, 9)], &[(2, 9)], &[(2, 9)], &[(2, 9)],
-            &[(4, 7)], &[], &[],
+            &[],
+            &[],
+            &[(4, 7)],
+            &[(2, 9)],
+            &[(2, 9)],
+            &[(2, 9)],
+            &[(2, 9)],
+            &[(2, 9)],
+            &[(2, 9)],
+            &[(4, 7)],
+            &[],
+            &[],
         ];
         let mut rows = Vec::with_capacity(12);
         for y in 0..12u32 {
@@ -299,8 +328,12 @@ pub fn radio_box(size: u32) -> PixelMap {
                 }
             };
             put(&mut row, FILL[y as usize], &|_| 'F');
-            put(&mut row, INNER[y as usize], &|x| if x + y <= 11 { 'D' } else { 'l' });
-            put(&mut row, OUTER[y as usize], &|x| if x + y <= 11 { 'd' } else { 'L' });
+            put(&mut row, INNER[y as usize], &|x| {
+                if x + y <= 11 { 'D' } else { 'l' }
+            });
+            put(&mut row, OUTER[y as usize], &|x| {
+                if x + y <= 11 { 'd' } else { 'L' }
+            });
             rows.push(row.into_iter().collect::<String>());
         }
         return PixelMap::new(rows);
@@ -328,8 +361,20 @@ pub fn radio_box(size: u32) -> PixelMap {
         for x in 0..n {
             let dark_side = x + y <= n - 1;
             row.push(match ring(x, y) {
-                Some(0) => if dark_side { 'd' } else { 'L' },
-                Some(1) => if dark_side { 'D' } else { 'l' },
+                Some(0) => {
+                    if dark_side {
+                        'd'
+                    } else {
+                        'L'
+                    }
+                }
+                Some(1) => {
+                    if dark_side {
+                        'D'
+                    } else {
+                        'l'
+                    }
+                }
                 Some(_) => 'F',
                 None => ' ',
             });
@@ -372,7 +417,10 @@ pub fn dotted_rect(size: Size) -> Vec<Rectangle> {
     let mut out = Vec::new();
     let mut put = |x: i32, y: i32| {
         if (x + y) % 2 == 0 {
-            out.push(Rectangle::new(Point::new(x as f32, y as f32), Size::new(1.0, 1.0)));
+            out.push(Rectangle::new(
+                Point::new(x as f32, y as f32),
+                Size::new(1.0, 1.0),
+            ));
         }
     };
     for x in 0..w {
@@ -472,7 +520,10 @@ mod tests {
         // A 9 x 9 fill.
         assert_eq!(m.at(2, 2), Some(Pixel::Fill));
         assert_eq!(m.at(10, 10), Some(Pixel::Fill));
-        let fills = (0..13).flat_map(|y| (0..13).map(move |x| (x, y))).filter(|(x, y)| m.at(*x, *y) == Some(Pixel::Fill)).count();
+        let fills = (0..13)
+            .flat_map(|y| (0..13).map(move |x| (x, y)))
+            .filter(|(x, y)| m.at(*x, *y) == Some(Pixel::Fill))
+            .count();
         assert_eq!(fills, 81);
     }
 
@@ -501,7 +552,10 @@ mod tests {
         };
         for y in 0..12 {
             for x in 0..12 {
-                assert_eq!(m.at(x, y).map(swap).is_some(), m.at(11 - x, 11 - y).is_some());
+                assert_eq!(
+                    m.at(x, y).map(swap).is_some(),
+                    m.at(11 - x, 11 - y).is_some()
+                );
             }
         }
     }
@@ -521,7 +575,12 @@ mod tests {
 
     #[test]
     fn the_dither_alternates_in_both_directions() {
-        assert!(!dither_second(0, 0) && dither_second(1, 0) && dither_second(0, 1) && !dither_second(1, 1));
+        assert!(
+            !dither_second(0, 0)
+                && dither_second(1, 0)
+                && dither_second(0, 1)
+                && !dither_second(1, 1)
+        );
         let px = dither_rgba(2, 2, [1, 1, 1, 255], [2, 2, 2, 255]);
         assert_eq!(&px[0..4], &[1, 1, 1, 255]);
         assert_eq!(&px[4..8], &[2, 2, 2, 255]);

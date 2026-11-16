@@ -35,7 +35,13 @@ impl Gradient {
             .or_else(|| raw.strip_prefix("LINEAR-GRADIENT("))?
             .strip_suffix(')')?;
         let mut parts = split_top_level(inner).into_iter();
-        let angle = parts.next()?.trim().strip_suffix("deg")?.trim().parse::<f32>().ok()?;
+        let angle = parts
+            .next()?
+            .trim()
+            .strip_suffix("deg")?
+            .trim()
+            .parse::<f32>()
+            .ok()?;
         if !angle.is_finite() || !(-360.0..=360.0).contains(&angle) {
             return None;
         }
@@ -80,7 +86,10 @@ impl Gradient {
             }
             i = end + 1;
         }
-        let stops: Vec<(f32, Color)> = raw_stops.into_iter().map(|(c, p)| (p.unwrap(), c)).collect();
+        let stops: Vec<(f32, Color)> = raw_stops
+            .into_iter()
+            .map(|(c, p)| (p.unwrap(), c))
+            .collect();
         if stops.windows(2).any(|w| w[1].0 < w[0].0) {
             return None;
         }
@@ -94,7 +103,11 @@ impl Gradient {
             .iter()
             .map(|(p, c)| format!("{} {}%", crate::color::to_hex(*c), trim_float(p * 100.0)))
             .collect();
-        format!("linear-gradient({}deg, {})", trim_float(self.angle), stops.join(", "))
+        format!(
+            "linear-gradient({}deg, {})",
+            trim_float(self.angle),
+            stops.join(", ")
+        )
     }
 
     /// The iced gradient. iced's angle is CSS's already: `0` points up and grows clockwise, so
@@ -192,12 +205,17 @@ mod tests {
         assert_eq!(g.stops.len(), 2);
         assert_eq!(g.stops[1].0, 1.0);
         let g = Gradient::parse("linear-gradient(180deg, #000, #888, #fff)").unwrap();
-        assert_eq!(g.stops.iter().map(|s| s.0).collect::<Vec<_>>(), [0.0, 0.5, 1.0]);
+        assert_eq!(
+            g.stops.iter().map(|s| s.0).collect::<Vec<_>>(),
+            [0.0, 0.5, 1.0]
+        );
         let g = Gradient::parse("linear-gradient(-90deg, #000 10%, #111, #fff 90%)").unwrap();
         assert_eq!(g.angle, 270.0);
         assert!((g.stops[1].0 - 0.5).abs() < 1e-6);
         // rgba() colors contain commas: they are not stop separators.
-        assert!(Gradient::parse("linear-gradient(0deg, rgba(0, 0, 0, 0.5) 0%, #fff 100%)").is_some());
+        assert!(
+            Gradient::parse("linear-gradient(0deg, rgba(0, 0, 0, 0.5) 0%, #fff 100%)").is_some()
+        );
     }
 
     #[test]
@@ -216,12 +234,12 @@ mod tests {
         for bad in [
             "",
             "#fff",
-            "linear-gradient(90deg, #fff)",                       // one stop
-            "linear-gradient(90, #000, #fff)",                    // no unit
-            "linear-gradient(400deg, #000, #fff)",                // angle out of range
+            "linear-gradient(90deg, #fff)",        // one stop
+            "linear-gradient(90, #000, #fff)",     // no unit
+            "linear-gradient(400deg, #000, #fff)", // angle out of range
             "linear-gradient(nandeg, #000, #fff)",
-            "linear-gradient(90deg, #000 60%, #fff 40%)",         // out of order
-            "linear-gradient(90deg, #000 -5%, #fff 100%)",        // position out of range
+            "linear-gradient(90deg, #000 60%, #fff 40%)", // out of order
+            "linear-gradient(90deg, #000 -5%, #fff 100%)", // position out of range
             "linear-gradient(90deg, #000 0%, #fff 120%)",
             "linear-gradient(90deg, nothex 0%, #fff 100%)",
             "linear-gradient(90deg, #000, #111, #222, #333, #444, #555, #666, #777, #888)", // 9 stops
@@ -234,7 +252,11 @@ mod tests {
     #[test]
     fn the_angle_maps_css_to_iced() {
         // iced's angle is CSS's: 0 points up, 90deg right, 180deg down (clockwise).
-        for (css, rad) in [(0.0, 0.0), (90.0, std::f32::consts::FRAC_PI_2), (180.0, std::f32::consts::PI)] {
+        for (css, rad) in [
+            (0.0, 0.0),
+            (90.0, std::f32::consts::FRAC_PI_2),
+            (180.0, std::f32::consts::PI),
+        ] {
             let g = Gradient::parse(&format!("linear-gradient({css}deg, #000, #fff)")).unwrap();
             let iced::Gradient::Linear(l) = g.to_iced();
             assert!((l.angle.0 - rad).abs() < 1e-5, "{css}deg");
@@ -242,7 +264,10 @@ mod tests {
         // And iced's own geometry agrees: 180deg runs from the top edge to the bottom edge.
         let g = Gradient::parse("linear-gradient(180deg, #000, #fff)").unwrap();
         let iced::Gradient::Linear(l) = g.to_iced();
-        let (a, b) = l.angle.to_distance(&iced::Rectangle::new(iced::Point::ORIGIN, iced::Size::new(100.0, 40.0)));
+        let (a, b) = l.angle.to_distance(&iced::Rectangle::new(
+            iced::Point::ORIGIN,
+            iced::Size::new(100.0, 40.0),
+        ));
         assert!(a.y < b.y && (a.x - b.x).abs() < 1e-3);
     }
 

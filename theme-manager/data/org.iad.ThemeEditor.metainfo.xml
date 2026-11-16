@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.iad.ThemeEditor</id>
+  <name>Theme Manager</name>
+  <summary>Choose, edit and install the global theme of iced-adaptive-design apps</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <description>
+    <p>Theme Manager ships a default set of themes, edits theme files with a control for every token, and makes one of them the global theme that every iced-adaptive-design app picks up.</p>
+  </description>
+  <url type="homepage">https://github.com/VaZark/iced-libadwaita</url>
+  <content_rating type="oars-1.1"/>
+  <launchable type="desktop-id">org.iad.ThemeEditor.desktop</launchable>
+  <provides><binary>theme-manager</binary></provides>
+</component>

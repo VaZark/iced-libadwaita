@@ -1,0 +1,1737 @@
+//! Widget gallery: exercises the theme, style classes and Adw widgets.
+//!
+//! ```text
+//! cargo run --example gallery
+//! cargo run --example gallery -- --screenshot target/shots   # renders every page, light + dark
+//! ```
+
+mod example_detail_header;
+use iad::components::typography as ty;
+use iad::styles as style;
+use iad::{Icon, Metrics, Role, Scheme, Theme};
+use iad::{binds as bnd, components as cmp, layouts as lay, metas as met, widgets as w};
+use iced::widget::{container, text};
+use iced::{Element as IcedElement, Length, Subscription, Task, window};
+use iced_adaptive_design as iad;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+
+type Element<'a> = iad::Element<'a, Message>;
+
+mod appshell;
+mod autocomplete_demo;
+mod composed_demo;
+mod data_demo;
+mod date_demo;
+mod details;
+mod entries_demo;
+mod form_demo;
+mod nav;
+mod navigation_demo;
+mod playground;
+mod plays;
+mod range_demo;
+mod reorder_demo;
+mod resizable_demo;
+mod rich_text_demo;
+mod sections_demo;
+mod stable_demo;
+mod stepper_demo;
+mod synced_demo;
+mod tree_demo;
+mod upstream_demo;
+mod virtual_demo;
+mod widgets_demo;
+
+use nav::{Detail, Entry, Inline, Page};
+
+/// The motions the Motion page can play: libadwaita easings and the sheet spring.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DemoMotion {
+    Linear,
+    StyleEaseOutQuad,
+    Ease,
+    EaseOutCubic,
+    EaseOutBack,
+    EaseOutBounce,
+    EaseOutElastic,
+    Spring,
+}
+
+impl std::fmt::Display for DemoMotion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.label())
+    }
+}
+
+impl DemoMotion {
+    const ALL: [DemoMotion; 8] = [
+        DemoMotion::Linear,
+        DemoMotion::StyleEaseOutQuad,
+        DemoMotion::Ease,
+        DemoMotion::EaseOutCubic,
+        DemoMotion::EaseOutBack,
+        DemoMotion::EaseOutBounce,
+        DemoMotion::EaseOutElastic,
+        DemoMotion::Spring,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            DemoMotion::Linear => "Linear",
+            DemoMotion::StyleEaseOutQuad => "Style 200ms",
+            DemoMotion::Ease => "Ease",
+            DemoMotion::EaseOutCubic => "OutCubic",
+            DemoMotion::EaseOutBack => "OutBack",
+            DemoMotion::EaseOutBounce => "OutBounce",
+            DemoMotion::EaseOutElastic => "OutElastic",
+            DemoMotion::Spring => "Sheet spring",
+        }
+    }
+
+    fn spec(self) -> iad::layouts::animation::Spec {
+        use iad::layouts::animation::{Easing, Spec, presets};
+        let ms = std::time::Duration::from_millis(600);
+        match self {
+            DemoMotion::Linear => Spec::Timed(ms, Easing::Linear),
+            DemoMotion::StyleEaseOutQuad => Spec::STYLE,
+            DemoMotion::Ease => Spec::Timed(ms, Easing::Ease),
+            DemoMotion::EaseOutCubic => Spec::Timed(ms, Easing::EaseOutCubic),
+            DemoMotion::EaseOutBack => Spec::Timed(ms, Easing::EaseOutBack),
+            DemoMotion::EaseOutBounce => Spec::Timed(ms, Easing::EaseOutBounce),
+            DemoMotion::EaseOutElastic => Spec::Timed(ms, Easing::EaseOutElastic),
+            DemoMotion::Spring => Spec::Spring(presets::sheet(false)),
+        }
+    }
+}
+
+/// How the primary menu is presented: follow the window width, or force a mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MenuMode {
+    Auto,
+    Dropdown,
+    FullPage,
+}
+
+impl MenuMode {
+    const ALL: [MenuMode; 3] = [MenuMode::Auto, MenuMode::Dropdown, MenuMode::FullPage];
+
+    fn icon(&self) -> Icon {
+        match self {
+            MenuMode::Auto => Icon::Settings,
+            MenuMode::Dropdown => Icon::GoDown,
+            MenuMode::FullPage => Icon::Window,
+        }
+    }
+}
+
+impl std::fmt::Display for MenuMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            MenuMode::Auto => "Auto",
+            MenuMode::Dropdown => "Dropdown",
+            MenuMode::FullPage => "Full page",
+        })
+    }
+}
+
+/// The id of the search field, which takes focus when the search opens.
+const SEARCH_ID: &str = "gallery.search";
+
+/// The header's title: the search entry, or the usual title.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HeaderTitle {
+    Search,
+    Title,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Dialog {
+    Alert,
+    About,
+    Shortcuts,
+    Preferences,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Tab {
+    One,
+    Two,
+    Three,
+}
+
+struct Gallery {
+    page: Page,
+    /// The nested component page open inside `page`, if any.
+    detail: Option<Detail>,
+    scheme: Scheme,
+    path_bar_title: bool,
+    /// The header's title is a search entry and the content lists matching pages.
+    searching: bool,
+    search: String,
+    anim_enabled: bool,
+    demo: DemoMotion,
+    demo_tween: iad::layouts::animation::Tween,
+    demo_value: f32,
+
+    wifi: bool,
+    notifications: bool,
+    expanded: bool,
+    name: String,
+    password: String,
+    combo: Option<&'static str>,
+    spin: f64,
+    tab: Tab,
+    check: bool,
+    radio: Option<u8>,
+    slider: f32,
+    editor: iced::widget::text_editor::Content,
+    editor_empty: iced::widget::text_editor::Content,
+    editor_ro: iced::widget::text_editor::Content,
+    editor_grow: iced::widget::text_editor::Content,
+    editor_grow_px: iced::widget::text_editor::Content,
+    sw: bool,
+    row_sw: bool,
+    combo2: Option<&'static str>,
+    /// The selected action of the split-button-action demo.
+    split_choice: &'static str,
+    picked: Option<&'static str>,
+    multi: Vec<&'static str>,
+    date: date_demo::State,
+    form: form_demo::State,
+    entries: entries_demo::State,
+    autocomplete: autocomplete_demo::State,
+    sections: sections_demo::State,
+    range: range_demo::State,
+    composed: composed_demo::State,
+    synced: synced_demo::State,
+    upstream: upstream_demo::State,
+    stepper: stepper_demo::State,
+    data: data_demo::State,
+    resizable: resizable_demo::State,
+    tree_demo: tree_demo::State,
+    virtual_demo: virtual_demo::State,
+    widgets_demo: widgets_demo::State,
+    stable_demo: stable_demo::State,
+    /// The playground of each component page that has one.
+    plays: std::collections::HashMap<Detail, playground::Playground>,
+    reorder: reorder_demo::State,
+    chips: Vec<&'static str>,
+    acc_single: Vec<u8>,
+    acc_multi: Vec<u8>,
+
+    dialog: Option<Dialog>,
+    show_content: bool,
+    menu_mode: MenuMode,
+    sidebar_mode: w::CollapsedSidebar,
+    sidebar_padding: w::SidebarPadding,
+    drawer_open: bool,
+    win: iad::windows::State,
+    main: window::Id,
+    /// The AppShell demo: its own window, with its own state.
+    shell: Option<iad::windows::Child<appshell::AppShell>>,
+    /// Screenshot harness: the window to capture instead of the main one.
+    shot_window: Option<window::Id>,
+    sheet: bool,
+    carousel: usize,
+    carousel_indicator: w::CarouselIndicator,
+    /// The toasts on screen, oldest first, each with its id (stacked notifications).
+    toasts: iad::primitives::notifications::Queue<ToastSpec>,
+    toast_seq: u32,
+    /// Whether toasts use the configured auto-dismiss timeout.
+    toast_auto: bool,
+    /// Screenshot harness: behave as if the window were narrow.
+    narrow: bool,
+    toast_position: w::ToastPosition,
+    toast_target: w::ToastTarget,
+    banner: bool,
+    angle: f32,
+    /// Rows of the Icons page drawn so far. They are revealed one a frame, so no single frame
+    /// rasterizes them all.
+    icons_revealed: usize,
+    /// The two task checkboxes of the Rich text page.
+    rich_tasks: [bool; 2],
+    /// The Rich text page's document, rebuilt when a task is toggled.
+    rich_doc: Vec<iad::primitives::rich_text::Block>,
+
+    shots: Option<Shots>,
+    shot_tag: Option<&'static str>,
+}
+
+/// A toast to show: its title, optional call-to-action label, and status dot.
+#[derive(Debug, Clone, Copy)]
+struct ToastSpec {
+    title: &'static str,
+    action: Option<&'static str>,
+    status: Option<Role>,
+}
+
+impl ToastSpec {
+    const fn plain(title: &'static str) -> Self {
+        Self {
+            title,
+            action: None,
+            status: None,
+        }
+    }
+}
+
+struct Shots {
+    dir: PathBuf,
+    index: usize,
+}
+
+#[derive(Debug, Clone)]
+enum Message {
+    Page(Page),
+    OpenDetail(Detail),
+    CloseDetail,
+    Banner(bool),
+    Sw(bool),
+    RowSw(bool),
+    Combo2(&'static str),
+    SplitChoice(&'static str),
+    SplitRun(&'static str),
+    Appearance(w::ThemeMode),
+    SystemTheme,
+    PathBarTitle(bool),
+    ToggleSearch,
+    SearchInput(String),
+    OpenResult(Detail),
+    Wifi(bool),
+    Notifications(bool),
+    Expanded(bool),
+    Name(String),
+    Password(String),
+    Combo(&'static str),
+    Spin(f64),
+    Tab(Tab),
+    Check(bool),
+    Radio(u8),
+    Slider(f32),
+    Editor(iced::widget::text_editor::Action),
+    EditorEmpty(iced::widget::text_editor::Action),
+    EditorGrow(iced::widget::text_editor::Action),
+    EditorGrowPx(iced::widget::text_editor::Action),
+    Picked(&'static str),
+    MultiToggle(&'static str),
+    Date(date_demo::Msg),
+    Form(form_demo::Msg),
+    Entries(entries_demo::Msg),
+    Autocomplete(autocomplete_demo::Msg),
+    Sections(sections_demo::Msg),
+    Range(range_demo::Msg),
+    Composed(composed_demo::Msg),
+    Synced(synced_demo::Msg),
+    Upstream(upstream_demo::Msg),
+    Stepper(stepper_demo::Msg),
+    Data(data_demo::Msg),
+    Resizable(resizable_demo::Msg),
+    Tree(tree_demo::Msg),
+    Virtual(virtual_demo::Msg),
+    Widgets(widgets_demo::Msg),
+    Stable(stable_demo::Msg),
+    /// A control of a component page's playground.
+    Play(Detail, playground::Msg),
+    Reorder(reorder_demo::Msg),
+    ChipRemove(&'static str),
+    AccSingle(Vec<u8>),
+    AccMulti(Vec<u8>),
+    OpenDialog(Dialog),
+    /// Opens the AppShell window (Layout > AppShell).
+    OpenShell,
+    Shell(appshell::Message),
+    /// A window was resized; the AppShell window's width drives its layout.
+    Resized(window::Id, f32),
+    CloseDialog,
+    Sheet(bool),
+    Carousel(usize),
+    CarouselIndicator(w::CarouselIndicator),
+    ShowToast(&'static str),
+    ShowToastSpec(ToastSpec),
+    ToastPosition(w::ToastPosition),
+    ToastTarget(w::ToastTarget),
+    ToastAction(iad::primitives::notifications::Id),
+    DismissToast(iad::primitives::notifications::Id),
+    ToastAuto(bool),
+    ClearToasts,
+    Frame(std::time::Instant),
+    Animations(bool),
+    DemoMotion(DemoMotion),
+    DemoPlay,
+    Noop,
+    /// A task checkbox of the Rich text page: its number and new state.
+    RichTask(usize, bool),
+    Drag,
+    /// Chrome of a secondary window (preferences, AppShell): performed on that window.
+    /// Closes the preferences window.
+    /// The window was closed (by the user or the compositor).
+    WindowClosed(window::Id),
+    /// A click on the disabled parent: bring the preferences window forward.
+    /// Escape: dismisses the topmost overlay.
+    Escape,
+    Narrow(bool),
+    Close,
+    Minimize,
+    ToggleMaximize,
+    Resize(window::Direction),
+    Back,
+    MenuMode(MenuMode),
+    SidebarMode(w::CollapsedSidebar),
+    SidebarPadding(w::SidebarPadding),
+    Drawer(bool),
+    ToggleFullscreen,
+    WindowChanged,
+    WindowState(iad::windows::State),
+    // screenshot mode
+    Shot(usize),
+    Capture(usize),
+    Saved(usize, window::Screenshot),
+}
+
+static SIDEBAR_MODES: [w::CollapsedSidebar; 2] = w::CollapsedSidebar::ALL;
+static INDICATORS: [w::CarouselIndicator; 3] = w::CarouselIndicator::ALL;
+static TOAST_POSITIONS: [w::ToastPosition; 6] = w::ToastPosition::ALL;
+static MOTIONS: [DemoMotion; 8] = DemoMotion::ALL;
+const FRUITS: [&str; 3] = ["Apple", "Banana", "Cherry"];
+const FRUITS5: [&str; 5] = ["Apple", "Banana", "Cherry", "Damson", "Elderberry"];
+
+struct Person {
+    name: &'static str,
+    role: &'static str,
+    team: &'static str,
+    email: &'static str,
+}
+static PEOPLE: [Person; 4] = [
+    Person {
+        name: "Ada Lovelace",
+        role: "Engineer",
+        team: "Compilers",
+        email: "ada@example.org",
+    },
+    Person {
+        name: "Grace Hopper",
+        role: "Admiral",
+        team: "Languages",
+        email: "grace@example.org",
+    },
+    Person {
+        name: "Linus T.",
+        role: "Maintainer",
+        team: "Kernel",
+        email: "linus@example.org",
+    },
+    Person {
+        name: "Margaret H.",
+        role: "Director",
+        team: "Flight software",
+        email: "margaret@example.org",
+    },
+];
+
+const COMBO: [&str; 3] = ["Adwaita Sans", "Cantarell", "Inter"];
+
+impl Gallery {
+    fn new() -> (Self, Task<Message>) {
+        // Desktop-level behavior comes from the shared config; the gallery's own switches
+        // below are demos layered on top of it.
+        let cfg = iad::config::current();
+        let from_cfg = iad::utils::theme();
+        let args: Vec<String> = std::env::args().collect();
+        let shots = args
+            .iter()
+            .position(|a| a == "--screenshot")
+            .and_then(|i| args.get(i + 1))
+            .map(|d| Shots {
+                dir: d.into(),
+                index: 0,
+            });
+        // GALLERY_DETAIL=textinput|switch|…: open a nested component page at startup.
+        let start_detail = std::env::var("GALLERY_DETAIL").ok().and_then(|v| {
+            Detail::all()
+                .into_iter()
+                .find(|d| format!("{d:?}").eq_ignore_ascii_case(&v))
+        });
+        let boot = if shots.is_some() {
+            Task::done(Message::Shot(0))
+        } else {
+            Task::none()
+        };
+        // A daemon opens its windows itself: the main one now, the preferences window on demand.
+        // `--appshell`: this process is the AppShell demo alone (started by the gallery's own
+        // action, see `Message::OpenShell`); closing its window ends it, and it does not depend on
+        // the gallery that started it.
+        let standalone = std::env::args().any(|a| a == "--appshell");
+        let (main, open_main) = if standalone {
+            (window::Id::unique(), Task::none())
+        } else {
+            let (main, open) = window::open(Self::main_settings());
+            (main, open.map(|_| Message::Noop))
+        };
+        let (virtual_demo, virtual_boot) = virtual_demo::State::start();
+        let plays: std::collections::HashMap<Detail, playground::Playground> = Detail::all()
+            .into_iter()
+            .map(|d| (d, playground::Playground::new(plays::specs(d))))
+            .collect();
+        let mut widgets_demo = widgets_demo::State::default();
+        widgets_demo.sync(plays.get(&Detail::Splitter), plays.get(&Detail::Spoiler));
+        let detect_theme = if shots.is_none() {
+            iad::utils::detect_theme().map(|_| Message::SystemTheme)
+        } else {
+            Task::none()
+        };
+        let boot = Task::batch([
+            detect_theme,
+            open_main,
+            boot,
+            virtual_boot.map(Message::Virtual),
+            autocomplete_demo::script().map(Message::Autocomplete),
+        ]);
+        let mut gallery = Self {
+            main,
+            shell: None,
+            shot_window: None,
+            page: start_detail
+                .map(Detail::page)
+                .or_else(|| {
+                    std::env::var("GALLERY_PAGE").ok().and_then(|v| {
+                        Page::ALL
+                            .into_iter()
+                            .find(|p| format!("{p:?}").eq_ignore_ascii_case(&v))
+                    })
+                })
+                .unwrap_or(Page::Buttons),
+            detail: start_detail,
+            scheme: from_cfg.scheme,
+            path_bar_title: std::env::var_os("GALLERY_PATHBAR").is_some(),
+            // GALLERY_SEARCH=<text> starts with the search open (screenshots).
+            searching: std::env::var_os("GALLERY_SEARCH").is_some(),
+            search: std::env::var("GALLERY_SEARCH").unwrap_or_default(),
+            anim_enabled: iad::layouts::animation::enabled(),
+            demo: DemoMotion::EaseOutCubic,
+            demo_tween: iad::layouts::animation::Tween::new(0.0),
+            demo_value: 0.0,
+            wifi: true,
+            notifications: false,
+            expanded: true,
+            name: "Ada Lovelace".into(),
+            password: "hunter2".into(),
+            combo: Some("Adwaita Sans"),
+            spin: 3.0,
+            tab: Tab::One,
+            check: true,
+            radio: Some(1),
+            slider: 40.0,
+            editor: iced::widget::text_editor::Content::with_text(
+                "Multi-line text editor\nstyled by the theme.",
+            ),
+            editor_empty: iced::widget::text_editor::Content::new(),
+            editor_ro: iced::widget::text_editor::Content::with_text(
+                "Read-only text.\nIt cannot be edited.",
+            ),
+            editor_grow: iced::widget::text_editor::Content::with_text(
+                "Type, and press Enter for new lines.\nThe field grows with its text up to six lines, then scrolls.",
+            ),
+            editor_grow_px: iced::widget::text_editor::Content::new(),
+            sw: true,
+            row_sw: false,
+            combo2: None,
+            split_choice: "merge",
+            picked: None,
+            multi: vec!["Banana", "Cherry"],
+            date: date_demo::State::default(),
+            sections: sections_demo::State::default(),
+            range: range_demo::State::default(),
+            composed: composed_demo::State::default(),
+            synced: synced_demo::State::default(),
+            upstream: upstream_demo::State::default(),
+            stepper: stepper_demo::State::default(),
+            data: data_demo::State::default(),
+            resizable: resizable_demo::State::default(),
+            tree_demo: tree_demo::State::default(),
+            virtual_demo,
+            widgets_demo,
+            stable_demo: stable_demo::State::default(),
+            plays,
+            reorder: reorder_demo::State::default(),
+            form: form_demo::State::default(),
+            entries: entries_demo::State::default(),
+            autocomplete: autocomplete_demo::State::default(),
+            chips: vec!["Rust", "iced", "GTK"],
+            acc_single: vec![0],
+            acc_multi: vec![0, 1],
+            dialog: None,
+            show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
+            sidebar_mode: match std::env::var("GALLERY_SIDEBAR_MODE").as_deref() {
+                Ok("parent-page") => w::CollapsedSidebar::ParentPage,
+                _ => cfg.mobile_sidebar,
+            },
+            drawer_open: std::env::var_os("GALLERY_DRAWER").is_some(),
+            sidebar_padding: w::SidebarPadding::default(),
+            menu_mode: match std::env::var("GALLERY_MENU").as_deref() {
+                Ok("page") => MenuMode::FullPage,
+                Ok("dropdown") => MenuMode::Dropdown,
+                _ => MenuMode::Auto,
+            },
+            win: iad::windows::State {
+                maximized: std::env::var_os("GALLERY_FULL").is_some(),
+                fullscreen: false,
+            },
+            sheet: false,
+            carousel: 0,
+            carousel_indicator: w::CarouselIndicator::default(),
+            toasts: iad::primitives::notifications::Queue::new(),
+            toast_seq: 0,
+            toast_auto: true,
+            narrow: false,
+            toast_position: cfg.toast_position,
+            toast_target: cfg.toast_target,
+            banner: true,
+            angle: 0.0,
+            icons_revealed: 0,
+            rich_tasks: [true, false],
+            rich_doc: rich_text_demo::sample([true, false]),
+            shots,
+            shot_tag: None,
+        };
+        if standalone {
+            let open = gallery.open_shell();
+            if let Some(c) = &gallery.shell {
+                gallery.main = c.id();
+            }
+            return (gallery, Task::batch([boot, open]));
+        }
+        (gallery, boot)
+    }
+
+    fn main_settings() -> window::Settings {
+        window::Settings {
+            size: std::env::var("GALLERY_SIZE")
+                .ok()
+                .and_then(|v| {
+                    let (w, h) = v.split_once('x')?;
+                    Some(iced::Size::new(w.parse().ok()?, h.parse().ok()?))
+                })
+                .unwrap_or(iced::Size::new(1040.0, 760.0)),
+            // Client-side or system decorations: the toolkit's `[windows] decorations` setting.
+            ..iad::windows::settings()
+        }
+    }
+
+    fn title(&self, id: window::Id) -> String {
+        if self.shell.as_ref().is_some_and(|c| c.is(id)) {
+            "AppShell".into()
+        } else {
+            "iced-adaptive-design gallery".into()
+        }
+    }
+
+    /// Opens the AppShell demo as its own window (a width of its own drives its layout), or
+    /// brings it forward if open. `GALLERY_SHELL_SIZE=WxH` sets its size.
+    fn open_shell(&mut self) -> Task<Message> {
+        if let Some(c) = &self.shell {
+            return c.focus();
+        }
+        let size = std::env::var("GALLERY_SHELL_SIZE")
+            .ok()
+            .and_then(|v| {
+                let (w, h) = v.split_once('x')?;
+                Some(iced::Size::new(w.parse().ok()?, h.parse().ok()?))
+            })
+            .unwrap_or(iced::Size::new(1100.0, 720.0));
+        // An ordinary window: it does not disable this one.
+        let (shell, boot) = appshell::AppShell::new(size.width);
+        let (child, open) = iad::windows::Child::window(size, shell);
+        self.shell = Some(child);
+        Task::batch([open.map(|_| Message::Noop), boot.map(Message::Shell)])
+    }
+
+    /// The metrics the desktop config and the theme file give: the look is not set here.
+    fn metrics(&self) -> Metrics {
+        Metrics::desktop()
+    }
+
+    fn theme(&self, _window: window::Id) -> Theme {
+        self.build_theme()
+    }
+
+    /// The theme the theme file (`IAD_THEME`, else the installed default) describes, in the
+    /// current scheme.
+    fn build_theme(&self) -> Theme {
+        let cfg = iad::config::current();
+        let themed = Theme::new(self.scheme).with_theme_config(&iad::theme_config::current());
+        let shadows = if cfg.shadows {
+            themed.shadows.clone()
+        } else {
+            iad::Shadows::none()
+        };
+        themed
+            .with_metrics(self.metrics())
+            .with_shadows(shadows)
+            .with_transparent_window(Self::csd())
+    }
+
+    /// Adds a toast to the queue (at most four kept, the oldest dropped first).
+    fn push_toast(&mut self, spec: ToastSpec) {
+        self.toast_seq += 1;
+        self.toasts.push(spec, Instant::now());
+    }
+
+    fn update(&mut self, msg: Message) -> Task<Message> {
+        match msg {
+            Message::Page(p) => {
+                self.page = p;
+                self.detail = None;
+                self.show_content = true;
+                self.drawer_open = false;
+            }
+            Message::OpenDetail(d) => {
+                self.page = d.page();
+                self.detail = Some(d);
+                // Drawing an icon rasterizes its SVG the first time, which blocks the frame. The
+                // page reveals its rows one a frame instead of all at once.
+                if d == Detail::Icons {
+                    self.icons_revealed = 0;
+                }
+            }
+            Message::CloseDetail => self.detail = None,
+            Message::Banner(v) => self.banner = v,
+            Message::Sw(v) => self.sw = v,
+            Message::RowSw(v) => self.row_sw = v,
+            Message::Combo2(s) => self.combo2 = Some(s),
+            Message::SplitChoice(c) => self.split_choice = c,
+            Message::SplitRun(c) => {
+                let title = match c {
+                    "squash" => "Squashed and merged",
+                    "rebase" => "Rebased and merged",
+                    _ => "Merged",
+                };
+                self.push_toast(ToastSpec {
+                    title,
+                    action: None,
+                    status: Some(Role::Success),
+                });
+            }
+            Message::SidebarMode(m) => {
+                self.sidebar_mode = m;
+                self.drawer_open = false;
+            }
+            Message::Drawer(open) => self.drawer_open = open,
+            Message::Back => self.show_content = false,
+            Message::MenuMode(m) => self.menu_mode = m,
+            Message::SidebarPadding(p) => self.sidebar_padding = p,
+            Message::Appearance(mode) => {
+                iad::utils::set_scheme_override(mode.scheme_override());
+                self.scheme = iad::utils::theme_settings().scheme;
+            }
+            Message::SystemTheme => {
+                if self.shots.is_none() {
+                    self.scheme = iad::utils::theme_settings().scheme;
+                }
+            }
+            Message::PathBarTitle(v) => self.path_bar_title = v,
+            Message::Wifi(v) => self.wifi = v,
+            Message::Notifications(v) => self.notifications = v,
+            Message::Expanded(v) => self.expanded = v,
+            Message::Name(s) => self.name = s,
+            Message::Password(s) => self.password = s,
+            Message::Combo(s) => self.combo = Some(s),
+            Message::Spin(v) => self.spin = v,
+            Message::Tab(t) => self.tab = t,
+            Message::Check(c) => self.check = c,
+            Message::Radio(r) => self.radio = Some(r),
+            Message::Slider(v) => self.slider = v,
+            Message::Editor(a) => self.editor.perform(a),
+            Message::EditorEmpty(a) => self.editor_empty.perform(a),
+            Message::EditorGrow(a) => self.editor_grow.perform(a),
+            Message::EditorGrowPx(a) => self.editor_grow_px.perform(a),
+            Message::Picked(s) => self.picked = Some(s),
+            Message::MultiToggle(s) => match self.multi.iter().position(|x| *x == s) {
+                Some(i) => {
+                    self.multi.remove(i);
+                }
+                None => self.multi.push(s),
+            },
+            Message::Date(m) => self.date.update(m),
+            Message::Form(m) => self.form.update(m),
+            Message::Entries(m) => self.entries.update(m),
+            Message::Autocomplete(m) => {
+                return self.autocomplete.update(m).map(Message::Autocomplete);
+            }
+            Message::Sections(m) => self.sections.update(m),
+            Message::Range(m) => self.range.update(m),
+            Message::Composed(m) => self.composed.update(m),
+            Message::Upstream(m) => self.upstream.update(m),
+            Message::Synced(m) => return self.synced.update(m).map(Message::Synced),
+            Message::Stepper(m) => self.stepper.update(m),
+            Message::Data(m) => return self.data.update(m).map(Message::Data),
+            Message::Resizable(m) => return self.resizable.update(m).map(Message::Resizable),
+            Message::Tree(m) => return self.tree_demo.update(m).map(Message::Tree),
+            Message::Virtual(m) => return self.virtual_demo.update(m).map(Message::Virtual),
+            Message::Widgets(m) => return self.widgets_demo.update(m).map(Message::Widgets),
+            Message::Stable(m) => self.stable_demo.update(m),
+            Message::Play(d, m) => {
+                if let Some(p) = self.plays.get_mut(&d) {
+                    p.update(m);
+                    if d == Detail::Tree {
+                        self.tree_demo.sync(p);
+                    }
+                }
+                if matches!(d, Detail::Splitter | Detail::Spoiler) {
+                    self.widgets_demo.sync(
+                        self.plays.get(&Detail::Splitter),
+                        self.plays.get(&Detail::Spoiler),
+                    );
+                }
+            }
+            Message::Reorder(m) => self.reorder.update(m),
+            Message::AccSingle(v) => self.acc_single = v,
+            Message::AccMulti(v) => self.acc_multi = v,
+            Message::ChipRemove(c) => self.chips.retain(|x| *x != c),
+            // The AppShell is a separate process, started by this action: it keeps running when
+            // this window is closed.
+            Message::OpenShell => {
+                let size = std::env::var("GALLERY_SHELL_SIZE").ok();
+                let mut d = iad::windows::Detached::this_exe().map(|d| d.arg("--appshell"));
+                if let (Ok(d), Some(size)) = (&mut d, size) {
+                    *d = d.clone().env("GALLERY_SHELL_SIZE", size);
+                }
+                return match d {
+                    Ok(d) => d.task(|_| Message::Noop),
+                    Err(_) => Task::none(),
+                };
+            }
+            // Chrome of the shell's window is its own message; everything else goes to the shell.
+            Message::Shell(appshell::Message::Window(action)) => {
+                if let Some(c) = &self.shell {
+                    return action.perform(c.id());
+                }
+            }
+            Message::Shell(m) => {
+                if let Some(c) = &mut self.shell {
+                    return c.state.update(m).map(Message::Shell);
+                }
+            }
+            Message::Resized(id, width) => {
+                if let Some(c) = &mut self.shell
+                    && c.is(id)
+                {
+                    // The frame follows the window: edge to edge when maximized.
+                    return Task::batch([
+                        c.state
+                            .update(appshell::Message::Resized(width))
+                            .map(Message::Shell),
+                        window::is_maximized(id)
+                            .map(|m| Message::Shell(appshell::Message::Maximized(m))),
+                    ]);
+                }
+            }
+            Message::OpenDialog(d) => self.dialog = Some(d),
+            Message::CloseDialog => self.dialog = None,
+            Message::Sheet(o) => self.sheet = o,
+            Message::Carousel(i) => self.carousel = i,
+            Message::CarouselIndicator(i) => self.carousel_indicator = i,
+            Message::ShowToast(s) => self.push_toast(ToastSpec::plain(s)),
+            Message::ShowToastSpec(t) => self.push_toast(t),
+            Message::ToastPosition(p) => self.toast_position = p,
+            Message::ToastTarget(t) => self.toast_target = t,
+            // The action runs and the toast is replaced by a plain confirmation.
+            Message::ToastAction(id) => {
+                self.toasts
+                    .replace(id, ToastSpec::plain("File restored"), Instant::now());
+            }
+            Message::DismissToast(id) => {
+                self.toasts.dismiss(id);
+            }
+            Message::ToastAuto(on) => {
+                self.toast_auto = on;
+            }
+            Message::ClearToasts => self.toasts.clear(),
+            Message::Frame(now) => {
+                self.angle += 0.12;
+                if self.detail == Some(Detail::Icons) {
+                    self.icons_revealed += 1;
+                }
+                self.demo_value = self.demo_tween.tick(now);
+            }
+            Message::Animations(on) => {
+                self.anim_enabled = on;
+                iad::layouts::animation::set_enabled(Some(on));
+            }
+            Message::DemoMotion(m) => self.demo = m,
+            Message::DemoPlay => {
+                let now = std::time::Instant::now();
+                let to = if self.demo_tween.target() > 0.5 {
+                    0.0
+                } else {
+                    1.0
+                };
+                self.demo_tween.set_target(to, now, self.demo.spec());
+            }
+            Message::Noop => {}
+            Message::RichTask(n, on) => {
+                if let Some(c) = self.rich_tasks.get_mut(n) {
+                    *c = on;
+                }
+                self.rich_doc = rich_text_demo::sample(self.rich_tasks);
+            }
+            Message::Drag => return window::drag(self.main),
+            Message::WindowClosed(id) => {
+                if id == self.main {
+                    return iced::exit();
+                }
+                if self.shell.as_ref().is_some_and(|c| c.is(id)) {
+                    self.shell = None;
+                }
+            }
+            Message::ToggleSearch => {
+                self.searching = !self.searching;
+                if !self.searching {
+                    self.search.clear();
+                }
+            }
+            Message::SearchInput(t) => self.search = t,
+            Message::OpenResult(d) => {
+                self.page = d.page();
+                self.detail = Some(d);
+                self.searching = false;
+                self.search.clear();
+            }
+            Message::Escape => {
+                if self.searching {
+                    self.searching = false;
+                    self.search.clear();
+                } else if self.dialog.is_some() {
+                    self.dialog = None;
+                } else if self.sheet {
+                    self.sheet = false;
+                } else if self.drawer_open {
+                    self.drawer_open = false;
+                } else {
+                    // Leaves the search bar (the on-select trigger demo) back to the path bar.
+                    self.sections.leave_search();
+                }
+            }
+            Message::Narrow(n) => self.narrow = n,
+            Message::Close => return iced::exit(),
+            Message::ToggleFullscreen => {
+                return window::oldest().and_then(|id| {
+                    window::mode(id).then(move |m| {
+                        window::set_mode(
+                            id,
+                            if m == window::Mode::Fullscreen {
+                                window::Mode::Windowed
+                            } else {
+                                window::Mode::Fullscreen
+                            },
+                        )
+                    })
+                });
+            }
+            Message::WindowChanged => return iad::windows::refresh().map(Message::WindowState),
+            // GALLERY_FULL forces the edge-to-edge look for screenshots.
+            Message::WindowState(st) => {
+                if std::env::var_os("GALLERY_FULL").is_none() {
+                    self.win = st;
+                }
+            }
+            Message::Minimize => return window::oldest().and_then(|id| window::minimize(id, true)),
+            Message::ToggleMaximize => return window::oldest().and_then(window::toggle_maximize),
+            Message::Resize(d) => {
+                return window::oldest().and_then(move |id| window::drag_resize(id, d));
+            }
+            Message::Shot(i) => return self.shot_next(i),
+            Message::Capture(i) => {
+                return window::screenshot(self.shot_window.unwrap_or(self.main))
+                    .map(move |s| Message::Saved(i, s));
+            }
+            Message::Saved(i, shot) => {
+                if let Some(s) = &self.shots {
+                    let name = format!(
+                        "{}-{}{}{}.png",
+                        if self.scheme.is_dark() {
+                            "dark"
+                        } else {
+                            "light"
+                        },
+                        format!("{:?}", self.page).to_lowercase(),
+                        self.detail
+                            .map(|d| format!("-{d:?}").to_lowercase())
+                            .unwrap_or_default(),
+                        self.shot_tag.map(|t| format!("-{t}")).unwrap_or_default()
+                    );
+                    std::fs::create_dir_all(&s.dir).ok();
+                    let path = s.dir.join(name);
+                    image::save_buffer(
+                        &path,
+                        &shot.rgba,
+                        shot.size.width,
+                        shot.size.height,
+                        image::ColorType::Rgba8,
+                    )
+                    .expect("write screenshot");
+                    println!("saved {}", path.display());
+                }
+                return Task::done(Message::Shot(i + 1));
+            }
+        }
+        Task::none()
+    }
+
+    /// Screenshot mode: step through (scheme x page), with dialogs/toasts on
+    /// the Dialogs page so overlays are covered too.
+    fn shot_next(&mut self, i: usize) -> Task<Message> {
+        // GALLERY_ANIM=switch|drawer|reveal|dialog|toast: capture an animation instead of the
+        // normal pages: settled start, then +70ms, +160ms and settled end after a trigger.
+        if let Ok(kind) = std::env::var("GALLERY_ANIM") {
+            let wait = |ms: u64, tag: &'static str, this: &mut Self| {
+                this.shot_tag = Some(tag);
+                Task::perform(tokio::time::sleep(Duration::from_millis(ms)), move |_| {
+                    Message::Capture(i)
+                })
+            };
+            // Exercise the complete appearance cycle through the header's update path.
+            if kind == "theme" {
+                let (mode, tag) = match i {
+                    0 => (w::ThemeMode::System, "theme-system"),
+                    1 => (w::ThemeMode::Light, "theme-light"),
+                    2 => (w::ThemeMode::Dark, "theme-dark"),
+                    3 => (w::ThemeMode::System, "theme-restored"),
+                    _ => return iced::exit(),
+                };
+                return self
+                    .update(Message::Appearance(mode))
+                    .chain(wait(500, tag, self));
+            }
+            // GALLERY_ANIM=appshell: open the AppShell window (GALLERY_SHELL_SIZE=WxH) and capture
+            // it.
+            if kind == "appshell" {
+                return match i {
+                    0 => {
+                        self.scheme = iad::utils::theme_settings().scheme;
+                        let open = self.open_shell();
+                        self.shot_tag = Some("parent");
+                        open.chain(Task::perform(
+                            tokio::time::sleep(Duration::from_millis(1500)),
+                            move |_| Message::Capture(i),
+                        ))
+                    }
+                    1 => {
+                        self.shot_window = self.shell.as_ref().map(|c| c.id());
+                        wait(300, "appshell", self)
+                    }
+                    _ => iced::exit(),
+                };
+            }
+            // GALLERY_ANIM=shell-back: the AppShell window with a page open (use APPSHELL_PIN=mobile
+            // APPSHELL_SIDEBAR_MODE=parent-page APPSHELL_CONTENT=1 GALLERY_SHELL_SIZE=420x640), then
+            // Back to the parent page, captured while the page slides out.
+            if kind == "shell-back" {
+                return match i {
+                    0 => {
+                        self.scheme = iad::utils::theme_settings().scheme;
+                        let open = self.open_shell();
+                        self.shot_tag = Some("a0-child");
+                        open.chain(Task::perform(
+                            tokio::time::sleep(Duration::from_millis(1500)),
+                            move |_| Message::Capture(i),
+                        ))
+                    }
+                    1 => {
+                        self.shot_window = self.shell.as_ref().map(|c| c.id());
+                        let back = self.update(Message::Shell(appshell::Message::Back));
+                        Task::batch([back, wait(70, "a1-70ms", self)])
+                    }
+                    2 => wait(90, "a2-160ms", self),
+                    3 => wait(120, "a3-280ms", self),
+                    4 => wait(700, "a4-end", self),
+                    _ => iced::exit(),
+                };
+            }
+            // GALLERY_ANIM=embedded-back: the shell embedded in Layout > Resizable, with a page open
+            // (APPSHELL_PIN=mobile APPSHELL_SIDEBAR_MODE=parent-page APPSHELL_CONTENT=1
+            // GALLERY_PAGE=layout GALLERY_ONLY=resizable), then Back, captured mid-transition.
+            if kind == "embedded-back" {
+                return match i {
+                    0 => {
+                        self.scheme = iad::utils::theme_settings().scheme;
+                        wait(900, "a0-child", self)
+                    }
+                    1 => {
+                        let back = self.update(Message::Resizable(resizable_demo::Msg::Shell(
+                            appshell::Message::Back,
+                        )));
+                        Task::batch([back, wait(70, "a1-70ms", self)])
+                    }
+                    2 => wait(90, "a2-160ms", self),
+                    3 => wait(120, "a3-280ms", self),
+                    4 => wait(700, "a4-end", self),
+                    _ => iced::exit(),
+                };
+            }
+            return match i {
+                0 => {
+                    self.scheme = iad::utils::theme_settings().scheme;
+                    wait(700, "a0-start", self)
+                }
+                // GALLERY_ANIM=keys: no trigger; send keys from outside during the wait.
+                1 if kind == "keys" => wait(6000, "keys", self),
+                1 => {
+                    let trigger = match kind.as_str() {
+                        "switch" => Message::Wifi(!self.wifi),
+                        "drawer" => Message::Drawer(true),
+                        "reveal" => Message::Expanded(!self.expanded),
+                        "carousel" => Message::Carousel(1),
+                        "page" => Message::Page(Page::Typography),
+                        "breakpoint" => Message::Narrow(true),
+                        "push" => Message::Page(Page::Dialogs),
+                        "dialog" => Message::OpenDialog(Dialog::Alert),
+                        "toast-action" => Message::ShowToastSpec(ToastSpec {
+                            title: "File deleted",
+                            action: Some("Undo"),
+                            status: Some(Role::Error),
+                        }),
+                        _ => Message::ShowToast("Settings saved"),
+                    };
+                    Task::done(trigger).chain(wait(70, "a1-70ms", self))
+                }
+                2 => wait(90, "a2-160ms", self),
+                3 => wait(700, "a3-end", self),
+                _ => iced::exit(),
+            };
+        }
+        // Every group page, then every component page (light), then the groups again (dark).
+        // GALLERY_SHOT_ONLY=<detail name> captures that page in the detected scheme and exits.
+        let only = std::env::var("GALLERY_SHOT_ONLY").ok();
+        let views: Vec<(Page, Option<Detail>)> = Page::ALL
+            .iter()
+            .map(|p| (*p, None))
+            .chain(Detail::all().into_iter().map(|d| (d.page(), Some(d))))
+            .filter(|(_, d)| {
+                only.as_ref()
+                    .is_none_or(|o| d.is_some_and(|d| format!("{d:?}").eq_ignore_ascii_case(o)))
+            })
+            .collect();
+        let total = if only.is_some() {
+            views.len()
+        } else {
+            views.len() + Page::ALL.len()
+        };
+        if i > total || (only.is_some() && i == total) {
+            return iced::exit();
+        }
+        if i < views.len() {
+            self.scheme = if only.is_some() {
+                iad::utils::theme_settings().scheme
+            } else {
+                Scheme::Light
+            };
+            (self.page, self.detail) = views[i];
+        } else {
+            self.scheme = Scheme::Dark;
+            self.page = Page::ALL[i - views.len()];
+            self.detail = None;
+        }
+        // The Dialogs group page also shows an open dialog and a toast, so overlays are covered.
+        let overlays = self.page == Page::Dialogs && self.detail.is_none();
+        self.dialog = overlays.then(|| match std::env::var("GALLERY_DIALOG").as_deref() {
+            Ok("preferences") => Dialog::Preferences,
+            Ok("shortcuts") => Dialog::Shortcuts,
+            Ok("about") => Dialog::About,
+            _ => Dialog::Alert,
+        });
+        self.toasts.clear();
+        if overlays {
+            self.push_toast(ToastSpec {
+                title: "Changes saved",
+                action: None,
+                status: Some(Role::Success),
+            });
+            self.push_toast(ToastSpec {
+                title: "File deleted",
+                action: Some("Undo"),
+                status: Some(Role::Error),
+            });
+        }
+        if let Some(s) = &mut self.shots {
+            s.index = i;
+        }
+        // Slow debug builds need longer before a page has really switched and laid out:
+        // GALLERY_SHOT_DELAY_MS (default 900).
+        let delay = std::env::var("GALLERY_SHOT_DELAY_MS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(900);
+        Task::perform(
+            tokio::time::sleep(Duration::from_millis(delay)),
+            move |_| Message::Capture(i),
+        )
+    }
+
+    fn subscription(&self) -> Subscription<Message> {
+        let frames = if self.page == Page::Feedback
+            || self.shots.is_some()
+            || (self.detail == Some(Detail::Icons) && self.icons_revealed < Icon::ALL.len())
+            || self.demo_tween.is_animating()
+        {
+            window::frames().map(Message::Frame)
+        } else {
+            Subscription::none()
+        };
+        let system_theme = if self.shots.is_none() {
+            iad::utils::follow_theme().map(|_| Message::SystemTheme)
+        } else {
+            Subscription::none()
+        };
+        Subscription::batch([
+            system_theme,
+            frames,
+            self.autocomplete.subscription().map(Message::Autocomplete),
+            self.resizable.subscription().map(Message::Resizable),
+            iad::windows::changes().map(|_| Message::WindowChanged),
+            window::close_events().map(Message::WindowClosed),
+            window::resize_events().map(|(id, size)| Message::Resized(id, size.width)),
+            self.shell.as_ref().map_or_else(Subscription::none, |c| {
+                c.state.subscription().map(Message::Shell)
+            }),
+        ])
+    }
+
+    fn view(&self, id: window::Id) -> IcedElement<'_, Message, Theme> {
+        if let Some(c) = &self.shell
+            && c.is(id)
+        {
+            return c.state.view().map(Message::Shell);
+        }
+        iad::layouts::responsive(|size| self.root(size)).into()
+    }
+
+    /// Whether the window draws its own decorations: the toolkit's setting, nothing of ours.
+    fn csd() -> bool {
+        iad::windows::csd()
+    }
+
+    fn surface_radius(&self) -> f32 {
+        if Self::csd() {
+            self.win.radius(&self.metrics())
+        } else {
+            0.0
+        }
+    }
+
+    fn root(&self, size: iced::Size) -> IcedElement<'_, Message, Theme> {
+        let m = self.metrics();
+        let csd = Self::csd();
+        // GALLERY_ANIM=breakpoint pretends the window just got narrower (the compositor ignores
+        // programmatic resizes), to capture the sidebar sliding out.
+        let width = if self.narrow {
+            size.width.min(600.0)
+        } else {
+            size.width
+        };
+        let collapsed = w::split_collapsed(width);
+
+        // Floating windows have rounded corners; maximized/fullscreen go edge to edge.
+        // Mobile mode (narrow): no window decorations at all. Corners still follow the
+        // real window state: rounded while floating, edge to edge only when the window
+        // is actually maximized or fullscreen.
+        let mobile = iad::breakpoints::is_mobile(width);
+        let win_state = self.win;
+        let corner = if csd {
+            win_state.radius(&iad::Metrics::desktop())
+        } else {
+            0.0
+        };
+
+        // Primary menu (HIG): open-menu icon, above the sidebar list, standard items last.
+        let presentation = match self.menu_mode {
+            MenuMode::Auto => w::MenuPresentation::resolve(width),
+            MenuMode::Dropdown => w::MenuPresentation::Dropdown,
+            MenuMode::FullPage => w::MenuPresentation::FullPage,
+        };
+        let primary = w::primary_menu(
+            w::Menu::new("Main Menu").section([
+                w::MenuItem::action("Preferences", Message::OpenDialog(Dialog::Preferences))
+                    .accel("Ctrl+,"),
+                w::MenuItem::action("Keyboard Shortcuts", Message::OpenDialog(Dialog::Shortcuts))
+                    .accel("Ctrl+?"),
+                w::MenuItem::action("Help", Message::ShowToast("Opening Help…")).accel("F1"),
+                w::MenuItem::action(
+                    "About iced-adaptive-design",
+                    Message::OpenDialog(Dialog::About),
+                ),
+            ]),
+        )
+        .presentation(presentation)
+        .window_radius(corner)
+        .open_initially(self.shots.is_some() && std::env::var_os("GALLERY_MENU").is_some());
+
+        // Which buttons exist, on which side, follows the user's GNOME `button-layout`
+        // (this machine: `appmenu:close`, so a lone close button at the end).
+        let controls = || w::WindowControls {
+            on_minimize: Some(Message::Minimize),
+            on_maximize: Some(Message::ToggleMaximize),
+            on_close: Some(Message::Close),
+            maximized: self.win.maximized,
+            layout: None,
+        };
+        // Collapsed, the sidebar is a drawer over the content (default) or its own page.
+        let drawer_mode = collapsed && self.sidebar_mode == w::CollapsedSidebar::Drawer;
+        let show_content_only = collapsed && !drawer_mode && self.show_content;
+        let show_sidebar_only = collapsed && !drawer_mode && !self.show_content;
+
+        // One header bar per pane, as in libadwaita split views. Window controls
+        // appear only at the window edge (the end pane); the collapsed single pane has both.
+        let mut sidebar_bar = w::header_bar::<Message>()
+            .title("iced-adaptive-design")
+            .pack_end(primary)
+            .window_corners(corner, if show_sidebar_only { corner } else { 0.0 })
+            .metrics(m);
+        let mut content_bar = w::header_bar::<Message>()
+            .title(self.detail.map_or(self.page.title(), Detail::title))
+            .window_corners(
+                if show_content_only || drawer_mode {
+                    corner
+                } else {
+                    0.0
+                },
+                corner,
+            )
+            .metrics(m);
+        // The search button sits at the end of the header, beside the window controls. Searching
+        // swaps the header's title for a search entry (an on-select trigger of a
+        // `MetaComponent`); the path bar (or the plain title) is its other variant.
+        content_bar = content_bar.pack_end(
+            w::ThemeToggleProps::default()
+                .tooltip_props(
+                    cmp::TooltipProps::default()
+                        .label_props(cmp::TextProps::default().overflow(cmp::TextOverflow::Wrap)),
+                )
+                .apply(
+                    w::ThemeToggle::new(w::ThemeMode::from(iad::utils::scheme_override()))
+                        .on_toggle(Message::Appearance)
+                        .disabled(!iad::config::current().allow_app_overrides)
+                        .metrics(m),
+                ),
+        );
+        content_bar = content_bar.pack_end(cmp::tooltip(
+            iced::widget::button(
+                container(Icon::Search.view(m.icon_size))
+                    .center(Length::Fixed(m.button_min_height)),
+            )
+            .padding(0)
+            .style(style::button::flat)
+            .on_press(Message::ToggleSearch),
+            "Search",
+            cmp::TooltipPosition::Bottom,
+        ));
+        if self.searching || self.path_bar_title {
+            let title = self.detail.map_or(self.page.title(), Detail::title);
+            let path = self.path_bar_title;
+            let entry_m = m;
+            content_bar = content_bar.title_widget(
+                met::MetaComponent::new()
+                    .selected(self.searching.then_some(HeaderTitle::Search))
+                    .when_selected(HeaderTitle::Search, move |_| {
+                        // The search field takes focus as it appears (a focus scope that does not
+                        // trap Tab: the header's other controls stay reachable).
+                        bnd::FocusScope::new(
+                            container(w::clamp(
+                                cmp::entry("Search components", &self.search)
+                                    .id(SEARCH_ID)
+                                    .on_input(Message::SearchInput)
+                                    .left_section(Icon::Search.view(entry_m.icon_size))
+                                    .metrics(entry_m),
+                                420.0,
+                            ))
+                            .center_y(Length::Fill),
+                        )
+                        .trap(false)
+                        .initial_focus(SEARCH_ID)
+                        .into()
+                    })
+                    .variant(
+                        HeaderTitle::Title,
+                        iad::primitives::When::always(),
+                        move |_| {
+                            let shown: Element<'_> = if path {
+                                w::path_bar(
+                                    vec![
+                                        "Home".into(),
+                                        "Projects".into(),
+                                        "iced-adaptive-design".into(),
+                                    ],
+                                    2,
+                                    |_| Message::Noop,
+                                )
+                            } else {
+                                ty::heading(title).into()
+                            };
+                            container(shown).center_y(Length::Fill).into()
+                        },
+                    )
+                    .height(Length::Fixed(m.button_min_height)),
+            );
+        }
+        if self.detail.is_some() {
+            // Inside a component page: back to the group's list.
+            content_bar = content_bar
+                .pack_start(cmp::circular_button(Icon::GoPrevious).on_press(Message::CloseDetail));
+        } else if drawer_mode {
+            // The drawer toggle: the sidebar lives behind it.
+            content_bar = content_bar
+                .pack_start(cmp::circular_button(Icon::Sidebar).on_press(Message::Drawer(true)));
+        } else if show_content_only {
+            content_bar = content_bar
+                .pack_start(cmp::circular_button(Icon::GoPrevious).on_press(Message::Back));
+        }
+        if csd {
+            sidebar_bar = sidebar_bar
+                .on_drag(Message::Drag)
+                .on_double_click(Message::ToggleMaximize);
+            content_bar = content_bar
+                .on_drag(Message::Drag)
+                .on_double_click(Message::ToggleMaximize);
+            // Controls only outside mobile mode. In a split view each pane shows only the
+            // buttons at its own window edge; a collapsed single pane shows both sides.
+            if !mobile {
+                if show_sidebar_only {
+                    sidebar_bar = sidebar_bar.window_controls(controls());
+                } else if show_content_only {
+                    content_bar = content_bar.window_controls(controls());
+                } else {
+                    sidebar_bar = sidebar_bar
+                        .window_controls(controls())
+                        .show_end_title_buttons(false);
+                    content_bar = content_bar
+                        .window_controls(controls())
+                        .show_start_title_buttons(false);
+                }
+            }
+        }
+
+        // Collapsed as the parent page, the sidebar is a page of cards with descriptions;
+        // otherwise (beside the content, or in the drawer) the compact list.
+        let sidebar_style = if collapsed && self.sidebar_mode == w::CollapsedSidebar::ParentPage {
+            w::SidebarStyle::Cards
+        } else {
+            w::SidebarStyle::List
+        };
+        let sidebar_list = w::SidebarList::new(Page::ALL.iter().map(|p| {
+            w::SidebarItem::new(p.title(), Message::Page(*p))
+                .icon(p.icon())
+                .subtitle(p.description())
+                .selected(*p == self.page)
+        }))
+        .style(sidebar_style)
+        .padding(self.sidebar_padding)
+        .window_radius(corner);
+        let sidebar_pane = w::toolbar_view(Element::from(sidebar_list)).top_bar(sidebar_bar);
+
+        // Searching lists the matching pages in place of the content, as Files lists results.
+        let page: Element = if self.searching {
+            self.search_results()
+        } else {
+            self.content_page()
+        };
+
+        // Switching pages fades the new one in (as a parent page, the push slide does that job).
+        let page = lay::PageTransition::container(
+            container(page),
+            if collapsed && self.sidebar_mode == w::CollapsedSidebar::ParentPage {
+                0
+            } else {
+                self.view_key()
+            },
+            style::container::window,
+        )
+        .scroll_key(self.view_key());
+        // The toast is placed in the whole window or only the content area (the shared
+        // `[toasts] target` setting). Both layers stay mounted so the tree does not change.
+        let toast_for = |id, spec: &ToastSpec| {
+            let mut t = w::Toast::new(spec.title)
+                .on_dismiss(Message::DismissToast(id))
+                .position(self.toast_position);
+            if !self.toast_auto {
+                t = t.timeout(0);
+            }
+            if let Some(label) = spec.action {
+                t = t.action(label, Message::ToastAction(id));
+            }
+            if let Some(status) = spec.status {
+                t = t.status(status);
+            }
+            t
+        };
+        let in_content = self.toast_target == w::ToastTarget::Content;
+        let content_pane: Element = if in_content {
+            w::toast_stack_from(
+                Element::from(w::toolbar_view(page).top_bar(content_bar)),
+                &self.toasts,
+                toast_for,
+            )
+        } else {
+            w::toast_stack(
+                Element::from(w::toolbar_view(page).top_bar(content_bar)),
+                Vec::new(),
+            )
+        };
+        let body = w::NavigationSplitView::new(sidebar_pane, content_pane)
+            .adapt(width)
+            .window_radius(corner)
+            .collapsed_sidebar(self.sidebar_mode)
+            .show_sidebar(self.drawer_open)
+            .on_close_drawer(Message::Drawer(false))
+            .show_content(self.show_content);
+
+        // The window background comes from `iad::windows::frame` (rounded when floating).
+        let body = container(body).width(Length::Fill).height(Length::Fill);
+        let base: Element = if in_content {
+            w::toast_stack(body, Vec::new())
+        } else {
+            w::toast_stack_from(body, &self.toasts, toast_for)
+        };
+
+        // A docked sheet over the whole window: modal, so the window is faded and disabled.
+        let base: Element = lay::Dock::new(
+            base,
+            w::Menu::new("Track")
+                .section([
+                    w::MenuItem::action("Play next", Message::Sheet(false)).icon(Icon::MusicNote),
+                    w::MenuItem::action("Add to playlist", Message::Sheet(false))
+                        .icon(Icon::ListAdd),
+                ])
+                .section([w::MenuItem::action("Remove", Message::Sheet(false)).icon(Icon::Delete)])
+                .sheet(Some("Midnight City · M83".into())),
+        )
+        .open(self.sheet)
+        .side(iad::layouts::anchor::Side::Bottom)
+        .mode(lay::DockMode::Overlay)
+        .scope(lay::DockScope::Window)
+        .window_radius(corner)
+        .on_outside(Message::Sheet(false))
+        .into();
+        let dialog: Option<Element<'_>> = match self.dialog {
+            None => None,
+            Some(Dialog::Alert) => Some(Element::from(
+                w::AlertDialog::new("Discard Changes?")
+                    .body("Unsaved changes will be permanently lost.")
+                    .response(
+                        "Cancel",
+                        w::ResponseAppearance::Default,
+                        Message::CloseDialog,
+                    )
+                    .response(
+                        "Save",
+                        w::ResponseAppearance::Suggested,
+                        Message::CloseDialog,
+                    )
+                    .response(
+                        "Discard",
+                        w::ResponseAppearance::Destructive,
+                        Message::CloseDialog,
+                    ),
+            )),
+            Some(Dialog::Shortcuts) => Some(w::shortcuts_dialog(
+                vec![
+                    (
+                        "General".into(),
+                        vec![
+                            ("Preferences".into(), "Ctrl+,".into()),
+                            ("Keyboard Shortcuts".into(), "Ctrl+?".into()),
+                            ("Help".into(), "F1".into()),
+                            ("Quit".into(), "Ctrl+Q".into()),
+                        ],
+                    ),
+                    (
+                        "Window".into(),
+                        vec![
+                            ("Fullscreen".into(), "F11".into()),
+                            ("Close dialog".into(), "Esc".into()),
+                        ],
+                    ),
+                ],
+                Message::CloseDialog,
+            )),
+            Some(Dialog::Preferences) => Some(w::preferences_dialog(
+                "Preferences",
+                self.preferences_demo(),
+                Message::CloseDialog,
+            )),
+            Some(Dialog::About) => Some(Element::from(
+                w::AboutDialog::new("Gallery")
+                    .developer_name("The iced-adaptive-design authors")
+                    .version("0.1.0")
+                    .comments("Widget gallery for iced-adaptive-design.")
+                    .website("https://iced.rs")
+                    .license("MIT OR Apache-2.0")
+                    .application_icon(
+                        Icon::Home.colored(48.0, self.build_theme().semantic.accent.color),
+                    )
+                    .on_close(Message::CloseDialog),
+            )),
+        };
+        let result = w::present_dialog(base, dialog, Some(Message::CloseDialog), corner);
+        // The toolkit listens: no subscription or update arm. The primary menu registers its own
+        // accelerators (Ctrl+, Ctrl+? F1); these are the standard ones the app supports.
+        let result = iad::shortcut::Standard::new()
+            .quit(Message::Close)
+            .fullscreen(Message::ToggleFullscreen)
+            .into_shortcuts()
+            .bind("Esc", Message::Escape)
+            .bind("Ctrl+F", Message::ToggleSearch)
+            .scope(result);
+        if csd {
+            iad::windows::frame(result, win_state, Message::Resize)
+        } else {
+            result
+        }
+    }
+
+    // --- pages ----------------------------------------------------------
+
+    fn page_frame<'a>(&self, content: impl Into<Element<'a>>) -> Element<'a> {
+        self.page_frame_sized(content, lay::ContainerSize::Sm)
+    }
+
+    /// A content page: a scrolled [`lay::Container`] of the given size. Every page of the gallery
+    /// is one.
+    fn page_frame_sized<'a>(
+        &self,
+        content: impl Into<Element<'a>>,
+        size: lay::ContainerSize,
+    ) -> Element<'a> {
+        let m = self.metrics();
+        lay::scrolled_window(
+            lay::Container::new(content)
+                .size(size)
+                .padding(m.page_padding)
+                .metrics(m),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
+    }
+
+    fn preferences_demo(&self) -> Element<'_> {
+        let m = self.metrics();
+        let mut page = w::PreferencesPage::<Message>::new().metrics(m);
+
+        page = page.push(
+            w::PreferencesGroup::new()
+                .title("Appearance")
+                .description("Rows, switches and choosers.")
+                .metrics(m)
+                .push(w::SwitchRow::new("Wi-Fi", self.wifi, Message::Wifi).metrics(m))
+                .push(
+                    w::ComboRow::new("Font", &COMBO, self.combo, Message::Combo)
+                        .subtitle("Interface font")
+                        // Shows the disabled state: dimmed and unselectable (selected is accent).
+                        .disabled_when(|o| *o == "Inter")
+                        .open_initially(false),
+                )
+                .push(w::SpinRow::new(
+                    "Text Scale",
+                    self.spin,
+                    1.0..=10.0,
+                    1.0,
+                    Message::Spin,
+                )),
+        );
+
+        page = page.push(
+            w::PreferencesGroup::new()
+                .title("Account")
+                .metrics(m)
+                .push(
+                    w::ActionRow::new("Ada Lovelace")
+                        .subtitle("ada@example.org")
+                        .prefix(cmp::avatar(40.0, "Ada Lovelace"))
+                        .chevron(true)
+                        .on_activate(Message::ShowToast("Opened account"))
+                        .metrics(m),
+                )
+                .push(w::EntryRow::text("Display name", &self.name, Message::Name).metrics(m))
+                .push(
+                    w::EntryRow::new(
+                        "Password",
+                        w::EntryInput::Text(
+                            cmp::password_entry("", &self.password).on_input(Message::Password),
+                        ),
+                    )
+                    .metrics(m),
+                ),
+        );
+
+        page = page.push(
+            w::PreferencesGroup::new()
+                .title("Advanced")
+                .header_suffix(cmp::flat_button(text("Reset")).on_press(Message::Noop))
+                .metrics(m)
+                .push(
+                    w::TreeRow::new("Notifications")
+                        .metrics(m)
+                        .expanded(self.expanded)
+                        .on_toggle(Message::Expanded)
+                        .subtitle("Expand for details")
+                        .push(
+                            w::SwitchRow::new("Sounds", self.notifications, Message::Notifications)
+                                .metrics(m),
+                        )
+                        .push(
+                            w::ActionRow::new("Do Not Disturb")
+                                .subtitle("Until tomorrow")
+                                .metrics(m),
+                        ),
+                )
+                .push(
+                    w::ButtonRow::new("Sign Out")
+                        .role(Role::Destructive)
+                        .on_activate(Message::OpenDialog(Dialog::Alert)),
+                ),
+        );
+        page.into()
+    }
+}
+
+/// Runs the gallery (the `gallery` binary, and `theme-manager gallery`).
+pub fn run() -> iced::Result {
+    // Shared desktop behavior: ~/.config/iced-adaptive-design/desktop.conf (+ system files).
+    const DEFAULT_BASE_THEME: &str = include_str!("../../themes/libadwaita.conf");
+    let mut cfg = iad::config::Config::load_with_base_theme(DEFAULT_BASE_THEME);
+    if std::env::var_os("GALLERY_OPT_OUT").is_some() {
+        // Opting out of desktop settings is highly discouraged; shown here only to demonstrate
+        // that it is allowed, explicit and reported (a notice is printed on install).
+        cfg = cfg.opt_out(|o| {
+            o.mobile_sidebar(w::CollapsedSidebar::ParentPage);
+        });
+    }
+    iad::config::install(cfg);
+    // `GALLERY_SCHEME=light|dark` starts in that scheme (the theme manager sets it); anything else
+    // follows the desktop. The header's toggle still changes it.
+    match std::env::var("GALLERY_SCHEME").ok().as_deref() {
+        Some("light") => {
+            iad::utils::set_scheme_override(Some(Scheme::Light));
+        }
+        Some("dark") => {
+            iad::utils::set_scheme_override(Some(Scheme::Dark));
+        }
+        _ => {}
+    }
+    // ICED_ADAPTIVE_DESIGN_HOLD_ANIMATIONS=0.5 holds every animation half way (see `iad::dev`).
+    iad::dev::Switches::from_env().apply();
+    // A daemon, so the preferences dialog can be a window of its own.
+    iced::daemon(Gallery::new, Gallery::update, Gallery::view)
+        .title(Gallery::title)
+        .theme(Gallery::theme)
+        .subscription(Gallery::subscription)
+        .settings(iced::Settings {
+            default_text_size: 14.67.into(),
+            antialiasing: true,
+            ..Default::default()
+        })
+        .run()
+}
+
+#[cfg(test)]
+mod flash_tests;

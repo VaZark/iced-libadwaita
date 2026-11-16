@@ -115,7 +115,11 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for SlidePages<'a, M> {
                 state.from = from;
                 state.forward = forward;
                 state.current = self.current;
-                state.progress = Progress::new(if Trigger::PagePush.animated() { 0.0 } else { 1.0 });
+                state.progress = Progress::new(if Trigger::PagePush.animated() {
+                    0.0
+                } else {
+                    1.0
+                });
                 shell.invalidate_layout();
                 shell.request_redraw();
             }
@@ -148,7 +152,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for SlidePages<'a, M> {
                     viewport,
                 );
             }
-        } else if matches!(event, Event::Mouse(_) | Event::Touch(_)) && cursor.is_over(layout.bounds()) {
+        } else if matches!(event, Event::Mouse(_) | Event::Touch(_))
+            && cursor.is_over(layout.bounds())
+        {
             shell.capture_event(); // no clicks while a page slides
         }
     }
@@ -181,7 +187,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for SlidePages<'a, M> {
     ) {
         let current = tree.state.downcast_ref::<State>().current;
         if let Some(l) = layout.children().nth(current) {
-            self.pages[current].as_widget_mut().operate(&mut tree.children[current], l, renderer, operation);
+            self.pages[current].as_widget_mut().operate(
+                &mut tree.children[current],
+                l,
+                renderer,
+                operation,
+            );
         }
     }
     fn draw(
@@ -199,7 +210,15 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for SlidePages<'a, M> {
         let draw_page = |r: &mut iced::Renderer, page: usize, dx: f32| {
             if let Some(l) = layout.children().nth(page) {
                 draw_translated(r, bounds, viewport, Vector::new(dx, 0.0), |r, view| {
-                    self.pages[page].as_widget().draw(&tree.children[page], r, theme, style, l, cursor, view);
+                    self.pages[page].as_widget().draw(
+                        &tree.children[page],
+                        r,
+                        theme,
+                        style,
+                        l,
+                        cursor,
+                        view,
+                    );
                 });
             }
         };

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Theme Manager
+Comment=Choose, edit and install the global theme of iced-adaptive-design apps
+Exec=theme-manager %f
+Icon=org.iad.ThemeEditor
+Terminal=false
+Categories=Settings;DesktopSettings;GTK;
+Keywords=theme;appearance;style;colors;
+StartupNotify=true

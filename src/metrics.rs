@@ -89,6 +89,9 @@ pub struct Metrics {
     pub scrollbar_slider_width: f32,
     /// Gap between the slider and the edge.
     pub scrollbar_margin: f32,
+    /// Room kept between content and the scrollbar beside it while content overflows, so text
+    /// never runs under the bar. Every `scrolled_window` uses it.
+    pub scrollbar_gutter: f32,
     /// `GtkProgressBar` trough thickness.
     pub progress_height: f32,
 
@@ -183,6 +186,7 @@ impl Default for Metrics {
             scrollbar_width: 12.0,
             scrollbar_slider_width: 12.0,
             scrollbar_margin: 0.0,
+            scrollbar_gutter: 4.0,
             progress_height: 10.0,
 
             row_padding: Padding::from([4.0, 8.0]),

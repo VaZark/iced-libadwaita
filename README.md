@@ -48,7 +48,7 @@ Apps should bundle at least one theme `.conf` file to provide a consistent appea
 - API: run `cargo xtask man` to build the man pages in `target/man/`. `man -l target/man/iad.7` (overview), `man -l target/man/iad-dock.3` (one component), `man -l target/man/iad-desktop.conf.5` (config).
 - Usage: [docs/lib/](docs/lib/README.md).
 - Gallery: `cargo run -p iced-adaptive-design-gallery`.
-- [Theme editor](theme-editor/README.md): `cargo run -p iced-adaptive-design-theme-editor -- [FILE]`. Section-first editing, a theme picker, and external gallery/toy launches with independent launch appearance.
+- [Theme manager](theme-manager/README.md): `cargo run -p iced-adaptive-design-theme-manager -- [FILE]`. Installable app: bundled themes, the global theme, section-first token editing; `theme-manager gallery` runs the gallery.
 - [Theme toys](theme-toys/README.md): `cargo run -p iced-adaptive-design-theme-toys -- <win95|winxp|win7|mate>`. Four reference targets: Windows Classic/95, XP, Windows 7 and modern MATE; `gnome2` is a compatibility alias only. Each toy has a validated opt-out base; `IAD_THEME` supplies an optional overlay.
 - Public [text-trigger and context menus](docs/lib/windows-and-menus.md#menus), and [typed child presentation](docs/lib/child-props.md#contract-and-usage).
 

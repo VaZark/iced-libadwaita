@@ -2,7 +2,7 @@
 
 Use `iad::Theme` as the application theme. Stock iced widgets are restyled too. Build it from the desktop config unless you have a reason not to: `Theme::from_config(&config::current())`.
 
-Theme files and validation are described in [app theme config](theme-config.md). The [four reference toys](../../theme-toys/README.md#theme-resolution) (`win95`, `winxp`, `win7`, `mate`; `gnome2` compatibility alias only) use independent opt-out bases with optional editor overlays, not the installed desktop theme. The [theme editor](../../theme-editor/README.md) launches the gallery or toys externally; launch appearance is independent of the scheme being edited.
+Theme files and validation are described in [app theme config](theme-config.md). The [four reference toys](../../theme-toys/README.md#theme-resolution) (`win95`, `winxp`, `win7`, `mate`; `gnome2` compatibility alias only) use independent opt-out bases with optional editor overlays, not the installed desktop theme. The [theme manager](../../theme-manager/README.md) edits theme files, ships the default set and chooses the global theme (`default.conf`); it starts the gallery with the current values but does not launch the toys.
 
 ## Layers
 

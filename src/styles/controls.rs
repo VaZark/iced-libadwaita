@@ -104,11 +104,7 @@ pub mod text_editor {
                 } else {
                     iced::Color::TRANSPARENT
                 },
-                width: if focused {
-                    theme.focus_width()
-                } else {
-                    0.0
-                },
+                width: if focused { theme.focus_width() } else { 0.0 },
                 radius: theme.metrics.radius_m.into(),
             },
             placeholder: s.dim(),

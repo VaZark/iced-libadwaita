@@ -13,6 +13,9 @@ iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-s
 image = { version = "0.25", default-features = false, features = ["png"] }
 tokio = { version = "1", features = ["time"] }
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "gallery"
 path = "src/main.rs"
