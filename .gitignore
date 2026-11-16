@@ -6,3 +6,5 @@ Cargo.lock.bak
 /AGENTS_TODO_FORMAT.md
 .agents/
 .claude/
+/build-dir
+/.flatpak-builder

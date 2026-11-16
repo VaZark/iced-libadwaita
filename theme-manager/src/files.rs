@@ -50,7 +50,7 @@ pub(crate) struct Preset {
     pub(crate) path: PathBuf,
     /// Where the entry points, when the file is a symlink.
     pub(crate) target: Option<PathBuf>,
-    /// `default.conf` points at this file: the one apps use when `IAD_THEME` is unset.
+    /// `default.conf` points at this file: the global theme, the one apps use when `IAD_THEME` is unset.
     pub(crate) is_default: bool,
 }
 
@@ -179,99 +179,122 @@ pub(crate) fn is_default_name(p: &std::path::Path) -> bool {
     p.file_name().is_some_and(|n| n == "default.conf")
 }
 
-/// The file `default.conf` in `dir` points at.
+// DECISION (user, 2026-11-16): every theme is a file of its own, always, and `default.conf` in the
+// standard theme directory is always a symlink to the current global theme's file. "Set as global
+// theme" is the one way to share a theme: it points that symlink at the theme (copying a bundled
+// theme into the directory first). A regular file that is in the way is kept as a theme of its own,
+// never overwritten. There is no registering by symlink, and no unregistering.
+
+/// The file `default.conf` in `dir` leads to (through the symlink), if there is one.
 pub(crate) fn default_target(dir: &std::path::Path) -> Option<PathBuf> {
     let link = dir.join("default.conf");
-    (std::fs::symlink_metadata(&link).is_ok())
-        .then(|| std::fs::canonicalize(link).ok())
-        .flatten()
+    std::fs::symlink_metadata(&link)
+        .ok()
+        .and_then(|_| std::fs::canonicalize(link).ok())
 }
 
-/// The symlinks in `dir` (other than `default.conf`) that point at `file`.
-pub(crate) fn links_to(dir: &std::path::Path, file: &std::path::Path) -> Vec<PathBuf> {
-    let target = canon(file);
-    scan_folder(dir)
-        .into_iter()
-        .filter(|p| is_link(p) && !is_default_name(p) && canon(p) == target)
-        .collect()
+/// A name for `text`'s theme to keep a file under in `dir`: its `[theme] name` as a file name, else
+/// `fallback`, made unique so no existing file is overwritten.
+fn free_name(dir: &std::path::Path, text: &str, fallback: &str) -> PathBuf {
+    let name = crate::bundled::name_of(text, fallback);
+    let stem: String = name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let stem = if stem.trim_matches('_').is_empty() {
+        fallback.to_string()
+    } else {
+        stem
+    };
+    let mut candidate = dir.join(format!("{stem}.conf"));
+    let mut n = 1;
+    while std::fs::symlink_metadata(&candidate).is_ok() {
+        n += 1;
+        candidate = dir.join(format!("{stem}-{n}.conf"));
+    }
+    candidate
 }
 
-/// Whether apps see `file`: it sits in `dir` itself or a symlink there points at it.
-pub(crate) fn is_registered(dir: &std::path::Path, file: &std::path::Path) -> bool {
-    let inside = canon(file).parent() == Some(canon(dir).as_path()) && !is_default_name(file);
-    inside || !links_to(dir, file).is_empty()
+/// What setting the global theme did.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Linked {
+    /// `default.conf`.
+    pub(crate) link: PathBuf,
+    /// A regular `default.conf` that was in the way, kept as a theme of its own at this path.
+    pub(crate) kept: Option<PathBuf>,
 }
 
-/// Registers `file` for every app: a symlink `<stem>.conf` in `dir` pointing at it. An old symlink
-/// of that name is replaced; a regular file of that name is never overwritten.
-pub(crate) fn register(dir: &std::path::Path, file: &std::path::Path) -> Result<PathBuf, String> {
-    if is_default_name(file) {
-        return Err(
-            "default.conf is reserved; choose another file name to register a theme".into(),
-        );
-    }
-    if !file.is_file() {
-        return Err(format!("{} is not a theme file", file.display()));
-    }
-    if is_registered(dir, file) {
-        return Err("already registered".into());
-    }
-    let stem = file
-        .file_stem()
-        .ok_or_else(|| "the file has no name".to_string())?
-        .to_string_lossy()
-        .into_owned();
-    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let link = dir.join(format!("{stem}.conf"));
-    if std::fs::symlink_metadata(&link).is_ok() {
-        if !is_link(&link) {
-            return Err(format!(
-                "{} is a regular file: not overwritten",
-                link.display()
-            ));
-        }
-        std::fs::remove_file(&link).map_err(|e| format!("{}: {e}", link.display()))?;
-    }
-    std::os::unix::fs::symlink(canon(file), &link)
-        .map_err(|e| format!("{}: {e}", link.display()))?;
-    Ok(link)
-}
-
-/// Removes the symlinks in `dir` that register `file`; never a regular file.
-pub(crate) fn unregister(dir: &std::path::Path, file: &std::path::Path) -> Result<usize, String> {
-    let links = links_to(dir, file);
-    if links.is_empty() {
-        return Err("not registered by a symlink".into());
-    }
-    for l in &links {
-        std::fs::remove_file(l).map_err(|e| format!("{}: {e}", l.display()))?;
-    }
-    Ok(links.len())
-}
-
-/// Makes `file` the one apps use without `IAD_THEME`: `default.conf` in `dir` points at it.
-pub(crate) fn set_default(
-    dir: &std::path::Path,
-    file: &std::path::Path,
-) -> Result<PathBuf, String> {
+/// Points `default.conf` in `dir` at `file`: it creates or replaces the symlink, atomically (a
+/// temporary symlink is renamed over it), so an app never finds it missing. A regular file called
+/// `default.conf` is not overwritten: it is renamed to a theme file of its own first, and when it
+/// is `file` itself the link leads to that new name (`Linked::kept`).
+pub(crate) fn set_default(dir: &std::path::Path, file: &std::path::Path) -> Result<Linked, String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let link = dir.join("default.conf");
-    if std::fs::symlink_metadata(&link).is_ok() {
-        if !is_link(&link) {
-            return Err(format!(
-                "{} is a regular file: not overwritten",
-                link.display()
-            ));
+    let mut target = canon(file);
+    let mut kept = None;
+    if std::fs::symlink_metadata(&link).is_ok_and(|m| !m.file_type().is_symlink()) {
+        let is_file = target == canon(&link);
+        let text = std::fs::read_to_string(&link).unwrap_or_default();
+        let new = free_name(dir, &text, "previous-default");
+        std::fs::rename(&link, &new).map_err(|e| format!("{}: {e}", link.display()))?;
+        if is_file {
+            target = canon(&new);
         }
-        std::fs::remove_file(&link).map_err(|e| format!("{}: {e}", link.display()))?;
+        kept = Some(new);
     }
-    std::os::unix::fs::symlink(canon(file), &link)
-        .map_err(|e| format!("{}: {e}", link.display()))?;
-    Ok(link)
+    let temp = dir.join(format!(".default.conf.{}.tmp", std::process::id()));
+    let _ = std::fs::remove_file(&temp);
+    std::os::unix::fs::symlink(&target, &temp).map_err(|e| format!("{}: {e}", temp.display()))?;
+    std::fs::rename(&temp, &link).map_err(|e| {
+        let _ = std::fs::remove_file(&temp);
+        format!("{}: {e}", link.display())
+    })?;
+    Ok(Linked { link, kept })
 }
 
-/// The theme files available, each once: the registered ones (the files and symlinks in the data
-/// dirs `dirs`), then those in the folders the user added, then the recently opened ones.
+/// Makes the bundled theme `key` the global theme: its text is installed as its own file,
+/// `<key>.conf` in `dir` (an installed file of that name with other text is the user's and is
+/// never overwritten), and `default.conf` points at it.
+pub(crate) fn set_global_bundled(dir: &std::path::Path, key: &str) -> Result<Linked, String> {
+    let text = crate::bundled::text(key).ok_or_else(|| format!("no bundled theme {key}"))?;
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let file = dir.join(format!("{key}.conf"));
+    match std::fs::read_to_string(&file) {
+        Ok(existing) if existing == text => {}
+        Ok(_) => {
+            return Err(format!(
+                "{} already exists with other values: open it to use it, or remove it first",
+                file.display()
+            ));
+        }
+        Err(_) => std::fs::write(&file, text).map_err(|e| format!("{}: {e}", file.display()))?,
+    }
+    set_default(dir, &file)
+}
+
+/// Removes the global theme: the `default.conf` symlink in `dir` (never the theme it leads to).
+/// Apps then show the bare toolkit look, or their own base theme.
+pub(crate) fn clear_global(dir: &std::path::Path) -> Result<(), String> {
+    let link = dir.join("default.conf");
+    match std::fs::symlink_metadata(&link) {
+        Err(_) => Err("there is no global theme".into()),
+        Ok(m) if m.file_type().is_symlink() => {
+            std::fs::remove_file(&link).map_err(|e| format!("{}: {e}", link.display()))
+        }
+        Ok(_) => Err(format!("{} is a regular file: not removed", link.display())),
+    }
+}
+
+/// The themes available, each once: the installed ones (the files in the data dirs `dirs`, and
+/// the file `default.conf` leads to, marked), the bundled ones not installed unchanged, those in
+/// the folders the user added, then the recently opened ones.
 pub(crate) fn list_presets(
     dirs: &[PathBuf],
     folders: &[PathBuf],
@@ -303,14 +326,14 @@ pub(crate) fn list_presets(
     add(
         &mut out,
         &mut seen,
-        "Registered",
+        "Installed",
         dirs.iter()
             .flat_map(|d| scan_folder(d))
             .filter(|p| !is_default_name(p))
             .collect(),
     );
     if let Some(d) = &default {
-        add(&mut out, &mut seen, "Registered", vec![d.clone()]);
+        add(&mut out, &mut seen, "Installed", vec![d.clone()]);
     }
     // A bundled theme already installed unchanged is listed once, as the installed file.
     let installed: Vec<String> = out
@@ -340,44 +363,4 @@ pub(crate) fn list_presets(
         recent.iter().filter(|p| p.is_file()).cloned().collect(),
     );
     out
-}
-
-/// What the registering buttons do.
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum Registry {
-    Register,
-    Unregister,
-}
-
-/// Makes the bundled theme `key` the global theme: its text is installed as `<key>.conf` in `dir`
-/// (an installed file of that name with other text is the user's and is never overwritten), and
-/// `default.conf` points at it.
-pub(crate) fn set_global_bundled(dir: &std::path::Path, key: &str) -> Result<PathBuf, String> {
-    let text = crate::bundled::text(key).ok_or_else(|| format!("no bundled theme {key}"))?;
-    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let file = dir.join(format!("{key}.conf"));
-    match std::fs::read_to_string(&file) {
-        Ok(existing) if existing == text => {}
-        Ok(_) => {
-            return Err(format!(
-                "{} already exists with other values: open it to use it, or remove it first",
-                file.display()
-            ));
-        }
-        Err(_) => std::fs::write(&file, text).map_err(|e| format!("{}: {e}", file.display()))?,
-    }
-    set_default(dir, &file)
-}
-
-/// Removes the global theme: `default.conf` in `dir`, when it is a symlink. Apps then show the
-/// bare toolkit look (or their own base theme).
-pub(crate) fn clear_global(dir: &std::path::Path) -> Result<(), String> {
-    let link = dir.join("default.conf");
-    if std::fs::symlink_metadata(&link).is_err() {
-        return Err("there is no global theme".into());
-    }
-    if !is_link(&link) {
-        return Err(format!("{} is a regular file: not removed", link.display()));
-    }
-    std::fs::remove_file(&link).map_err(|e| format!("{}: {e}", link.display()))
 }

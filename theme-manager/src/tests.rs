@@ -644,145 +644,6 @@ fn theme_picker_keeps_unsaved_confirmation_accessible() {
     std::fs::remove_dir_all(d).unwrap();
 }
 
-#[test]
-fn register_makes_a_symlink_and_replaces_an_old_one() {
-    let d = temp_dir("reg");
-    let (data, other) = (d.join("data"), d.join("else"));
-    std::fs::create_dir_all(&other).unwrap();
-    let a = other.join("mine.conf");
-    let b = other.join("sub");
-    std::fs::create_dir_all(&b).unwrap();
-    let b = b.join("mine.conf");
-    std::fs::write(&a, "").unwrap();
-    std::fs::write(&b, "").unwrap();
-    assert!(!is_registered(&data, &a));
-    let link = register(&data, &a).unwrap();
-    assert_eq!(link, data.join("mine.conf"));
-    assert!(is_link(&link) && canon(&link) == canon(&a));
-    assert!(is_registered(&data, &a));
-    assert_eq!(register(&data, &a), Err("already registered".to_string()));
-    // Another file with the same name replaces the old symlink.
-    register(&data, &b).unwrap();
-    assert_eq!(canon(&data.join("mine.conf")), canon(&b));
-    let _ = std::fs::remove_dir_all(d);
-}
-
-#[test]
-fn register_never_overwrites_a_regular_file() {
-    let d = temp_dir("regfile");
-    let data = d.join("data");
-    std::fs::create_dir_all(&data).unwrap();
-    std::fs::write(data.join("mine.conf"), "keep me").unwrap();
-    let file = d.join("mine.conf");
-    std::fs::write(&file, "").unwrap();
-    let err = register(&data, &file).unwrap_err();
-    assert!(err.contains("regular file"), "{err}");
-    assert_eq!(read(&data.join("mine.conf")), "keep me");
-    let _ = std::fs::remove_dir_all(d);
-}
-
-#[test]
-fn unregister_removes_only_symlinks() {
-    let d = temp_dir("unreg");
-    let data = d.join("data");
-    std::fs::create_dir_all(&data).unwrap();
-    let file = d.join("mine.conf");
-    std::fs::write(&file, "x").unwrap();
-    register(&data, &file).unwrap();
-    assert_eq!(unregister(&data, &file), Ok(1));
-    assert!(!data.join("mine.conf").exists() && file.exists());
-    assert!(unregister(&data, &file).is_err());
-    // A regular file inside the data dir is registered but has no symlink to remove.
-    let inside = data.join("own.conf");
-    std::fs::write(&inside, "x").unwrap();
-    assert!(is_registered(&data, &inside));
-    assert!(unregister(&data, &inside).is_err());
-    assert!(inside.exists());
-    let _ = std::fs::remove_dir_all(d);
-}
-
-#[test]
-fn set_as_default_points_default_conf_at_the_file_and_the_list_tags_it() {
-    let d = temp_dir("default");
-    let data = d.join("data");
-    std::fs::create_dir_all(&data).unwrap();
-    let (a, b) = (d.join("a.conf"), d.join("b.conf"));
-    std::fs::write(&a, "[theme]\nname=Alpha\nkey=a\n").unwrap();
-    std::fs::write(&b, "[theme]\nname=Beta\nkey=b\n").unwrap();
-    register(&data, &a).unwrap();
-    register(&data, &b).unwrap();
-    set_default(&data, &a).unwrap();
-    assert_eq!(default_target(&data), Some(canon(&a)));
-    let list = file_presets(&[data.clone()], &[], &[]);
-    assert_eq!(list.len(), 2, "default.conf is not a third entry");
-    let tagged: Vec<_> = list
-        .iter()
-        .filter(|p| p.is_default)
-        .map(|p| p.name.as_str())
-        .collect();
-    assert_eq!(tagged, ["Alpha"]);
-    // Replaced by another file.
-    set_default(&data, &b).unwrap();
-    let list = file_presets(&[data.clone()], &[], &[]);
-    assert_eq!(
-        list.iter()
-            .filter(|p| p.is_default)
-            .map(|p| p.name.as_str())
-            .collect::<Vec<_>>(),
-        ["Beta"]
-    );
-    // A regular default.conf is not overwritten.
-    let other = temp_dir("default2");
-    std::fs::write(other.join("default.conf"), "mine").unwrap();
-    assert!(
-        set_default(&other, &a)
-            .unwrap_err()
-            .contains("regular file")
-    );
-    assert_eq!(read(&other.join("default.conf")), "mine");
-    let _ = std::fs::remove_dir_all(d);
-    let _ = std::fs::remove_dir_all(other);
-}
-
-#[test]
-fn a_default_that_is_not_registered_still_shows_up_tagged() {
-    let d = temp_dir("loosedefault");
-    let data = d.join("data");
-    std::fs::create_dir_all(&data).unwrap();
-    let f = d.join("far.conf");
-    std::fs::write(&f, "").unwrap();
-    set_default(&data, &f).unwrap();
-    let list = file_presets(&[data], &[], &[]);
-    assert_eq!(list.len(), 1);
-    assert!(list[0].is_default && list[0].group == "Registered");
-    let _ = std::fs::remove_dir_all(d);
-}
-
-#[test]
-fn the_registry_buttons_report_in_the_status_line_and_rescan() {
-    let d = temp_dir("buttons");
-    let data = d.join("data");
-    let f = d.join("t.conf");
-    std::fs::write(&f, "[theme]\nname=T\nkey=t\n").unwrap();
-    let mut e = editor();
-    e.theme_dirs = vec![data.clone()];
-    let _ = e.update(Msg::Register);
-    assert!(e.status.contains("Save the theme"), "no file yet");
-    e.load(f.clone());
-    let _ = e.update(Msg::Register);
-    assert!(e.status.starts_with("Registered"), "{}", e.status);
-    assert!(
-        e.presets
-            .iter()
-            .any(|p| p.group == "Registered" && p.name == "T")
-    );
-    let _ = e.update(Msg::SetGlobal);
-    assert!(e.presets.iter().any(|p| p.is_default));
-    let _ = e.update(Msg::Unregister);
-    assert!(!is_registered(&data, &f));
-    let _ = std::fs::remove_dir_all(d);
-}
-
 // ------------------------------------------------------------- list
 
 #[test]
@@ -803,50 +664,6 @@ fn a_clean_environment_lists_only_the_bundled_themes() {
             "synthwave",
             "terminal"
         ]
-    );
-    let _ = std::fs::remove_dir_all(d);
-}
-
-#[test]
-fn the_list_has_the_registered_files_the_folders_and_the_recent_ones() {
-    let d = temp_dir("list");
-    let data = d.join("data");
-    let folder = d.join("folder");
-    std::fs::create_dir_all(&data).unwrap();
-    std::fs::create_dir_all(&folder).unwrap();
-    std::fs::write(folder.join("mine.conf"), "[theme]\nname=Mine\nkey=mine\n").unwrap();
-    std::fs::write(folder.join("plain.conf"), "").unwrap();
-    std::fs::write(data.join("own.conf"), "[theme]\nname=Own\nkey=own\n").unwrap();
-    let far = temp_dir("recent").join("far.conf");
-    std::fs::write(&far, "").unwrap();
-    register(&data, &folder.join("plain.conf")).unwrap();
-    let list = file_presets(
-        &[data.clone()],
-        &[folder.clone()],
-        &[far.clone(), folder.join("mine.conf"), d.join("gone.conf")],
-    );
-    let group = |n: &str| list.iter().find(|p| p.name == n).map(|p| p.group);
-    assert_eq!(group("Own"), Some("Registered"));
-    assert_eq!(
-        group("plain"),
-        Some("Registered"),
-        "registered, so not repeated under Folders"
-    );
-    assert_eq!(group("Mine"), Some("Folders"));
-    assert_eq!(group("far"), Some("Recent"));
-    assert_eq!(list.iter().filter(|p| p.name == "Mine").count(), 1);
-    assert!(
-        list.iter().all(|p| p.path.is_file()),
-        "only real files, none missing"
-    );
-    // The symlink entry shows where it points.
-    let plain = list.iter().find(|p| p.name == "plain").unwrap();
-    assert_eq!(plain.target, Some(canon(&folder.join("plain.conf"))));
-    assert_eq!(list.iter().find(|p| p.name == "Own").unwrap().target, None);
-    // No embedded, shipped or repository group exists.
-    assert!(
-        list.iter()
-            .all(|p| ["Registered", "Folders", "Recent"].contains(&p.group))
     );
     let _ = std::fs::remove_dir_all(d);
 }
@@ -978,75 +795,7 @@ fn saving_remembers_the_file_as_last_and_recent() {
     let _ = std::fs::remove_dir_all(d);
 }
 
-// ---------------------------------------------------------- save as + register
-
-#[test]
-fn save_as_writes_a_new_file_and_registers_it() {
-    let d = temp_dir("saveas");
-    let data = d.join("data");
-    let file = d.join("elsewhere").join("mine.conf");
-    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-    let mut e = editor();
-    e.theme_dirs = vec![data.clone()];
-    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
-    let _ = e.update(Msg::SavedAs(Some(file.clone())));
-    assert!(
-        read(&file).contains("radius-m=7"),
-        "the new file is written"
-    );
-    assert!(
-        !e.dirty() && e.path == Some(file.clone()),
-        "the editor edits the new file"
-    );
-    let link = data.join("mine.conf");
-    assert!(
-        is_link(&link) && canon(&link) == canon(&file),
-        "registered by a symlink"
-    );
-    assert!(
-        e.status.starts_with("Saved and registered as"),
-        "{}",
-        e.status
-    );
-    assert!(
-        e.presets.iter().any(|p| p.path == link),
-        "the list shows it"
-    );
-    let _ = std::fs::remove_dir_all(d);
-}
-
-#[test]
-fn save_as_inside_the_registry_needs_no_symlink() {
-    let d = temp_dir("saveas-in");
-    let data = d.join("data");
-    std::fs::create_dir_all(&data).unwrap();
-    let file = data.join("inside.conf");
-    let mut e = editor();
-    e.theme_dirs = vec![data.clone()];
-    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
-    let _ = e.update(Msg::SavedAs(Some(file.clone())));
-    assert!(!is_link(&file) && file.is_file());
-    assert!(e.status.contains("registered already"), "{}", e.status);
-    let _ = std::fs::remove_dir_all(d);
-}
-
-#[test]
-fn save_as_does_not_overwrite_a_regular_file_in_the_registry_and_says_so() {
-    let d = temp_dir("saveas-clash");
-    let data = d.join("data");
-    std::fs::create_dir_all(&data).unwrap();
-    std::fs::write(data.join("mine.conf"), "[metrics]\nradius-m=1\n").unwrap();
-    let file = d.join("mine.conf");
-    let mut e = editor();
-    e.theme_dirs = vec![data.clone()];
-    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
-    let _ = e.update(Msg::SavedAs(Some(file.clone())));
-    assert!(file.is_file(), "the file is saved anyway");
-    assert_eq!(read(&data.join("mine.conf")), "[metrics]\nradius-m=1\n");
-    assert!(e.status.contains("could not register"), "{}", e.status);
-    assert!(e.toast.as_ref().is_some_and(|t| t.error));
-    let _ = std::fs::remove_dir_all(d);
-}
+// ---------------------------------------------------------- save as
 
 #[test]
 fn save_only_updates_the_file_and_registers_nothing() {
@@ -1334,81 +1083,42 @@ fn opening_a_bundled_theme_gives_an_unsaved_copy_that_never_writes_the_bundle() 
 }
 
 #[test]
-fn a_bundled_theme_becomes_the_global_theme_through_a_copy_and_a_default_link() {
-    let d = temp_dir("bundled-global");
-    let data = d.join("data");
-    let mut e = editor();
-    e.theme_dirs = vec![data.clone()];
-    let _ = e.update(Msg::PickBundled("solarized"));
-    assert!(!e.is_global());
-    let _ = e.update(Msg::SetGlobal);
-    assert!(e.is_global(), "{}", e.status);
-    assert!(is_link(&data.join("default.conf")));
-    assert_eq!(
-        read(&data.join("solarized.conf")),
-        crate::bundled::text("solarized").unwrap()
-    );
-    assert_eq!(
-        canon(&data.join("default.conf")),
-        canon(&data.join("solarized.conf"))
-    );
-    // Installed unchanged, it is listed once: as the installed file.
-    let list = list_presets(&[data.clone()], &[], &[]);
-    assert!(!list.iter().any(|p| p.bundled == Some("solarized")));
-    assert!(list.iter().any(|p| p.name == "Solarized" && p.is_default));
-    // Removing the global theme removes only the link.
-    let _ = e.update(Msg::ClearGlobal);
-    assert!(!e.is_global() && !data.join("default.conf").exists());
-    assert!(data.join("solarized.conf").is_file());
-    let _ = std::fs::remove_dir_all(d);
-}
-
-#[test]
-fn an_installed_file_with_other_values_is_never_overwritten_by_a_bundled_theme() {
-    let d = temp_dir("bundled-keep");
-    let data = d.join("data");
-    std::fs::create_dir_all(&data).unwrap();
-    std::fs::write(data.join("terminal.conf"), "[metrics]\nradius-m=1\n").unwrap();
-    let err = set_global_bundled(&data, "terminal").unwrap_err();
-    assert!(err.contains("already exists"), "{err}");
-    assert_eq!(read(&data.join("terminal.conf")), "[metrics]\nradius-m=1\n");
-    assert!(!data.join("default.conf").exists());
-    assert!(set_global_bundled(&data, "nope").is_err());
-    let _ = std::fs::remove_dir_all(d);
-}
-
-#[test]
-fn clearing_the_global_theme_refuses_a_regular_file_and_a_missing_one() {
-    let d = temp_dir("clear-global");
-    assert!(clear_global(&d).is_err());
-    std::fs::write(d.join("default.conf"), "").unwrap();
-    assert!(clear_global(&d).unwrap_err().contains("regular file"));
-    assert!(d.join("default.conf").is_file());
-    let _ = std::fs::remove_dir_all(d);
-}
-
-#[test]
-fn setting_the_global_theme_needs_saved_values() {
+fn the_global_theme_saves_first_instead_of_refusing() {
     let d = temp_dir("global-dirty");
     let data = d.join("data");
     let f = d.join("t.conf");
     std::fs::write(&f, "[theme]\nname=T\nkey=t\n").unwrap();
     let mut e = editor();
     e.theme_dirs = vec![data.clone()];
+    // Untitled: Save as opens, and nothing is linked yet.
+    assert!(e.update(Msg::SetGlobal).units() > 0, "Save as opens");
+    assert_eq!(e.after_save, Some(AfterSave::Global));
+    assert!(!data.join("default.conf").exists());
+    // Cancelling the dialog forgets the plan.
+    let _ = e.update(Msg::SavedAs(None));
+    assert_eq!(e.after_save, None);
+    // Choosing a file writes it and makes it global.
     let _ = e.update(Msg::SetGlobal);
-    assert!(
-        e.status.contains("Save the theme"),
-        "untitled: {}",
-        e.status
-    );
+    let chosen = d.join("mine");
+    let _ = e.update(Msg::SavedAs(Some(chosen.clone())));
+    let chosen = chosen.with_extension("conf");
+    assert!(chosen.is_file() && e.path.as_ref() == Some(&chosen));
+    assert!(e.is_global(), "{}", e.status);
+    assert_eq!(default_target(&data), Some(canon(&chosen)));
+    assert_eq!(e.after_save, None);
+    // A file with unsaved changes is saved, then linked.
     e.load(f.clone());
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    assert!(e.dirty());
     let _ = e.update(Msg::SetGlobal);
-    assert!(e.status.contains("Save the changes"), "{}", e.status);
-    assert!(!data.join("default.conf").exists());
-    assert!(e.save_to(f.clone()));
-    let _ = e.update(Msg::SetGlobal);
-    assert!(e.is_global() && canon(&data.join("default.conf")) == canon(&f));
+    assert!(!e.dirty() && e.is_global(), "{}", e.status);
+    assert!(read(&f).contains("radius-m=7"));
+    assert_eq!(default_target(&data), Some(canon(&f)));
+    // A bundled theme that was edited has no file either: Save as first.
+    let _ = e.update(Msg::PickBundled("terminal"));
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "9".into()));
+    assert!(e.update(Msg::SetGlobal).units() > 0);
+    assert_eq!(e.after_save, Some(AfterSave::Global));
     let _ = std::fs::remove_dir_all(d);
 }
 
@@ -1644,4 +1354,201 @@ fn only_the_blocks_near_the_view_are_built_and_the_page_keeps_its_height() {
     let blocks = e.blocks();
     assert!(!blocks.is_empty());
     assert_eq!(e.built(&blocks, gap), 0..blocks.len());
+}
+
+// ----------------------------------------- every theme is a file; default.conf is a symlink
+
+#[test]
+fn setting_the_global_theme_points_default_conf_at_the_file_and_replaces_it_atomically() {
+    let d = temp_dir("link-global");
+    let (data, other) = (d.join("data"), d.join("else"));
+    std::fs::create_dir_all(&other).unwrap();
+    let (a, b) = (other.join("a.conf"), other.join("b.conf"));
+    std::fs::write(&a, "[theme]\nname=A\n").unwrap();
+    std::fs::write(&b, "[theme]\nname=B\n").unwrap();
+    assert_eq!(default_target(&data), None);
+    let linked = set_default(&data, &a).unwrap();
+    assert_eq!(
+        linked,
+        Linked {
+            link: data.join("default.conf"),
+            kept: None
+        }
+    );
+    assert!(is_link(&linked.link) && default_target(&data) == Some(canon(&a)));
+    set_default(&data, &b).unwrap();
+    assert_eq!(default_target(&data), Some(canon(&b)));
+    // Both themes are still their own files, and nothing else was left in the directory.
+    assert!(a.is_file() && b.is_file());
+    assert_eq!(std::fs::read_dir(&data).unwrap().count(), 1);
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn a_regular_default_conf_is_kept_as_a_theme_of_its_own_not_overwritten() {
+    let d = temp_dir("keep-default");
+    let data = d.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("default.conf"), "[theme]\nname=Old Look\n").unwrap();
+    let a = d.join("a.conf");
+    std::fs::write(&a, "[theme]\nname=A\n").unwrap();
+    let linked = set_default(&data, &a).unwrap();
+    assert!(is_link(&data.join("default.conf")));
+    assert_eq!(default_target(&data), Some(canon(&a)));
+    let kept = linked.kept.unwrap();
+    assert_eq!(kept, data.join("Old_Look.conf"));
+    assert_eq!(read(&kept), "[theme]\nname=Old Look\n");
+    // Again: another regular file in the way gets another name.
+    std::fs::remove_file(data.join("default.conf")).unwrap();
+    std::fs::write(data.join("default.conf"), "[theme]\nname=Old Look\n").unwrap();
+    assert_eq!(
+        set_default(&data, &a).unwrap().kept,
+        Some(data.join("Old_Look-2.conf"))
+    );
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn the_open_regular_default_conf_moves_to_its_own_name_and_becomes_the_target() {
+    let d = temp_dir("open-default");
+    let data = d.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    let file = data.join("default.conf");
+    std::fs::write(&file, "[theme]\nname=Mine\n").unwrap();
+    let mut e = editor();
+    e.theme_dirs = vec![data.clone()];
+    e.load(file.clone());
+    let _ = e.update(Msg::SetGlobal);
+    let moved = data.join("Mine.conf");
+    assert!(is_link(&file) && default_target(&data) == Some(canon(&moved)));
+    assert_eq!(e.path, Some(moved.clone()));
+    assert!(e.is_global(), "{}", e.status);
+    assert_eq!(read(&moved), "[theme]\nname=Mine\n");
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn removing_the_global_theme_removes_the_symlink_and_never_a_theme_file() {
+    let d = temp_dir("clear-global");
+    assert!(clear_global(&d).is_err());
+    let a = d.join("a.conf");
+    std::fs::write(&a, "x").unwrap();
+    symlink(&a, d.join("default.conf")).unwrap();
+    clear_global(&d).unwrap();
+    assert!(!d.join("default.conf").exists() && a.is_file());
+    std::fs::write(d.join("default.conf"), "y").unwrap();
+    assert!(clear_global(&d).unwrap_err().contains("regular file"));
+    assert!(d.join("default.conf").is_file());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn a_bundled_theme_is_copied_as_its_own_file_and_linked() {
+    let d = temp_dir("bundled-global");
+    let data = d.join("data");
+    let mut e = editor();
+    e.theme_dirs = vec![data.clone()];
+    let _ = e.update(Msg::PickBundled("solarized"));
+    assert!(!e.is_global());
+    let _ = e.update(Msg::SetGlobal);
+    assert!(e.is_global(), "{}", e.status);
+    assert_eq!(
+        read(&data.join("solarized.conf")),
+        crate::bundled::text("solarized").unwrap()
+    );
+    assert!(is_link(&data.join("default.conf")));
+    assert_eq!(
+        default_target(&data),
+        Some(canon(&data.join("solarized.conf")))
+    );
+    // Installed unchanged, it is listed once, as the installed file, marked as the global one.
+    let list = list_presets(&[data.clone()], &[], &[]);
+    assert!(!list.iter().any(|p| p.bundled == Some("solarized")));
+    assert!(
+        list.iter()
+            .any(|p| p.name == "Solarized" && p.is_default && p.group == "Installed")
+    );
+    // Another theme moves the link; both stay files. Removing leaves the files.
+    let _ = e.update(Msg::PickBundled("cosmic"));
+    let _ = e.update(Msg::SetGlobal);
+    assert_eq!(
+        default_target(&data),
+        Some(canon(&data.join("cosmic.conf")))
+    );
+    assert!(data.join("solarized.conf").is_file());
+    let _ = e.update(Msg::ClearGlobal);
+    assert!(!e.is_global() && !data.join("default.conf").exists());
+    assert!(data.join("cosmic.conf").is_file() && data.join("solarized.conf").is_file());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn an_installed_file_with_other_values_is_never_overwritten_by_a_bundled_theme() {
+    let d = temp_dir("bundled-keep");
+    let data = d.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("terminal.conf"), "[metrics]\nradius-m=1\n").unwrap();
+    let err = set_global_bundled(&data, "terminal").unwrap_err();
+    assert!(err.contains("already exists"), "{err}");
+    assert_eq!(read(&data.join("terminal.conf")), "[metrics]\nradius-m=1\n");
+    assert!(!data.join("default.conf").exists());
+    assert!(set_global_bundled(&data, "nope").is_err());
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn the_list_groups_the_installed_bundled_folder_and_recent_themes() {
+    let d = temp_dir("list");
+    let data = d.join("data");
+    let folder = d.join("folder");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(data.join("own.conf"), "[theme]\nname=Own\n").unwrap();
+    std::fs::write(folder.join("mine.conf"), "[theme]\nname=Mine\n").unwrap();
+    std::fs::write(folder.join("plain.conf"), "").unwrap();
+    let far = temp_dir("recent").join("far.conf");
+    std::fs::write(&far, "").unwrap();
+    // The global theme lives outside the directory: it is listed as installed, marked.
+    set_default(&data, &folder.join("plain.conf")).unwrap();
+    let list = file_presets(
+        &[data.clone()],
+        &[folder.clone()],
+        &[far, folder.join("mine.conf"), d.join("gone.conf")],
+    );
+    let group = |n: &str| list.iter().find(|p| p.name == n).map(|p| p.group);
+    assert_eq!(group("Own"), Some("Installed"));
+    assert_eq!(group("plain"), Some("Installed"));
+    assert!(list.iter().find(|p| p.name == "plain").unwrap().is_default);
+    assert_eq!(group("Mine"), Some("Folders"));
+    assert_eq!(group("far"), Some("Recent"));
+    assert_eq!(list.iter().filter(|p| p.name == "Mine").count(), 1);
+    assert!(list.iter().all(|p| p.path.is_file()));
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn there_is_no_registering_in_the_menu_or_on_save_as() {
+    let d = temp_dir("no-register");
+    let data = d.join("data");
+    let mut e = editor();
+    e.theme_dirs = vec![data.clone()];
+    let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
+    let _ = e.update(Msg::SavedAs(Some(d.join("mine.conf"))));
+    assert!(!data.exists(), "Save as writes the file and nothing else");
+    let _ = std::fs::remove_dir_all(d);
+}
+
+#[test]
+fn the_header_offers_set_as_global_theme_and_shows_when_it_is_done() {
+    let d = temp_dir("header-global");
+    let mut e = editor();
+    e.theme_dirs = vec![d.join("data")];
+    let _ = e.view();
+    let _ = e.update(Msg::PickBundled("terminal"));
+    assert!(!e.is_global());
+    let _ = e.view();
+    let _ = e.update(Msg::SetGlobal);
+    assert!(e.is_global());
+    let _ = e.view();
+    let _ = std::fs::remove_dir_all(d);
 }

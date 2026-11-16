@@ -1,0 +1,5 @@
+#!/bin/sh
+# Entry point inside the Flatpak: use the host's data directory, so the global theme
+# (`$XDG_DATA_HOME/iad/themes/default.conf`) is the one the host's apps read, not the sandbox's.
+export XDG_DATA_HOME="$HOME/.local/share"
+exec theme-manager "$@"

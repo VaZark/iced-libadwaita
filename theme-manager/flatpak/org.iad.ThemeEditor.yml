@@ -1,0 +1,37 @@
+# Local Flatpak build of Theme Manager (see ../README.md). Wayland only.
+app-id: org.iad.ThemeEditor
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: theme-manager-launch
+finish-args:
+  - --socket=wayland
+  - --device=dri
+  # The global theme: default.conf and the themes it points at, where every app looks for them.
+  # The launcher points XDG_DATA_HOME at the host's, since the sandbox's own would hide them.
+  - --filesystem=xdg-data/iad:create
+  # The toolkit's desktop-wide settings (scheme, accent, density), read-only.
+  - --filesystem=xdg-config/iced-adaptive-design:ro
+modules:
+  - name: theme-manager
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      build-args:
+        - --share=network
+      env:
+        CARGO_HOME: /run/build/theme-manager/cargo
+    build-commands:
+      - cargo build --release --locked -p iced-adaptive-design-theme-manager
+      - install -Dm755 target/release/theme-manager /app/bin/theme-manager
+      - install -Dm755 theme-manager/flatpak/theme-manager-launch /app/bin/theme-manager-launch
+      - install -Dm644 theme-manager/data/org.iad.ThemeEditor.svg /app/share/icons/hicolor/scalable/apps/org.iad.ThemeEditor.svg
+      - mkdir -p /app/share/applications && sed 's/^Exec=.*/Exec=theme-manager-launch %f/' theme-manager/data/org.iad.ThemeEditor.desktop > /app/share/applications/org.iad.ThemeEditor.desktop
+      - install -Dm644 theme-manager/data/org.iad.ThemeEditor.metainfo.xml /app/share/metainfo/org.iad.ThemeEditor.metainfo.xml
+    sources:
+      - type: dir
+        path: ../..
+        # .cargo holds the `cargo xtask` alias only; the rest is build output and local state.
+        skip: [target, .git, build-dir, .flatpak-builder, .claude]

@@ -1,4 +1,4 @@
-//! The theme dialog: a filter, the themes by group (registered, bundled, folders, recent), the
+//! The theme dialog: a filter, the themes by group (global, installed, bundled, folders, recent), the
 //! global theme actions and the file actions.
 
 use super::theme_item_props;
@@ -70,7 +70,7 @@ impl Editor {
             })
             .style(iad::styles::text::dim),
             space().width(Length::Fill),
-            cmp::raised_button(cmp::typography::label("Use as global theme"))
+            cmp::raised_button(cmp::typography::label("Set as global theme"))
                 .on_press_maybe((!is_global).then_some(Msg::SetGlobal)),
             cmp::flat_button(cmp::typography::label("Remove global theme"))
                 .on_press_maybe(has_global.then_some(Msg::ClearGlobal)),
@@ -104,7 +104,7 @@ impl Editor {
             "{}{}{}\n{place}",
             if active { self.dot() } else { "" },
             preset.name,
-            if preset.is_default { " · default" } else { "" }
+            if preset.is_default { " · global" } else { "" }
         );
         let on_press = match preset.bundled {
             Some(key) => Msg::PickBundled(key),
@@ -151,7 +151,7 @@ impl Editor {
                     "Nothing matches"
                 })
                 .description(if none {
-                    "Open a theme file or start a new one. Save as registers it for every app."
+                    "Open a theme file or start a new one."
                 } else {
                     "No theme has that name or path."
                 })

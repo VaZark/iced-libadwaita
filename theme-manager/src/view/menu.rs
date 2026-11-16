@@ -5,15 +5,8 @@ use iad::widgets as w;
 use iced_adaptive_design as iad;
 
 impl Editor {
-    /// File actions, edit, registering, the gallery and folders.
+    /// File actions, edit, the gallery and folders.
     pub(crate) fn main_menu(&self) -> w::Menu<Msg> {
-        let registered = match (self.registry(), &self.path) {
-            (Some(dir), Some(file)) => Some((
-                crate::files::is_registered(dir, file),
-                !crate::files::links_to(dir, file).is_empty(),
-            )),
-            _ => None,
-        };
         let item = |label: &str, msg: Msg, accel: Option<&str>, enabled: bool| {
             let mut i = w::MenuItem::action(label, msg);
             if let Some(a) = accel {
@@ -41,20 +34,6 @@ impl Editor {
                     Msg::Redo,
                     Some("Ctrl+Shift+Z"),
                     !self.redo.is_empty(),
-                ),
-            ])
-            .section([
-                item(
-                    "Register for all apps",
-                    Msg::Register,
-                    None,
-                    registered.is_some_and(|(is, _)| !is),
-                ),
-                item(
-                    "Unregister",
-                    Msg::Unregister,
-                    None,
-                    registered.is_some_and(|(_, linked)| linked),
                 ),
             ])
             .section([

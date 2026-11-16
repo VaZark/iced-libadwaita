@@ -1,5 +1,5 @@
 //! The header: the gallery launcher, the theme (a title button that opens the picker), then undo,
-//! reset, save and the main menu, all icon buttons.
+//! reset, save, set as global theme and the main menu, all icon buttons.
 
 use super::{theme_item_props, tip};
 use crate::{Editor, Msg};
@@ -49,6 +49,21 @@ impl Editor {
             .into()
     }
 
+    /// "Set as global theme": a globe, or a check while the open theme already is the global one.
+    fn global_button(&self) -> Element<'_, Msg> {
+        if self.is_global() {
+            tip(
+                cmp::icon_button(Icon::Check),
+                "This is the global theme: every iad app uses it",
+            )
+        } else {
+            tip(
+                cmp::icon_button(Icon::Globe).on_press(Msg::SetGlobal),
+                "Set as global theme: every iad app uses it (saves first)",
+            )
+        }
+    }
+
     pub(super) fn header(
         &self,
         collapsed: bool,
@@ -90,6 +105,7 @@ impl Editor {
                 .combobox_props(w::PopoverProps::default().padding([0.0, side]))
                 .window_radius(chrome.radius()),
         )
+        .pack_end(self.global_button())
         .pack_end(tip(
             cmp::icon_button(Icon::Save)
                 .on_press_maybe((dirty || self.path.is_none()).then_some(Msg::Save)),

@@ -21,7 +21,7 @@ use iad::widgets as w;
 use iced::Task;
 use iced_adaptive_design as iad;
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tokens::GradEdit;
 
 /// The editor's own look is libadwaita's, with a neutral primary color: it has no blue buttons.
@@ -79,6 +79,13 @@ fn window_size() -> iced::Size {
 /// for a variant.
 type Addr = (String, String);
 
+/// What follows a Save as that was asked for by another action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AfterSave {
+    /// Make the saved file the global theme.
+    Global,
+}
+
 /// A message shown as a toast.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Notice {
@@ -127,6 +134,8 @@ struct Editor {
     source: Option<&'static str>,
     /// The running gallery started from the window, and the program that starts it.
     gallery: Option<std::process::Child>,
+    /// What to do once the Save as the user was sent to has written the file.
+    after_save: Option<AfterSave>,
     /// `dirty()` for the values it was last computed for: regenerating the file text is too slow
     /// to repeat for every widget on every frame (a window resize draws many).
     /// How far the token page is scrolled: the blocks near it are the ones built.
@@ -148,8 +157,6 @@ enum Msg {
     Noop,
     Pick(PathBuf),
     New,
-    Register,
-    Unregister,
     SetGlobal,
     /// The token page was scrolled or resized.
     TokensScrolled(iad::layouts::virtualize::Viewport),
@@ -246,6 +253,7 @@ impl Editor {
             last_edit: None,
             source: None,
             gallery: None,
+            after_save: None,
             tokens_view: iad::layouts::virtualize::Viewport::new(page::FIRST_VIEW),
             dirty_cache: std::cell::Cell::new(None),
             launch_mode: w::ThemeMode::System,
@@ -537,28 +545,9 @@ impl Editor {
         }
     }
 
-    /// Save as: a new file, written and then registered for every app (a symlink in the data
-    /// dir, unless the file is there already); the editor goes on editing the new file.
+    /// Save as: a new file, written; the editor goes on editing it.
     fn save_as_to(&mut self, path: PathBuf) {
-        if !self.save_to(path.clone()) {
-            return;
-        }
-        let Some(dir) = self.registry().map(PathBuf::from) else {
-            return;
-        };
-        let name = theme_name(&path);
-        if is_registered(&dir, &path) {
-            self.notify(format!("Saved {name}: it is registered already"), false);
-            return;
-        }
-        match register(&dir, &path) {
-            Ok(_) => self.notify(format!("Saved and registered as {name}"), false),
-            Err(e) => self.notify(
-                format!("Saved {name}, but could not register it: {e}"),
-                true,
-            ),
-        }
-        self.rescan();
+        self.save_to(path);
     }
 
     // ------------------------------------------------------------- tokens
@@ -795,31 +784,10 @@ impl Editor {
         }
     }
 
-    // ----------------------------------------------------------- registering
-
-    fn registry_op(&mut self, op: Registry) {
-        let (Some(dir), Some(file)) = (self.registry().map(PathBuf::from), self.path.clone())
-        else {
-            self.notify("Save the theme to a file first", true);
-            return;
-        };
-        let done = match op {
-            Registry::Register => register(&dir, &file)
-                .map(|l| format!("Registered {} -> {}", l.display(), file.display())),
-            Registry::Unregister => unregister(&dir, &file)
-                .map(|n| format!("Unregistered {} symlink(s) of {}", n, file.display())),
-        };
-        match done {
-            Ok(s) => self.notify(s, false),
-            Err(s) => self.notify(s, true),
-        }
-        self.rescan();
-    }
-
     // ------------------------------------------------------------ the global theme
 
-    /// Whether the open theme is the one `default.conf` points at (a bundled theme counts when the
-    /// global file holds its text).
+    /// Whether the open theme is the one `default.conf` leads to (a bundled theme counts when that
+    /// file holds its text).
     fn is_global(&self) -> bool {
         let Some(target) = self.registry().and_then(default_target) else {
             return false;
@@ -833,30 +801,62 @@ impl Editor {
         }
     }
 
-    /// Makes the open theme the global one, which every app picks up. Unsaved changes are not
-    /// applied: they are saved first.
-    fn set_global(&mut self) {
+    /// Sets the open theme as the global one: `default.conf` in the standard theme directory, which
+    /// every iad app looks at, becomes a symlink to the theme's file. Every theme is a file of its
+    /// own, so a bundled one is copied into the directory first. The global theme is the saved file,
+    /// so unsaved changes are saved first; a theme with no file of its own (new, or edited from a
+    /// bundled one) opens Save as, and becomes global when that has written it.
+    fn set_global(&mut self) -> Task<Msg> {
         let Some(dir) = self.registry().map(PathBuf::from) else {
             self.notify("There is no theme directory to install into", true);
-            return;
+            return Task::none();
         };
-        if self.dirty() {
+        if self.path.is_none() && (self.source.is_none() || self.dirty()) {
+            self.after_save = Some(AfterSave::Global);
             self.notify(
-                "Save the changes first: the global theme is a saved file",
-                true,
+                "Choose where to save the theme: it becomes the global theme",
+                false,
             );
-            return;
+            return self.apply(Msg::SaveAs);
+        }
+        if self.dirty()
+            && let Some(file) = self.path.clone()
+            && !self.save_to(file)
+        {
+            return Task::none();
         }
         let done = match (self.path.clone(), self.source) {
-            (Some(file), _) => set_default(&dir, &file).map(|_| file_name(&file)),
-            (None, Some(key)) => set_global_bundled(&dir, key).map(|_| file_name(Path::new(key))),
+            (Some(file), _) => set_default(&dir, &file).map(|linked| (file, linked)),
+            (None, Some(key)) => set_global_bundled(&dir, key)
+                .map(|linked| (PathBuf::from(format!("{key}.conf")), linked)),
             (None, None) => Err("Save the theme to a file first".to_string()),
         };
         match done {
-            Ok(name) => self.notify(format!("{name} is now the global theme"), false),
+            Ok((file, linked)) => {
+                let name = file_name(&file);
+                match linked.kept {
+                    // The open file was the regular default.conf: it lives under its new name.
+                    Some(kept) if file == linked.link => {
+                        self.notify(
+                            format!("{name} is now the global theme (kept as {})", kept.display()),
+                            false,
+                        );
+                        self.path = Some(kept);
+                    }
+                    Some(kept) => self.notify(
+                        format!(
+                            "{name} is now the global theme; the default.conf that was there is kept as {}",
+                            kept.display()
+                        ),
+                        false,
+                    ),
+                    None => self.notify(format!("{name} is now the global theme"), false),
+                }
+            }
             Err(e) => self.notify(e, true),
         }
         self.rescan();
+        Task::none()
     }
 
     /// Removes the global theme; apps go back to the bare look (or their own base theme).
@@ -967,9 +967,7 @@ impl Editor {
                 self.pick(Target::New);
                 self.theme_picker = self.pending.is_some();
             }
-            Msg::Register => self.registry_op(Registry::Register),
-            Msg::Unregister => self.registry_op(Registry::Unregister),
-            Msg::SetGlobal => self.set_global(),
+            Msg::SetGlobal => return self.set_global(),
             Msg::Gallery => self.open_gallery(),
             Msg::TokensScrolled(view) => self.scrolled(view.offset, view.height),
             Msg::LaunchMode(mode) => self.launch_mode = mode,
@@ -1092,7 +1090,8 @@ impl Editor {
                 );
             }
             Msg::Opened(Some(path)) => self.pick(Target::File(path)),
-            Msg::Opened(None) | Msg::SavedAs(None) => {}
+            Msg::Opened(None) => {}
+            Msg::SavedAs(None) => self.after_save = None,
             Msg::Save => match self.path.clone() {
                 Some(p) => {
                     self.save_to(p);
@@ -1106,6 +1105,12 @@ impl Editor {
                     .and_then(|p| p.parent())
                     .map(PathBuf::from)
                     .or_else(|| self.registry().map(PathBuf::from));
+                // A new theme is offered the standard directory, which has to exist to be offered.
+                if self.path.is_none()
+                    && let Some(dir) = &dir
+                {
+                    let _ = std::fs::create_dir_all(dir);
+                }
                 let name = self
                     .path
                     .as_ref()
@@ -1115,7 +1120,7 @@ impl Editor {
                 return Task::perform(
                     async move {
                         let mut dialog = rfd::AsyncFileDialog::new()
-                            .set_title("Save theme as — registers it for apps")
+                            .set_title("Save theme as")
                             .add_filter("Theme", &["conf"])
                             .set_file_name(name);
                         if let Some(d) = dir.filter(|d| d.is_dir()) {
@@ -1131,6 +1136,9 @@ impl Editor {
                     path.set_extension("conf");
                 }
                 self.save_as_to(path);
+                if self.after_save.take() == Some(AfterSave::Global) && !self.dirty() {
+                    return self.set_global();
+                }
             }
             Msg::DismissToast => self.toast = None,
             Msg::Drawer(open) => self.drawer = open,
