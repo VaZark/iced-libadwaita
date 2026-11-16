@@ -116,6 +116,16 @@ The current design records no dialog/toast exit animations because the applicati
 
 **Retest:** if implementing these features or an iced update changes their input/lifecycle dependencies, exercise close/reopen during animation, reduced motion, modal capture/focus return, touch cancellation and nested scrolling. Do not silently change controlled APIs or declare a local gap fixed by a dependency bump.
 
+### ICED-11 — Draw-time theme config does not install build-time geometry
+
+**Kind:** toolkit integration contract, not an iced rendering limitation.
+
+`Theme::with_theme_config` applies paint-time tokens but does not install the configuration consumed by `Metrics::desktop`, `Typography::desktop`, surface helpers or window chrome. Since the toolkit baseline is neutral, sparse app skins cannot rely on the former built-in Adwaita padding/radii. Resolve an explicit base plus app overrides, pass it through `Config::with_theme_config`, and install that configuration at startup and after appearance changes. Build the draw-time theme from the same resolved configuration. Keep global-config tests isolated from parallel tests.
+
+**Evidence:** [config installation](src/config.rs), [theme application](src/theme.rs), [build-time metrics](src/metrics.rs), [window chrome](src/windows/mod.rs). On 2026-11-16, Weave's historical/current sample renders reproduced a gutter change from 16 to 8 and rounded floating corners becoming square after the toolkit update. Its downstream fix supplies an explicit base, installs the selected cascade and tests runtime switching in isolated subprocesses; screenshots live in that checkout's ignored `target/weave-review/`.
+
+**Retest:** compare resolved layout and draw metrics with no skin, a sparse skin and explicit custom radii/padding; switch skins and schemes without restarting. Render full wide/narrow frames, check floating corners and separately verify maximized/fullscreen edge-to-edge behavior. Confirm explicit primary-action colors remain independent, and accent-following app fallbacks are resolved in config rather than renderer constants. Live compositor/input checks remain separate from headless rendering.
+
 ## Required iced-update procedure
 
 1. Record old/new locked versions, changed iced-family packages, enabled features, OS/compositor, renderer and display scale. Review upstream changes against **every ID**, including local contracts.

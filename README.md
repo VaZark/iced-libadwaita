@@ -28,6 +28,8 @@ fn view(&self) -> iced::Element<'_, Message, iad::Theme> {
 
 Use `iad::Theme` as the application theme: `iad::Theme::from_config(&iad::config::Config::load())`.
 
+Apps should bundle at least one theme `.conf` file to provide a consistent appearance even when no desktop theme is installed. We recommend [`themes/libadwaita.conf`](themes/libadwaita.conf) as the base theme. See [app theme config](docs/lib/theme-config.md) for loading and applying theme files.
+
 ## What is where
 
 | Path                   | Holds                                                                                                                                        |

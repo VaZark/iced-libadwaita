@@ -2,6 +2,10 @@
 
 The [desktop config](desktop-config.md) is shared by every app. Sometimes one app needs its own look: custom colors, its own paddings and radii, tokens for objects only it has, or a different vibe from something utilitarian. The app theme config is for that. Code: `iced_adaptive_design::theme_config`.
 
+## Bundling a base theme
+
+Apps should bundle at least one theme `.conf` file and load it as their base theme so their appearance remains consistent even when no desktop theme is installed. We recommend [`libadwaita.conf`](../../themes/libadwaita.conf), which supplies the toolkit's reference libadwaita styling. Bundling a file alone does not apply it: resolve and validate it through `ThemeConfig`, install it through `Config::with_theme_config` for layout tokens, and use the same resolved configuration for the draw-time `Theme`. See [Using it](#using-it) and [Independent bases and explicit overlays](#independent-bases-and-explicit-overlays).
+
 ## The layers
 
 Highest priority first.
