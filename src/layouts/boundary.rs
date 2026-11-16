@@ -1,5 +1,9 @@
 //! Resolved surface geometry shared during subtree traversal.
 //!
+//! DECISION (user, 2026-11): effects take geometry from the actual target style; unknown targets
+//! get no guessed mask or ring (legacy radius fallbacks were removed on purpose), without
+//! removing controlled events or modal capture. Revisit if a real target cannot state its shape.
+//!
 //! Geometry is scoped to synchronous draw/update/mouse traversal, never stored in a
 //! process-wide geometry registry. Scopes nest and restore on unwind. Descendants
 //! can read their nearest surface and the complete intersection (not guessed radii).

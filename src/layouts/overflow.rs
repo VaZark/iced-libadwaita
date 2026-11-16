@@ -1,5 +1,10 @@
 //! Explicit natural-content / viewport negotiation.
 //!
+//! DECISION (user, 2026-11): overflow offers grow, scroll and scale-down as separate caller
+//! policies (CSS `overflow` / `object-fit` split). No silent geometry rejection and no single
+//! mandatory policy; text overflow in particular is caller policy, not a global forced wrap.
+//! Revisit if a policy needs to be chosen by theme config rather than by the caller.
+//!
 //! Like CSS `overflow`, [`OverflowMode::Grow`] and [`OverflowMode::Scroll`] choose
 //! whether excess content contributes its natural size or lives in a viewport.
 //! [`OverflowMode::ScaleDown`] instead follows `object-fit: scale-down`: contain

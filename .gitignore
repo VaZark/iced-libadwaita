@@ -1,5 +1,7 @@
 target/
 Cargo.lock.bak
+/TODO
+/docs/agent
 /AGENTS_TODO_AND_STATUS.md
 /AGENTS_TODO_FORMAT.md
 .agents/

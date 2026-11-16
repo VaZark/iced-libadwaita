@@ -3,7 +3,8 @@
 ## Context
 
 - Read `CONTRIBUTING.md` for repository conventions.
-- Read `AGENTS_TODO_AND_STATUS.md` for active tasks, dependencies, and unresolved findings.
+- Read `AGENTS_TODO_AND_STATUS.md` for the active batch, validation and handoff; tasks live one per file in `TODO/<epic>/` (Todo app vault format).
+- User decisions are inline `DECISION (user, <date>)` comments at the code they govern; find them with `grep -rn 'DECISION (' src theme-toys` before re-asking.
 - Read `DESIGN.md` only for GUI or public component API changes.
 - Consult `ICED_LIMITATIONS.md` when modifying iced integrations, implementing affected features, or upgrading iced-family dependencies.
 - Read relevant sections and source files only; avoid unrelated history or full-file dumps.
@@ -31,5 +32,5 @@
 - Use the relevant skill for specialized workflows.
 - Run targeted tests before broader workspace validation.
 - Compilation does not establish visual or interaction correctness.
-- Record actual validation evidence, blockers, and unresolved work in `AGENTS_TODO_AND_STATUS.md`.
+- Record actual validation evidence and handoff in `AGENTS_TODO_AND_STATUS.md`; record unresolved work as `TODO/` task files. Keep no history log.
 - Finish with a concise summary of changes, verification, and remaining issues.

@@ -1,5 +1,11 @@
 //! Owned, typed presentation overrides for concrete nested widgets.
 //!
+//! DECISION (user, 2026-11): typed `<Widget>Props`, not a string-keyed child-style map. Each is a
+//! safe subset of the nested widget's real builder props, exposed case by case; parent-owned
+//! values, events, state, validation and security are never overridable. Caller-supplied
+//! Element slots and custom-drawn primitives get no fake props API. Revisit if a parent needs
+//! to expose more than a safe subset.
+//!
 //! Parents expose these case-by-case (for example `label_props(TextProps)`),
 //! then apply them to the widget they already construct. There is no string-keyed
 //! part lookup, widget-tree inspection, or replacement of children. Values,

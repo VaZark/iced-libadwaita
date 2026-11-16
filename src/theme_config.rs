@@ -1770,6 +1770,10 @@ pub fn theme_path() -> Option<PathBuf> {
     pick_theme(std::env::var("IAD_THEME").ok().as_deref(), &theme_dirs())
 }
 
+// DECISION (user, 2026-11): `IAD_THEME=none` means no theme at all, like HTML without CSS: bare
+// neutral presentation, no discovered theme. It never disables application behavior or events.
+// Refinement: it suppresses discovery only; an explicit `Builder::base_theme` still applies.
+// Revisit if a "no base either" switch is needed.
 fn pick_theme(env: Option<&str>, dirs: &[PathBuf]) -> Option<PathBuf> {
     match env.map(str::trim).filter(|v| !v.is_empty()) {
         Some("none") => return None,

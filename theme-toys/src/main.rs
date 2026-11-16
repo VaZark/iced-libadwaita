@@ -7,6 +7,10 @@
 //! theme-toys --list
 //! ```
 
+// DECISION (user, 2026-11): canonical targets are Windows Classic/95, XP, Win7 and modern MATE.
+// macOS is dropped entirely; MATE replaces GNOME2 (`gnome2` stays only as a compatibility
+// alias, not a duplicate target). Toys may opt out of desktop styling with their own per-design
+// base. Revisit if another target is added.
 mod common;
 mod design;
 #[path = "gnome2.rs"]
