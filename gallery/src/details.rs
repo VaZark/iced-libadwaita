@@ -1391,29 +1391,35 @@ impl Gallery {
                 .into()
             }
             Inline::ResponsiveTable => {
-                let table = |mode: w::TableMode| {
-                    w::ResponsiveTable::<Person, Message>::new(&PEOPLE)
-                        .column(w::Column::new("Name", |p: &Person| ty::heading(p.name).into()).min_width(110.0))
-                        .column(w::Column::new("Role", |p: &Person| ty::body(p.role).into()).min_width(90.0))
-                        .column(w::Column::new("Team", |p: &Person| ty::body(p.team).into()).min_width(100.0))
-                        .column(w::Column::new("Email", |p: &Person| ty::body(p.email).into()).width(Length::FillPortion(2)).min_width(150.0))
-                        .card(|p: &Person| {
-                            column![
-                                row![ty::heading(p.name), cmp::Badge::new(p.role).role(Role::Accent)].spacing(8).align_y(iced::Alignment::Center),
-                                ty::caption(p.email),
-                                ty::body(p.team),
-                            ]
-                            .spacing(4)
-                            .into()
-                        })
-                        .mode(mode)
-                        .height(Length::Fixed(300.0))
-                };
-                let wide = container(Element::from(table(w::TableMode::Auto))).width(Length::Fixed(600.0)).height(Length::Fixed(300.0));
-                let narrow = container(Element::from(table(w::TableMode::Auto))).width(Length::Fixed(340.0)).height(Length::Fixed(300.0));
+                let table = w::ResponsiveTable::<Person, Message>::new(&PEOPLE)
+                    .column(w::Column::new("Name", |p: &Person| ty::heading(p.name).into()).min_width(110.0))
+                    .column(w::Column::new("Role", |p: &Person| ty::body(p.role).into()).min_width(90.0))
+                    .column(w::Column::new("Team", |p: &Person| ty::body(p.team).into()).min_width(100.0))
+                    .column(w::Column::new("Email", |p: &Person| ty::body(p.email).into()).width(Length::FillPortion(2)).min_width(150.0))
+                    .card(|p: &Person| {
+                        column![
+                            row![ty::heading(p.name), cmp::Badge::new(p.role).role(Role::Accent)].spacing(8).align_y(iced::Alignment::Center),
+                            ty::caption(p.email),
+                            ty::body(p.team),
+                        ]
+                        .spacing(4)
+                        .into()
+                    })
+                    .mode(w::TableMode::Auto);
+                // The two presets the switch jumps between: cards (narrower than the columns need)
+                // and the table (as wide as they need, with room to spare).
+                let needed = table.needed_width();
+                let narrow = self.table_size.width < needed;
+                let size = self.table_size;
+                let preset = move |on: bool| Message::TableSize(iced::Size::new(if on { needed - 120.0 } else { needed + 120.0 }, size.height));
+                let resizable = w::Resizable::new(Element::from(table), self.table_size)
+                    .on_resize(Message::TableSize)
+                    .constraints(iad::primitives::resize::Constraints::new(iced::Size::new(200.0, 150.0), iced::Size::new(900.0, 420.0)));
                 column![
-                    g("Wide container").description("The columns fit: a table.").push(wide),
-                    g("Narrow container").description("They do not: every row is a card with a custom layout.").push(narrow),
+                    g("Resizable table")
+                        .description("Drag the corner: a table while the columns fit, cards when they do not. The row jumps between the two widths.")
+                        .push(w::SwitchRow::new("Narrow", narrow, preset).subtitle("Cards below the width the columns need, a table from it").metrics(m))
+                        .push(resizable),
                 ]
                 .spacing(m.group_spacing)
                 .into()

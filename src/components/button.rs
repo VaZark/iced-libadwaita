@@ -380,10 +380,19 @@ mod circular_tests {
     }
 }
 
+/// The face of an icon-only button: the glyph centered in a square of the button's minimum
+/// height, which is where the icon button's padding and hit area come from. A trigger that draws
+/// its own button surface (a [`MenuButton`](crate::widgets::MenuButton)) uses it too.
+pub(crate) fn icon_face<'a, M: 'a>(
+    icon: impl Into<Element<'a, M>>,
+) -> iced::widget::Container<'a, M, Theme> {
+    container(icon).center(Length::Fixed(Metrics::desktop().button_min_height))
+}
+
 /// A flat icon button with a rounded-rect hover (`.flat` + icon-only).
 pub fn icon_button<'a, M: 'a>(icon: Icon) -> Button<'a, M, Theme> {
     let m = Metrics::desktop();
-    button(container(icon.view(m.icon_size)).center(Length::Fixed(m.button_min_height)))
+    button(icon_face(icon.view(m.icon_size)))
         .padding(Padding::from(0.0))
         .style(sb::flat)
 }

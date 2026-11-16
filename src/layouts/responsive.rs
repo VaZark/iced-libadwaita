@@ -145,7 +145,12 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Responsive<'a, M> {
     ) {
         self.content
             .as_widget_mut()
-            .operate(&mut tree.children[0], layout, renderer, operation);
+            .operate(
+                &mut tree.children[0],
+                layout.children().next().unwrap(),
+                renderer,
+                operation,
+            );
     }
     fn overlay<'b>(
         &'b mut self,
@@ -258,5 +263,44 @@ mod tests {
                 "resizing still rebuilds size-aware content"
             );
         }
+    }
+    /// An operation (a scroll read, focus, ...) walks the content with the content's own layout:
+    /// the responsive's layout is one level above it. Handing it the wrong level made a
+    /// `Container` inside a `ResponsiveTable` panic on `layout.children().next().unwrap()`.
+    #[test]
+    fn operations_reach_the_content_with_its_own_layout() {
+        struct Count(usize);
+        impl Operation for Count {
+            fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation)) {
+                operate(self);
+            }
+            fn container(&mut self, _id: Option<&iced::advanced::widget::Id>, _bounds: Rectangle) {
+                self.0 += 1;
+            }
+        }
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        let limits = layout::Limits::new(Size::ZERO, Size::new(100.0, 100.0));
+        // A container that is the second child of a row, in a column whose next child is a
+        // childless `space`: given the layout one level too high, it would be handed the space's.
+        let mut widget = responsive::<()>(|_| {
+            iced::widget::column![
+                iced::widget::row![
+                    iced::widget::space(),
+                    iced::widget::container(iced::widget::space())
+                ],
+                iced::widget::space(),
+            ]
+            .into()
+        });
+        let mut tree = Tree::empty();
+        let node = widget.layout(&mut tree, &renderer, &limits);
+        let mut count = Count(0);
+        widget.operate(&mut tree, Layout::new(&node), &renderer, &mut count);
+        assert_eq!(count.0, 3, "column, row and the row's container are all visited");
     }
 }

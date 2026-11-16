@@ -29,7 +29,7 @@ use crate::widgets::{boxed_list, clamp};
 use crate::{Icon, IconSource, Metrics, Theme, Typography};
 use iced::Length;
 use iced::alignment::Vertical;
-use iced::widget::{button, column, container, row, space, text, tooltip};
+use iced::widget::{Container, button, column, container, row, space, text, tooltip};
 
 /// How an opened menu is shown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -1059,13 +1059,13 @@ fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M>
 impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
     fn from(b: MenuButton<M>) -> Self {
         let m = Metrics::desktop();
-        let trigger_content: Element<'a, M> = match b.text_trigger {
-            Some(label) => b.label_props.apply(text(label)).into(),
-            None => b.icon.view(m.icon_size).into(),
+        // A glyph-only trigger is an icon button's face, so it has the same padding and hit area.
+        let trigger_face: Container<'a, M, Theme> = match b.text_trigger {
+            Some(label) => container(b.label_props.apply(text(label)))
+                .center_y(Length::Fixed(m.button_min_height)),
+            None => crate::components::button::icon_face(b.icon.view(m.icon_size)),
         };
-        let trigger = b
-            .trigger_props
-            .apply(container(trigger_content).center_y(Length::Fixed(m.button_min_height)));
+        let trigger = b.trigger_props.apply(trigger_face);
         let (content, presentation) = match b.presentation {
             MenuPresentation::Dropdown if b.menu.has_submenu() => (
                 pages_content(&b.menu, popover_width(), b.open_page),

@@ -17,23 +17,16 @@
 
 use crate::Element;
 use crate::components::{ButtonProps, ContainerProps, TextProps};
+use crate::widgets::TableHeader;
 
-use crate::components::typography as ty;
+use crate::Metrics;
 use crate::layouts::{Flex, FlexCells};
-use crate::primitives::sorting::{Direction, SortState};
-use crate::styles::text as st;
-use crate::{Icon, Metrics};
+use crate::primitives::sorting::SortState;
 use iced::alignment::Horizontal;
-use iced::widget::{button, container, row, space};
-use iced::{Alignment, Length, Padding};
+use iced::widget::{container, space};
+use iced::{Length, Padding};
 
-/// The least width a header label needs: its text and the sort arrow. A column is never made
-/// narrower than this, so a header is never cut off ("Tim"): the columns that can give way give
-/// way, in proportion, and a small column keeps what its label needs.
-pub(crate) fn label_floor(label: &str) -> f32 {
-    // A caption heading is about 7 px a character; the arrow and its gap are 16 px more.
-    label.chars().count() as f32 * 7.0 + 16.0
-}
+pub(crate) use super::table_header::label_floor;
 
 /// How a column of `width` takes part in the line, for the header and the rows alike so they
 /// line up. Every column is **flex**: a fixed width is a *starting* size that gives way down to
@@ -165,15 +158,6 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> SortHeader<'a, K, M> {
     }
 }
 
-/// The arrow of a column: up for ascending, down for descending, both when it can sort but is not.
-pub fn arrow(direction: Option<Direction>) -> Icon {
-    match direction {
-        Some(Direction::Asc) => Icon::GoUp,
-        Some(Direction::Desc) => Icon::GoDown,
-        None => Icon::GoUpDown,
-    }
-}
-
 impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<SortHeader<'a, K, M>> for Element<'a, M> {
     fn from(h: SortHeader<'a, K, M>) -> Self {
         let m = h.metrics;
@@ -189,59 +173,28 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<SortHeader<'a, K, M>> fo
                     let flex = flex_of(w, &label);
                     line.cell(
                         flex,
-                        h.cell_props.apply(
-                            container(
-                                h.label_props.apply(
-                                    ty::caption(label)
-                                        .style(st::dim)
-                                        .wrapping(iced::widget::text::Wrapping::None),
-                                ),
-                            )
-                            .width(Length::Fill)
-                            .align_x(align),
-                        ),
+                        h.cell_props.apply(container(
+                            TableHeader::new(label)
+                                .metrics(m)
+                                .align(align)
+                                .label_props(h.label_props.clone()),
+                        )),
                     )
                 }
                 Cell::Sortable(key, label, w, align) => {
                     let flex = flex_of(w, &label);
-                    let active = h.state.direction(&key).is_some();
-                    let icon = arrow(h.state.direction(&key));
-                    let label = if active {
-                        ty::caption(label).wrapping(iced::widget::text::Wrapping::None)
-                    } else {
-                        ty::caption(label)
-                            .style(st::dim)
-                            .wrapping(iced::widget::text::Wrapping::None)
-                    };
-                    let label = h.label_props.apply(label);
+                    let direction = h.state.direction(&key);
                     let msg = (h.on_sort)(key);
-                    // The label is the click target over **the whole column**, not just its text,
-                    // and it does not highlight: a header is not a button to look at.
                     line.cell(
                         flex,
-                        h.sort_button_props.apply(
-                            button(
-                                h.cell_props.apply(
-                                    container(
-                                        row![label, icon.view(12.0)]
-                                            .spacing(m.space_xs)
-                                            .align_y(Alignment::Center),
-                                    )
-                                    .width(Length::Fill)
-                                    .align_x(align),
-                                ),
-                            )
-                            .width(Length::Fill)
-                            .padding(0)
-                            .style(|t: &crate::Theme, _| button::Style {
-                                background: None,
-                                text_color: t.semantic.window.fg,
-                                border: iced::Border::default(),
-                                shadow: iced::Shadow::default(),
-                                snap: false,
-                            })
-                            .on_press(msg),
-                        ),
+                        h.cell_props.apply(container(
+                            TableHeader::new(label)
+                                .metrics(m)
+                                .align(align)
+                                .label_props(h.label_props.clone())
+                                .button_props(h.sort_button_props.clone())
+                                .sortable(direction, msg),
+                        )),
                     )
                 }
             };
@@ -267,13 +220,6 @@ mod tests {
         assert!(g.grow > 0.0 && g.min == label_floor("Title"));
         assert_eq!(flex_of(Length::FillPortion(3), "x").0.grow, 3.0);
         assert!(label_floor("Duration") > label_floor("Time"));
-    }
-
-    #[test]
-    fn the_arrow_follows_the_direction() {
-        assert_eq!(arrow(Some(Direction::Asc)), Icon::GoUp);
-        assert_eq!(arrow(Some(Direction::Desc)), Icon::GoDown);
-        assert_eq!(arrow(None), Icon::GoUpDown);
     }
 
     #[test]

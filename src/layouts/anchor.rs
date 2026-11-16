@@ -84,7 +84,9 @@ pub struct Placement {
     pub cross_offset: f32,
     /// Minimum distance kept from the viewport edges (`Outside` only).
     pub margin: f32,
-    /// Move to the opposite side when the preferred one does not fit (`Outside` only).
+    /// Move to the opposite side when the preferred one does not fit, and to the opposite
+    /// alignment (`Start` / `End`) when the preferred one overflows the viewport, so the surface
+    /// still shares an edge with the anchor (`Outside` only).
     pub flip: bool,
     /// Slide along the side to stay inside the viewport (`Outside`) or the anchor (`Inside`).
     pub shift: bool,
@@ -352,23 +354,46 @@ fn outside(
             size = other_size;
         }
     }
+    // The position along the edge the surface shares with the anchor (the cross axis).
+    let (anchor_start, anchor_len, own, total) = if side.vertical() {
+        (anchor.x, anchor.width, size.width, bounds.width)
+    } else {
+        (anchor.y, anchor.height, size.height, bounds.height)
+    };
+    let cross = |align: Align| along(align, anchor_start, anchor_len, own) + p.cross_offset;
+    let fits = |v: f32| v >= p.margin && v + own <= total - p.margin;
+    let mut c = cross(p.align);
+    // Keep the shared edge in either direction: when `align` would overflow the viewport and the
+    // opposite edge fits, line up with that edge instead of sliding away from the anchor.
+    if p.flip && !fits(c) {
+        let other = match p.align {
+            Align::Start => Some(Align::End),
+            Align::End => Some(Align::Start),
+            Align::Center => None,
+        };
+        if let Some(other) = other
+            && fits(cross(other))
+        {
+            c = cross(other);
+        }
+    }
     let (mut x, mut y);
     match side {
         Side::Top => {
             y = anchor.y - p.offset - size.height;
-            x = along(p.align, anchor.x, anchor.width, size.width) + p.cross_offset;
+            x = c;
         }
         Side::Bottom => {
             y = anchor.y + anchor.height + p.offset;
-            x = along(p.align, anchor.x, anchor.width, size.width) + p.cross_offset;
+            x = c;
         }
         Side::Left => {
             x = anchor.x - p.offset - size.width;
-            y = along(p.align, anchor.y, anchor.height, size.height) + p.cross_offset;
+            y = c;
         }
         Side::Right => {
             x = anchor.x + anchor.width + p.offset;
-            y = along(p.align, anchor.y, anchor.height, size.height) + p.cross_offset;
+            y = c;
         }
     }
     let clamp = |v: f32, len: f32, total: f32| v.min(total - len - p.margin).max(p.margin);
@@ -547,6 +572,49 @@ mod tests {
         assert_eq!(r.position.x, 400.0 - 100.0 - 6.0);
         let l = place(anchor(-20.0, 50.0), S, VIEW, p(Side::Bottom, Align::Start));
         assert_eq!(l.position.x, 6.0);
+    }
+
+    #[test]
+    fn shares_the_other_edge_when_its_own_alignment_overflows() {
+        // Start-aligned at the right of the viewport: the right edges line up instead.
+        let r = place(anchor(320.0, 50.0), S, VIEW, p(Side::Bottom, Align::Start));
+        assert_eq!(r.position.x, 320.0 + 60.0 - 100.0);
+        // End-aligned at the left of the viewport: the left edges line up instead.
+        let l = place(anchor(10.0, 50.0), S, VIEW, p(Side::Bottom, Align::End));
+        assert_eq!(l.position.x, 10.0);
+        // The same on a side placement, along the vertical axis.
+        let v = place(anchor(100.0, 250.0), S, VIEW, p(Side::Right, Align::Start));
+        assert_eq!(v.side, Side::Right);
+        assert_eq!(v.position.y, 250.0 + 30.0 - 80.0);
+        // With flipping off, the surface just slides to stay inside.
+        let mut q = p(Side::Bottom, Align::End);
+        q.flip = false;
+        assert_eq!(place(anchor(10.0, 50.0), S, VIEW, q).position.x, 6.0);
+    }
+
+    /// CSS anchor positioning's try tactics (WPT `try-tactic-basic`): `flip-block` mirrors the side,
+    /// `flip-inline` mirrors the alignment, and both together put the surface in the opposite
+    /// corner. Each is taken only for the axis that overflows.
+    #[test]
+    fn flips_each_axis_that_overflows_like_the_css_try_tactics() {
+        let view = Size::new(400.0, 400.0);
+        let surface = Size::new(30.0, 40.0);
+        let at = |x, y| Rectangle::new(Point::new(x, y), Size::new(20.0, 20.0));
+        let q = p(Side::Bottom, Align::Start);
+        // Room both ways: the base option.
+        assert_eq!(place(at(10.0, 10.0), surface, view, q).position, Point::new(10.0, 34.0));
+        // Only the block axis overflows: flip-block.
+        let r = place(at(10.0, 360.0), surface, view, q);
+        assert_eq!((r.side, r.position), (Side::Top, Point::new(10.0, 316.0)));
+        // Only the inline axis overflows: flip-inline.
+        let r = place(at(370.0, 10.0), surface, view, q);
+        assert_eq!((r.side, r.position), (Side::Bottom, Point::new(360.0, 34.0)));
+        // Both: flip-block flip-inline.
+        let r = place(at(370.0, 360.0), surface, view, q);
+        assert_eq!((r.side, r.position), (Side::Top, Point::new(360.0, 316.0)));
+        // A side placement mirrors the same way: the roles of the axes swap.
+        let r = place(at(360.0, 370.0), surface, view, p(Side::Right, Align::Start));
+        assert_eq!((r.side, r.position), (Side::Left, Point::new(326.0, 350.0)));
     }
 
     #[test]

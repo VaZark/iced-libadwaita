@@ -218,6 +218,8 @@ struct Gallery {
     reorder: reorder_demo::State,
     chips: Vec<&'static str>,
     acc_single: Vec<u8>,
+    /// The size of the resizable responsive table.
+    table_size: iced::Size,
     acc_multi: Vec<u8>,
 
     dialog: Option<Dialog>,
@@ -336,6 +338,7 @@ enum Message {
     Reorder(reorder_demo::Msg),
     ChipRemove(&'static str),
     AccSingle(Vec<u8>),
+    TableSize(iced::Size),
     AccMulti(Vec<u8>),
     OpenDialog(Dialog),
     /// Opens the AppShell window (Layout > AppShell).
@@ -559,6 +562,7 @@ impl Gallery {
             autocomplete: autocomplete_demo::State::default(),
             chips: vec!["Rust", "iced", "GTK"],
             acc_single: vec![0],
+            table_size: iced::Size::new(620.0, 300.0),
             acc_multi: vec![0, 1],
             dialog: None,
             show_content: std::env::var_os("GALLERY_SIDEBAR").is_none(),
@@ -786,6 +790,7 @@ impl Gallery {
             }
             Message::Reorder(m) => self.reorder.update(m),
             Message::AccSingle(v) => self.acc_single = v,
+            Message::TableSize(s) => self.table_size = s,
             Message::AccMulti(v) => self.acc_multi = v,
             Message::ChipRemove(c) => self.chips.retain(|x| *x != c),
             // The AppShell is a separate process, started by this action: it keeps running when

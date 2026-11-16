@@ -49,6 +49,7 @@ use crate::metas::meta_component::MetaComponent;
 use crate::primitives::When;
 use crate::primitives::sorting::{Direction, SortState};
 use crate::styles::button as sb;
+use crate::widgets::TableHeader;
 use crate::{Icon, Metrics, Theme};
 use iced::alignment::Vertical;
 use iced::widget::{button, column, container, row, space, text};
@@ -493,71 +494,23 @@ fn virtual_table_view<'a, T: 'a, M: Clone + 'a>(
         .into()
 }
 
-/// A column header: dim caption text, or for a sortable column a button with the arrow.
+/// A column header: a label that wraps, and for a sortable column the arrow and a press target.
 fn header_cell<'a, T: 'a, M: Clone + 'a>(
     t: &ResponsiveTable<'a, T, M>,
     col: &Column<'a, T, M>,
 ) -> Element<'a, M> {
     let props = &t.props;
-    let Some(sort) = t.sorting(col) else {
-        return dim_caption(&col.header, &t.props);
-    };
-    let m = &t.metrics;
-    let sorted = sort.dir.is_some();
-    let arrow = match sort.dir {
-        Some(Direction::Asc) => Icon::GoUp,
-        Some(Direction::Desc) => Icon::GoDown,
-        None => Icon::GoUpDown,
-    };
-    // Sorted arrows use the foreground; unsorted arrows use dim opacity.
-    let icon =
-        arrow
-            .view(m.icon_size * 0.75)
-            .style(move |th: &Theme, _| iced::widget::svg::Style {
-                color: Some(if sorted {
-                    th.semantic.icon_color(false)
-                } else {
-                    th.semantic.dim()
-                }),
-            });
-    let mut content = row![
-        props
-            .header_label
-            .apply(crate::components::typography::caption_heading(
-                col.header.clone()
-            )),
-        icon
-    ]
-    .spacing(m.space_xs)
-    .align_y(Vertical::Center);
-    if let Some(n) = sort.priority {
-        content = content.push(
-            props
-                .sort_priority
-                .apply(crate::components::typography::caption(n.to_string())),
-        );
+    let header = TableHeader::new(col.header.clone()).metrics(t.metrics);
+    match t.sorting(col) {
+        Some(sort) => header
+            .label_props(props.header_label.clone())
+            .priority_props(props.sort_priority.clone())
+            .button_props(props.header_button.clone())
+            .sortable(sort.dir, sort.press)
+            .priority(sort.priority)
+            .into(),
+        None => header.label_props(props.caption.clone()).into(),
     }
-    // No padding: the label stays on the column's left edge, aligned with the cells.
-    props
-        .header_button
-        .apply(
-            button(content)
-                .padding(Padding::ZERO)
-                .style(move |th: &Theme, status| {
-                    let hot = sorted
-                        || matches!(status, button::Status::Hovered | button::Status::Pressed);
-                    button::Style {
-                        text_color: if hot {
-                            th.semantic.window.fg
-                        } else {
-                            th.semantic.dim()
-                        },
-                        ..button::Style::default()
-                    }
-                })
-                .on_press(sort.press),
-        )
-        .into()
 }
 
 /// The cards' stand-in for the header row: a dropdown of the sortable columns and a button
