@@ -12,9 +12,11 @@ Highest priority first:
 .IP 2. 3
 The application theme file, \fI$XDG_CONFIG_HOME/<app\-id>/theme.conf\fR. The application declares its tokens and their defaults in a schema.
 .IP 3. 3
-The installed theme file: \fBIAD_THEME\fR=\fI<path>\fR (\fBnone\fR means no theme), else \fIdefault.conf\fR in \fI$XDG_DATA_HOME/iad/themes\fR, else in \fIiad/themes\fR of each \fI$XDG_DATA_DIRS\fR entry. The first file found is the only one read. A desktop or distribution installs its look there. The toolkit never writes it.
+The installed theme file: \fBIAD_THEME\fR=\fI<path>\fR (\fBnone\fR skips the external theme), else \fIdefault.conf\fR in \fI$XDG_DATA_HOME/iad/themes\fR, else in \fIiad/themes\fR of each \fI$XDG_DATA_DIRS\fR entry. The first file found is the only one read. A desktop or distribution installs its look there. The toolkit never writes it.
+.IP 4. 3
+The bundled base supplied by \fBBuilder::base_theme\fR or \fBConfig::load_with_base_theme\fR. Applications should bundle at least one theme file; \fIlibadwaita.conf\fR is recommended. An unset \fBIAD_THEME\fR or \fBIAD_THEME=none\fR never disables this explicit base. The selected external theme overlays it, with invalid values falling back to the base.
 .PP
-Below these, a token is its declared default. The toolkit has no built\-in look: with no theme file it draws like HTML without CSS (black on white, square, thin grey rules, no shadows).
+Below these, a token is its declared default. The toolkit has no built\-in look: without a bundled base or selected theme file it draws like HTML without CSS (black on white, square, thin grey rules, no shadows).
 .PP
 A missing application theme file is written from the declared defaults, every token commented out as \fI#key=default\fR under a description, so it documents the tokens and pins none of them. Uncomment a line to change it; delete the file to get a fresh one.
 .SH TOKENS

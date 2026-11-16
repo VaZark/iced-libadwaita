@@ -1712,7 +1712,7 @@ pub enum Source {
     /// Never set: the declared default (and, for a toolkit token, whatever the desktop config
     /// makes of it).
     Default,
-    /// The theme file found by [`theme_path`].
+    /// The bundled base or toolkit theme file found by [`theme_path`].
     Theme,
     /// The app theme file.
     App,
@@ -1763,8 +1763,9 @@ pub fn theme_dirs() -> Vec<PathBuf> {
 }
 
 /// Which theme file applies: `IAD_THEME=<path>` if it names a readable file (`IAD_THEME=none`
-/// means no theme at all), else the first `default.conf` in [`theme_dirs`]. `None` is the bare
-/// look: the toolkit has no built-in style.
+/// skips external theme discovery), else the first `default.conf` in [`theme_dirs`].
+/// This selects only the external layer: a bundled [`Builder::base_theme`] still applies.
+/// Without either layer, the toolkit uses its bare defaults.
 pub fn theme_path() -> Option<PathBuf> {
     pick_theme(std::env::var("IAD_THEME").ok().as_deref(), &theme_dirs())
 }
@@ -1831,6 +1832,7 @@ impl Inheritance {
 pub struct Builder {
     app_id: String,
     schema: Schema,
+    base_theme: Option<String>,
     toolkit_text: Option<String>,
     app_text: Option<String>,
     hardcoded: Vec<(String, String, Value)>,
@@ -1846,6 +1848,7 @@ impl Builder {
         Self {
             app_id: app_id.to_string(),
             schema: Schema::new(),
+            base_theme: None,
             toolkit_text: None,
             app_text: None,
             hardcoded: Vec::new(),
@@ -1881,6 +1884,14 @@ impl Builder {
     /// Nothing is read or written for this layer.
     pub fn app_text(mut self, text: impl Into<String>) -> Self {
         self.app_text = Some(text.into());
+        self
+    }
+    /// A bundled base theme, validated below the selected toolkit and app theme layers.
+    /// It remains active when `IAD_THEME` is unset or `none`, discovery finds no file,
+    /// files are disabled, or automatic desktop inheritance is opted out.
+    /// Prefer `include_str!` with a bundled `.conf` file (recommended: `libadwaita.conf`).
+    pub fn base_theme(mut self, text: impl Into<String>) -> Self {
+        self.base_theme = Some(text.into());
         self
     }
     /// Uses `text` as the toolkit theme file instead of reading it.
@@ -1989,7 +2000,11 @@ impl Builder {
                 .insert((s.section, s.key), (s.default, Source::Default));
         }
         // Lowest priority first, so a later layer overwrites an earlier one.
-        for (text, source) in [(&toolkit_text, Source::Theme), (&app_text, Source::App)] {
+        for (text, source) in [
+            (self.base_theme.as_deref().unwrap_or(""), Source::Theme),
+            (toolkit_text.as_str(), Source::Theme),
+            (app_text.as_str(), Source::App),
+        ] {
             if source == Source::App {
                 cfg.inherited = cfg.values.clone();
             }
@@ -2418,8 +2433,9 @@ impl Tokens {
 static CURRENT: RwLock<Option<Arc<ThemeConfig>>> = RwLock::new(None);
 
 impl ThemeConfig {
-    /// What an app that supplies no look of its own gets: the theme file the toolkit finds
-    /// ([`theme_path`]) over the declared defaults, and no app file.
+    /// The selected external theme ([`theme_path`]) over the declared defaults, with no
+    /// bundled base or app file. For a bundled base use [`Builder::base_theme`] or
+    /// [`Config::load_with_base_theme`](crate::config::Config::load_with_base_theme).
     pub fn discover() -> Self {
         Self::builder("").app_text("").build()
     }

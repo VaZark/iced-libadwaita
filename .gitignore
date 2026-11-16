@@ -1,3 +1,6 @@
 target/
 Cargo.lock.bak
 /AGENTS_TODO_AND_STATUS.md
+/AGENTS_TODO_FORMAT.md
+.agents/
+.claude/

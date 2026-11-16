@@ -156,7 +156,7 @@ fn build(design: usize, overlay: &str) -> ThemeConfig {
         .files(false)
         .schema(schema())
         .inheritance(Inheritance::OptOut)
-        .toolkit_text(scene_text(design))
+        .base_theme(scene_text(design))
         .app_text(overlay)
         .build()
 }

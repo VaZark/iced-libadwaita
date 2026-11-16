@@ -1696,7 +1696,8 @@ impl Gallery {
 
 fn main() -> iced::Result {
     // Shared desktop behavior: ~/.config/iced-adaptive-design/desktop.conf (+ system files).
-    let mut cfg = iad::config::Config::load();
+    const DEFAULT_BASE_THEME: &str = include_str!("../../themes/libadwaita.conf");
+    let mut cfg = iad::config::Config::load_with_base_theme(DEFAULT_BASE_THEME);
     if std::env::var_os("GALLERY_OPT_OUT").is_some() {
         // Opting out of desktop settings is highly discouraged; shown here only to demonstrate
         // that it is allowed, explicit and reported (a notice is printed on install).

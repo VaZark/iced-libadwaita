@@ -720,6 +720,23 @@ impl Config {
             .with_theme_config(&crate::theme_config::ThemeConfig::discover())
     }
 
+    /// Loads desktop settings with a bundled base theme beneath the selected external theme.
+    /// `IAD_THEME=none` skips the external theme but does not disable this base. Unset
+    /// `IAD_THEME` uses the installed XDG theme, if any, over the base.
+    ///
+    /// ```no_run
+    /// # use iced_adaptive_design::config::{self, Config};
+    /// const DEFAULT_BASE_THEME: &str = include_str!("../themes/libadwaita.conf");
+    /// config::install(Config::load_with_base_theme(DEFAULT_BASE_THEME));
+    /// ```
+    pub fn load_with_base_theme(base: &str) -> Self {
+        let theme = crate::theme_config::ThemeConfig::builder("")
+            .base_theme(base)
+            .app_text("")
+            .build();
+        Self::load_from(&Self::search_paths()).with_theme_config(&theme)
+    }
+
     /// Like [`load`](Self::load) with explicit files, lowest priority first.
     pub fn load_from(paths: &[PathBuf]) -> Self {
         let mut merged = BTreeMap::new();

@@ -51,12 +51,12 @@ Write the doc comment. The page follows.
 
 ## Theme files
 
-The library has no built-in look: with no theme file an app is drawn like HTML without CSS (black on white, square, no shadows). The look is a theme file in the key-file format of [docs/lib/theme-config.md](docs/lib/theme-config.md). `themes/` has the shipped ones. To try one, point `IAD_THEME` at it:
+The library has no built-in look: without a bundled base or selected theme file an app is drawn like HTML without CSS (black on white, square, no shadows). Apps can supply a base using `Config::load_with_base_theme` or `ThemeConfig::builder(..).base_theme(..)`; `IAD_THEME=none` skips external discovery but retains that base. The gallery bundles `libadwaita.conf`. The look is a theme file in the key-file format of [docs/lib/theme-config.md](docs/lib/theme-config.md). `themes/` has the shipped ones. To try one, point `IAD_THEME` at it:
 
 ```text
 IAD_THEME=themes/libadwaita.conf cargo run -p iced-adaptive-design-gallery
 IAD_THEME=themes/cosmic.conf      cargo run -p iced-adaptive-design-gallery
-IAD_THEME=none                   cargo run -p iced-adaptive-design-gallery   # the bare look
+IAD_THEME=none                   cargo run -p iced-adaptive-design-gallery   # bundled libadwaita base, no external overlay
 ```
 
 Without `IAD_THEME`, the first `default.conf` found in `$XDG_DATA_HOME/iad/themes/` (`~/.local/share/iad/themes/`), then in `iad/themes/` of each `$XDG_DATA_DIRS` entry, applies. To make a look your default on this machine:
@@ -97,7 +97,7 @@ GALLERY_MENU=page|dropdown
 GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push|breakpoint
 GALLERY_ANIM=keys                 wait 6 s, then capture: send keys meanwhile
 GALLERY_ANIM=theme                capture system appearance, app override, then system again
-IAD_THEME=path.conf               draw with this theme file (IAD_THEME=none: the bare look)
+IAD_THEME=path.conf               draw with this theme file (IAD_THEME=none: bundled base only)
 GALLERY_ANIM=appshell             open the AppShell window (GALLERY_SHELL_SIZE=WxH)
 GALLERY_ANIM=shell-back|embedded-back
 APPSHELL_PIN=mobile|tablet|desktop

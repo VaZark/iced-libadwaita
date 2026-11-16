@@ -4,7 +4,17 @@ The [desktop config](desktop-config.md) is shared by every app. Sometimes one ap
 
 ## Bundling a base theme
 
-Apps should bundle at least one theme `.conf` file and load it as their base theme so their appearance remains consistent even when no desktop theme is installed. We recommend [`libadwaita.conf`](../../themes/libadwaita.conf), which supplies the toolkit's reference libadwaita styling. Bundling a file alone does not apply it: resolve and validate it through `ThemeConfig`, install it through `Config::with_theme_config` for layout tokens, and use the same resolved configuration for the draw-time `Theme`. See [Using it](#using-it) and [Independent bases and explicit overlays](#independent-bases-and-explicit-overlays).
+Apps should bundle at least one theme `.conf` file and load it as their base theme so their appearance remains consistent even when no desktop theme is installed. We recommend [`libadwaita.conf`](../../themes/libadwaita.conf), which supplies the toolkit's reference libadwaita styling.
+
+```rust
+const DEFAULT_BASE_THEME: &str = include_str!("../themes/libadwaita.conf");
+config::install(Config::load_with_base_theme(DEFAULT_BASE_THEME));
+let theme = Theme::from_config(&config::current());
+```
+
+`DEFAULT_BASE_THEME` is an app-owned constant, not a required name or environment variable. iad owns theme discovery and validates each layer separately: the selected external theme overlays the base, and invalid values fall back to it. `IAD_THEME=none` skips the external theme without disabling the bundled base, failing, or warning. Unset `IAD_THEME` discovers the installed XDG theme if available; otherwise the base applies. Without a base or external theme, iad uses the bare look.
+
+For app-owned tokens or explicit layers, use `ThemeConfig::builder(app_id).base_theme(DEFAULT_BASE_THEME)` and install the result through `Config::with_theme_config`. The base also applies with `.files(false)` or `Inheritance::OptOut`; those options disable automatic discovery, not explicitly supplied text. See [Using it](#using-it) and [Independent bases and explicit overlays](#independent-bases-and-explicit-overlays).
 
 ## The layers
 
@@ -12,13 +22,16 @@ Highest priority first.
 
 1. **Hardcoded**, set in code with `.hardcode(..)`. **Extremely discouraged.** Nobody can change a hardcoded value without a rebuild, and every one is reported on stderr at startup and listed in `ThemeConfig::hardcoded()`. Declare a token and put the value in the app theme instead.
 2. **The app theme file**, `$XDG_CONFIG_HOME/<app-id>/theme.conf`. The app declares its tokens and their defaults in a `Schema`, so the file can be deleted: the app writes a fresh one.
-3. **The installed theme file**, found by `theme_config::theme_path()`: `IAD_THEME=<path>` (`IAD_THEME=none` means no theme), else `default.conf` in `$XDG_DATA_HOME/iad/themes` (`~/.local/share/iad/themes`), else in `iad/themes` of each `$XDG_DATA_DIRS` entry (`/usr/local/share`, `/usr/share`). The first file found is the only one read. A desktop or distribution installs or symlinks its look there (`themes/` has libadwaita, COSMIC, Solarized, Terminal, Bubblegum and Synthwave). The toolkit declares the tokens it understands in `Schema::toolkit()`; it never writes a theme file.
+3. **The installed theme file**, found by `theme_config::theme_path()`: `IAD_THEME=<path>` (`IAD_THEME=none` skips this external layer), else `default.conf` in `$XDG_DATA_HOME/iad/themes` (`~/.local/share/iad/themes`), else in `iad/themes` of each `$XDG_DATA_DIRS` entry (`/usr/local/share`, `/usr/share`). The first file found is the only one read. A desktop or distribution installs or symlinks its look there (`themes/` has libadwaita, COSMIC, Solarized, Terminal, Bubblegum and Synthwave). The toolkit declares the tokens it understands in `Schema::toolkit()`; it never writes a theme file.
 
-Below them a token is its **declared default**. **The toolkit has no built-in look**: with no theme file it paints like HTML without CSS (black on white, square, 1px grey rules, no shadows) and every widget still lays out and responds.
+4. **The bundled base theme**, explicitly supplied through `Builder::base_theme` or `Config::load_with_base_theme`. It has toolkit-theme provenance, not app-override provenance, and remains active even with `IAD_THEME=none`.
+
+Below them a token is its **declared default**. **The toolkit has no built-in look**: without a bundled base or selected theme file it paints like HTML without CSS (black on white, square, 1px grey rules, no shadows) and every widget still lays out and responds.
 
 ```mermaid
 flowchart LR
-    D["Declared defaults"] --> T["Toolkit theme file"]
+    D["Declared defaults"] --> B["Bundled base theme"]
+    B --> T["Toolkit theme file"]
     T --> A["App theme file"]
     A --> H["Hardcoded"]
     DC["Desktop config"] -.-> D
@@ -77,7 +90,7 @@ let size = theme.token_number("cover", "size");
 
 ### Independent bases and explicit overlays
 
-`Inheritance::OptOut` skips automatic desktop theme discovery. It does not discard explicitly supplied `.toolkit_text(base)` and `.app_text(overlay)`: both are validated against the combined toolkit/app schema, and valid app entries take precedence over the base. `.files(false)` disables automatic file access; the caller can still read and supply overlay text explicitly.
+`Inheritance::OptOut` skips automatic desktop theme discovery. It does not discard explicitly supplied `.base_theme(base)`, `.toolkit_text(theme)` and `.app_text(overlay)`: both are validated against the combined toolkit/app schema, and valid app entries take precedence over the base. `.files(false)` disables automatic file access; the caller can still read and supply overlay text explicitly.
 
 The [theme toys](../../theme-toys/README.md#theme-resolution) use this pattern for four canonical targets: `win95`, `winxp`, `win7`, `mate` (modern MATE). `gnome2` is a compatibility alias only. Each embeds its own complete `theme-toys/themes/<target>.conf` base, including native styling and app-owned scene geometry. An optional `IAD_THEME` file is read as an overlay, not a replacement base. Without one the bundled base applies; installed `default.conf` files are not consulted. Invalid entries fall back through the validated cascade. Scene-fit checks can reject overlay geometry while retaining native theme edits; see the toy guide for limits and the special handling of `IAD_THEME=none`.
 
