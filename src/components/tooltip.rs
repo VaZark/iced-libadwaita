@@ -10,6 +10,11 @@ pub use iced_tooltip::Position as TooltipPosition;
 /// The space between the tooltip and what it describes.
 const GAP: f32 = 6.0;
 
+/// How long the pointer rests on a control before its tooltip shows (`[motion] tooltip-delay`).
+pub(crate) fn delay() -> std::time::Duration {
+    std::time::Duration::from_secs_f32(crate::config::current().tooltip_delay_ms.max(0.0) / 1000.0)
+}
+
 /// `content` with a tooltip saying `label` on hover, on the `position` side of it.
 pub fn tooltip<'a, M: 'a>(
     content: impl Into<Element<'a, M>>,
@@ -26,15 +31,22 @@ pub struct TooltipProps {
     pub container_style: Option<super::props::ContainerStyle>,
     pub gap: Option<f32>,
     pub padding: Option<iced::Pixels>,
+    /// How long the pointer rests before the tooltip shows; the `[motion] tooltip-delay` setting
+    /// when unset.
+    pub delay: Option<std::time::Duration>,
 }
 impl TooltipProps {
     pub(crate) fn merge(&mut self, overrides: &Self) {
         self.label_props.merge(&overrides.label_props);
-        super::props::merge_fields!(self, overrides; container_style, gap, padding);
+        super::props::merge_fields!(self, overrides; container_style, gap, padding, delay);
     }
 
     pub fn label_props(mut self, props: super::props::TextProps) -> Self {
         self.label_props = props;
+        self
+    }
+    pub fn delay(mut self, delay: std::time::Duration) -> Self {
+        self.delay = Some(delay);
         self
     }
     pub fn style(
@@ -66,6 +78,7 @@ pub fn tooltip_with_props<'a, M: 'a>(
         position,
     )
     .gap(props.gap.unwrap_or(GAP))
+    .delay(props.delay.unwrap_or_else(delay))
     .style(|t: &crate::Theme| match t.token_color("tooltip", "bg") {
         // A theme with its own tooltip: a fill, its text color and a 1px solid border.
         Some(bg) => iced::widget::container::Style {
@@ -97,6 +110,16 @@ pub fn tooltip_with_props<'a, M: 'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tooltip_waits_for_the_configured_delay_unless_its_props_say_otherwise() {
+        assert_eq!(delay(), std::time::Duration::from_secs(1));
+        let props = TooltipProps::default().delay(std::time::Duration::ZERO);
+        assert_eq!(props.delay, Some(std::time::Duration::ZERO));
+        let mut base = TooltipProps::default();
+        base.merge(&props);
+        assert_eq!(base.delay, Some(std::time::Duration::ZERO));
+    }
 
     #[test]
     fn it_wraps_any_content() {

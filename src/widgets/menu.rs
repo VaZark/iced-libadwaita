@@ -1095,6 +1095,7 @@ impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
                 text(t).size(12),
                 tooltip::Position::Bottom,
             )
+            .delay(crate::components::tooltip::delay())
             .style(sc::osd)
             .padding(m.space_xs)
             .into(),

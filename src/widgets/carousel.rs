@@ -1099,6 +1099,7 @@ mod tests {
             "Page tooltip",
             TooltipPosition::Top,
             TooltipProps::default()
+                .delay(std::time::Duration::ZERO)
                 .gap(2.0)
                 .padding(0)
                 .style(|_| iced::widget::container::Style {

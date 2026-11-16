@@ -48,6 +48,7 @@ Defaults are in parentheses. Every key is optional.
 | `reduced-motion`                                                                                      | bool (false)            | every trigger resolves to `none`               |
 | `page-change`, `page-push`, `popover`, `selection`, `drawer`, `dialog`, `sheet`, `toast`, `reveal`, `switch`, `carousel`, `layout` | default, none (default) | that trigger's animation                       |
 | `transition-close`, `transition-open`                                                                 | ms (30)                 | `transition::Budgets::current()`               |
+| `tooltip-delay`                                                                                       | ms (1000)               | how long the pointer rests before a tooltip shows |
 
 `sheet` is the slide and fade of an overlay `Dock`. `layout` is the sidebar sliding at a breakpoint.
 

@@ -547,6 +547,7 @@ mod child_api_tests {
         let label_seen = label_draws.clone();
         let surface_seen = surface_draws.clone();
         let tooltip = TooltipProps::default()
+            .delay(std::time::Duration::ZERO)
             .gap(11.0)
             .padding(7)
             .label_props(

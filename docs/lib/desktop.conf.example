@@ -40,6 +40,8 @@ layout=default           # the sidebar slides in/out of the layout at the collap
 # old layout has this long to close, then the new one this long to open. 0 = instant.
 transition-close=30
 transition-open=30
+# How long the pointer rests on a control before its tooltip shows, in ms. 0 = at once.
+tooltip-delay=1000
 
 [windows]
 decorations=csd          # csd (Adwaita) | ssd (discouraged)

@@ -215,6 +215,15 @@ pub const PROPERTIES: &[Property] = &[
         "30",
     ),
     p(
+        "motion",
+        "tooltip-delay",
+        Number {
+            min: 0.0,
+            max: 5000.0,
+        },
+        "1000",
+    ),
+    p(
         "breakpoints",
         "sm",
         Number {

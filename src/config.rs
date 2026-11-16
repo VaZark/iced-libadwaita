@@ -138,6 +138,9 @@ pub struct Config {
     pub transition_close_ms: f32,
     /// `[motion] transition-open`: the time budget of an open step, in milliseconds.
     pub transition_open_ms: f32,
+    /// `[motion] tooltip-delay`: how long the pointer rests on a control before its tooltip shows,
+    /// in milliseconds.
+    pub tooltip_delay_ms: f32,
     pub decorations: DecorationMode,
     /// `system` follows GNOME's `button-layout`; `Fixed(string)` is a GTK layout string.
     pub button_layout: Pick<String>,
@@ -216,6 +219,7 @@ impl Default for Config {
             motion: Default::default(),
             transition_close_ms: 30.0,
             transition_open_ms: 30.0,
+            tooltip_delay_ms: 1000.0,
             decorations: DecorationMode::Csd,
             button_layout: Pick::System,
             mobile_max_width: crate::breakpoints::MOBILE_MAX_WIDTH,
@@ -440,6 +444,13 @@ impl Config {
             self.transition_open_ms,
             0.0,
             2000.0
+        );
+        num!(
+            "motion",
+            "tooltip-delay",
+            self.tooltip_delay_ms,
+            0.0,
+            5000.0
         );
         if let Some(v) = get("windows", "decorations") {
             match v {
@@ -1155,6 +1166,18 @@ expander-indent=10
 [bogus]
 thing=1
 "#;
+
+    #[test]
+    fn a_tooltip_waits_a_second_unless_the_file_says_otherwise() {
+        assert_eq!(Config::default().tooltip_delay_ms, 1000.0);
+        let c = Config::from_keyfile("[motion]\ntooltip-delay=250\n");
+        assert_eq!(c.tooltip_delay_ms, 250.0);
+        assert!(c.warnings().is_empty());
+        // Out of range: warned about and the default stays.
+        let c = Config::from_keyfile("[motion]\ntooltip-delay=99999\n");
+        assert_eq!(c.tooltip_delay_ms, 1000.0);
+        assert_eq!(c.warnings().len(), 1);
+    }
 
     #[test]
     fn the_retired_name_first_page_is_an_invalid_value() {
