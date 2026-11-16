@@ -14,6 +14,10 @@ cargo xtask man                   # build man pages in target/man/
 
 `cargo test` and `cargo clippy` must be clean before you commit.
 
+## Updating iced
+
+Every iced-family dependency update, including patch and lockfile-only changes, requires the [limitation register's upgrade checks](ICED_LIMITATIONS.md#required-iced-update-procedure). Rerun targeted regressions, workspace checks and the listed live gallery/toy scenarios. Record exact locked versions, actual renderer/environment, per-entry results and evidence in `ICED_LIMITATIONS.md`; explicitly carry blocked or unperformed checks as pending. Compilation is not visual or interaction acceptance, and release notes alone do not justify removing a workaround.
+
 ## Formatting
 
 Local pre-commit hooks: dprint formats JSON, Markdown and TOML; `cargo fmt --all` formats Rust. Install with `pre-commit install`. Run everything with `pre-commit run --all-files`.
@@ -111,7 +115,7 @@ Screenshots can be stale on slow debug builds. Wait before calling a page broken
 
 ## Working on a component
 
-1. Read its page in `docs/hig-inferences/widgets/` and its **iced mapping**.
+1. Read [ICED_LIMITATIONS.md](ICED_LIMITATIONS.md), then its page in `docs/hig-inferences/widgets/` and its **iced mapping**. Reuse documented workarounds and record newly discovered iced constraints or integration traps in the register.
 2. Give it the shape in [docs/lib/components.md](docs/lib/components.md).
 3. Write its doc comments, then `cargo xtask man`.
 4. Show its states, including disabled, in the gallery.

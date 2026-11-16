@@ -1,6 +1,6 @@
 # Agent workflow
 
-Read `CONTRIBUTING.md`, `DESIGN.md`, and `AGENTS_TODO_AND_STATUS.md` before changing code. Preserve user/other-agent work; do not commit, stage, reset, or create branches unless asked.
+Read `CONTRIBUTING.md`, `DESIGN.md`, `ICED_LIMITATIONS.md`, and `AGENTS_TODO_AND_STATUS.md` before changing code. Consult the limitation register before feature design; update it when discovering iced constraints or integration traps, and run/record its per-entry checks on every iced-family dependency update (including patch and lockfile-only updates). Preserve user/other-agent work; do not commit, stage, reset, or create branches unless asked.
 
 ## Bounded sprint-style implementation and testing
 
