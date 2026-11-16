@@ -122,6 +122,17 @@ fn resolve_scheme(mode: iced::theme::Mode) -> crate::Scheme {
     }
 }
 
+/// What a mode reported by a *change* means. The portal's "no preference" (`default` in GNOME) is
+/// what the desktop switches to when the user picks the light style, so once a scheme is known it
+/// is a change back to light. Before anything is known it is the start-up report and means nothing.
+fn resolve_change(mode: iced::theme::Mode) -> crate::Scheme {
+    if mode == iced::theme::Mode::None && color_scheme().is_some() {
+        remember_scheme(crate::Scheme::Light);
+        return crate::Scheme::Light;
+    }
+    resolve_scheme(mode)
+}
+
 fn remember_scheme(scheme: crate::Scheme) {
     PORTAL_SCHEME.store(Some(scheme));
 }
@@ -144,7 +155,7 @@ pub fn detect_color_scheme() -> iced::Task<crate::Scheme> {
 /// Subscribe to it and map it to any message that redraws, so an app with
 /// `[appearance] color-scheme=system` follows the desktop live.
 pub fn follow_color_scheme() -> iced::Subscription<crate::Scheme> {
-    iced::system::theme_changes().map(resolve_scheme)
+    iced::system::theme_changes().map(resolve_change)
 }
 
 /// The configured icon theme (`[appearance] icon-theme`), `hicolor` when not set.
