@@ -805,7 +805,7 @@ fn index(all: &[Component], version: &str) -> String {
     }
     let _ = writeln!(
         o,
-        ".SH SEE ALSO\n\\fBiad\\fR(7), \\fBiad\\-desktop.conf\\fR(5)"
+        ".SH SEE ALSO\n\\fBiad\\fR(7), \\fBiad\\-desktop.ron\\fR(5)"
     );
     o
 }

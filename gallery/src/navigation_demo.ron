@@ -1,0 +1,25 @@
+// Local navigation example, not an installed desktop/theme override.
+{
+    "breakpoints": {
+        "sm": 300,
+        "md": 420,
+    },
+    "navigation": {
+        "breakpoint-rules": "xs:reading,md:scan",
+        "row-padding": 8,
+        "gap": 4,
+        "inset": 6,
+    },
+    "navigation.reading": {
+        "row-height": 48,
+        "row-padding": 12,
+    },
+    // Unset keys inherit navigation's base values, not another named density.
+    "navigation.scan": {
+        "row-height": 32,
+    },
+    // The selected and hovered rows share this actual target shape.
+    "button.gallery-navigation": {
+        "radius": 24,
+    },
+}

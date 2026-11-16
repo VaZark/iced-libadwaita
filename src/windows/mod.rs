@@ -2,7 +2,7 @@
 //!
 //! Adwaita dislikes server-side decorations (SSD): the app draws its own
 //! [`HeaderBar`](crate::widgets::HeaderBar), which carries the title, window
-//! controls and acts as the drag handle. So SSD is off by default (the toolkit config, `[windows]
+//! controls and acts as the drag handle. So SSD is off by default (the toolkit config, `[window-decorations]
 //! decorations`, decides: see [`csd`]); use
 //! [`settings`] for the iced window and [`frame`] to get rounded corners and
 //! edge resize grips, which a decoration-less window otherwise lacks.
@@ -22,14 +22,14 @@ use iced::{Length, Size, Subscription, Task, mouse};
 /// `AdwWindow`'s default minimum size.
 pub const MIN_SIZE: Size = Size::new(360.0, 200.0);
 
-/// The smallest window in effect: the desktop config's `[windows] min-width` / `min-height`
+/// The smallest window in effect: the desktop config's `[window-decorations] min-width` / `min-height`
 /// ([`MIN_SIZE`] is the fallback).
 pub fn min_size() -> Size {
     let c = crate::config::current();
     Size::new(c.min_window_width, c.min_window_height)
 }
 
-/// Whether windows draw their own decorations: the toolkit's `[windows] decorations` setting
+/// Whether windows draw their own decorations: the toolkit's `[window-decorations] decorations` setting
 /// (client-side unless the desktop config says `ssd`). Apps follow it as it is; it is not a
 /// per-app switch.
 pub fn csd() -> bool {
@@ -37,7 +37,7 @@ pub fn csd() -> bool {
 }
 
 /// Window settings following the desktop config: client-side decorations unless the config
-/// says `[windows] decorations=ssd`.
+/// says `[window-decorations] decorations=ssd`.
 pub fn settings() -> Settings {
     if crate::config::current().decorations == crate::config::DecorationMode::Ssd {
         return settings_with_ssd(true);
@@ -216,7 +216,7 @@ pub fn frame<'a, M: Clone + 'a>(
     .width(Length::Fill)
     .height(Length::Fill);
 
-    // A theme can give the window a frame of its own (`[windows] frame-border-*`): a solid one in
+    // A theme can give the window a frame of its own (`[window-decorations] frame-border-*`): a solid one in
     // `frame-border`, or a drawn bevel colored by `[frame.window]`. The toolkit's own 1px outline
     // is then not drawn.
     match crate::theme_config::window_frame() {
@@ -230,7 +230,7 @@ pub fn frame<'a, M: Clone + 'a>(
                     .padding(f.width)
                     .style(move |t: &Theme| iced::widget::container::Style {
                         background: Some(iced::Background::Color(
-                            t.token_color("windows", "frame-border")
+                            t.token_color("window-decorations", "frame-border")
                                 .unwrap_or(t.semantic.window.fg),
                         )),
                         border: iced::Border {
@@ -267,7 +267,7 @@ pub enum Action {
 }
 
 impl Action {
-    /// What a click on the title bar does, from the theme's `[windows] titlebar-<click>-click`
+    /// What a click on the title bar does, from the theme's `[window-decorations] titlebar-<click>-click`
     /// (`click` is `double`, `middle` or `right`). `None` when the token says `none`, or names an
     /// action this window's buttons do not allow (a dialog cannot maximize or minimize).
     pub fn titlebar(click: &str, chrome: &Chrome) -> Option<Self> {

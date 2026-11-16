@@ -1,14 +1,14 @@
 # Desktop config
 
-Desktop behavior is set once per desktop, in a shared file, so every iced-adaptive-design app behaves the same. Apps read these settings. They do not hard-code them. Code: `iced_adaptive_design::config`. Sample: [desktop.conf.example](desktop.conf.example). Man page: `iad-desktop.conf(5)`.
+Desktop behavior is set once per desktop, in a shared file, so every iced-adaptive-design app behaves the same. Apps read these settings. They do not hard-code them. Code: `iced_adaptive_design::config`. Sample: [desktop.ron.example](desktop.ron.example). Man page: `iad-desktop.ron(5)`.
 
 ## Where and in what order
 
-GLib key-file format: `[section]`, `key=value`, `#` comments. No dependencies. Lowest to highest priority:
+[RON](https://github.com/ron-rs/ron): a map of sections to maps of keys, `//` comments (see `desktop.ron.example`). Numbers are numbers and flags are booleans. Lowest to highest priority:
 
 1. built-in defaults (the HIG defaults)
-2. system files: `$XDG_CONFIG_DIRS/iced-adaptive-design/desktop.conf` (default `/etc/xdg`)
-3. the user file: `$XDG_CONFIG_HOME/iced-adaptive-design/desktop.conf` (`~/.config`)
+2. system files: `$XDG_CONFIG_DIRS/iced-adaptive-design/desktop.ron` (default `/etc/xdg`)
+3. the user file: `$XDG_CONFIG_HOME/iced-adaptive-design/desktop.ron` (`~/.config`)
 4. the app's opt-outs, if the desktop allows them
 
 ```mermaid
@@ -21,7 +21,7 @@ flowchart LR
 
 An app that needs its own look (custom colors, paddings, tokens for its own objects) uses the [app theme config](theme-config.md), not an opt-out.
 
-Later wins per key. `ICED_ADAPTIVE_DESIGN_CONFIG=/path.conf` replaces 2 and 3 with one file (testing). Invalid or unknown values are ignored with a warning (`Config::warnings`).
+Later wins per key. `ICED_ADAPTIVE_DESIGN_CONFIG=/path.ron` replaces 2 and 3 with one file (testing). Invalid or unknown values are ignored with a warning (`Config::warnings`).
 
 ## Settings
 
@@ -52,12 +52,12 @@ Defaults are in parentheses. Every key is optional.
 
 `sheet` is the slide and fade of an overlay `Dock`. `layout` is the sidebar sliding at a breakpoint.
 
-### `[windows]`
+### `[window-decorations]`
 
 | Key                | Values                          | Drives                                          |
 | ------------------ | ------------------------------- | ----------------------------------------------- |
 | `decorations`      | csd, ssd (csd)                  | `windows::settings()`; transparent base for csd  |
-| `button-layout`    | system, a GTK-style string (system) | `DecorationLayout::detect()`: a fixed value here, else the theme's `[windows] button-layout`, else `appmenu:close` |
+| `button-layout`    | system, a GTK-style string (system) | `DecorationLayout::detect()`: a fixed value here, else the theme's `[window-decorations] button-layout`, else `appmenu:close` |
 | `min-width`, `min-height` | px (360, 200)            | minimum window size                             |
 | `mobile-max-width` | px (575, `sm` − 1)              | `breakpoints::is_mobile`, menu `Auto`                |
 
@@ -150,6 +150,6 @@ The library's `utils` module provides one application setup path:
 - Run `utils::detect_theme().map(Message::SystemTheme)` at startup.
 - Include `utils::follow_theme().map(Message::SystemTheme)` in the application's subscription; handling that message redraws with `utils::theme()`.
 
-Color-scheme detection uses iced's native settings/portal integration: the portal's light/dark is the only thing the toolkit reads from the system. Nothing is read from GSettings or GTK settings files. The icon theme, window button layout and animations come from the config (`[icons] theme`, `[windows] button-layout`, `[motion] animations`), and the look itself from a theme file (see `theme-config.md`). Fixed values in global configuration remain authoritative. The gallery uses the same API for its header System/Light/Dark button.
+Color-scheme detection uses iced's native settings/portal integration: the portal's light/dark is the only thing the toolkit reads from the system. Nothing is read from GSettings or GTK settings files. The icon theme, window button layout and animations come from the config (`[icons] theme`, `[window-decorations] button-layout`, `[motion] animations`), and the look itself from a theme file (see `theme-config.md`). Fixed values in global configuration remain authoritative. The gallery uses the same API for its header System/Light/Dark button.
 
 `components::ThemeToggle::new(mode).on_toggle(Message::Appearance)` cycles `ThemeMode::System` (the default), `Light`, `Dark`, then back to `System`. Handle it with `utils::set_scheme_override(mode.scheme_override())`; `utils::theme()` and `Theme::from_config` then use that app-level choice. `set_scheme_override(None)` resumes following the desktop. This process-local override never changes desktop preferences or writes the shared configuration, and respects `allow-app-overrides`.

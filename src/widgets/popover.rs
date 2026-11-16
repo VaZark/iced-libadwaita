@@ -405,6 +405,9 @@ struct State {
     /// The content was on screen since it was last reset: closing it puts it back as new, so a
     /// menu that was left on a submenu opens on its first page again.
     shown: bool,
+    /// The side and alignment the popover was last placed with: kept while they still fit (CSS
+    /// anchor positioning's "last successful option"), and forgotten when it closes.
+    placed: Option<(crate::layouts::anchor::Side, crate::layouts::anchor::Align)>,
     /// 0 → 1 while the popover opens; restarted each time it opens.
     appear: crate::layouts::animation::Progress,
 }
@@ -423,6 +426,7 @@ impl State {
             pointer: None,
             open,
             shown: open,
+            placed: None,
             appear: crate::layouts::animation::Progress::new(start),
         }
     }
@@ -929,7 +933,8 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
         let state = state.downcast_mut::<State>();
         if !state.open {
             // Closed: forget where the content was left (the page of a submenu, a scroll), so
-            // it opens as new.
+            // it opens as new, on its preferred side.
+            state.placed = None;
             if state.shown {
                 state.shown = false;
                 children[1] = Tree::new(self.popover.as_widget());
@@ -967,6 +972,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Popover<'a, M> {
             keyboard_pointer: &mut state.keyboard_pointer,
             menu_navigation: self.menu_navigation,
             appear: &mut state.appear,
+            placed: &mut state.placed,
             anchor,
             align: self.align,
             min_width: self.popover_width,
@@ -997,6 +1003,7 @@ struct PopoverOverlay<'a, 'b, M> {
     keyboard_pointer: &'b mut Option<Point>,
     menu_navigation: bool,
     appear: &'b mut crate::layouts::animation::Progress,
+    placed: &'b mut Option<(crate::layouts::anchor::Side, crate::layouts::anchor::Align)>,
     anchor: Rectangle,
     align: Align,
     min_width: Option<f32>,
@@ -1074,6 +1081,7 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
             },
             offset: self.offset,
             margin: MARGIN,
+            last: *self.placed,
             ..anchor::Placement::default()
         };
         // Everything is measured inside the region the popover is kept in: the content area it
@@ -1120,8 +1128,9 @@ impl<'a, 'b, M> overlay::Overlay<M, Theme, iced::Renderer> for PopoverOverlay<'a
             .as_widget_mut()
             .layout(self.tree, renderer, &limits);
         let size = node.size();
-        let at = place_within(self.anchor, size, region, placement);
-        layout::Node::with_children(size, vec![node]).move_to(at)
+        let placed = place_within_choice(self.anchor, size, region, placement);
+        *self.placed = Some(placed.1);
+        layout::Node::with_children(size, vec![node]).move_to(placed.0)
     }
 
     fn draw(
@@ -1417,17 +1426,34 @@ fn place_within(
     region: Rectangle,
     placement: crate::layouts::anchor::Placement,
 ) -> Point {
+    place_within_choice(anchor, size, region, placement).0
+}
+
+/// [`place_within`], and the side and alignment it used, to remember for the next placement.
+fn place_within_choice(
+    anchor: Rectangle,
+    size: Size,
+    region: Rectangle,
+    placement: crate::layouts::anchor::Placement,
+) -> (
+    Point,
+    (crate::layouts::anchor::Side, crate::layouts::anchor::Align),
+) {
     let rel = Rectangle {
         x: anchor.x - region.x,
         y: anchor.y - region.y,
         ..anchor
     };
-    let at = crate::layouts::anchor::place(rel, size, region.size(), placement).position;
+    let placed = crate::layouts::anchor::place(rel, size, region.size(), placement);
+    let at = placed.position;
     // An anchor may be outside the current viewport after a resize or scroll.
     // The anchor primitive flips against it; clamp both axes to the final region.
-    Point::new(
-        (at.x + region.x).clamp(region.x, region.x + (region.width - size.width).max(0.0)),
-        (at.y + region.y).clamp(region.y, region.y + (region.height - size.height).max(0.0)),
+    (
+        Point::new(
+            (at.x + region.x).clamp(region.x, region.x + (region.width - size.width).max(0.0)),
+            (at.y + region.y).clamp(region.y, region.y + (region.height - size.height).max(0.0)),
+        ),
+        placed.choice(),
     )
 }
 
@@ -1968,6 +1994,27 @@ mod tests {
             plain,
             crate::layouts::anchor::place(anchor, size, window.size(), below()).position
         );
+    }
+
+    #[test]
+    fn a_popover_stays_where_it_last_fit_until_that_overflows() {
+        let region = Rectangle::new(Point::new(100.0, 100.0), Size::new(300.0, 200.0));
+        let size = Size::new(80.0, 60.0);
+        let anchor = |y| Rectangle::new(Point::new(150.0, y), Size::new(40.0, 20.0));
+        // Near the bottom of the region: opens above.
+        let (_, first) = place_within_choice(anchor(270.0), size, region, below());
+        assert_eq!(first.0, Side::Top);
+        // The anchor moves up so below fits again; remembering the choice keeps it above.
+        let remembered = Placement {
+            last: Some(first),
+            ..below()
+        };
+        let (at, kept) = place_within_choice(anchor(200.0), size, region, remembered);
+        assert_eq!(kept.0, Side::Top);
+        assert!(at.y + size.height <= 200.0, "above the anchor: {at:?}");
+        // Forgotten (the popover closed): back to the preferred side.
+        let (_, fresh) = place_within_choice(anchor(200.0), size, region, below());
+        assert_eq!(fresh.0, Side::Bottom);
     }
 
     #[test]

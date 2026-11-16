@@ -8,7 +8,7 @@ use iced::widget::{column, container};
 use iced_adaptive_design as iad;
 use std::sync::LazyLock;
 
-const CONFIG_TEXT: &str = include_str!("navigation_demo.conf");
+const CONFIG_TEXT: &str = include_str!("navigation_demo.ron");
 const DESTINATIONS: [(&str, &str); 2] = [("Inbox", "Opened Inbox"), ("Archive", "Opened Archive")];
 
 fn schema() -> Schema {
@@ -109,7 +109,7 @@ pub fn view(metrics: Metrics) -> Element<'static> {
     column![
         ty::caption("Explicit .variant(\"reading\"): a custom name, not an enum preset. Inbox is selected; hover either row to compare effects on the config-owned target shape."),
         preview(config(), metrics, Some("reading")),
-        ty::caption("Local xs:reading,md:scan rules: resize the gallery. Thresholds and densities come from navigation_demo.conf; scan inherits base padding, gap and inset."),
+        ty::caption("Local xs:reading,md:scan rules: resize the gallery. Thresholds and densities come from navigation_demo.ron; scan inherits base padding, gap and inset."),
         preview(config(), metrics, None),
     ]
     .spacing(metrics.space_m)

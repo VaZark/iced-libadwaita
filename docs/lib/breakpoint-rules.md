@@ -5,19 +5,22 @@ A breakpoint rule selects a variant; it does not introduce a second set of style
 properties. Scheme variations remain orthogonal: `[dark:widget.variant]` overrides
 that variant in the dark scheme.
 
-```ini
-[tabs]
-breakpoint-rules=xs:pills,md:outline,lg:default
-
-[tabs.outline]
-indicator-height=2px
-border-width=1px
-
-[dark:tabs.outline]
-border-width=2px
-
-[toolbar]
-breakpoint-rules=xs:flat,md:raised-border
+```ron
+{
+    "tabs": {
+        "breakpoint-rules": "xs:pills,md:outline,lg:default",
+    },
+    "tabs.outline": {
+        "indicator-height": 2,
+        "border-width": 1,
+    },
+    "dark:tabs.outline": {
+        "border-width": 2,
+    },
+    "toolbar": {
+        "breakpoint-rules": "xs:flat,md:raised-border",
+    },
+}
 ```
 
 Rules use comma-separated `breakpoint:variant` pairs. Classes are `xs`, `sm`, `md`,
@@ -57,22 +60,25 @@ slider, and local-token previews. Light/dark selection is not widget variant sel
 
 ## Navigation density
 
-```ini
-[breakpoints]
-md=700px
-
-[navigation]
-breakpoint-rules=xs:sm,md:lg
-row-padding=12px
-gap=2px
-inset=6px
-
-[navigation.sm]
-row-height=30px
-
-[navigation.lg]
-row-height=48px
-row-padding=14px
+```ron
+{
+    "breakpoints": {
+        "md": 700,
+    },
+    "navigation": {
+        "breakpoint-rules": "xs:sm,md:lg",
+        "row-padding": 12,
+        "gap": 2,
+        "inset": 6,
+    },
+    "navigation.sm": {
+        "row-height": 30,
+    },
+    "navigation.lg": {
+        "row-height": 48,
+        "row-padding": 14,
+    },
+}
 ```
 
 ```rust,ignore
@@ -90,7 +96,7 @@ base navigation key → supplied metric. There is no size-name arithmetic or spe
 values, never another variant's geometry. Custom names must be registered in the
 schema.
 
-Density defaults are config-loaded. The shipped `themes/libadwaita.conf` explicitly
+Density defaults are config-loaded. The shipped `themes/libadwaita.ron` explicitly
 sets the existing libadwaita geometry:
 
 | Config variant | Minimum row height | Horizontal row padding | Gap | Inset |

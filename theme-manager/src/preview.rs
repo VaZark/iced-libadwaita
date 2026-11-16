@@ -40,7 +40,7 @@ impl Preview {
             "Project",
             vec![
                 TreeNode::branch("src", "Sources", vec![TreeNode::new("main", "main.rs")]),
-                TreeNode::new("theme", "theme.conf"),
+                TreeNode::new("theme", "theme.ron"),
             ],
         )];
         let mut tree_state = TreeState::default();

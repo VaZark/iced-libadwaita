@@ -16,7 +16,7 @@ flowchart TD
 - Do not animate in the app what a component already animates. To animate something yourself, use `animation::Tween` with a `Spec`. Gate it with `Trigger::…::spec(..)` or `animation::enabled()`, so reduced motion is respected.
 - Springs for things the user moves (drawer, dock, carousel). Short eased transitions for state changes.
 
-Every trigger is a key of the `[motion]` section: see `iad-desktop.conf(5)`.
+Every trigger is a key of the `[motion]` section: see `iad-desktop.ron(5)`.
 
 ## Surfaces and hierarchical boundaries
 

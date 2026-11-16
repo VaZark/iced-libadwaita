@@ -617,7 +617,7 @@ impl Gallery {
                     Some(iced::Size::new(w.parse().ok()?, h.parse().ok()?))
                 })
                 .unwrap_or(iced::Size::new(1040.0, 760.0)),
-            // Client-side or system decorations: the toolkit's `[windows] decorations` setting.
+            // Client-side or system decorations: the toolkit's `[window-decorations] decorations` setting.
             ..iad::windows::settings()
         }
     }
@@ -1701,8 +1701,8 @@ impl Gallery {
 
 /// Runs the gallery (the `gallery` binary, and `theme-manager gallery`).
 pub fn run() -> iced::Result {
-    // Shared desktop behavior: ~/.config/iced-adaptive-design/desktop.conf (+ system files).
-    const DEFAULT_BASE_THEME: &str = include_str!("../../themes/libadwaita.conf");
+    // Shared desktop behavior: ~/.config/iced-adaptive-design/desktop.ron (+ system files).
+    const DEFAULT_BASE_THEME: &str = include_str!("../../themes/libadwaita.ron");
     let mut cfg = iad::config::Config::load_with_base_theme(DEFAULT_BASE_THEME);
     if std::env::var_os("GALLERY_OPT_OUT").is_some() {
         // Opting out of desktop settings is highly discouraged; shown here only to demonstrate

@@ -1,4 +1,4 @@
-//! Shadow tokens. The bare baseline has none; `themes/libadwaita.conf` models libadwaita's.
+//! Shadow tokens. The bare baseline has none; `themes/libadwaita.ron` models libadwaita's.
 //!
 //! Adwaita builds elevation from *stacked* CSS box-shadows (a 1px ring plus one
 //! or two blurred layers). iced draws one shadow per quad, so each [`Elevation`]

@@ -1151,7 +1151,18 @@ mod tests {
         let tokens = ThemeConfig::builder("tree-variants")
             .files(false)
             .schema(Schema::new().variant("tree", "compact", &[]))
-            .app_text("[tree]\nlevel-offset=21px\nrow-height=35px\nicon-padding=6px\n[tree.compact]\nrow-height=27px\nlabel-padding=3px")
+            .app_text(r##"{
+    "tree": {
+        "level-offset": 21,
+        "row-height": 35,
+        "icon-padding": 6,
+    },
+    "tree.compact": {
+        "row-height": 27,
+        "label-padding": 3,
+    },
+}
+"##)
             .build()
             .tokens();
         let d = data();
@@ -1193,11 +1204,29 @@ mod tests {
         let cfg = ThemeConfig::builder("tree-local")
             .files(false)
             .schema(Schema::new().variant("tree", "narrow", &[]).variant("tree", "wide", &[]))
-            .app_text("[tree]\nbreakpoint-rules=xs:narrow,md:wide\nlevel-offset=23px\n[tree.narrow]\nrow-height=26px\n[tree.wide]\nrow-height=42px\ngrip-width=48px")
+            .app_text(r##"{
+    "tree": {
+        "breakpoint-rules": "xs:narrow,md:wide",
+        "level-offset": 23,
+    },
+    "tree.narrow": {
+        "row-height": 26,
+    },
+    "tree.wide": {
+        "row-height": 42,
+        "grip-width": 48,
+    },
+}
+"##)
             .build();
         let other = ThemeConfig::builder("tree-other")
             .files(false)
-            .app_text("[tree]\nrow-height=61px")
+            .app_text(r##"{
+    "tree": {
+        "row-height": 61,
+    },
+}
+"##)
             .build();
         let d = data();
         let state = TreeState::new();

@@ -88,6 +88,10 @@ pub struct Placement {
     /// alignment (`Start` / `End`) when the preferred one overflows the viewport, so the surface
     /// still shares an edge with the anchor (`Outside` only).
     pub flip: bool,
+    /// The option last used for this surface (`Outside` only). Like CSS's "last successful position
+    /// option", it is kept for as long as it fits, even when the preferred one would fit again, so
+    /// a surface does not jump back and forth as the room changes. See [`Placed::choice`].
+    pub last: Option<(Side, Align)>,
     /// Slide along the side to stay inside the viewport (`Outside`) or the anchor (`Inside`).
     pub shift: bool,
 }
@@ -102,6 +106,7 @@ impl Default for Placement {
             cross_offset: 0.0,
             margin: 6.0,
             flip: true,
+            last: None,
             shift: true,
         }
     }
@@ -266,6 +271,14 @@ pub struct Placed {
     pub size: Size,
     /// The side actually used (differs from the request after a flip).
     pub side: Side,
+    /// The alignment actually used (differs from the request after a flip).
+    pub align: Align,
+}
+impl Placed {
+    /// The option to give back as [`Placement::last`] on the next placement.
+    pub fn choice(&self) -> (Side, Align) {
+        (self.side, self.align)
+    }
 }
 
 /// Room available on `side` of `anchor` inside `bounds`, after the offset and margin.
@@ -341,9 +354,40 @@ fn outside(
         s
     };
     let need = |side: Side, s: Size| if side.vertical() { s.height } else { s.width };
+    // The position along the edge the surface shares with the anchor (the cross axis) for a
+    // surface of `size` on `side`, and whether that is inside the viewport.
+    let cross_at = |side: Side, size: Size, align: Align| {
+        let (start, len, own) = if side.vertical() {
+            (anchor.x, anchor.width, size.width)
+        } else {
+            (anchor.y, anchor.height, size.height)
+        };
+        along(align, start, len, own) + p.cross_offset
+    };
+    let cross_fits = |side: Side, size: Size, v: f32| {
+        let (own, total) = if side.vertical() {
+            (size.width, bounds.width)
+        } else {
+            (size.height, bounds.height)
+        };
+        v >= p.margin && v + own <= total - p.margin
+    };
+    let fits = |side: Side, align: Align| {
+        let size = sized(side);
+        room(&anchor, bounds, &p, side) >= need(side, size)
+            && cross_fits(side, size, cross_at(side, size, align))
+    };
     let mut side = p.side;
     let mut size = sized(side);
-    if p.flip && room(&anchor, bounds, &p, side) < need(side, size) {
+    let mut align = p.align;
+    // The last option that worked stays for as long as it still fits (CSS anchor positioning's
+    // "last successful position option"); only when it overflows is the preferred order tried.
+    let sticky = p.flip && p.last.is_some_and(|(s, a)| fits(s, a));
+    if sticky && let Some((s, a)) = p.last {
+        side = s;
+        size = sized(s);
+        align = a;
+    } else if p.flip && room(&anchor, bounds, &p, side) < need(side, size) {
         let other = side.opposite();
         let other_size = sized(other);
         // Flip when the other side fits, or at least has more room.
@@ -354,27 +398,21 @@ fn outside(
             size = other_size;
         }
     }
-    // The position along the edge the surface shares with the anchor (the cross axis).
-    let (anchor_start, anchor_len, own, total) = if side.vertical() {
-        (anchor.x, anchor.width, size.width, bounds.width)
-    } else {
-        (anchor.y, anchor.height, size.height, bounds.height)
-    };
-    let cross = |align: Align| along(align, anchor_start, anchor_len, own) + p.cross_offset;
-    let fits = |v: f32| v >= p.margin && v + own <= total - p.margin;
-    let mut c = cross(p.align);
+    let mut c = cross_at(side, size, align);
     // Keep the shared edge in either direction: when `align` would overflow the viewport and the
     // opposite edge fits, line up with that edge instead of sliding away from the anchor.
-    if p.flip && !fits(c) {
-        let other = match p.align {
+    if p.flip && !sticky && !cross_fits(side, size, c) {
+        let other = match align {
             Align::Start => Some(Align::End),
             Align::End => Some(Align::Start),
             Align::Center => None,
         };
-        if let Some(other) = other
-            && fits(cross(other))
-        {
-            c = cross(other);
+        if let Some(other) = other {
+            let v = cross_at(side, size, other);
+            if cross_fits(side, size, v) {
+                c = v;
+                align = other;
+            }
         }
     }
     let (mut x, mut y);
@@ -414,6 +452,7 @@ fn outside(
         position: Point::new(x, y),
         size,
         side,
+        align,
     }
 }
 
@@ -463,6 +502,7 @@ fn inside(anchor: Rectangle, intrinsic: Size, sizing: Sizing, p: Placement) -> P
         position: Point::new(x, y),
         size,
         side: p.side,
+        align: p.align,
     }
 }
 
@@ -491,6 +531,7 @@ fn straddle(anchor: Rectangle, intrinsic: Size, sizing: Sizing, p: Placement) ->
         position: Point::new(cx - size.width / 2.0, cy - size.height / 2.0),
         size,
         side: p.side,
+        align: p.align,
     }
 }
 
@@ -507,6 +548,7 @@ fn center(anchor: Rectangle, intrinsic: Size, sizing: Sizing, p: Placement) -> P
         position: Point::new(x, y),
         size,
         side: p.side,
+        align: p.align,
     }
 }
 
@@ -615,6 +657,43 @@ mod tests {
         // A side placement mirrors the same way: the roles of the axes swap.
         let r = place(at(360.0, 370.0), surface, view, p(Side::Right, Align::Start));
         assert_eq!((r.side, r.position), (Side::Left, Point::new(326.0, 350.0)));
+    }
+
+    /// CSS's "last successful position option" (WPT `position-try-fallbacks-003`): once flipped,
+    /// a surface stays flipped while that still fits, and goes back only when it no longer does.
+    #[test]
+    fn keeps_the_last_option_that_worked_until_it_overflows() {
+        let view = Size::new(400.0, 300.0);
+        let q = p(Side::Bottom, Align::Start);
+        // No room below: flips above, and reports the choice.
+        let first = place(anchor(50.0, 250.0), S, view, q);
+        assert_eq!(first.choice(), (Side::Top, Align::Start));
+        // Moved up so the preferred side fits again. Without memory it goes back below...
+        let back = place(anchor(50.0, 100.0), S, view, q);
+        assert_eq!(back.side, Side::Bottom);
+        // ...with the last choice it stays above, which still fits.
+        let sticky = Placement {
+            last: Some(first.choice()),
+            ..q
+        };
+        let kept = place(anchor(50.0, 100.0), S, view, sticky);
+        assert_eq!((kept.side, kept.position.y), (Side::Top, 100.0 - 4.0 - 80.0));
+        // Above no longer fits (anchor near the top): it returns to the preferred side.
+        let again = place(anchor(50.0, 40.0), S, view, sticky);
+        assert_eq!(again.side, Side::Bottom);
+        // The alignment is remembered the same way.
+        let end = place(anchor(320.0, 50.0), S, view, q);
+        assert_eq!(end.choice().1, Align::End);
+        let kept = place(
+            anchor(200.0, 50.0),
+            S,
+            view,
+            Placement { last: Some(end.choice()), ..q },
+        );
+        assert_eq!(kept.align, Align::End);
+        // With flipping off, nothing is remembered or applied.
+        let off = place(anchor(50.0, 100.0), S, view, Placement { flip: false, ..sticky });
+        assert_eq!(off.side, Side::Bottom);
     }
 
     #[test]

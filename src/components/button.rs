@@ -499,7 +499,7 @@ impl<'a, T, M> ToggleGroup<'a, T, M> {
         self.homogeneous = h;
         self
     }
-    /// Follows the window's mode: in mobile mode (`breakpoints::is_mobile(width)`, the `[windows]
+    /// Follows the window's mode: in mobile mode (`breakpoints::is_mobile(width)`, the `[window-decorations]
     /// mobile-max-width` breakpoint) every segment that has an icon *and* a label shows the icon
     /// only; above it, icon and text. A segment with no icon has nothing shorter to show and
     /// falls back to its text. Same rule as [`MenuPresentation::resolve`](crate::widgets::MenuPresentation).
@@ -631,7 +631,16 @@ mod circular_button_tests {
         // A theme with a small radius and a variant that sets another one cannot change it.
         let cfg = crate::theme_config::ThemeConfig::builder("t")
             .files(false)
-            .toolkit_text("[metrics]\nradius-m=2\nradius-pill=2\n[button.suggested]\nradius=5px\n")
+            .toolkit_text(r##"{
+    "metrics": {
+        "radius-m": 2,
+        "radius-pill": 2,
+    },
+    "button.suggested": {
+        "radius": 5,
+    },
+}
+"##)
             .app_text("")
             .build();
         let theme = Theme::light().with_theme_config(&cfg);

@@ -25,7 +25,7 @@ pub enum CollapseBehavior {
     Flex,
 }
 
-/// Layout tokens (logical px). The defaults are the bare baseline; `themes/libadwaita.conf` has
+/// Layout tokens (logical px). The defaults are the bare baseline; `themes/libadwaita.ron` has
 /// libadwaita's.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Metrics {

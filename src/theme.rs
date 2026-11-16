@@ -178,7 +178,7 @@ impl Theme {
         if let Some(t) = cfg.typography() {
             self.typography = t;
         }
-        if let Some(flat) = cfg.bool("windows", "flat-headerbars") {
+        if let Some(flat) = cfg.bool("window-decorations", "flat-headerbars") {
             self.flat_headerbars = flat;
         }
         if let Some(c) = cfg.color("colors", "focus-ring") {

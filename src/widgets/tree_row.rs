@@ -672,7 +672,16 @@ mod local_variant_tests {
     fn local_rules_and_explicit_variants_do_not_require_global_installation() {
         let config = ThemeConfig::builder("local-tree-row").files(false)
             .schema(Schema::toolkit().variant("tree-row", "wide", &[]))
-            .toolkit_text("[tree-row]\nindent=11px\nbreakpoint-rules=xs:default,md:wide\n[tree-row.wide]\nindent=29px")
+            .toolkit_text(r##"{
+    "tree-row": {
+        "indent": 11,
+        "breakpoint-rules": "xs:default,md:wide",
+    },
+    "tree-row.wide": {
+        "indent": 29,
+    },
+}
+"##)
             .app_text("").build();
         let tokens = config.tokens();
         let row = TreeRow::<u8>::new("local").theme_config(&config);

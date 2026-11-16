@@ -10,12 +10,12 @@ use iced_adaptive_design as iad;
 
 /// `(key, file text)`, in the order they are listed.
 pub(crate) const BUNDLED: [(&str, &str); 6] = [
-    ("libadwaita", include_str!("../../themes/libadwaita.conf")),
-    ("cosmic", include_str!("../../themes/cosmic.conf")),
-    ("bubblegum", include_str!("../../themes/bubblegum.conf")),
-    ("solarized", include_str!("../../themes/solarized.conf")),
-    ("synthwave", include_str!("../../themes/synthwave.conf")),
-    ("terminal", include_str!("../../themes/terminal.conf")),
+    ("libadwaita", include_str!("../../themes/libadwaita.ron")),
+    ("cosmic", include_str!("../../themes/cosmic.ron")),
+    ("bubblegum", include_str!("../../themes/bubblegum.ron")),
+    ("solarized", include_str!("../../themes/solarized.ron")),
+    ("synthwave", include_str!("../../themes/synthwave.ron")),
+    ("terminal", include_str!("../../themes/terminal.ron")),
 ];
 
 /// The text of the bundled theme `key`.
@@ -25,9 +25,8 @@ pub(crate) fn text(key: &str) -> Option<&'static str> {
 
 /// A theme text's display name: its `[theme] name`, else `fallback`.
 pub(crate) fn name_of(text: &str, fallback: &str) -> String {
-    iad::config::parse_keyfile(text)
-        .get(&("theme".to_string(), "name".to_string()))
-        .filter(|n| !n.is_empty())
-        .cloned()
+    iad::theme_config::Document::parse(text)
+        .ok()
+        .and_then(|d| d.text("theme", "name").filter(|n| !n.is_empty()).map(String::from))
         .unwrap_or_else(|| fallback.to_string())
 }

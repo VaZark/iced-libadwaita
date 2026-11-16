@@ -77,7 +77,7 @@ pub fn window_title_with_props<'a, M: 'a>(
     title_props: &TextProps,
     subtitle_props: &TextProps,
 ) -> Element<'a, M> {
-    // Bold unless the theme's `[windows] titlebar-font-weight` says normal.
+    // Bold unless the theme's `[window-decorations] titlebar-font-weight` says normal.
     let name = if crate::theme_config::titlebar_bold() {
         typography::heading(title.to_string())
     } else {
@@ -291,7 +291,7 @@ impl<'a, M> HeaderBar<'a, M> {
                 layout: None,
             })
             .on_drag(on_action(Action::Drag));
-        // What a click on the bar does is the theme's `[windows] titlebar-*-click`.
+        // What a click on the bar does is the theme's `[window-decorations] titlebar-*-click`.
         let act = |click: &str| Action::titlebar(click, chrome).map(&on_action);
         if let Some(m) = act("double") {
             bar = bar.on_double_click(m);
@@ -379,7 +379,24 @@ fn control_style(
     style
 }
 
-/// A window button with the chosen artwork, sized and rounded by the theme's `[windows]` tokens.
+/// How far from the window's side edge a button whose top edge is `above` below the top must
+/// sit so that its outer corner is at least `clearance` inside the arc of a window corner of
+/// `radius`. The corner point `(inset, above)` has to be within `radius - clearance` of the arc's
+/// center `(radius, radius)`. No rounded corner, or a button below the curve: nothing is needed.
+pub(crate) fn corner_inset(radius: f32, above: f32, clearance: f32) -> f32 {
+    if radius <= 0.0 || above >= radius {
+        return 0.0;
+    }
+    let reach = radius - clearance.max(0.0);
+    let down = radius - above;
+    if reach <= down {
+        // No sideways position keeps that clearance at this height: as far as the arc goes.
+        return radius;
+    }
+    radius - (reach * reach - down * down).sqrt()
+}
+
+/// A window button with the chosen artwork, sized and rounded by the theme's `[window-decorations]` tokens.
 fn ctl<'a, M: Clone + 'a>(
     icon: IconSource,
     kind: &'static str,
@@ -390,7 +407,8 @@ fn ctl<'a, M: Clone + 'a>(
     let size = crate::theme_config::window_button_size();
     let radius = crate::theme_config::window_button_radius();
     let icon_size = crate::theme_config::window_button_icon_size();
-    // A theme that names a button variant for the window buttons (`[windows] button-style`) styles
+    let filled = crate::theme_config::window_buttons_filled();
+    // A theme that names a button variant for the window buttons (`[window-decorations] button-style`) styles
     // them as that variant, bevel and gradient included; its radius and size are the variant's.
     if let Some(name) = crate::theme_config::window_button_style() {
         let section = format!("button.{name}");
@@ -435,7 +453,9 @@ fn ctl<'a, M: Clone + 'a>(
             iced::widget::button(container(icon.view(icon_size)).center(Length::Fixed(size)))
                 .padding(0)
                 .style(move |t: &Theme, status| {
-                    let mut style = if flat.unwrap_or(t.flat_headerbars) {
+                    // The bare glyph in the title bar's foreground, with a fill only under the
+                    // pointer; a theme asks for a disc at rest with `[window-decorations] button-fill=circle`.
+                    let mut style = if filled && flat.unwrap_or(t.flat_headerbars) {
                         crate::styles::button::circular(t, status)
                     } else {
                         crate::styles::button::headerbar(t, status)
@@ -493,7 +513,7 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
                     }),
                 }
             };
-            // The window buttons sit together, `[windows] button-gap` apart.
+            // The window buttons sit together, `[window-decorations] button-gap` apart.
             let gap = crate::theme_config::window_button_gap();
             let close_gap = crate::theme_config::window_close_gap();
             let group = |buttons: Vec<(WindowButton, Element<'a, M>)>| -> Option<Element<'a, M>> {
@@ -520,11 +540,38 @@ impl<'a, M: Clone + 'a> From<HeaderBar<'a, M>> for Element<'a, M> {
                     .filter_map(|b| make(b).map(|el| (b, el)))
                     .collect()
             };
+            // Clear of the title bar's edge, so the buttons keep their distance from a rounded
+            // window corner (`[window-decorations] button-inset`).
+            let inset = crate::theme_config::window_button_inset();
+            // The buttons are centered in the bar: this far below its top edge.
+            let pad = h.padding.unwrap_or(m.headerbar_padding);
+            let (_, button_height) = crate::theme_config::window_button_dims();
+            let above = pad.top + (h.height.unwrap_or(m.headerbar_height) - button_height) / 2.0;
+            let clearance = crate::theme_config::window_button_corner_clearance().unwrap_or(above / 2.0);
+            // Near a rounded window corner the side inset grows so the button's corner keeps
+            // `clearance` from the arc, however large the radius is.
+            let inset_at = |side_pad: f32, radius: f32| {
+                inset.max(corner_inset(radius, above, clearance) - side_pad)
+            };
+            let (inset_l, inset_r) = (inset_at(pad.left, corner_l), inset_at(pad.right, corner_r));
+            // And apart from the title bar's own actions (`[window-decorations] button-separation`).
+            let apart = crate::theme_config::window_button_separation();
             if h.show_start_buttons {
-                start.splice(0..0, group(made(&layout.start)));
+                start.splice(
+                    0..0,
+                    group(made(&layout.start)).map(|g| {
+                        Element::from(
+                            container(g).padding(iced::Padding::ZERO.left(inset_l).right(apart)),
+                        )
+                    }),
+                );
             }
             if h.show_end_buttons {
-                end.extend(group(made(&layout.end)));
+                end.extend(group(made(&layout.end)).map(|g| {
+                    Element::from(
+                        container(g).padding(iced::Padding::ZERO.right(inset_r).left(apart)),
+                    )
+                }));
             }
         }
         let mut title: Element<'a, M> = match (h.title_widget, h.title) {
@@ -619,7 +666,14 @@ mod tests {
         use iced::widget::button::Status;
         let cfg = crate::theme_config::ThemeConfig::builder("test")
             .files(false)
-            .toolkit_text("[windows]\nclose-bg=#ff0000\nclose-fg=#ffffff\nclose-border=#000000\n")
+            .toolkit_text(r##"{
+    "window-decorations": {
+        "close-bg": "#ff0000",
+        "close-fg": "#ffffff",
+        "close-border": "#000000",
+    },
+}
+"##)
             .build();
         let theme = Theme::light().with_theme_config(&cfg);
         for base in [
@@ -823,5 +877,43 @@ mod child_props_tests {
         assert_eq!(bar.on_drag, Some(7));
         assert_eq!(bar.controls.as_ref().unwrap().on_close, Some(8));
         let _: Element<'_, u8> = bar.into();
+    }
+}
+
+#[cfg(test)]
+mod corner_tests {
+    use super::corner_inset;
+
+    #[test]
+    fn a_square_corner_or_a_button_below_the_curve_needs_nothing() {
+        assert_eq!(corner_inset(0.0, 12.0, 6.0), 0.0);
+        assert_eq!(corner_inset(15.0, 15.0, 6.0), 0.0);
+        assert_eq!(corner_inset(15.0, 20.0, 6.0), 0.0);
+    }
+
+    #[test]
+    fn the_button_corner_keeps_its_clearance_from_the_arc() {
+        for (radius, above, clearance) in [(15.0, 11.5, 6.0), (30.0, 12.0, 6.0), (30.0, 12.0, 8.0)] {
+            let inset = corner_inset(radius, above, clearance);
+            // The distance from the corner point to the arc, along the radius.
+            let d = ((radius - inset).powi(2) + (radius - above).powi(2)).sqrt();
+            let gap = radius - d;
+            assert!(
+                (gap - clearance).abs() < 0.01 || inset == 0.0,
+                "radius {radius}: gap {gap} for clearance {clearance} (inset {inset})"
+            );
+        }
+        // A bigger radius, the same button: further in.
+        assert!(corner_inset(30.0, 12.0, 6.0) > corner_inset(15.0, 12.0, 6.0));
+        // The old bubblegum geometry (6 px in, 12 px down, radius 30) touched the arc.
+        let touching = ((30.0f32 - 6.0).powi(2) + (30.0f32 - 12.0).powi(2)).sqrt();
+        assert!((30.0 - touching).abs() < 0.01);
+        assert!(corner_inset(30.0, 12.0, 6.0) > 6.0);
+    }
+
+    #[test]
+    fn no_position_clears_the_arc_when_the_clearance_exceeds_the_room_above() {
+        // More clearance than the button has above it: as far in as the radius.
+        assert_eq!(corner_inset(30.0, 12.0, 20.0), 30.0);
     }
 }

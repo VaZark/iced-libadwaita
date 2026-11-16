@@ -1057,8 +1057,8 @@ mod tests {
         for padding in [0, 9] {
             let cfg = crate::theme_config::ThemeConfig::builder("classic-tab-regression")
                 .files(false)
-                .toolkit_text(include_str!("../../themes/win95.conf"))
-                .app_text(format!("[tabs]\npanel-padding={padding}px\n"))
+                .toolkit_text(include_str!("../../themes/win95.ron"))
+                .app_text(format!("{{ \"tabs\": {{ \"panel-padding\": {padding} }} }}"))
                 .build();
             assert!(cfg.warnings().is_empty(), "{:?}", cfg.warnings());
             let theme = Theme::light().with_theme_config(&cfg);
@@ -1108,7 +1108,12 @@ mod tests {
 
     #[test]
     fn breakpoint_rules_select_presentations_and_explicit_variants_win() {
-        let tokens = tokens("[tabs]\nbreakpoint-rules=xs:pills,md:outline,xl:floating\n");
+        let tokens = tokens(r##"{
+    "tabs": {
+        "breakpoint-rules": "xs:pills,md:outline,xl:floating",
+    },
+}
+"##);
         for (width, expected) in [(0.0, "pills"), (800.0, "outline"), (100_000.0, "floating")] {
             assert_eq!(selected_tab(&tokens, width, None), expected);
             assert_eq!(selected_tab(&tokens, width, Some("default")), "default");
@@ -1136,7 +1141,16 @@ mod tests {
     #[test]
     fn selected_variant_geometry_overrides_base_and_inherits_metrics() {
         let tokens = tokens(
-            "[tabs]\nindicator-height=3px\n[tabs.pills]\nindicator-height=7px\nclose-icon-size=0px\n",
+            r##"{
+    "tabs": {
+        "indicator-height": 3,
+    },
+    "tabs.pills": {
+        "indicator-height": 7,
+        "close-icon-size": 0,
+    },
+}
+"##,
         );
         assert_eq!(
             tab_metric_for(&tokens, "pills", "indicator-height", 9.0),
@@ -1157,7 +1171,16 @@ mod tests {
     fn local_tokens_drive_rules_geometry_and_preserve_explicit_builders() {
         let cfg = crate::theme_config::ThemeConfig::builder("local-tabs")
             .files(false)
-            .app_text("[tabs]\nbreakpoint-rules=xs:pills,md:outline\nclose-icon-size=11px\n[tabs.outline]\nclose-icon-size=23px\n")
+            .app_text(r##"{
+    "tabs": {
+        "breakpoint-rules": "xs:pills,md:outline",
+        "close-icon-size": 11,
+    },
+    "tabs.outline": {
+        "close-icon-size": 23,
+    },
+}
+"##)
             .build();
         assert!(cfg.warnings().is_empty(), "{:?}", cfg.warnings());
         let mut m = Metrics::desktop();

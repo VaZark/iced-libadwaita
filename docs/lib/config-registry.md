@@ -21,11 +21,11 @@ Many applications read the shared [desktop config](desktop-config.md) at once, e
 - **Deprecation never removes historical support.** An application built with an older toolkit keeps using the property. Releases only append to the registry and set `deprecated`.
 - **New builds that reference a deprecated property fail validation** (`validate_build_properties`, called from a `build.rs`). So do builds that reference a property the toolkit does not know.
 - **No automatic translation or migration** between a deprecated property and its replacement. Different toolkit generations may use independent values.
-- A user's `desktop.conf` is runtime input, not a build artifact: it is never validated at build time and never fails a build.
+- A user's `desktop.ron` is runtime input, not a build artifact: it is never validated at build time and never fails a build.
 
 ```mermaid
 flowchart TD
-    F["desktop.conf (shared)"] --> R{"Known to this toolkit<br/>version? (registry, since)"}
+    F["desktop.ron (shared)"] --> R{"Known to this toolkit<br/>version? (registry, since)"}
     R -- yes --> V{"Valid value for its type?"}
     V -- yes --> U["Used"]
     V -- no --> W["Warning, default used"]

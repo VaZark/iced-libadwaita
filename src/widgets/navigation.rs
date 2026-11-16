@@ -1760,7 +1760,25 @@ mod local_variant_tests {
     #[test]
     fn familiar_and_custom_variants_share_per_key_inheritance() {
         let config = config(
-            "[navigation]\nrow-padding=17px\ninset=0px\n[navigation.sm]\nrow-height=51px\n[navigation.md]\nrow-height=51px\n[navigation.lg]\nrow-height=51px\n[navigation.custom]\nrow-height=51px",
+            r##"{
+    "navigation": {
+        "row-padding": 17,
+        "inset": 0,
+    },
+    "navigation.sm": {
+        "row-height": 51,
+    },
+    "navigation.md": {
+        "row-height": 51,
+    },
+    "navigation.lg": {
+        "row-height": 51,
+    },
+    "navigation.custom": {
+        "row-height": 51,
+    },
+}
+"##,
         );
         let mut m = Metrics::default();
         m.sidebar_spacing = 9.0;
@@ -1785,7 +1803,13 @@ mod local_variant_tests {
     fn absent_and_opted_out_variants_are_neutral() {
         use crate::theme_config::DefaultVariants;
         let m = Metrics::default();
-        for text in ["", "[navigation]\nrow-height=63px\nrow-padding=19px"] {
+        for text in ["", r##"{
+    "navigation": {
+        "row-height": 63,
+        "row-padding": 19,
+    },
+}
+"##] {
             for opted_out in [false, true] {
                 let mut builder = ThemeConfig::builder("neutral-navigation")
                     .files(false)
@@ -1821,7 +1845,7 @@ mod local_variant_tests {
 
     #[test]
     fn libadwaita_density_defaults_are_loaded_from_config() {
-        let config = config(include_str!("../../themes/libadwaita.conf"));
+        let config = config(include_str!("../../themes/libadwaita.ron"));
         let tokens = config.tokens();
         // The theme's absolute geometry is independent of unrelated inherited metrics.
         for m in [Metrics::default(), Metrics::compact()] {
@@ -1857,10 +1881,8 @@ mod local_variant_tests {
 
     fn config(text: &str) -> ThemeConfig {
         let schema = Schema::toolkit().variant("navigation", "custom", &[]);
-        assert!(
-            schema.validate(text).is_valid(),
-            "invalid navigation fixture: {text}"
-        );
+        let report = schema.validate(text);
+        assert!(report.is_valid(), "invalid navigation fixture: {report:?}");
         ThemeConfig::builder("navigation-layout")
             .files(false)
             .schema(schema)
@@ -1869,7 +1891,26 @@ mod local_variant_tests {
             .build()
     }
 
-    const RULES: &str = "[breakpoints]\nsm=300px\nmd=420px\n[navigation]\nbreakpoint-rules=xs:sm,md:lg\nrow-padding=17px\ngap=5px\ninset=7px\n[navigation.sm]\nrow-height=48px\n[navigation.lg]\nrow-height=80px\nrow-padding=23px";
+    const RULES: &str = r##"{
+    "breakpoints": {
+        "sm": 300,
+        "md": 420,
+    },
+    "navigation": {
+        "breakpoint-rules": "xs:sm,md:lg",
+        "row-padding": 17,
+        "gap": 5,
+        "inset": 7,
+    },
+    "navigation.sm": {
+        "row-height": 48,
+    },
+    "navigation.lg": {
+        "row-height": 80,
+        "row-padding": 23,
+    },
+}
+"##;
 
     fn list() -> SidebarList<'static, ()> {
         SidebarList::new([
@@ -1917,7 +1958,26 @@ mod local_variant_tests {
     fn every_density_name_uses_the_same_actual_layout_and_font_growth() {
         let renderer = renderer();
         let configured = config(
-            "[navigation]\nrow-height=48px\ngap=3px\ninset=4px\n[navigation.sm]\nrow-padding=17px\n[navigation.md]\nrow-padding=17px\n[navigation.lg]\nrow-padding=17px\n[navigation.custom]\nrow-padding=17px",
+            r##"{
+    "navigation": {
+        "row-height": 48,
+        "gap": 3,
+        "inset": 4,
+    },
+    "navigation.sm": {
+        "row-padding": 17,
+    },
+    "navigation.md": {
+        "row-padding": 17,
+    },
+    "navigation.lg": {
+        "row-padding": 17,
+    },
+    "navigation.custom": {
+        "row-padding": 17,
+    },
+}
+"##,
         );
         for font_size in [14.0, 80.0] {
             let mut reference = None;
@@ -2024,9 +2084,29 @@ mod local_variant_tests {
     fn actual_layout_inherits_each_key_and_keeps_local_snapshots_isolated() {
         let renderer = renderer();
         let a = config(
-            "[navigation]\nrow-padding=19px\ninset=4px\n[navigation.custom]\nrow-height=60px\n[navigation.md]\ngap=99px",
+            r##"{
+    "navigation": {
+        "row-padding": 19,
+        "inset": 4,
+    },
+    "navigation.custom": {
+        "row-height": 60,
+    },
+    "navigation.md": {
+        "gap": 99,
+    },
+}
+"##,
         );
-        let b = config("[navigation]\nrow-height=72px\nrow-padding=9px\ngap=8px\ninset=6px");
+        let b = config(r##"{
+    "navigation": {
+        "row-height": 72,
+        "row-padding": 9,
+        "gap": 8,
+        "inset": 6,
+    },
+}
+"##);
         let mut m = Metrics::default();
         m.sidebar_spacing = 3.0;
         m.sidebar_row_height = 90.0;
@@ -2094,7 +2174,7 @@ mod local_variant_tests {
     #[test]
     fn indentation_and_typed_child_overrides_use_the_resolved_layout() {
         let renderer = renderer();
-        let config = config(&format!("{RULES}\nindent=29px"));
+        let config = config(&RULES.replace("\"row-padding\": 23,", "\"row-padding\": 23,\n        \"indent\": 29,"));
         let mut element: Element<'_, ()> =
             SidebarList::new([SidebarItem::new("Nested", ()).indent(2)])
                 .theme_config(&config)
@@ -2131,7 +2211,12 @@ mod local_variant_tests {
         use iced::widget::button::{Status, Style};
         use iced::{Border, Color, Event, mouse, window};
         let mut renderer = renderer();
-        let config = config("[navigation]\nselection-opacity=0.5");
+        let config = config(r##"{
+    "navigation": {
+        "selection-opacity": 0.5,
+    },
+}
+"##);
         let density = NavigationDensity {
             metrics: Metrics::default(),
             tokens: std::sync::Arc::new(config.tokens()),
@@ -2301,7 +2386,12 @@ mod local_variant_tests {
         use iced::advanced::{Shell, clipboard, renderer as renderer_style};
         use iced::{Color, Event, mouse, window};
         let mut renderer = renderer();
-        let config = config("[navigation]\nselection-opacity=0.5");
+        let config = config(r##"{
+    "navigation": {
+        "selection-opacity": 0.5,
+    },
+}
+"##);
         let density = NavigationDensity {
             metrics: Metrics::default(),
             tokens: std::sync::Arc::new(config.tokens()),

@@ -99,11 +99,11 @@ mod tests {
     fn native_theme_compatibility_and_app_scene_schemas_are_separate() {
         use iced_adaptive_design::theme_config::Schema;
         for text in [
-            include_str!("../../themes/win95.conf"),
-            include_str!("../../themes/winxp.conf"),
-            include_str!("../../themes/win7.conf"),
-            include_str!("../../themes/mate.conf"),
-            include_str!("../../themes/gnome2.conf"),
+            include_str!("../../themes/win95.ron"),
+            include_str!("../../themes/winxp.ron"),
+            include_str!("../../themes/win7.ron"),
+            include_str!("../../themes/mate.ron"),
+            include_str!("../../themes/gnome2.ron"),
         ] {
             let report = Schema::toolkit().validate(text);
             assert!(report.errors.is_empty(), "{:?}", report.errors);
@@ -116,7 +116,7 @@ mod tests {
             assert!(design::layout_fits(&config, index));
         }
         for &(section, key, default) in design::GEOMETRY {
-            let invalid = format!("[{section}]\n{key}=-1px\n");
+            let invalid = format!("{{ {section:?}: {{ {key:?}: -1 }} }}");
             let config = ThemeConfig::builder("invalid-geometry-test")
                 .files(false)
                 .schema(design::schema())
@@ -134,11 +134,15 @@ mod tests {
             let base = design::resolve(index, "");
             let width = base.number("menu", "popover-width").unwrap()
                 + base.number("metrics", "space-m").unwrap();
-            let overlay =
-                format!("[menu]\npopover-width={width}px\n[colors]\npopover-bg=#123456\n");
+            let overlay = format!(
+                "\"menu\": {{ \"popover-width\": {width} }}, \"colors\": {{ \"popover-bg\": \"#123456\" }}"
+            );
             for text in [
-                overlay.clone(),
-                format!("{overlay}[toy.{}]\nwidth=1px\n", reference.key),
+                format!("{{ {overlay} }}"),
+                format!(
+                    "{{ {overlay}, \"toy.{}\": {{ \"width\": 1 }} }}",
+                    reference.key
+                ),
             ] {
                 let config = design::resolve(index, &text);
                 assert_eq!(config.text("theme", "key"), Some(reference.key));

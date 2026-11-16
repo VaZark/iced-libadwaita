@@ -1,18 +1,18 @@
-.TH IAD\-DESKTOP.CONF 5 "2026-11-03" "iced-adaptive-design 0.1.0" "iced-adaptive-design Manual"
+.TH IAD\-DESKTOP.RON 5 "2026-11-03" "iced-adaptive-design 0.1.0" "iced-adaptive-design Manual"
 .SH NAME
-desktop.conf \- the shared desktop configuration of iad applications
+desktop.ron \- the shared desktop configuration of iad applications
 .SH DESCRIPTION
 Desktop\-level behavior is defined \fIonce per desktop\fR, in a shared file, so every iad application behaves the same way. Applications read these decisions; they do not hard\-code them.
 .PP
-The file is in the GLib key\-file format: \fB[section]\fR headers, \fBkey=value\fR lines and \fB#\fR comments. Every setting is optional; the values shown below are the defaults. Invalid or unknown values are ignored with a warning.
+The file is RON: a map of sections to maps of keys, with \fB//\fR comments. Numbers are numbers and flags are booleans. Every setting is optional; the values shown below are the defaults. Invalid or unknown values are ignored with a warning.
 .SH FILES
 Lowest to highest priority:
 .IP 1. 3
 the built\-in defaults (the HIG defaults);
 .IP 2. 3
-system files, \fI$XDG_CONFIG_DIRS/iad/desktop.conf\fR (default \fI/etc/xdg\fR);
+system files, \fI$XDG_CONFIG_DIRS/iad/desktop.ron\fR (default \fI/etc/xdg\fR);
 .IP 3. 3
-the user file, \fI$XDG_CONFIG_HOME/iad/desktop.conf\fR (default \fI~/.config\fR);
+the user file, \fI$XDG_CONFIG_HOME/iad/desktop.ron\fR (default \fI~/.config\fR);
 .IP 4. 3
 the application's opt\-outs, if \fBpolicy.allow\-app\-overrides\fR allows them.
 .PP
@@ -96,7 +96,7 @@ the sidebar slides in/out of the layout at the collapse breakpoint
 \fBtransition\-close\fR=\fI30\fR
 .TP
 \fBtransition\-open\fR=\fI30\fR
-.SS [windows]
+.SS [window-decorations]
 .TP
 \fBdecorations\fR=\fIcsd\fR
 csd (Adwaita) | ssd (discouraged)

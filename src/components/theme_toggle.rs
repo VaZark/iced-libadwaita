@@ -167,7 +167,12 @@ mod tests {
         };
         let base = config("");
         assert_eq!(appearance_icon_size(&metrics, &base.tokens()), 23.0);
-        let explicit = config("[theme-toggle]\nicon-size=31px\n");
+        let explicit = config(r##"{
+    "theme-toggle": {
+        "icon-size": 31,
+    },
+}
+"##);
         assert!(explicit.warnings().is_empty());
         assert_eq!(appearance_icon_size(&metrics, &explicit.tokens()), 31.0);
         for invalid in ["0px", "-1px", "129px", "NaNpx", "24"] {

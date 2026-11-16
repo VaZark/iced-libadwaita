@@ -1,6 +1,6 @@
 //! Desktop preferences and desktop-neutral XDG icon lookup.
 //!
-//! Window layout comes from the config (`desktop.conf` and the theme's `[windows]` tokens), never
+//! Window layout comes from the config (`desktop.ron` and the theme's `[window-decorations]` tokens), never
 //! from a desktop's settings store. The only system input is the color scheme the settings portal
 //! reports; appearance detection and updates are shared through [`crate::utils`].
 
@@ -80,12 +80,12 @@ impl DecorationLayout {
     }
 
     /// The layout in effect: the desktop config's fixed `button-layout` if set, else the theme's
-    /// `[windows] button-layout` token, else [`gnome_default`](Self::gnome_default).
+    /// `[window-decorations] button-layout` token, else [`gnome_default`](Self::gnome_default).
     pub fn detect() -> Self {
         if let crate::config::Pick::Fixed(s) = &crate::config::current().button_layout {
             return Self::parse(s);
         }
-        match crate::theme_config::current().text("windows", "button-layout") {
+        match crate::theme_config::current().text("window-decorations", "button-layout") {
             Some(s) => Self::parse(s),
             None => Self::gnome_default(),
         }

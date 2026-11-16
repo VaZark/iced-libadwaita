@@ -438,7 +438,12 @@ mod tests {
 
     #[test]
     fn rules_select_toolbar_modes_but_explicit_side_styles_win() {
-        let tokens = tokens("[toolbar]\nbreakpoint-rules=xs:flat,md:raised,xl:raised-border\n");
+        let tokens = tokens(r##"{
+    "toolbar": {
+        "breakpoint-rules": "xs:flat,md:raised,xl:raised-border",
+    },
+}
+"##);
         for (width, expected) in [
             (0.0, "flat"),
             (800.0, "raised"),
@@ -472,7 +477,17 @@ mod tests {
     #[test]
     fn toolbar_variant_geometry_falls_back_to_base_then_metrics() {
         let tokens = tokens(
-            "[toolbar]\nshadow-height=3px\n[toolbar.raised]\nshadow-height=7px\nshadow-opacity=0.2\nseparator-width=0px\n",
+            r##"{
+    "toolbar": {
+        "shadow-height": 3,
+    },
+    "toolbar.raised": {
+        "shadow-height": 7,
+        "shadow-opacity": 0.2,
+        "separator-width": 0,
+    },
+}
+"##,
         );
         assert_eq!(
             toolbar_metric_for(&tokens, "raised", "shadow-height", 9.0),
@@ -541,7 +556,17 @@ mod tests {
         use iced::advanced::renderer::Headless;
         let cfg = crate::theme_config::ThemeConfig::builder("local-toolbar")
             .files(false)
-            .app_text("[toolbar]\nbreakpoint-rules=xs:flat,md:raised-border\nseparator-width=5px\nshadow-height=9px\n[toolbar.raised-border]\nseparator-width=8px\n")
+            .app_text(r##"{
+    "toolbar": {
+        "breakpoint-rules": "xs:flat,md:raised-border",
+        "separator-width": 5,
+        "shadow-height": 9,
+    },
+    "toolbar.raised-border": {
+        "separator-width": 8,
+    },
+}
+"##)
             .build();
         assert!(cfg.warnings().is_empty(), "{:?}", cfg.warnings());
         let renderer = iced::futures::executor::block_on(iced::Renderer::new(

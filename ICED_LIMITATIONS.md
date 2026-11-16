@@ -139,7 +139,7 @@ The current design records no dialog/toast exit animations because the applicati
    cargo clippy --locked --all-targets --workspace
    ```
 
-3. Build/run the gallery and relevant theme toys following [CONTRIBUTING.md](CONTRIBUTING.md#the-gallery) and [toy validation guidance](theme-toys/README.md). Use `themes/libadwaita.conf` for the Adwaita gallery baseline. Exercise the per-entry scenarios live, in light/dark and narrow/wide layouts; include intermediate animation states. Test wgpu and tiny-skia separately and record the renderer actually used, not merely requested.
+3. Build/run the gallery and relevant theme toys following [CONTRIBUTING.md](CONTRIBUTING.md#the-gallery) and [toy validation guidance](theme-toys/README.md). Use `themes/libadwaita.ron` for the Adwaita gallery baseline. Exercise the per-entry scenarios live, in light/dark and narrow/wide layouts; include intermediate animation states. Test wgpu and tiny-skia separately and record the renderer actually used, not merely requested.
 4. Save logs, screenshots and minimal reproducers under ignored `target/`. Record evidence paths and any environment blockers below. Screenshots cannot establish keyboard/gesture acceptance, and a successful build cannot establish visual acceptance.
 5. Update each entry and add a dated validation row **in this tracked file**. Use `pass`, `reproduced`, `resolved`, `fail` or `pending` per ID. Pending checks remain explicitly outstanding; an upgrade must not be described as fully validated while they remain. Change/remove workarounds only with regression evidence and update gallery/toy consumers when their APIs or behavior change.
 

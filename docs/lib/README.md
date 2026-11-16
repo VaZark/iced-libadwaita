@@ -9,7 +9,7 @@ It is not the API reference. The API is in the man pages (`target/man/`). Run `c
 | `iad(7)`              | overview: conventions, theming, dialogs, focus, primitives |
 | `iad-<alias>(3)`      | one component: constructors, properties, slots, events     |
 | `iad-components(3)`   | index of the components                                    |
-| `iad-desktop.conf(5)` | every key of the desktop config                            |
+| `iad-desktop.ron(5)` | every key of the desktop config                            |
 
 Read one: `man -l target/man/iad-dock.3`. Or put them under `man3`, `man5`, `man7` of your `MANPATH`.
 
@@ -29,7 +29,7 @@ The design rationale (HIG notes, libadwaita sources) is for contributors. It is 
 - [child-props.md](child-props.md#contract-and-usage): typed nested presentation, no-op defaults and parent-owned state; includes API audit coverage.
 - [breakpoint-rules.md](breakpoint-rules.md): responsive logical variants and config-owned named densities.
 - [primitives.md](primitives.md): the headless logic under the components.
-- [desktop-config.md](desktop-config.md): the shared desktop config. [Sample](desktop.conf.example).
+- [desktop-config.md](desktop-config.md): the shared desktop config. [Sample](desktop.ron.example).
 - [config-registry.md](config-registry.md): the versioned registry behind it: types, defaults, `since`, deprecation.
 
 `TagFilter` is a tags entry (picked tags as pills, find-as-you-type) over a `ChipGroup`. It edits one group by default (a track needs every picked tag); `.multiple(true)` edits several alternative groups (every tag of at least one). The app owns a `TagGroups` and passes the `GroupEvent`s to `TagGroups::apply`; `TagGroups::matches(tags)` is the filter.

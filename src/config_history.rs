@@ -2,7 +2,7 @@
 //! property, bundled with the toolkit.
 //!
 //! Applications link their toolkit statically, so applications built with different toolkit
-//! versions read the same `desktop.conf` side by side. The registry is what keeps that safe:
+//! versions read the same `desktop.ron` side by side. The registry is what keeps that safe:
 //!
 //! * each application reads **only** the properties its bundled toolkit version knows;
 //! * unknown properties are **ignored, never deleted or rewritten** (a newer toolkit may have
@@ -45,6 +45,38 @@ impl ValueType {
             Self::Milliseconds => value.parse::<u32>().is_ok(),
             Self::Choice(words) => words.contains(&value),
             Self::Text => true,
+        }
+    }
+}
+
+impl ValueType {
+    /// Whether the RON `value` of a desktop file is valid for this type: a boolean, a number in
+    /// range, a whole number of milliseconds, one of the words (a string, or `true`/`false` where
+    /// the words include them), or free text (a string).
+    pub fn accepts_ron(&self, value: &ron::Value) -> bool {
+        use ron::Value as R;
+        match (self, value) {
+            (Self::Bool, R::Bool(_)) => true,
+            (Self::Number { min, max }, R::Number(n)) => (*min..=*max).contains(&n.into_f64()),
+            (Self::Milliseconds, R::Number(n)) => {
+                let n = n.into_f64();
+                n >= 0.0 && n.fract() == 0.0 && n <= f64::from(u32::MAX)
+            }
+            (Self::Choice(words), R::String(s)) => words.contains(&s.as_str()),
+            (Self::Choice(words), R::Bool(_)) => words.contains(&"true"),
+            (Self::Text, R::String(_)) => true,
+            _ => false,
+        }
+    }
+
+    /// What a value of this type is, for messages.
+    pub fn expectation(&self) -> String {
+        match self {
+            Self::Bool => "true or false".into(),
+            Self::Number { min, max } => format!("a number from {min} to {max}"),
+            Self::Milliseconds => "a whole number of milliseconds".into(),
+            Self::Choice(words) => format!("one of {}", words.join(", ")),
+            Self::Text => "a string".into(),
         }
     }
 }
@@ -277,10 +309,10 @@ pub const PROPERTIES: &[Property] = &[
         },
         "600",
     ),
-    p("windows", "decorations", Choice(&["csd", "ssd"]), "csd"),
-    p("windows", "button-layout", Text, "system"),
+    p("window-decorations", "decorations", Choice(&["csd", "ssd"]), "csd"),
+    p("window-decorations", "button-layout", Text, "system"),
     p(
-        "windows",
+        "window-decorations",
         "mobile-max-width",
         Number {
             min: 200.0,
@@ -289,7 +321,7 @@ pub const PROPERTIES: &[Property] = &[
         "575",
     ),
     p(
-        "windows",
+        "window-decorations",
         "min-width",
         Number {
             min: 200.0,
@@ -298,7 +330,7 @@ pub const PROPERTIES: &[Property] = &[
         "360",
     ),
     p(
-        "windows",
+        "window-decorations",
         "min-height",
         Number {
             min: 100.0,
@@ -429,7 +461,7 @@ pub fn supported() -> impl Iterator<Item = &'static Property> {
 
 /// Validates properties that a **new build** references (an app's bundled defaults, a build-time
 /// UI definition…) against this toolkit version. Unknown and deprecated properties are errors;
-/// nothing is migrated. A user's own `desktop.conf` is runtime input, not a build artifact, and
+/// nothing is migrated. A user's own `desktop.ron` is runtime input, not a build artifact, and
 /// is never validated here.
 pub fn validate_build_properties<'a>(
     properties: impl IntoIterator<Item = (&'a str, &'a str)>,

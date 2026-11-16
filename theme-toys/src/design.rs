@@ -129,10 +129,10 @@ pub fn schema() -> Schema {
 
 pub fn scene_text(design: usize) -> &'static str {
     match design {
-        0 => include_str!("../themes/win95.conf"),
-        1 => include_str!("../themes/winxp.conf"),
-        2 => include_str!("../themes/win7.conf"),
-        _ => include_str!("../themes/mate.conf"),
+        0 => include_str!("../themes/win95.ron"),
+        1 => include_str!("../themes/winxp.ron"),
+        2 => include_str!("../themes/win7.ron"),
+        _ => include_str!("../themes/mate.ron"),
     }
 }
 

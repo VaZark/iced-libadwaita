@@ -754,7 +754,17 @@ mod target_effect_tests {
         let config = ThemeConfig::builder("target-shape")
             .files(false)
             .schema(Schema::toolkit().variant("button", "custom", &[]))
-            .toolkit_text("[button.custom]\nradius=99px\nbg=#ffffff\nhover-bg=#0000ff\nactive-bg=#ff0000\nborder-width=2px\nborder=#00ff00")
+            .toolkit_text(r##"{
+    "button.custom": {
+        "radius": 99,
+        "bg": "#ffffff",
+        "hover-bg": "#0000ff",
+        "active-bg": "#ff0000",
+        "border-width": 2,
+        "border": "#00ff00",
+    },
+}
+"##)
             .app_text("").build();
         let theme = Theme::light().with_theme_config(&config);
         for status in [

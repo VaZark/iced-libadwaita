@@ -2,7 +2,7 @@
 //! the default set of themes and chooses the global theme every app picks up.
 //!
 //! `theme-manager [FILE]` opens the manager; `theme-manager gallery [ARGS]` runs the gallery.
-//! The manager's own look is `themes/libadwaita.conf`, so editing never changes the tool itself.
+//! The manager's own look is `themes/libadwaita.ron`, so editing never changes the tool itself.
 
 mod bundled;
 mod files;
@@ -25,7 +25,20 @@ use std::path::PathBuf;
 use tokens::GradEdit;
 
 /// The editor's own look is libadwaita's, with a neutral primary color: it has no blue buttons.
-const NEUTRAL_PRIMARY: &str = "\n[menu]\npopover-max-height=560px\n[colors]\nprimary=#3d3d44\nprimary-fg=#ffffff\n[dark:colors]\nprimary=#d0d0d8\nprimary-fg=#1d1d20\n";
+const NEUTRAL_PRIMARY: &str = r##"{
+    "menu": {
+        "popover-max-height": 560,
+    },
+    "colors": {
+        "primary": "#3d3d44",
+        "primary-fg": "#ffffff",
+    },
+    "dark:colors": {
+        "primary": "#d0d0d8",
+        "primary-fg": "#1d1d20",
+    },
+}
+"##;
 /// DECISION (user, 2026-11-16): the app id stays `org.iad.ThemeEditor`.
 const APP_ID: &str = "org.iad.ThemeEditor";
 /// How many edits undo goes back.
@@ -93,15 +106,37 @@ struct Notice {
     error: bool,
 }
 
+/// The values of a theme file's text, as the RON each key holds (unknown keys and invalid
+/// values included). Text that is not RON has none.
+fn values_of(text: &str) -> BTreeMap<Addr, ron::Value> {
+    iad::theme_config::Document::parse(text)
+        .map(|doc| {
+            doc.entries()
+                .map(|(section, key, v)| ((section.to_string(), key.to_string()), v.clone()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// What a token's control shows for the RON `v` the file holds: the value as typed text
+/// (`24px`, `#3584e4`), or the RON itself when the value is not valid for the token.
+fn text_of(spec: &Spec, v: &ron::Value) -> String {
+    spec.ty
+        .from_ron(v)
+        .map(|typed| typed.to_text())
+        .unwrap_or_else(|_| ron::ser::to_string(v).unwrap_or_default())
+}
+
 struct Editor {
     theme: iad::Theme,
+    schema: Schema,
     specs: Vec<Spec>,
     sections: Vec<String>,
     section: String,
     variant: Variant,
     path: Option<PathBuf>,
     /// Every key of the file as written, including ones the schema does not know.
-    values: BTreeMap<Addr, String>,
+    values: BTreeMap<Addr, ron::Value>,
     /// The text last saved or opened, to tell whether there is anything to save.
     clean: String,
     /// What each control shows, per token of the variant being edited.
@@ -126,8 +161,8 @@ struct Editor {
     overrides_only: bool,
     collapsed: BTreeSet<(String, String)>,
     // -- undo
-    undo: Vec<BTreeMap<Addr, String>>,
-    redo: Vec<BTreeMap<Addr, String>>,
+    undo: Vec<BTreeMap<Addr, ron::Value>>,
+    redo: Vec<BTreeMap<Addr, ron::Value>>,
     /// The token the last edit changed: typing in it again does not add an undo step.
     last_edit: Option<Addr>,
     /// The bundled theme the values were opened from while they have no file of their own.
@@ -227,6 +262,7 @@ impl Editor {
         let theme = iad::Theme::from_config(&iad::config::current());
         let mut e = Self {
             theme,
+            schema,
             specs,
             section: sections.first().cloned().unwrap_or_default(),
             sections,
@@ -356,7 +392,7 @@ impl Editor {
         match std::fs::read_to_string(&path) {
             Ok(text) => {
                 let report = Schema::toolkit().validate(&text);
-                self.values = iad::config::parse_keyfile(&text).into_iter().collect();
+                self.values = values_of(&text);
                 self.clean = self.generate();
                 let message = if report.errors.is_empty() && report.unknown.is_empty() {
                     format!("Opened {}", file_name(&path))
@@ -386,7 +422,7 @@ impl Editor {
         let Some(text) = bundled::text(key) else {
             return;
         };
-        self.values = iad::config::parse_keyfile(text).into_iter().collect();
+        self.values = values_of(text);
         self.path = None;
         self.state.last_file = None;
         self.source = Some(key);
@@ -469,58 +505,27 @@ impl Editor {
     }
 
     /// The file for the values set: schema sections in order, a section's variants after its
-    /// base, unknown keys kept at the end of their section.
+    /// base, unknown keys kept at the end of their section. Values the schema understands are
+    /// written the way a theme is written by hand; anything else is kept as it was read.
     fn generate(&self) -> String {
-        let mut out = String::from(
-            "# An iced-adaptive-design theme file. Only the tokens set here take effect;\n# everything else is the toolkit default. [light:*] and [dark:*] sections win over the base\n# on that color scheme.\n",
-        );
-        let mut order: Vec<&str> = self.sections.iter().map(String::as_str).collect();
-        let mut extra: Vec<&str> = Vec::new();
-        for (section, _) in self.values.keys() {
-            let base = section.split_once(':').map_or(section.as_str(), |(_, b)| b);
-            if !order.contains(&base) && !extra.contains(&base) {
-                extra.push(base);
-            }
+        let mut doc = iad::theme_config::Document::default();
+        for ((section, key), v) in &self.values {
+            doc.set(section, key, v.clone());
         }
-        order.extend(extra);
-        for base in order {
-            for prefix in ["", "light:", "dark:"] {
-                let section = format!("{prefix}{base}");
-                let mut keys: Vec<&String> = self
-                    .values
-                    .keys()
-                    .filter(|(s, _)| *s == section)
-                    .map(|(_, k)| k)
-                    .collect();
-                if keys.is_empty() {
-                    continue;
-                }
-                let rank = |k: &String| {
-                    self.specs
-                        .iter()
-                        .position(|s| s.section == base && s.key == *k)
-                        .unwrap_or(usize::MAX)
-                };
-                keys.sort_by(|a, b| rank(a).cmp(&rank(b)).then(a.cmp(b)));
-                out.push_str(&format!("\n[{section}]\n"));
-                for k in keys {
-                    out.push_str(&format!(
-                        "{k}={}\n",
-                        self.values[&(section.clone(), k.clone())]
-                    ));
-                }
-            }
-        }
-        out
+        doc.to_text(
+            "An iced-adaptive-design theme. Only the tokens set here take effect; everything else is\nthe toolkit default. \"light:*\" and \"dark:*\" sections win over the base on that color scheme.",
+            &self.schema,
+        )
     }
 
     /// Writes the values to `path`: creates the file, or replaces the one there, through a
     /// symlink to what it points at. This is the only place the editor writes a theme.
     fn save_to(&mut self, path: PathBuf) -> bool {
         let text = self.generate();
-        if self.values.iter().any(|((section, key), raw)| {
+        if self.values.iter().any(|((section, key), v)| {
             key == "breakpoint-rules"
-                && !tokens::valid_rules(section.rsplit(':').next().unwrap_or(section), raw)
+                && !matches!(v, ron::Value::String(raw)
+                    if tokens::valid_rules(section.rsplit(':').next().unwrap_or(section), raw))
         }) {
             self.notify("Cannot save invalid breakpoint rules", true);
             return false;
@@ -560,10 +565,10 @@ impl Editor {
     fn shown(&self, spec: &Spec) -> (String, bool) {
         let here = (self.section_of(&spec.section), spec.key.clone());
         if let Some(v) = self.values.get(&here) {
-            return (v.clone(), true);
+            return (text_of(spec, v), true);
         }
         if let Some(v) = self.values.get(&(spec.section.clone(), spec.key.clone())) {
-            return (v.clone(), false);
+            return (text_of(spec, v), false);
         }
         (
             spec.default
@@ -673,15 +678,23 @@ impl Editor {
         let Some(spec) = self.spec(section, key) else {
             return false;
         };
-        if spec.ty.parse(&raw).is_none()
-            || (key == "breakpoint-rules" && !tokens::valid_rules(section, &raw))
-        {
+        let Some(typed) = spec.ty.parse(&raw) else {
+            return false;
+        };
+        if key == "breakpoint-rules" && !tokens::valid_rules(section, &raw) {
             return false;
         }
+        let value = typed.to_ron();
         let at = (self.section_of(section), key.to_string());
-        if self.values.get(&at) != Some(&raw) {
+        // The same value written another way (`9` and `9.0`) is not a change.
+        let unchanged = self
+            .values
+            .get(&at)
+            .and_then(|v| spec.ty.from_ron(v).ok())
+            .is_some_and(|current| current == typed);
+        if !unchanged {
             self.checkpoint(Some(at.clone()));
-            self.values.insert(at, raw);
+            self.values.insert(at, value);
         }
         true
     }
@@ -692,7 +705,7 @@ impl Editor {
             return 0;
         }
         let prefix = self.variant.prefix();
-        let missing: Vec<(Addr, String)> = self
+        let missing: Vec<(Addr, ron::Value)> = self
             .values
             .iter()
             .filter(|((section, _), _)| !section.contains(':') && section != "theme")
@@ -786,7 +799,7 @@ impl Editor {
 
     // ------------------------------------------------------------ the global theme
 
-    /// Whether the open theme is the one `default.conf` leads to (a bundled theme counts when that
+    /// Whether the open theme is the one `default.ron` leads to (a bundled theme counts when that
     /// file holds its text).
     fn is_global(&self) -> bool {
         let Some(target) = self.registry().and_then(default_target) else {
@@ -801,7 +814,7 @@ impl Editor {
         }
     }
 
-    /// Sets the open theme as the global one: `default.conf` in the standard theme directory, which
+    /// Sets the open theme as the global one: `default.ron` in the standard theme directory, which
     /// every iad app looks at, becomes a symlink to the theme's file. Every theme is a file of its
     /// own, so a bundled one is copied into the directory first. The global theme is the saved file,
     /// so unsaved changes are saved first; a theme with no file of its own (new, or edited from a
@@ -828,14 +841,14 @@ impl Editor {
         let done = match (self.path.clone(), self.source) {
             (Some(file), _) => set_default(&dir, &file).map(|linked| (file, linked)),
             (None, Some(key)) => set_global_bundled(&dir, key)
-                .map(|linked| (PathBuf::from(format!("{key}.conf")), linked)),
+                .map(|linked| (PathBuf::from(format!("{key}.ron")), linked)),
             (None, None) => Err("Save the theme to a file first".to_string()),
         };
         match done {
             Ok((file, linked)) => {
                 let name = file_name(&file);
                 match linked.kept {
-                    // The open file was the regular default.conf: it lives under its new name.
+                    // The open file was the regular default.ron: it lives under its new name.
                     Some(kept) if file == linked.link => {
                         self.notify(
                             format!("{name} is now the global theme (kept as {})", kept.display()),
@@ -845,7 +858,7 @@ impl Editor {
                     }
                     Some(kept) => self.notify(
                         format!(
-                            "{name} is now the global theme; the default.conf that was there is kept as {}",
+                            "{name} is now the global theme; the default.ron that was there is kept as {}",
                             kept.display()
                         ),
                         false,
@@ -882,7 +895,7 @@ impl Editor {
             return;
         };
         let file =
-            std::env::temp_dir().join(format!("iad-theme-manager-{}.conf", std::process::id()));
+            std::env::temp_dir().join(format!("iad-theme-manager-{}.ron", std::process::id()));
         if let Err(e) = std::fs::write(&file, self.generate()) {
             self.notify(format!("Could not write {}: {e}", file.display()), true);
             return;
@@ -1059,9 +1072,7 @@ impl Editor {
             Msg::Undo => self.undo(),
             Msg::Redo => self.redo(),
             Msg::Discard => {
-                let saved: BTreeMap<Addr, String> = iad::config::parse_keyfile(&self.clean)
-                    .into_iter()
-                    .collect();
+                let saved = values_of(&self.clean);
                 if saved != self.values {
                     self.checkpoint(None);
                     self.values = saved;
@@ -1080,7 +1091,7 @@ impl Editor {
                     async move {
                         let mut dialog = rfd::AsyncFileDialog::new()
                             .set_title("Open a theme")
-                            .add_filter("Theme", &["conf"]);
+                            .add_filter("Theme", &["ron"]);
                         if let Some(dir) = directory {
                             dialog = dialog.set_directory(dir);
                         }
@@ -1116,7 +1127,7 @@ impl Editor {
                     .as_ref()
                     .and_then(|p| p.file_name())
                     .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| "theme.conf".into());
+                    .unwrap_or_else(|| "theme.ron".into());
                 return Task::perform(
                     async move {
                         let mut dialog = rfd::AsyncFileDialog::new()

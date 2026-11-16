@@ -96,6 +96,67 @@ impl Gradient {
         Some(Self { angle, stops })
     }
 
+    /// Reads the structure a theme file holds: `(angle: 90, stops: [(0.0, "#0a246a"), (1.0, "#a6caf0")])`.
+    /// The angle is CSS degrees (`-360..=360`), a stop is `(position in 0..=1, color string)`;
+    /// two to eight stops with positions that do not decrease.
+    pub fn from_ron(v: &ron::Value) -> Result<Self, String> {
+        use ron::Value as R;
+        let R::Map(map) = v else {
+            return Err("a gradient is (angle: 90, stops: [(0.0, \"#fff\"), (1.0, \"#000\")])".into());
+        };
+        let field = |name: &str| {
+            map.iter()
+                .find(|(k, _)| matches!(k, R::String(s) if s == name))
+                .map(|(_, v)| v)
+        };
+        let angle = match field("angle") {
+            Some(R::Number(n)) => n.into_f64() as f32,
+            _ => return Err("a gradient needs `angle:` in degrees".into()),
+        };
+        if !angle.is_finite() || !(-360.0..=360.0).contains(&angle) {
+            return Err(format!("the angle {angle} is outside -360..=360 degrees"));
+        }
+        let Some(R::Seq(items)) = field("stops") else {
+            return Err("a gradient needs `stops: [(position, color), ...]`".into());
+        };
+        if !(2..=MAX_STOPS).contains(&items.len()) {
+            return Err(format!("a gradient has 2 to {MAX_STOPS} stops, not {}", items.len()));
+        }
+        let mut stops: Vec<(f32, Color)> = Vec::with_capacity(items.len());
+        for item in items {
+            let (R::Seq(pair)) = item else {
+                return Err("a stop is (position, \"color\")".into());
+            };
+            let [R::Number(at), R::String(color)] = pair.as_slice() else {
+                return Err("a stop is (position, \"color\")".into());
+            };
+            let at = at.into_f64() as f32;
+            if !at.is_finite() || !(0.0..=1.0).contains(&at) {
+                return Err(format!("the stop position {at} is outside 0..=1"));
+            }
+            if stops.last().is_some_and(|(prev, _)| at < *prev) {
+                return Err("stop positions must not decrease".into());
+            }
+            let color = super::variable::parse_color(color.trim())
+                .ok_or_else(|| format!("{color:?} is not a color"))?;
+            stops.push((at, color));
+        }
+        Ok(Self {
+            angle: angle.rem_euclid(360.0),
+            stops,
+        })
+    }
+
+    /// The RON a theme file holds for this gradient (reads back to an equal gradient).
+    pub fn to_ron_text(&self) -> String {
+        let stops: Vec<String> = self
+            .stops
+            .iter()
+            .map(|(p, c)| format!("({}, \"{}\")", trim_float(*p), crate::color::to_hex(*c)))
+            .collect();
+        format!("(angle: {}, stops: [{}])", trim_float(self.angle), stops.join(", "))
+    }
+
     /// The text this gradient is written as (parses back to an equal gradient).
     pub fn to_text(&self) -> String {
         let stops: Vec<String> = self

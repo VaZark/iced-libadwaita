@@ -3,7 +3,7 @@
 //! Field names match the `@define-color` names used by libadwaita's
 //! stylesheet (e.g. `accent_bg_color`, `headerbar_fg_color`), so porting
 //! custom CSS is mostly a rename. The built-in values are the bare baseline (black on white);
-//! the libadwaita values are in `themes/libadwaita.conf`.
+//! the libadwaita values are in `themes/libadwaita.ron`.
 
 use crate::color::{black, hex, white};
 use iced::Color;

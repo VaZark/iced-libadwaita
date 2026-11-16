@@ -51,19 +51,19 @@ Write the doc comment. The page follows.
 
 ## Theme files
 
-The library has no built-in look: without a bundled base or selected theme file an app is drawn like HTML without CSS (black on white, square, no shadows). Apps can supply a base using `Config::load_with_base_theme` or `ThemeConfig::builder(..).base_theme(..)`; `IAD_THEME=none` skips external discovery but retains that base. The gallery bundles `libadwaita.conf`. The look is a theme file in the key-file format of [docs/lib/theme-config.md](docs/lib/theme-config.md). `themes/` has the shipped ones. To try one, point `IAD_THEME` at it:
+The library has no built-in look: without a bundled base or selected theme file an app is drawn like HTML without CSS (black on white, square, no shadows). Apps can supply a base using `Config::load_with_base_theme` or `ThemeConfig::builder(..).base_theme(..)`; `IAD_THEME=none` skips external discovery but retains that base. The gallery bundles `libadwaita.ron`. The look is a theme file in the key-file format of [docs/lib/theme-config.md](docs/lib/theme-config.md). `themes/` has the shipped ones. To try one, point `IAD_THEME` at it:
 
 ```text
-IAD_THEME=themes/libadwaita.conf cargo run -p iced-adaptive-design-gallery
-IAD_THEME=themes/cosmic.conf      cargo run -p iced-adaptive-design-gallery
+IAD_THEME=themes/libadwaita.ron cargo run -p iced-adaptive-design-gallery
+IAD_THEME=themes/cosmic.ron      cargo run -p iced-adaptive-design-gallery
 IAD_THEME=none                   cargo run -p iced-adaptive-design-gallery   # bundled libadwaita base, no external overlay
 ```
 
-Without `IAD_THEME`, the first `default.conf` found in `$XDG_DATA_HOME/iad/themes/` (`~/.local/share/iad/themes/`), then in `iad/themes/` of each `$XDG_DATA_DIRS` entry, applies. To make a look your default on this machine:
+Without `IAD_THEME`, the first `default.ron` found in `$XDG_DATA_HOME/iad/themes/` (`~/.local/share/iad/themes/`), then in `iad/themes/` of each `$XDG_DATA_DIRS` entry, applies. To make a look your default on this machine:
 
 ```text
 mkdir -p ~/.local/share/iad/themes
-ln -s "$PWD/themes/cosmic.conf" ~/.local/share/iad/themes/default.conf
+ln -s "$PWD/themes/cosmic.ron" ~/.local/share/iad/themes/default.ron
 ```
 
 For the standard theme loader, an unreadable `IAD_THEME` path prints a warning and falls through to those directories. `Inheritance::OptOut` skips automatic theme discovery; apps can still supply explicit validated theme layers. The toys use this for their own bundled bases plus an optional `IAD_THEME` overlay; see [theme toys](theme-toys/README.md#theme-resolution).
@@ -75,11 +75,11 @@ Run `cargo run -p iced-adaptive-design-theme-manager -- [FILE]`.
 - The **primary sidebar selects token sections**. **All** groups every token on one searchable page. The selected theme in the header opens a **picker dialog** with registered files, added folders and recent files; long names and paths wrap within bounded widths.
 - **Modified only** filters unsaved changes. **Overrides only** shows explicit entries in the active Light/Dark scheme, not inherited Base values; it is unavailable for Base. Typed controls edit values, **Reset** removes an explicit entry, and Light/Dark edits write `[light:*]` / `[dark:*]` sections. **Copy from Base** fills the active scheme from Base. **Ctrl+Z** and **Ctrl+Shift+Z** undo and redo.
 - **Save** updates the current file, following symlinks; an untitled file opens Save as.  **Save as** writes a copy and makes it the current file for subsequent saves.
-- There is **no embedded preview**: the header's play button starts the gallery with the current values (a temp `IAD_THEME` file, nothing saved); `theme-manager gallery` runs it with the global theme. **Set as global theme** (in the theme dialog) points the symlink `default.conf` in `$XDG_DATA_HOME/iad/themes/`, where every iad app looks, at the open theme's file (a bundled theme is copied there first); **Remove global theme** in the same dialog deletes the symlink. Six themes are bundled (`libadwaita`, `cosmic`, `bubblegum`, `solarized`, `synthwave`, `terminal`); toy themes are not.
+- There is **no embedded preview**: the header's play button starts the gallery with the current values (a temp `IAD_THEME` file, nothing saved); `theme-manager gallery` runs it with the global theme. **Set as global theme** (in the theme dialog) points the symlink `default.ron` in `$XDG_DATA_HOME/iad/themes/`, where every iad app looks, at the open theme's file (a bundled theme is copied there first); **Remove global theme** in the same dialog deletes the symlink. Six themes are bundled (`libadwaita`, `cosmic`, `bubblegum`, `solarized`, `synthwave`, `terminal`); toy themes are not.
 
-The editor remembers the open file, folders, recents, section and variant in `~/.config/iad-theme-editor/state.conf`. See the [theme manager guide](theme-manager/README.md) and [toy resolution and validation limits](theme-toys/README.md).
+The editor remembers the open file, folders, recents, section and variant in `~/.config/iad-theme-editor/state.ron`. See the [theme manager guide](theme-manager/README.md) and [toy resolution and validation limits](theme-toys/README.md).
 
-A new toolkit token goes in `Schema::toolkit()` (`src/theme_config.rs`) with a type and bounds. Prefer typed numbers (`Length`, `Percentage`) and enum strings. Add its intended libadwaita value to `themes/libadwaita.conf`, run schema tests, then inspect relevant gallery states; compilation alone does not establish visual acceptance.
+A new toolkit token goes in `Schema::toolkit()` (`src/theme_config.rs`) with a type and bounds. Prefer typed numbers (`Length`, `Percentage`) and enum strings. Add its intended libadwaita value to `themes/libadwaita.ron`, run schema tests, then inspect relevant gallery states; compilation alone does not establish visual acceptance.
 
 ## The gallery
 
@@ -97,13 +97,13 @@ GALLERY_MENU=page|dropdown
 GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push|breakpoint
 GALLERY_ANIM=keys                 wait 6 s, then capture: send keys meanwhile
 GALLERY_ANIM=theme                capture system appearance, app override, then system again
-IAD_THEME=path.conf               draw with this theme file (IAD_THEME=none: bundled base only)
+IAD_THEME=path.ron               draw with this theme file (IAD_THEME=none: bundled base only)
 GALLERY_ANIM=appshell             open the AppShell window (GALLERY_SHELL_SIZE=WxH)
 GALLERY_ANIM=shell-back|embedded-back
 APPSHELL_PIN=mobile|tablet|desktop
 APPSHELL_SIDEBAR_MODE=parent-page
 APPSHELL_CONTENT=1  APPSHELL_DRAWER=1  APPSHELL_EDGE=right|bottom
-ICED_ADAPTIVE_DESIGN_CONFIG=path.conf  try a desktop config
+ICED_ADAPTIVE_DESIGN_CONFIG=path.ron  try a desktop config
 ICED_ADAPTIVE_DESIGN_SCREENSHOT=f.png  an app using iad::dev saves a screenshot to f.png
 ICED_ADAPTIVE_DESIGN_SHOT_DELAY_MS=2500 ... after this delay (default 1500)
 ICED_ADAPTIVE_DESIGN_HOLD_ANIMATIONS=0.5 hold every animation half way, for a known frame
@@ -129,7 +129,7 @@ Not done until it works end to end. Add it to the library, never only to an exam
 - A `///` comment on the method, then `cargo xtask man`.
 - A control in the component's playground (`gallery/src/plays.rs`): the `specs` entry and its use in `build`.
 - A line in its `docs/hig-inferences/widgets/` page.
-- If a desktop config key backs the default: `docs/lib/desktop-config.md`, `docs/lib/desktop.conf.example`, `docs/man/iad-desktop.conf.5`.
+- If a desktop config key backs the default: `docs/lib/desktop-config.md`, `docs/lib/desktop.ron.example`, `docs/man/iad-desktop.ron.5`.
 
 A property whose default comes from the toolkit or the config is a plain value that starts at that default. The builder overrides it. No `Option` with a `None` case. The playground control shows the default, and the generated code mentions the call only once it changes.
 

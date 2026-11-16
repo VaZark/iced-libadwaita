@@ -6,8 +6,8 @@
 //! iced-adaptive-design app behaves the same way. It lives in a GLib key-file:
 //!
 //! 1. built-in defaults (libadwaita's own behavior),
-//! 2. system files: `$XDG_CONFIG_DIRS/iced-adaptive-design/desktop.conf` (default `/etc/xdg`),
-//! 3. the user file: `$XDG_CONFIG_HOME/iced-adaptive-design/desktop.conf`,
+//! 2. system files: `$XDG_CONFIG_DIRS/iced-adaptive-design/desktop.ron` (default `/etc/xdg`),
+//! 3. the user file: `$XDG_CONFIG_HOME/iced-adaptive-design/desktop.ron`,
 //! 4. the app's **opt-outs** (see below), if the desktop allows them.
 //!
 //! `ICED_ADAPTIVE_DESIGN_CONFIG=/path/file.conf` replaces 2 and 3 with a single file (testing).
@@ -36,6 +36,7 @@
 //! theme from it.
 
 use crate::palette::AccentColor;
+use crate::theme_config::Document;
 use crate::widgets::CollapsedSidebar;
 use crate::{CollapseBehavior, Metrics, Scheme};
 use std::collections::BTreeMap;
@@ -157,7 +158,7 @@ pub struct Config {
     pub sidebar_min_width: f32,
     pub sidebar_max_width: f32,
     pub drawer_max_fraction: f32,
-    /// `[windows] min-width` / `min-height`: the smallest window.
+    /// `[window-decorations] min-width` / `min-height`: the smallest window.
     pub min_window_width: f32,
     pub min_window_height: f32,
     /// `[layout] page-max-width`: the readable width pages and preference lists are clamped to.
@@ -195,7 +196,7 @@ pub struct Config {
     /// The app's theme config, whose metric tokens are applied over the density's metrics.
     pub(crate) theme_config: Option<crate::theme_config::ThemeConfig>,
     /// The app opted out of the desktop's look ([`Inheritance::OptOut`](crate::theme_config::Inheritance)):
-    /// nothing from `desktop.conf` applies and the portal's color scheme is not consulted.
+    /// nothing from `desktop.ron` applies and the portal's color scheme is not consulted.
     pub(crate) desktop_opt_out: bool,
 }
 
@@ -263,24 +264,12 @@ impl Default for Config {
 
 // ---------------------------------------------------------------- parsing
 
-/// Parses GLib key-file text into `(section, key) -> value`. Lines starting with `#` or `;`
-/// are comments; unknown syntax is skipped.
-pub fn parse_keyfile(text: &str) -> BTreeMap<(String, String), String> {
-    let mut map = BTreeMap::new();
-    let mut section = String::new();
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
-            continue;
-        }
-        if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
-            section = name.trim().to_string();
-        } else if let Some((k, v)) = line.split_once('=') {
-            let v = v.trim().trim_matches('"').trim_matches('\'');
-            map.insert((section.clone(), k.trim().to_string()), v.to_string());
-        }
+/// A RON number as `f32`, if it is one and finite.
+fn num_of(v: &ron::Value) -> Option<f32> {
+    match v {
+        ron::Value::Number(n) => Some(n.into_f64() as f32).filter(|f| f.is_finite()),
+        _ => None,
     }
-    map
 }
 
 fn parse_bool(v: &str) -> Option<bool> {
@@ -312,16 +301,33 @@ fn parse_accent(v: &str) -> Option<AccentColor> {
 }
 
 impl Config {
-    /// Builds a config from key-file text on top of the defaults.
-    pub fn from_keyfile(text: &str) -> Self {
+    /// Builds a config from the RON text of a desktop file on top of the defaults. A file that is
+    /// not valid RON sets nothing (the error is in [`warnings`](Self::warnings)).
+    pub fn from_ron(text: &str) -> Self {
         let mut c = Self::default();
-        c.apply(&parse_keyfile(text));
+        match Document::parse(text) {
+            Ok(doc) => c.apply(&doc),
+            Err(error) => c.warnings.push(error),
+        }
         c
     }
 
-    fn apply(&mut self, m: &BTreeMap<(String, String), String>) {
-        let get = |s: &str, k: &str| m.get(&(s.to_string(), k.to_string())).map(String::as_str);
+    fn apply(&mut self, doc: &Document) {
+        // Choices are strings; numbers and flags are read as the RON values they are.
+        let get = |s: &str, k: &str| doc.text(s, k);
+        let raw = |s: &str, k: &str| doc.get(s, k);
         let mut warn = Vec::new();
+        // A choice or a text given as something else than a string (a number, a list) is
+        // reported here; numbers and flags are read, and reported, where they are used.
+        for (section, key, v) in doc.entries() {
+            if let Some(p) = crate::config_history::find(section, key)
+                && matches!(p.ty, crate::config_history::ValueType::Choice(_) | crate::config_history::ValueType::Text)
+                && !p.ty.accepts_ron(v)
+                && !matches!(v, ron::Value::String(_))
+            {
+                warn.push(format!("[{section}] {key}: expected {}", p.ty.expectation()));
+            }
+        }
         macro_rules! bad {
             ($s:expr, $k:expr, $v:expr) => {
                 warn.push(format!("[{}] {}: invalid value {:?}", $s, $k, $v))
@@ -330,9 +336,9 @@ impl Config {
         // A number in `lo..=hi`; anything else is reported and ignored.
         macro_rules! num {
             ($s:expr, $k:expr, $field:expr, $lo:expr, $hi:expr) => {
-                if let Some(v) = get($s, $k) {
-                    match v.parse::<f32>() {
-                        Ok(f) if ($lo..=$hi).contains(&f) => $field = f,
+                if let Some(v) = raw($s, $k) {
+                    match num_of(v) {
+                        Some(f) if ($lo..=$hi).contains(&f) => $field = f,
                         _ => bad!($s, $k, v),
                     }
                 }
@@ -354,10 +360,11 @@ impl Config {
                 _ => bad!("appearance", "accent", v),
             }
         }
-        if let Some(v) = get("appearance", "flat-headerbars") {
-            parse_bool(v)
-                .map(|b| self.flat_headerbars = b)
-                .unwrap_or_else(|| bad!("appearance", "flat-headerbars", v));
+        if let Some(v) = raw("appearance", "flat-headerbars") {
+            match v {
+                ron::Value::Bool(b) => self.flat_headerbars = b.clone(),
+                _ => bad!("appearance", "flat-headerbars", v),
+            }
         }
         if let Some(v) = get("appearance", "density") {
             match v {
@@ -366,9 +373,9 @@ impl Config {
                 _ => bad!("appearance", "density", v),
             }
         }
-        if let Some(v) = get("appearance", "transparency") {
-            match v.parse::<f32>() {
-                Ok(f) if (0.0..=1.0).contains(&f) => self.transparency = f,
+        if let Some(v) = raw("appearance", "transparency") {
+            match num_of(v) {
+                Some(f) if (0.0..=1.0).contains(&f) => self.transparency = f,
                 _ => bad!("appearance", "transparency", v),
             }
         }
@@ -378,27 +385,26 @@ impl Config {
                 None => bad!("appearance", "tint", v),
             }
         }
-        if let Some(v) = get("appearance", "text-scale") {
-            match v.parse::<f32>() {
-                Ok(f) if (0.5..=3.0).contains(&f) => self.text_scale = f,
+        if let Some(v) = raw("appearance", "text-scale") {
+            match num_of(v) {
+                Some(f) if (0.5..=3.0).contains(&f) => self.text_scale = f,
                 _ => bad!("appearance", "text-scale", v),
             }
         }
-        if let Some(v) = get("appearance", "shadows") {
-            parse_bool(v)
-                .map(|b| self.shadows = b)
-                .unwrap_or_else(|| bad!("appearance", "shadows", v));
+        if let Some(v) = raw("appearance", "shadows") {
+            match v {
+                ron::Value::Bool(b) => self.shadows = b.clone(),
+                _ => bad!("appearance", "shadows", v),
+            }
         }
-        if let Some(v) = get("appearance", "shadow-scale") {
-            v.parse::<f32>()
-                .ok()
+        if let Some(v) = raw("appearance", "shadow-scale") {
+            num_of(v)
                 .filter(|f| *f >= 0.0)
                 .map(|f| self.shadow_scale = f)
                 .unwrap_or_else(|| bad!("appearance", "shadow-scale", v));
         }
-        if let Some(v) = get("appearance", "shadow-intensity") {
-            v.parse::<f32>()
-                .ok()
+        if let Some(v) = raw("appearance", "shadow-intensity") {
+            num_of(v)
                 .filter(|f| *f >= 0.0)
                 .map(|f| self.shadow_intensity = f)
                 .unwrap_or_else(|| bad!("appearance", "shadow-intensity", v));
@@ -418,18 +424,18 @@ impl Config {
                 }
             }
         }
-        if let Some(v) = get("motion", "animations") {
+        if let Some(v) = raw("motion", "animations") {
             match v {
-                "system" => self.animations = Pick::System,
-                _ => parse_bool(v)
-                    .map(|b| self.animations = Pick::Fixed(b))
-                    .unwrap_or_else(|| bad!("motion", "animations", v)),
+                ron::Value::String(s) if s == "system" => self.animations = Pick::System,
+                ron::Value::Bool(b) => self.animations = Pick::Fixed(b.clone()),
+                _ => bad!("motion", "animations", v),
             }
         }
-        if let Some(v) = get("motion", "reduced-motion") {
-            parse_bool(v)
-                .map(|b| self.reduced_motion = b)
-                .unwrap_or_else(|| bad!("motion", "reduced-motion", v));
+        if let Some(v) = raw("motion", "reduced-motion") {
+            match v {
+                ron::Value::Bool(b) => self.reduced_motion = b.clone(),
+                _ => bad!("motion", "reduced-motion", v),
+            }
         }
         num!(
             "motion",
@@ -452,14 +458,14 @@ impl Config {
             0.0,
             5000.0
         );
-        if let Some(v) = get("windows", "decorations") {
+        if let Some(v) = get("window-decorations", "decorations") {
             match v {
                 "csd" => self.decorations = DecorationMode::Csd,
                 "ssd" => self.decorations = DecorationMode::Ssd,
-                _ => bad!("windows", "decorations", v),
+                _ => bad!("window-decorations", "decorations", v),
             }
         }
-        if let Some(v) = get("windows", "button-layout") {
+        if let Some(v) = get("window-decorations", "button-layout") {
             self.button_layout = if v == "system" {
                 Pick::System
             } else {
@@ -479,19 +485,17 @@ impl Config {
             );
             self.breakpoints = before;
         }
-        if let Some(v) = get("windows", "mobile-max-width") {
-            v.parse::<f32>()
-                .ok()
+        if let Some(v) = raw("window-decorations", "mobile-max-width") {
+            num_of(v)
                 .filter(|f| *f >= 200.0)
                 .map(|f| {
                     self.mobile_max_width = f;
                     self.mobile_explicit = true;
                 })
-                .unwrap_or_else(|| bad!("windows", "mobile-max-width", v));
+                .unwrap_or_else(|| bad!("window-decorations", "mobile-max-width", v));
         }
-        if let Some(v) = get("navigation", "collapse-width") {
-            v.parse::<f32>()
-                .ok()
+        if let Some(v) = raw("navigation", "collapse-width") {
+            num_of(v)
                 .filter(|f| *f >= 200.0)
                 .map(|f| {
                     self.collapse_width = f;
@@ -547,9 +551,9 @@ impl Config {
             self.sidebar_min_width = crate::widgets::SIDEBAR_MIN_WIDTH;
             self.sidebar_max_width = crate::widgets::SIDEBAR_MAX_WIDTH;
         }
-        num!("windows", "min-width", self.min_window_width, 200.0, 2000.0);
+        num!("window-decorations", "min-width", self.min_window_width, 200.0, 2000.0);
         num!(
-            "windows",
+            "window-decorations",
             "min-height",
             self.min_window_height,
             100.0,
@@ -577,10 +581,16 @@ impl Config {
                 _ => bad!("menus", "presentation", v),
             }
         }
-        if let Some(v) = get("toasts", "timeout") {
-            match v.parse::<u32>() {
-                Ok(ms) => self.toast_timeout = ms,
-                Err(_) => bad!("toasts", "timeout", v),
+        if let Some(v) = raw("toasts", "timeout") {
+            match v {
+                ron::Value::Number(n)
+                    if n.into_f64() >= 0.0
+                        && n.into_f64().fract() == 0.0
+                        && n.into_f64() <= f64::from(u32::MAX) =>
+                {
+                    self.toast_timeout = n.into_f64() as u32
+                }
+                _ => bad!("toasts", "timeout", v),
             }
         }
         if let Some(v) = get("toasts", "position") {
@@ -598,10 +608,11 @@ impl Config {
                 .map(|t| self.toast_target = t)
                 .unwrap_or_else(|| bad!("toasts", "target", v));
         }
-        if let Some(v) = get("shortcuts", "enabled") {
-            parse_bool(v)
-                .map(|b| self.shortcuts_enabled = b)
-                .unwrap_or_else(|| bad!("shortcuts", "enabled", v));
+        if let Some(v) = raw("shortcuts", "enabled") {
+            match v {
+                ron::Value::Bool(b) => self.shortcuts_enabled = b.clone(),
+                _ => bad!("shortcuts", "enabled", v),
+            }
         }
         if let Some(v) = get("shortcuts", "hints") {
             match v {
@@ -618,16 +629,14 @@ impl Config {
                 _ => bad!("rows", "collapse", v),
             }
         }
-        if let Some(v) = get("rows", "wrap-basis") {
-            v.parse::<f32>()
-                .ok()
+        if let Some(v) = raw("rows", "wrap-basis") {
+            num_of(v)
                 .filter(|f| *f >= 0.0)
                 .map(|f| self.row_wrap_basis = f)
                 .unwrap_or_else(|| bad!("rows", "wrap-basis", v));
         }
-        if let Some(v) = get("rows", "expander-indent") {
-            v.parse::<f32>()
-                .ok()
+        if let Some(v) = raw("rows", "expander-indent") {
+            num_of(v)
                 .filter(|f| *f >= 0.0)
                 .map(|f| self.expander_indent = f)
                 .unwrap_or_else(|| bad!("rows", "expander-indent", v));
@@ -639,19 +648,21 @@ impl Config {
                 Pick::Fixed(v.to_string())
             };
         }
-        if let Some(v) = get("policy", "allow-app-overrides") {
-            parse_bool(v)
-                .map(|b| self.allow_app_overrides = b)
-                .unwrap_or_else(|| bad!("policy", "allow-app-overrides", v));
+        if let Some(v) = raw("policy", "allow-app-overrides") {
+            match v {
+                ron::Value::Bool(b) => self.allow_app_overrides = b.clone(),
+                _ => bad!("policy", "allow-app-overrides", v),
+            }
         }
         // Properties this toolkit does not know are ignored: never an error, never deleted or
         // rewritten (a newer toolkit may have written them). They are only recorded, so a
         // settings tool can show them. What counts as known is the versioned registry.
-        for (section, key) in m.keys() {
+        for (section, key, _) in doc.entries() {
             let known = crate::config_history::find(section, key)
                 .is_some_and(|p| p.is_supported_by(crate::config_history::TOOLKIT_VERSION));
-            if !known && !self.unknown.contains(&(section.clone(), key.clone())) {
-                self.unknown.push((section.clone(), key.clone()));
+            let entry = (section.to_string(), key.to_string());
+            if !known && !self.unknown.contains(&entry) {
+                self.unknown.push(entry);
             }
         }
         self.warnings.extend(warn);
@@ -712,20 +723,20 @@ impl Config {
             .into_iter()
             .rev()
         {
-            out.push(PathBuf::from(d).join("iced-adaptive-design/desktop.conf"));
+            out.push(PathBuf::from(d).join("iced-adaptive-design/desktop.ron"));
         }
         let user = std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")));
         if let Some(u) = user {
-            out.push(u.join("iced-adaptive-design/desktop.conf"));
+            out.push(u.join("iced-adaptive-design/desktop.ron"));
         }
         out
     }
 
     /// Loads the layered files (missing files are fine) over the defaults, and the theme file
     /// the toolkit finds ([`theme_config::theme_path`](crate::theme_config::theme_path): `IAD_THEME`, else
-    /// the installed `default.conf`; none means the bare look).
+    /// the installed `default.ron`; none means the bare look).
     pub fn load() -> Self {
         Self::load_from(&Self::search_paths())
             .with_theme_config(&crate::theme_config::ThemeConfig::discover())
@@ -737,7 +748,7 @@ impl Config {
     ///
     /// ```no_run
     /// # use iced_adaptive_design::config::{self, Config};
-    /// const DEFAULT_BASE_THEME: &str = include_str!("../themes/libadwaita.conf");
+    /// const DEFAULT_BASE_THEME: &str = include_str!("../themes/libadwaita.ron");
     /// config::install(Config::load_with_base_theme(DEFAULT_BASE_THEME));
     /// ```
     pub fn load_with_base_theme(base: &str) -> Self {
@@ -750,13 +761,17 @@ impl Config {
 
     /// Like [`load`](Self::load) with explicit files, lowest priority first.
     pub fn load_from(paths: &[PathBuf]) -> Self {
-        let mut merged = BTreeMap::new();
+        // Lowest priority first: a later file sets its keys over an earlier one's.
+        let mut c = Self::default();
+        let mut merged = Document::default();
         for p in paths {
             if let Ok(text) = std::fs::read_to_string(p) {
-                merged.extend(parse_keyfile(&text));
+                match Document::parse(&text) {
+                    Ok(doc) => merged.merge(doc),
+                    Err(error) => c.warnings.push(format!("{}: {error}", p.display())),
+                }
             }
         }
-        let mut c = Self::default();
         c.apply(&merged);
         c
     }
@@ -1135,53 +1150,71 @@ pub fn current() -> Arc<Config> {
 mod tests {
     use super::*;
 
-    const FILE: &str = r#"
-# desktop defaults
-[appearance]
-color-scheme=dark
-accent=teal
-flat-headerbars=true
-density=compact
-shadows=false
-
-[motion]
-animations=off
-
-[windows]
-decorations=ssd
-button-layout=close,minimize,maximize:
-mobile-max-width=500
-
-[navigation]
-mobile-sidebar=parent-page
-
-[menus]
-presentation=dropdown
-
-[rows]
-collapse=flex
-wrap-basis=200
-expander-indent=10
-
-[bogus]
-thing=1
-"#;
+    const FILE: &str = r##"
+// desktop defaults
+{
+    "appearance": {
+        "color-scheme": "dark",
+        "accent": "teal",
+        "flat-headerbars": true,
+        "density": "compact",
+        "shadows": false,
+    },
+    "motion": {
+        "animations": false,
+    },
+    "window-decorations": {
+        "decorations": "ssd",
+        "button-layout": "close,minimize,maximize:",
+        "mobile-max-width": 500,
+    },
+    "navigation": {
+        "mobile-sidebar": "parent-page",
+    },
+    "menus": {
+        "presentation": "dropdown",
+    },
+    "rows": {
+        "collapse": "flex",
+        "wrap-basis": 200,
+        "expander-indent": 10,
+    },
+    "bogus": {
+        "thing": 1,
+    },
+}
+"##;
 
     #[test]
     fn a_tooltip_waits_a_second_unless_the_file_says_otherwise() {
         assert_eq!(Config::default().tooltip_delay_ms, 1000.0);
-        let c = Config::from_keyfile("[motion]\ntooltip-delay=250\n");
+        let c = Config::from_ron(r##"{
+    "motion": {
+        "tooltip-delay": 250,
+    },
+}
+"##);
         assert_eq!(c.tooltip_delay_ms, 250.0);
         assert!(c.warnings().is_empty());
         // Out of range: warned about and the default stays.
-        let c = Config::from_keyfile("[motion]\ntooltip-delay=99999\n");
+        let c = Config::from_ron(r##"{
+    "motion": {
+        "tooltip-delay": 99999,
+    },
+}
+"##);
         assert_eq!(c.tooltip_delay_ms, 1000.0);
         assert_eq!(c.warnings().len(), 1);
     }
 
     #[test]
     fn the_retired_name_first_page_is_an_invalid_value() {
-        let c = Config::from_keyfile("[navigation]\nmobile-sidebar=first-page\n");
+        let c = Config::from_ron(r##"{
+    "navigation": {
+        "mobile-sidebar": "first-page",
+    },
+}
+"##);
         assert_eq!(c.mobile_sidebar, CollapsedSidebar::Drawer);
         assert_eq!(c.warnings().len(), 1);
     }
@@ -1198,7 +1231,7 @@ thing=1
 
     #[test]
     fn keyfile_parses_every_section() {
-        let c = Config::from_keyfile(FILE);
+        let c = Config::from_ron(FILE);
         assert_eq!(c.color_scheme, Pick::Fixed(Scheme::Dark));
         assert_eq!(c.accent, Pick::Fixed(AccentColor::Teal));
         assert!(c.flat_headerbars && !c.shadows);
@@ -1225,7 +1258,15 @@ thing=1
 
     #[test]
     fn invalid_values_warn_and_keep_defaults() {
-        let c = Config::from_keyfile("[motion]\nanimations=maybe\n[appearance]\ntext-scale=99\n");
+        let c = Config::from_ron(r##"{
+    "motion": {
+        "animations": "maybe",
+    },
+    "appearance": {
+        "text-scale": 99,
+    },
+}
+"##);
         assert_eq!(c.animations, Pick::System);
         assert_eq!(c.text_scale, 1.0);
         assert_eq!(c.warnings().len(), 2);
@@ -1233,8 +1274,18 @@ thing=1
 
     #[test]
     fn density_and_rows_feed_the_metrics() {
-        let c = Config::from_keyfile(
-            "[appearance]\ndensity=compact\n[rows]\ncollapse=flex\nwrap-basis=90\nexpander-indent=0\n",
+        let c = Config::from_ron(
+            r##"{
+    "appearance": {
+        "density": "compact",
+    },
+    "rows": {
+        "collapse": "flex",
+        "wrap-basis": 90,
+        "expander-indent": 0,
+    },
+}
+"##,
         );
         let m = c.metrics();
         assert_eq!(m.button_min_height, Metrics::compact().button_min_height);
@@ -1249,8 +1300,19 @@ thing=1
         std::fs::create_dir_all(&dir).unwrap();
         let sys = dir.join("system.conf");
         let user = dir.join("user.conf");
-        std::fs::write(&sys, "[appearance]\ncolor-scheme=dark\nshadows=false\n").unwrap();
-        std::fs::write(&user, "[appearance]\ncolor-scheme=light\n").unwrap();
+        std::fs::write(&sys, r##"{
+    "appearance": {
+        "color-scheme": "dark",
+        "shadows": false,
+    },
+}
+"##).unwrap();
+        std::fs::write(&user, r##"{
+    "appearance": {
+        "color-scheme": "light",
+    },
+}
+"##).unwrap();
         let c = Config::load_from(&[sys, user, dir.join("missing.conf")]);
         assert_eq!(
             c.color_scheme,
@@ -1264,7 +1326,15 @@ thing=1
     #[test]
     fn app_opt_out_overrides_and_is_reported() {
         let c =
-            Config::from_keyfile("[motion]\nanimations=on\n[navigation]\nmobile-sidebar=drawer\n")
+            Config::from_ron(r##"{
+    "motion": {
+        "animations": true,
+    },
+    "navigation": {
+        "mobile-sidebar": "drawer",
+    },
+}
+"##)
                 .opt_out(|o| {
                     o.animations(false)
                         .mobile_sidebar(CollapsedSidebar::ParentPage);
@@ -1281,7 +1351,15 @@ thing=1
     #[test]
     fn desktop_policy_can_forbid_opt_outs() {
         let c =
-            Config::from_keyfile("[policy]\nallow-app-overrides=false\n[motion]\nanimations=on\n")
+            Config::from_ron(r##"{
+    "policy": {
+        "allow-app-overrides": false,
+    },
+    "motion": {
+        "animations": true,
+    },
+}
+"##)
                 .opt_out(|o| {
                     o.animations(false);
                 });
@@ -1294,14 +1372,36 @@ thing=1
     fn each_trigger_can_be_set_to_none() {
         use crate::layouts::animation::{Motion, Trigger};
         let c =
-            Config::from_keyfile("[motion]\npage-change=none\npopover=default\ncarousel=wobble\n");
+            Config::from_ron(r##"{
+    "motion": {
+        "page-change": "none",
+        "popover": "default",
+        "carousel": "wobble",
+    },
+}
+"##);
         assert_eq!(c.motion.get(&Trigger::PageChange), Some(&Motion::None));
         // `default` is no entry at all: it is the trigger's own animation, and it also overrides
         // an earlier file's `none`.
         assert_eq!(c.motion.get(&Trigger::Popover), None);
         let layered = {
-            let mut c = Config::from_keyfile("[motion]\npopover=none\n");
-            c.apply(&parse_keyfile("[motion]\npopover=default\n"));
+            let mut c = Config::from_ron(r##"{
+    "motion": {
+        "popover": "none",
+    },
+}
+"##);
+            c.apply(
+                &Document::parse(
+                    r##"{
+    "motion": {
+        "popover": "default",
+    },
+}
+"##,
+                )
+                .unwrap(),
+            );
             c
         };
         assert_eq!(
@@ -1330,10 +1430,20 @@ thing=1
     fn popovers_stay_in_the_content_area_unless_the_config_says_window() {
         use crate::widgets::PopoverBounds;
         assert_eq!(Config::default().popover_bounds, PopoverBounds::Content);
-        let c = Config::from_keyfile("[popovers]\nbounds=window\n");
+        let c = Config::from_ron(r##"{
+    "popovers": {
+        "bounds": "window",
+    },
+}
+"##);
         assert_eq!(c.popover_bounds, PopoverBounds::Window);
         assert!(c.warnings().is_empty());
-        let bad = Config::from_keyfile("[popovers]\nbounds=everywhere\n");
+        let bad = Config::from_ron(r##"{
+    "popovers": {
+        "bounds": "everywhere",
+    },
+}
+"##);
         assert_eq!(
             bad.popover_bounds,
             PopoverBounds::Content,
@@ -1344,10 +1454,20 @@ thing=1
 
     #[test]
     fn the_accent_may_be_a_hex_color() {
-        let c = Config::from_keyfile("[appearance]\naccent=#3584e4\n");
+        let c = Config::from_ron(r##"{
+    "appearance": {
+        "accent": "#3584e4",
+    },
+}
+"##);
         assert_eq!(c.accent, Pick::Fixed(AccentColor::Custom(0x3584e4)));
         assert!(c.warnings().is_empty());
-        let bad = Config::from_keyfile("[appearance]\naccent=#35\n");
+        let bad = Config::from_ron(r##"{
+    "appearance": {
+        "accent": "#35",
+    },
+}
+"##);
         assert!(!bad.warnings().is_empty());
     }
 
@@ -1355,22 +1475,27 @@ thing=1
     fn toast_timeout_is_integer_milliseconds_and_supports_policy_overrides() {
         assert_eq!(Config::default().toast_timeout, 3000);
         for value in [0u32, 75, 5000, u32::MAX] {
-            let config = Config::from_keyfile(&format!("[toasts]\ntimeout={value}\n"));
+            let config = Config::from_ron(&format!("{{ \"toasts\": {{ \"timeout\": {value} }} }}"));
             assert_eq!(config.toast_timeout, value);
             assert!(config.warnings().is_empty());
         }
-        for value in ["-1", "1.5", "NaN", "inf", "4294967296", "3s"] {
-            let config = Config::from_keyfile(&format!("[toasts]\ntimeout={value}\n"));
-            assert_eq!(config.toast_timeout, 3000);
-            assert!(!config.warnings().is_empty());
-            assert!(!crate::config_history::ValueType::Milliseconds.accepts(value));
+        // As RON: negative, fractional, not finite, too big, or not a number at all.
+        for value in ["-1", "1.5", "NaN", "inf", "4294967296", "\"3s\""] {
+            let config = Config::from_ron(&format!("{{ \"toasts\": {{ \"timeout\": {value} }} }}"));
+            assert_eq!(config.toast_timeout, 3000, "{value}");
+            assert!(!config.warnings().is_empty(), "{value}");
         }
         let config = Config::default().opt_out(|o| {
             o.toast_timeout(100);
         });
         assert_eq!(config.toast_timeout, 100);
         assert!(config.overridden().contains(&Setting::ToastTimeout));
-        let config = Config::from_keyfile("[policy]\nallow-app-overrides=false\n").opt_out(|o| {
+        let config = Config::from_ron(r##"{
+    "policy": {
+        "allow-app-overrides": false,
+    },
+}
+"##).opt_out(|o| {
             o.toast_timeout(100);
         });
         assert_eq!(config.toast_timeout, 3000);
@@ -1385,13 +1510,24 @@ thing=1
             (d.toast_position, d.toast_target),
             (ToastPosition::BottomCenter, ToastTarget::Content)
         );
-        let c = Config::from_keyfile("[toasts]\nposition=top-right\ntarget=content\n");
+        let c = Config::from_ron(r##"{
+    "toasts": {
+        "position": "top-right",
+        "target": "content",
+    },
+}
+"##);
         assert_eq!(
             (c.toast_position, c.toast_target),
             (ToastPosition::TopRight, ToastTarget::Content)
         );
         assert!(c.warnings().is_empty());
-        let bad = Config::from_keyfile("[toasts]\nposition=middle\n");
+        let bad = Config::from_ron(r##"{
+    "toasts": {
+        "position": "middle",
+    },
+}
+"##);
         assert_eq!(bad.toast_position, ToastPosition::BottomCenter);
         assert_eq!(bad.warnings().len(), 1);
     }
@@ -1413,10 +1549,31 @@ thing=1
             (360.0, 200.0, 600.0)
         );
 
-        let c = Config::from_keyfile(
-            "[breakpoints]\nsm=500\nmd=640\nlg=900\nxl=1100\nxxl=1300\n\
-             [navigation]\nsidebar-fraction=0.3\nsidebar-min-width=200\nsidebar-max-width=320\ndrawer-max-fraction=0.7\nmin-content-width=480\n\
-             [windows]\nmin-width=400\nmin-height=240\n[layout]\npage-max-width=720\n",
+        let c = Config::from_ron(
+            r##"{
+    "breakpoints": {
+        "sm": 500,
+        "md": 640,
+        "lg": 900,
+        "xl": 1100,
+        "xxl": 1300,
+    },
+    "navigation": {
+        "sidebar-fraction": 0.3,
+        "sidebar-min-width": 200,
+        "sidebar-max-width": 320,
+        "drawer-max-fraction": 0.7,
+        "min-content-width": 480,
+    },
+    "window-decorations": {
+        "min-width": 400,
+        "min-height": 240,
+    },
+    "layout": {
+        "page-max-width": 720,
+    },
+}
+"##,
         );
         assert!(c.warnings().is_empty(), "{:?}", c.warnings());
         // The mobile and collapse widths follow the scale (`sm - 1`, `md - 1`) unless set explicitly.
@@ -1442,7 +1599,15 @@ thing=1
         assert_eq!(c.metrics().clamp_maximum, 720.0);
 
         let explicit =
-            Config::from_keyfile("[breakpoints]\nsm=500\n[windows]\nmobile-max-width=450\n");
+            Config::from_ron(r##"{
+    "breakpoints": {
+        "sm": 500,
+    },
+    "window-decorations": {
+        "mobile-max-width": 450,
+    },
+}
+"##);
         assert_eq!(
             explicit.mobile_max_width, 450.0,
             "an explicit width wins over the scale"
@@ -1451,11 +1616,23 @@ thing=1
 
     #[test]
     fn a_shuffled_scale_or_bad_sidebar_is_ignored_with_a_warning() {
-        let c = Config::from_keyfile("[breakpoints]\nsm=900\nmd=700\n");
+        let c = Config::from_ron(r##"{
+    "breakpoints": {
+        "sm": 900,
+        "md": 700,
+    },
+}
+"##);
         assert_eq!(c.breakpoints, crate::breakpoints::Breakpoints::default());
         assert!(c.warnings().iter().any(|w| w.contains("breakpoints")));
         let c =
-            Config::from_keyfile("[navigation]\nsidebar-min-width=500\nsidebar-max-width=300\n");
+            Config::from_ron(r##"{
+    "navigation": {
+        "sidebar-min-width": 500,
+        "sidebar-max-width": 300,
+    },
+}
+"##);
         assert_eq!((c.sidebar_min_width, c.sidebar_max_width), (180.0, 280.0));
         assert_eq!(c.warnings().len(), 1);
     }
@@ -1465,11 +1642,22 @@ thing=1
         use crate::shortcut::Hints;
         let d = Config::default();
         assert!(d.shortcuts_enabled && d.shortcut_hints == Hints::Auto);
-        let c = Config::from_keyfile("[shortcuts]\nenabled=false\nhints=never\n");
+        let c = Config::from_ron(r##"{
+    "shortcuts": {
+        "enabled": false,
+        "hints": "never",
+    },
+}
+"##);
         assert!(!c.shortcuts_enabled && c.shortcut_hints == Hints::Never);
         assert!(c.warnings().is_empty());
         assert_eq!(
-            Config::from_keyfile("[shortcuts]\nhints=sometimes\n")
+            Config::from_ron(r##"{
+    "shortcuts": {
+        "hints": "sometimes",
+    },
+}
+"##)
                 .warnings()
                 .len(),
             1
@@ -1479,8 +1667,17 @@ thing=1
     /// Unknown properties are ignored without a warning and are reported separately.
     #[test]
     fn unknown_properties_are_ignored_not_warned_about() {
-        let c = Config::from_keyfile(
-            "[appearance]\ndensity=compact\nfuture-key=1\n[brand-new-section]\nx=y\n",
+        let c = Config::from_ron(
+            r##"{
+    "appearance": {
+        "density": "compact",
+        "future-key": 1,
+    },
+    "brand-new-section": {
+        "x": "y",
+    },
+}
+"##,
         );
         assert_eq!(c.density, Density::Compact, "known properties still apply");
         assert!(c.warnings().is_empty(), "{:?}", c.warnings());
@@ -1499,18 +1696,29 @@ thing=1
     #[test]
     fn the_registry_defaults_are_the_defaults() {
         use crate::config_history::PROPERTIES;
-        let mut file = String::new();
+        use crate::config_history::ValueType;
+        // The registry's defaults as the RON a file would hold: flags are booleans, numbers are
+        // numbers, `animations` is "system" or a boolean, the rest are strings.
+        let ron = |p: &crate::config_history::Property| match p.ty {
+            ValueType::Bool => p.default.to_string(),
+            ValueType::Number { .. } | ValueType::Milliseconds => p.default.to_string(),
+            ValueType::Choice(_) | ValueType::Text => {
+                ron::ser::to_string(p.default).unwrap()
+            }
+        };
+        let mut file = String::from("{\n");
         let mut sections: Vec<&str> = PROPERTIES.iter().map(|p| p.section).collect();
-        sections.dedup();
         sections.sort_unstable();
         sections.dedup();
         for s in &sections {
-            file.push_str(&format!("[{s}]\n"));
+            file.push_str(&format!("    \"{s}\": {{\n"));
             for p in PROPERTIES.iter().filter(|p| p.section == *s) {
-                file.push_str(&format!("{}={}\n", p.key, p.default));
+                file.push_str(&format!("        \"{}\": {},\n", p.key, ron(p)));
             }
+            file.push_str("    },\n");
         }
-        let c = Config::from_keyfile(&file);
+        file.push_str("}\n");
+        let c = Config::from_ron(&file);
         assert!(c.warnings().is_empty(), "{:?}", c.warnings());
         assert!(
             c.unknown_properties().is_empty(),
@@ -1528,7 +1736,7 @@ thing=1
             "the registry's defaults must be the built-in defaults"
         );
         assert_eq!(
-            Config::from_keyfile(""),
+            Config::from_ron(""),
             Config::default(),
             "missing properties use defaults"
         );
@@ -1536,14 +1744,31 @@ thing=1
 
     #[test]
     fn transparency_and_tint_are_read_and_validated() {
-        let c = Config::from_keyfile("[appearance]\ntransparency=0.35\ntint=#ff000080\n");
+        let c = Config::from_ron(r##"{
+    "appearance": {
+        "transparency": 0.35,
+        "tint": "#ff000080",
+    },
+}
+"##);
         assert_eq!(c.transparency, 0.35);
         let t = c.tint.unwrap();
         assert_eq!((t.r, t.g, t.b), (1.0, 0.0, 0.0));
         assert!((t.a - 0.5).abs() < 0.01);
-        let c = Config::from_keyfile("[appearance]\ntransparency=2\ntint=maybe\n");
+        let c = Config::from_ron(r##"{
+    "appearance": {
+        "transparency": 2,
+        "tint": "maybe",
+    },
+}
+"##);
         assert_eq!((c.transparency, c.tint), (0.0, None));
-        let c = Config::from_keyfile("[appearance]\ntint=#3584e4\n");
+        let c = Config::from_ron(r##"{
+    "appearance": {
+        "tint": "#3584e4",
+    },
+}
+"##);
         assert_eq!(c.tint.unwrap().a, 0.25);
     }
 }

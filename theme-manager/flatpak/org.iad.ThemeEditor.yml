@@ -9,7 +9,7 @@ command: theme-manager-launch
 finish-args:
   - --socket=wayland
   - --device=dri
-  # The global theme: default.conf and the themes it points at, where every app looks for them.
+  # The global theme: default.ron and the themes it points at, where every app looks for them.
   # The launcher points XDG_DATA_HOME at the host's, since the sandbox's own would hide them.
   - --filesystem=xdg-data/iad:create
   # The toolkit's desktop-wide settings (scheme, accent, density), read-only.

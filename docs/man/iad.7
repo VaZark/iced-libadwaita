@@ -13,7 +13,7 @@ use iced_adaptive_design as iad;
 let theme = iad::Theme::from_config(&iad::config::Config::load());
 .fi
 .SH DESCRIPTION
-\fBiad\fR (iced\-adaptive\-design) is a design system for the iced GUI toolkit that follows the GNOME Human Interface Guidelines, with libadwaita as the reference: a theme, about 150 components, each with a man page generated from its doc comments (\fBiad\-components\fR(3)), the headless \fIprimitives\fR they are built from, and a shared \fIdesktop configuration\fR (\fBiad\-desktop.conf\fR(5)) so every application on a desktop behaves the same way.
+\fBiad\fR (iced\-adaptive\-design) is a design system for the iced GUI toolkit that follows the GNOME Human Interface Guidelines, with libadwaita as the reference: a theme, about 150 components, each with a man page generated from its doc comments (\fBiad\-components\fR(3)), the headless \fIprimitives\fR they are built from, and a shared \fIdesktop configuration\fR (\fBiad\-desktop.ron\fR(5)) so every application on a desktop behaves the same way.
 .PP
 The library does not include its gallery. The gallery is a separate crate that depends on the library: \fBcargo run \-p iced\-adaptive\-design\-gallery\fR.
 .SH COMPONENT CONVENTIONS
@@ -81,7 +81,7 @@ anchor, animation, calendar, color_picker, dock, date, focus, form, infinite, lo
 .ad
 .hy
 .SH DESKTOP CONFIGURATION
-Desktop\-level behavior is set once per desktop in \fBdesktop.conf\fR and read through \fBiced_adaptive_design::config\fR. Lowest to highest priority: built\-in defaults, system files, the user file, and the application's opt\-outs (if the desktop allows them). See \fBiad\-desktop.conf\fR(5).
+Desktop\-level behavior is set once per desktop in \fBdesktop.ron\fR and read through \fBiced_adaptive_design::config\fR. Lowest to highest priority: built\-in defaults, system files, the user file, and the application's opt\-outs (if the desktop allows them). See \fBiad\-desktop.ron\fR(5).
 .SH ENVIRONMENT
 .TP
 .B ICED_ADAPTIVE_DESIGN_CONFIG
@@ -91,10 +91,10 @@ Path of one file that replaces the system and user files (testing).
 Where the user and system configuration files are looked up.
 .SH FILES
 .TP
-.I $XDG_CONFIG_HOME/iad/desktop.conf
+.I $XDG_CONFIG_HOME/iad/desktop.ron
 The user configuration (default \fI~/.config\fR).
 .TP
-.I $XDG_CONFIG_DIRS/iad/desktop.conf
+.I $XDG_CONFIG_DIRS/iad/desktop.ron
 System configuration (default \fI/etc/xdg\fR).
 .SH EXAMPLES
 A confirm dialog over the window:
@@ -118,6 +118,6 @@ Dock::new(base, sheet)
     .on_outside(Msg::Close)
 .fi
 .SH SEE ALSO
-\fBiad\-components\fR(3), \fBiad\-desktop.conf\fR(5)
+\fBiad\-components\fR(3), \fBiad\-desktop.ron\fR(5)
 .PP
 The guidance documents in \fIdocs/lib/\fR (choosing a component, layout, theming, windows and menus, motion) and the design rationale in \fIdocs/hig\-inferences/\fR.

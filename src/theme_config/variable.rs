@@ -74,31 +74,137 @@ impl VariableType {
             Self::Bool => Kind::Bool,
         }
     }
+    /// Parses text typed by a person (a field in the theme manager): lengths end in `px`,
+    /// percentages may end in `%`, gradients are `linear-gradient(...)`. Files do not go through
+    /// text: see [`from_ron`](Self::from_ron).
     pub fn parse(&self, raw: &str) -> Option<Value> {
         let raw = raw.trim();
+        let input = match self {
+            Self::Integer { .. } => match raw.parse::<i64>() {
+                Ok(n) => Input::Int(n),
+                Err(_) => Input::Num(finite(raw)?),
+            },
+            Self::Decimal { .. } => Input::Num(finite(raw)?),
+            Self::Length { .. } => Input::Num(finite(raw.strip_suffix("px")?.trim())?),
+            Self::Percentage { .. } => {
+                Input::Num(finite(raw.strip_suffix('%').unwrap_or(raw).trim())?)
+            }
+            Self::Number => Input::Num(raw.parse::<f32>().ok().filter(|n| n.is_finite())? as f64),
+            Self::Bool => match raw.to_ascii_lowercase().as_str() {
+                "true" | "yes" | "on" | "1" => Input::Bool(true),
+                "false" | "no" | "off" | "0" => Input::Bool(false),
+                _ => return None,
+            },
+            Self::Gradient => return super::Gradient::parse(raw).map(Value::Gradient),
+            Self::Color | Self::Font | Self::String { .. } => Input::Text(raw),
+        };
+        self.check(input)
+    }
+
+    /// Reads a value from a file's RON: numbers are numbers (a length is a plain number of px),
+    /// booleans are booleans, colors, fonts and choices are strings, and a gradient is the
+    /// structure `(angle: 90, stops: [(0.0, "#0a246a"), (1.0, "#a6caf0")])`. `Err` says what
+    /// was expected.
+    pub fn from_ron(&self, v: &ron::Value) -> Result<Value, String> {
+        use ron::Value as R;
+        let input = match (self, v) {
+            (Self::Gradient, v) => return super::Gradient::from_ron(v).map(Value::Gradient),
+            (_, R::Number(n)) => match (self, n) {
+                (Self::Integer { .. }, ron::Number::I8(_) | ron::Number::I16(_) | ron::Number::I32(_)
+                    | ron::Number::I64(_) | ron::Number::U8(_) | ron::Number::U16(_)
+                    | ron::Number::U32(_) | ron::Number::U64(_)) => {
+                    Input::Int(n.into_f64() as i64)
+                }
+                _ => Input::Num(n.into_f64()),
+            },
+            (Self::Bool, R::Bool(b)) => Input::Bool(*b),
+            (Self::Color | Self::Font | Self::String { .. }, R::String(s)) => Input::Text(s.trim()),
+            _ => return Err(format!("expected {}", self.expectation())),
+        };
+        self.check(input)
+            .ok_or_else(|| format!("{v:?} is not valid: expected {}", self.expectation()))
+    }
+
+    /// Checks a value built in code (a hardcoded token) the way a file's value is checked: the
+    /// right kind, inside the range, on the step.
+    pub fn from_value(&self, v: &Value) -> Option<Value> {
+        if self.kind() != v.kind() {
+            return None;
+        }
+        match v {
+            Value::Integer(n) => self.check(Input::Int(*n)),
+            Value::Decimal(n) | Value::Length(n) | Value::Percentage(n) => {
+                self.check(Input::Num(*n))
+            }
+            Value::Number(n) => self.check(Input::Num(*n as f64)),
+            Value::Bool(b) => self.check(Input::Bool(*b)),
+            Value::Text(t) => self.check(Input::Text(t.trim())),
+            Value::Color(_) => Some(v.clone()),
+            Value::Gradient(g) => (matches!(self, Self::Gradient)
+                && (2..=super::gradient::MAX_STOPS).contains(&g.stops.len()))
+            .then(|| v.clone()),
+        }
+    }
+
+    /// What a value of this type looks like, for error messages.
+    pub fn expectation(&self) -> String {
         match self {
-            Self::Integer {
-                min,
-                max,
-                step,
-                rounds,
-            } => {
+            Self::Integer { min, max, step, .. } => format!(
+                "an integer{}{}",
+                range_text(min.map(|n| n as f64), max.map(|n| n as f64)),
+                if *step > 1 { format!(" in steps of {step}") } else { String::new() }
+            ),
+            Self::Decimal { min, max, .. } => format!("a number{}", range_text(*min, *max)),
+            Self::Length { min, max } => format!("a length in px (a number){}", range_text(*min, *max)),
+            Self::Percentage { min, max, .. } => format!(
+                "a percentage (a number){}",
+                range_text(Some(min.unwrap_or(0.0)), Some(max.unwrap_or(100.0)))
+            ),
+            Self::Color => "a color string (\"#rrggbb\", \"rgba(..)\", \"hsl(..)\")".into(),
+            Self::Gradient => "a gradient: (angle: 90, stops: [(0.0, \"#fff\"), (1.0, \"#000\")])".into(),
+            Self::Font => "a font family name".into(),
+            Self::String { values, accepts_random } => {
+                if *accepts_random || values.is_empty() {
+                    "a string".into()
+                } else {
+                    format!("one of {}", values.join(", "))
+                }
+            }
+            Self::Number => "a number".into(),
+            Self::Bool => "true or false".into(),
+        }
+    }
+
+    /// Checks a typed input against this type's range, step and choices.
+    fn check(&self, input: Input<'_>) -> Option<Value> {
+        match (self, input) {
+            (
+                Self::Integer {
+                    min,
+                    max,
+                    step,
+                    rounds,
+                },
+                input @ (Input::Int(_) | Input::Num(_)),
+            ) => {
                 if *step == 0 || min.zip(*max).is_some_and(|(a, b)| a > b) {
                     return None;
                 }
-                let n = if let Ok(n) = raw.parse::<i64>() {
-                    n
-                } else {
-                    let n = finite(raw)?;
-                    let n = match rounds {
-                        Some(Rounding::Ceil) => n.ceil(),
-                        Some(Rounding::Floor) => n.floor(),
-                        None => return None,
-                    };
-                    if n < i64::MIN as f64 || n >= -(i64::MIN as f64) {
-                        return None;
+                let n = match input {
+                    Input::Int(n) => n,
+                    Input::Num(n) => {
+                        let n = match rounds {
+                            Some(Rounding::Ceil) => n.ceil(),
+                            Some(Rounding::Floor) => n.floor(),
+                            None if n.fract() == 0.0 => n,
+                            None => return None,
+                        };
+                        if !n.is_finite() || n < i64::MIN as f64 || n >= -(i64::MIN as f64) {
+                            return None;
+                        }
+                        n as i64
                     }
-                    n as i64
+                    _ => return None,
                 };
                 let origin = min.unwrap_or(0) as i128;
                 let delta = n as i128 - origin;
@@ -119,60 +225,57 @@ impl VariableType {
                 }
                 Some(Value::Integer(n))
             }
-            Self::Decimal {
-                no_decimals,
-                min,
-                max,
-                step,
-                rounds,
-            } => {
+            (
+                Self::Decimal {
+                    no_decimals,
+                    min,
+                    max,
+                    step,
+                    rounds,
+                },
+                input @ (Input::Int(_) | Input::Num(_)),
+            ) => {
                 if *no_decimals > 12 {
                     return None;
                 }
                 let quantum = 10f64.powi(-(*no_decimals as i32));
-                let mut n = snap(finite(raw)?, quantum, 0.0, *rounds)?;
+                let mut n = snap(input.num()?, quantum, 0.0, *rounds)?;
                 if let Some(step) = step {
                     n = snap(n, *step, min.unwrap_or(0.0), *rounds)?;
                 }
                 n = snap(n, quantum, 0.0, None)?;
                 bounds(n, *min, *max).map(Value::Decimal)
             }
-            Self::Length { min, max } => {
-                bounds(finite(raw.strip_suffix("px")?.trim())?, *min, *max).map(Value::Length)
+            (Self::Length { min, max }, input @ (Input::Int(_) | Input::Num(_))) => {
+                bounds(input.num()?, *min, *max).map(Value::Length)
             }
-            Self::Percentage { min, max, rounds } => {
-                let mut n = finite(raw.strip_suffix('%').unwrap_or(raw).trim())?;
+            (Self::Percentage { min, max, rounds }, input @ (Input::Int(_) | Input::Num(_))) => {
+                let mut n = input.num()?;
                 if rounds.is_some() {
                     n = snap(n, 1.0, 0.0, *rounds)?;
                 }
                 bounds(n, Some(min.unwrap_or(0.0)), Some(max.unwrap_or(100.0)))
                     .map(Value::Percentage)
             }
-            Self::Color => parse_color(raw).map(Value::Color),
-            Self::Gradient => super::Gradient::parse(raw).map(Value::Gradient),
-            Self::Font => {
-                let name = raw.trim();
-                (!name.is_empty()
-                    && name.chars().count() <= 64
-                    && !name.chars().any(char::is_control))
-                .then(|| Value::Text(name.into()))
+            (Self::Color, Input::Text(t)) => parse_color(t).map(Value::Color),
+            (Self::Font, Input::Text(name)) => (!name.is_empty()
+                && name.chars().count() <= 64
+                && !name.chars().any(char::is_control))
+            .then(|| Value::Text(name.into())),
+            (
+                Self::String {
+                    values,
+                    accepts_random,
+                },
+                Input::Text(t),
+            ) => (!t.contains(['\n', '\r']) && (*accepts_random || values.iter().any(|v| v == t)))
+                .then(|| Value::Text(t.into())),
+            (Self::Number, input @ (Input::Int(_) | Input::Num(_))) => {
+                let n = input.num()? as f32;
+                n.is_finite().then_some(Value::Number(n))
             }
-            Self::String {
-                values,
-                accepts_random,
-            } => (!raw.contains(['\n', '\r'])
-                && (*accepts_random || values.iter().any(|v| v == raw)))
-            .then(|| Value::Text(raw.into())),
-            Self::Number => raw
-                .parse::<f32>()
-                .ok()
-                .filter(|n| n.is_finite())
-                .map(Value::Number),
-            Self::Bool => match raw.to_ascii_lowercase().as_str() {
-                "true" | "yes" | "on" | "1" => Some(Value::Bool(true)),
-                "false" | "no" | "off" | "0" => Some(Value::Bool(false)),
-                _ => None,
-            },
+            (Self::Bool, Input::Bool(b)) => Some(Value::Bool(b)),
+            _ => None,
         }
     }
     pub(crate) fn well_formed(&self) -> bool {
@@ -202,6 +305,31 @@ impl VariableType {
             }
             _ => true,
         }
+    }
+}
+/// What a value is checked from: an integer, a number, text or a flag.
+#[derive(Clone, Copy)]
+enum Input<'a> {
+    Int(i64),
+    Num(f64),
+    Text(&'a str),
+    Bool(bool),
+}
+impl Input<'_> {
+    fn num(self) -> Option<f64> {
+        match self {
+            Input::Int(n) => Some(n as f64),
+            Input::Num(n) if n.is_finite() => Some(n),
+            _ => None,
+        }
+    }
+}
+fn range_text(min: Option<f64>, max: Option<f64>) -> String {
+    match (min, max) {
+        (Some(a), Some(b)) => format!(" from {a} to {b}"),
+        (Some(a), None) => format!(" of at least {a}"),
+        (None, Some(b)) => format!(" of at most {b}"),
+        (None, None) => String::new(),
     }
 }
 fn finite(raw: &str) -> Option<f64> {

@@ -19,7 +19,7 @@ Responsive behavior has a second reference: Mantine (AppShell) and Bootstrap, fo
 
 ```mermaid
 flowchart TD
-    Config["desktop.conf"] --> Theme
+    Config["desktop.ron"] --> Theme
     Palette --> Semantic --> Theme
     Metrics --> Theme
     Shadows --> Theme
@@ -87,7 +87,7 @@ See [windows and menus](docs/lib/windows-and-menus.md).
 
 ### Desktop config
 
-`~/.config/iced-adaptive-design/desktop.conf` (and system files) sets shared behavior: scheme, accent, density, transparency, tint, shadows, motion per trigger, decorations, breakpoints, menus, sidebar, rows, toasts. Apps opt out per setting with `Config::opt_out` (discouraged, reported at startup, forbidden by `[policy]`). See [desktop config](docs/lib/desktop-config.md).
+`~/.config/iced-adaptive-design/desktop.ron` (and system files) sets shared behavior: scheme, accent, density, transparency, tint, shadows, motion per trigger, decorations, breakpoints, menus, sidebar, rows, toasts. Apps opt out per setting with `Config::opt_out` (discouraged, reported at startup, forbidden by `[policy]`). See [desktop config](docs/lib/desktop-config.md).
 
 A versioned registry (types, defaults, `since`, deprecation) lets apps of different toolkit versions share one file: unknown keys are ignored, never deleted. See [config registry](docs/lib/config-registry.md).
 

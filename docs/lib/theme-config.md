@@ -4,10 +4,10 @@ The [desktop config](desktop-config.md) is shared by every app. Sometimes one ap
 
 ## Bundling a base theme
 
-Apps should bundle at least one theme `.conf` file and load it as their base theme so their appearance remains consistent even when no desktop theme is installed. We recommend [`libadwaita.conf`](../../themes/libadwaita.conf), which supplies the toolkit's reference libadwaita styling.
+Apps should bundle at least one theme `.ron` file and load it as their base theme so their appearance remains consistent even when no desktop theme is installed. We recommend [`libadwaita.ron`](../../themes/libadwaita.ron), which supplies the toolkit's reference libadwaita styling.
 
 ```rust
-const DEFAULT_BASE_THEME: &str = include_str!("../themes/libadwaita.conf");
+const DEFAULT_BASE_THEME: &str = include_str!("../themes/libadwaita.ron");
 config::install(Config::load_with_base_theme(DEFAULT_BASE_THEME));
 let theme = Theme::from_config(&config::current());
 ```
@@ -21,8 +21,8 @@ For app-owned tokens or explicit layers, use `ThemeConfig::builder(app_id).base_
 Highest priority first.
 
 1. **Hardcoded**, set in code with `.hardcode(..)`. **Extremely discouraged.** Nobody can change a hardcoded value without a rebuild, and every one is reported on stderr at startup and listed in `ThemeConfig::hardcoded()`. Declare a token and put the value in the app theme instead.
-2. **The app theme file**, `$XDG_CONFIG_HOME/<app-id>/theme.conf`. The app declares its tokens and their defaults in a `Schema`, so the file can be deleted: the app writes a fresh one.
-3. **The installed theme file**, found by `theme_config::theme_path()`: `IAD_THEME=<path>` (`IAD_THEME=none` skips this external layer), else `default.conf` in `$XDG_DATA_HOME/iad/themes` (`~/.local/share/iad/themes`), else in `iad/themes` of each `$XDG_DATA_DIRS` entry (`/usr/local/share`, `/usr/share`). The first file found is the only one read. A desktop or distribution installs or symlinks its look there (`themes/` has libadwaita, COSMIC, Solarized, Terminal, Bubblegum and Synthwave). The toolkit declares the tokens it understands in `Schema::toolkit()`; it never writes a theme file.
+2. **The app theme file**, `$XDG_CONFIG_HOME/<app-id>/theme.ron`. The app declares its tokens and their defaults in a `Schema`, so the file can be deleted: the app writes a fresh one.
+3. **The installed theme file**, found by `theme_config::theme_path()`: `IAD_THEME=<path>` (`IAD_THEME=none` skips this external layer), else `default.ron` in `$XDG_DATA_HOME/iad/themes` (`~/.local/share/iad/themes`), else in `iad/themes` of each `$XDG_DATA_DIRS` entry (`/usr/local/share`, `/usr/share`). The first file found is the only one read. A desktop or distribution installs or symlinks its look there (`themes/` has libadwaita, COSMIC, Solarized, Terminal, Bubblegum and Synthwave). The toolkit declares the tokens it understands in `Schema::toolkit()`; it never writes a theme file.
 
 4. **The bundled base theme**, explicitly supplied through `Builder::base_theme` or `Config::load_with_base_theme`. It has toolkit-theme provenance, not app-override provenance, and remains active even with `IAD_THEME=none`.
 
@@ -41,7 +41,7 @@ A token only changes anything when someone sets it. The generated files are comm
 
 ## Tokens
 
-A token is a typed value in the key-file format of the desktop config: a color (`#rrggbb` or `#rrggbbaa`), a number, a bool or text.
+A token is a typed value in a RON file (a map of sections to maps of keys, the same shape as the desktop config): a color string (`"#rrggbb"` or `"#rrggbbaa"`), a number (a length is a plain number of px), a bool, text, or a structure such as a gradient: `(angle: 90, stops: [(0.0, "#0a246a"), (1.0, "#a6caf0")])`. This document writes `[section] key` for the key `"key"` in the section `"section"`.
 
 **Toolkit tokens**
 
@@ -52,7 +52,7 @@ A token is a typed value in the key-file format of the desktop config: a color (
 | `[typography]`                                | `text-scale` (multiplies every size), `base-size`, `title-1`…`monospace` (ratios of the base)                                                                                                                                                                                                               |
 | `[shadows]`                                   | `card`, `popover`, `dialog`, `osd`: CSS box-shadow lists (`0 1px 3px 1px rgba(0, 0, 6, 0.07), …`)                                                                                                                                                                                                           |
 | `[button.<variant>]`                          | `bg`, `fg`, `border`, `border-width`, `radius`, `hover-bg`, `active-bg`: see _Widget variants_                                                                                                                                                                                                              |
-| `[windows]`                                   | `button-layout` (`start:end`, e.g. `:minimize,maximize,close`), `button-size` (px), `button-radius` (% of the size, 50% is a circle), `titlebar-double-click`/`-middle-click`/`-right-click` (`toggle-maximize`, `menu`, `minimize`, `lower`, `none`)                                                       |
+| `[window-decorations]`                                   | `button-layout` (`start:end`, e.g. `:minimize,maximize,close`), `button-size` (px), `button-radius` (% of the size, 50% is a circle), `titlebar-double-click`/`-middle-click`/`-right-click` (`toggle-maximize`, `menu`, `minimize`, `lower`, `none`)                                                       |
 | `[theme]`                                     | `name`, `key`, `mode`, `default-variants` (`all`/`none`)                                                                                                                                                                                                                                                    |
 
 Prefer typed numbers (`button-radius=50%`, `button-size=24px`) and enum strings over new switches: a value is validated against its declared type and range, and an invalid one falls back with a warning.
@@ -92,15 +92,15 @@ let size = theme.token_number("cover", "size");
 
 `Inheritance::OptOut` skips automatic desktop theme discovery. It does not discard explicitly supplied `.base_theme(base)`, `.toolkit_text(theme)` and `.app_text(overlay)`: both are validated against the combined toolkit/app schema, and valid app entries take precedence over the base. `.files(false)` disables automatic file access; the caller can still read and supply overlay text explicitly.
 
-The [theme toys](../../theme-toys/README.md#theme-resolution) use this pattern for four canonical targets: `win95`, `winxp`, `win7`, `mate` (modern MATE). `gnome2` is a compatibility alias only. Each embeds its own complete `theme-toys/themes/<target>.conf` base, including native styling and app-owned scene geometry. An optional `IAD_THEME` file is read as an overlay, not a replacement base. Without one the bundled base applies; installed `default.conf` files are not consulted. Invalid entries fall back through the validated cascade. Scene-fit checks can reject overlay geometry while retaining native theme edits; see the toy guide for limits and the special handling of `IAD_THEME=none`.
+The [theme toys](../../theme-toys/README.md#theme-resolution) use this pattern for four canonical targets: `win95`, `winxp`, `win7`, `mate` (modern MATE). `gnome2` is a compatibility alias only. Each embeds its own complete `theme-toys/themes/<target>.ron` base, including native styling and app-owned scene geometry. An optional `IAD_THEME` file is read as an overlay, not a replacement base. Without one the bundled base applies; installed `default.ron` files are not consulted. Invalid entries fall back through the validated cascade. Scene-fit checks can reject overlay geometry while retaining native theme edits; see the toy guide for limits and the special handling of `IAD_THEME=none`.
 
 ### Editing and applying a theme
 
 The [theme manager](../../theme-manager/README.md) (`cargo run -p iced-adaptive-design-theme-manager -- [FILE]`) edits theme files by section. The selected theme opens a picker for registered files, the bundled set, folders and recents. **All** groups every token on one searchable page. **Modified only** filters unsaved changes; **Overrides only** filters explicit active Light/Dark entries, excluding inherited Base values, and is unavailable for Base.
 
-**Save** updates the current file, following symlinks. **Save as** writes a copy, switches subsequent saves to it. **Set as global theme** (in the theme dialog) points the symlink `default.conf` in the user theme directory, where every iad app looks, at the open theme's file (a bundled theme is copied there first); **Remove global theme** in the same dialog deletes the symlink. There is no embedded preview; the header's play button starts the gallery with the current values (a temp `IAD_THEME` file, nothing saved), and `theme-manager gallery` runs it with the global theme.
+**Save** updates the current file, following symlinks. **Save as** writes a copy, switches subsequent saves to it. **Set as global theme** (in the theme dialog) points the symlink `default.ron` in the user theme directory, where every iad app looks, at the open theme's file (a bundled theme is copied there first); **Remove global theme** in the same dialog deletes the symlink. There is no embedded preview; the header's play button starts the gallery with the current values (a temp `IAD_THEME` file, nothing saved), and `theme-manager gallery` runs it with the global theme.
 
-For a standalone gallery launch, use `IAD_THEME=path.conf cargo run -p iced-adaptive-design-gallery`.
+For a standalone gallery launch, use `IAD_THEME=path.ron cargo run -p iced-adaptive-design-gallery`.
 
 ## Widget variants
 
@@ -108,19 +108,22 @@ Responsive selection uses [breakpoint rules and logical variants](breakpoint-rul
 
 A **variant** is a named set of typed style tokens that belongs to one widget. In a theme file it is the section `[<widget>.<variant>]`; every key is optional and inherits per key from the widget's base values and resolved theme metrics. Named size/density presets, including `sm`, `md` and `lg`, are config-loaded values, not renderer arithmetic. Custom names use the same resolution path; missing or undeclared names inherit neutral/base values. See [breakpoint rules and logical variants](breakpoint-rules.md).
 
-```ini
-[button.suggested]        # restyle a default variant
-bg=#2e7d32
-hover-bg=#388e3c
-
-[button.brand]            # an app's own variant
-bg=#6a1b9a
-fg=#ffffff
-radius=4px
-
-[dark:button.brand]       # the dark scheme cascades over it like any section
-bg=#ce93d8
-fg=#000000
+```ron
+{
+    "button.suggested": {        // restyle a default variant
+        "bg": "#2e7d32",
+        "hover-bg": "#388e3c",
+    },
+    "button.brand": {            // an app's own variant
+        "bg": "#6a1b9a",
+        "fg": "#ffffff",
+        "radius": 4,
+    },
+    "dark:button.brand": {       // the dark scheme cascades over it like any section
+        "bg": "#ce93d8",
+        "fg": "#000000",
+    },
+}
 ```
 
 Button keys: `bg`, `fg`, `border` (colors), `border-width`, `radius` (lengths in px), `hover-bg`, `active-bg` (colors; derived from `bg` when unset). The toolkit provides these default button variants: `default`, `raised`, `flat`, `headerbar`, `suggested` (the primary color), `destructive`, `opaque`, `pill`, `suggested-pill`, `link`, `osd`, `card` (`DEFAULT_VARIANTS`). They are declared in `Schema::toolkit()`, so the theme editor lists them and a generated template documents them.
@@ -148,27 +151,31 @@ A theme can take on a look that is not libadwaita's: a classic grey desktop with
 
 **Gradients.** A gradient token is `linear-gradient(<angle>deg, <color> <pos>%, ...)`.
 
-```ini
-[gradients]
-titlebar=linear-gradient(90deg, #0a246a 0%, #a6caf0 100%)   # navy to light blue, left to right
-progress=linear-gradient(180deg, #5dd05d, #1e9a1e)           # positions spread evenly
+```ron
+{
+    "gradients": {
+        "titlebar": (angle: 90.0, stops: [(0.0, "#0a246a"), (1.0, "#a6caf0 100%)   # navy to light blue, left to righ")]),
+        "progress": (angle: 180.0, stops: [(0.0, "#5dd05d"), (1.0, "#1e9a1e)           # positions spread evenl")]),
+    },
+}
 ```
 
 The angle is CSS's (`0deg` up, `90deg` right, `180deg` down). Two to eight stops; a color is any form a color token takes; a given position is in `0..=100` and does not decrease, a missing one is spread evenly between its neighbours. Anything else is refused with a warning. Surfaces: `[gradients] window`, `view`, `headerbar`, `titlebar` (the title bar of a client-side decorated window, over `headerbar`), `sidebar`, `card`, `popover`, `dialog`, `progress`. A button variant takes `bg-gradient`, `hover-bg-gradient` and `active-bg-gradient`; without the last two the hover and pressed gradients are the base one with each stop lightened or darkened like a flat fill.
 
 **Bevels.** iced draws one border color per quad, so a two-tone frame is drawn by `components::Bevel`. A variant or a frame asks for one with `border-style`:
 
-```ini
-[button.default]
-border-style=raised          # solid (the toolkit's own border), raised, sunken, etched, bump, window
-border-width=2px             # 1 or 2 rings (1px each)
-border-light=#ffffff         # outer light edge       (top and left of a raised frame)
-border-dark=#000000          # outer dark edge        (bottom and right)
-border-light-inner=#dfdfdf   # inner light edge
-border-dark-inner=#808080    # inner dark edge
-
-[frame.field]                # text fields, entries
-border-style=sunken
+```ron
+{
+    "button.default": {
+        "border-style": "raised          # solid (the toolkit's own border), raised, sunken, etched, bump, window",
+        "border-width": "2px             # 1 or 2 rings (1px each)",
+        "border-light": "#ffffff         # outer light edge       (top and left of a raised frame)",
+        "border-dark": "#000000          # outer dark edge        (bottom and right)",
+        "border-light-inner": "#dfdfdf   # inner light edge",
+        "border-dark-inner": "#808080    # inner dark edge",
+        "border-style": "sunken",
+    },
+}
 ```
 
 ```text
@@ -183,7 +190,7 @@ D D D D D D D D       L L L L L L L L
 
 `etched` is a groove and `bump` a ridge (a dark and a light line); `window` is the frame of a window. Unset colors are the classic gray-frame ones (white, black, `#dfdfdf`, `#808080`). A button drawn with a bevel sinks while it is held down. The frames the toolkit's builders use are `[frame.<name>]` for `window`, `card`, `field`, `well`, `panel`, `popover` and `dialog`; a button's is its variant's own section. A `solid` or unset style uses the surface's ordinary border. Limits: the toolkit's own `check_button`, `radio_button` and `progress_bar` are iced widgets that a theme can only restyle, not wrap, so they take colors and gradients but not a bevel.
 
-**Window frame and title bar** (`[windows]`): `frame-border-width` (px), `frame-border` (a solid frame color), `frame-border-style` (`solid` or a bevel, colored by `[frame.window]`), `titlebar-align` (`start`, `center`, `end`), `titlebar-font-weight` (`normal`, `bold`), `titlebar-icon` (the application icon at the start of the title) and `button-style` (the button variant of the window buttons: any `[button.<name>]`, bevel and gradient included).
+**Window frame and title bar** (`[window-decorations]`): `frame-border-width` (px), `frame-border` (a solid frame color), `frame-border-style` (`solid` or a bevel, colored by `[frame.window]`), `titlebar-align` (`start`, `center`, `end`), `titlebar-font-weight` (`normal`, `bold`), `titlebar-icon` (the application icon at the start of the title) and `button-style` (the button variant of the window buttons: any `[button.<name>]`, bevel and gradient included).
 
 **Font.** `[typography] font-family` and `monospace-font-family` (1 to 64 characters, no control characters). The toolkit's text helpers apply them; for the text it does not style, set the application's default font: `iced::application(..).default_font(theme_config::default_font())` (iced needs a `&'static str` for a family name, so each distinct name is leaked once). `Theme::font()` and `Theme::monospace_font()` give the fonts to an app's own text.
 
@@ -235,4 +242,4 @@ Variations use `[variation-key:property-section]`, for example `[dark:panel]` or
 
 `Builder::variation` and `ThemeConfig::with_variation` select a variation. `Theme::with_theme_config` automatically selects `light`/`dark` from the theme scheme unless a variation was explicitly selected. Variations apply to custom tokens, colors, metrics and typography.
 
-`Schema::template` generates a valid, commented `.conf`, including constraints, optional fallbacks and variation sections. The existing theme loader regenerates missing files from that template. `Schema::validate` validates text without file access and returns syntax/value errors plus unknown properties/variation keys. The loader reports invalid values through `warnings()` and keeps the cascade; unknown values remain ignored and are never rewritten.
+`Schema::template` generates a valid, commented `.ron`, including constraints, optional fallbacks and variation sections. The existing theme loader regenerates missing files from that template. `Schema::validate` validates text without file access and returns syntax/value errors plus unknown properties/variation keys. The loader reports invalid values through `warnings()` and keeps the cascade; unknown values remain ignored and are never rewritten.

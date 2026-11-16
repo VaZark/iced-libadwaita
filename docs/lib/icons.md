@@ -4,9 +4,12 @@ General-purpose icons come from installed XDG themes, following the freedesktop 
 
 Select an installed theme in the shared desktop configuration:
 
-```ini
-[icons]
-theme=Adwaita
+```ron
+{
+    "icons": {
+        "theme": "Adwaita",
+    },
+}
 ```
 
 `system` follows `gtk-icon-theme-name` from shared GTK settings files, with `hicolor` as the fallback when no preference is available. There is no forced Adwaita fallback. Reinstalling configuration with a different theme clears lookup and render caches on their next use; redraw the application to display it. Use `utils::detect_theme()` at startup and `utils::follow_theme()` as a subscription to follow desktop changes. GTK preference files are checked every second; changing their selected theme invalidates icon caches on the next draw. Edits to artwork inside an unchanged theme are not watched.

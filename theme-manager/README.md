@@ -34,7 +34,7 @@ Wayland, the GPU, `xdg-data/iad` (where the global theme lives, so host apps see
 
 ## The global theme
 
-Every theme is a file of its own. The global theme is `default.conf` in
+Every theme is a file of its own. The global theme is `default.ron` in
 `$XDG_DATA_HOME/iad/themes/` (default `~/.local/share/iad/themes/`), the file every iad app already
 looks for (`theme_config::theme_path`), and it is always a **symlink** to the current theme's file.
 There is one action:
@@ -43,8 +43,8 @@ There is one action:
   that symlink at the open theme's file, creating or replacing it atomically. Unsaved changes are
   saved first; a theme with no file yet (new, or edited from a bundled one) opens Save as, which
   starts in that directory, and becomes global once written. A bundled theme is copied there as
-  `<key>.conf` first (an existing file of that name with other values is never overwritten).
-- A regular file called `default.conf` is never overwritten: it is renamed to a theme file of its
+  `<key>.ron` first (an existing file of that name with other values is never overwritten).
+- A regular file called `default.ron` is never overwritten: it is renamed to a theme file of its
   own (from its `[theme] name`) before the link is made.
 - **Remove global theme** (same dialog) deletes the symlink, never the theme it led to; apps fall
   back to their own base theme.
@@ -53,7 +53,7 @@ There is one action:
 ## Bundled themes
 
 `libadwaita`, `cosmic`, `bubblegum`, `solarized`, `synthwave`, `terminal`, embedded from
-`themes/*.conf`. The theme picker lists them under **Bundled** (a bundled theme already installed
+`themes/*.ron`. The theme picker lists them under **Bundled** (a bundled theme already installed
 unchanged shows once, as the installed file). Opening one gives an unsaved copy: **Save as**
 writes your own. The toy reference themes (`win95`, `winxp`, `win7`, `mate`, `gnome2`) belong to
 `theme-toys` and are not bundled.
@@ -75,7 +75,7 @@ it with the global theme. The gallery has no desktop entry. Theme toys are start
 `theme-toys`, not from here.
 
 State (open file, folders, recents, section, variant) is kept in
-`$XDG_CONFIG_HOME/iad-theme-editor/state.conf`.
+`$XDG_CONFIG_HOME/iad-theme-editor/state.ron`.
 
 ## The token page
 
@@ -85,5 +85,5 @@ The token page is virtualized (`src/page.rs`): only the groups near the scroll p
 
 `cargo test -p iced-adaptive-design-theme-manager --offline` covers files, saving and
 filtering, undo, the bundled set (valid, matches `themes/`, no toys), setting and removing the
-global theme (a symlink, replaced atomically; a regular default.conf is kept), starting the gallery, and headless layout of long
+global theme (a symlink, replaced atomically; a regular default.ron is kept), starting the gallery, and headless layout of long
 multilingual names at narrow widths. Layout assertions are not pixel-perfect visual acceptance.

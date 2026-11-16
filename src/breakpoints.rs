@@ -31,7 +31,7 @@ pub const XXL: f32 = 1400.0;
 /// Corners are unaffected: use [`windows::State`](crate::windows::State) (rounded unless actually maximized/fullscreen).
 pub const MOBILE_MAX_WIDTH: f32 = SM - 1.0;
 
-/// The mobile breakpoint in effect: the desktop config's `[windows] mobile-max-width`
+/// The mobile breakpoint in effect: the desktop config's `[window-decorations] mobile-max-width`
 /// (default [`MOBILE_MAX_WIDTH`]).
 pub fn mobile_max_width() -> f32 {
     crate::config::current().mobile_max_width
@@ -314,7 +314,13 @@ mod tests {
             ..Breakpoints::default()
         };
         assert_eq!(base.with_tokens(&tokens("")), base);
-        let scale = base.with_tokens(&tokens("[breakpoints]\nmd=700px\nxl=1250px"));
+        let scale = base.with_tokens(&tokens(r##"{
+    "breakpoints": {
+        "md": 700,
+        "xl": 1250,
+    },
+}
+"##));
         assert_eq!(
             scale,
             Breakpoints {
@@ -324,7 +330,13 @@ mod tests {
             }
         );
         assert_eq!(
-            base.with_tokens(&tokens("[breakpoints]\nsm=1px\nxxl=16384px")),
+            base.with_tokens(&tokens(r##"{
+    "breakpoints": {
+        "sm": 1,
+        "xxl": 16384,
+    },
+}
+"##)),
             Breakpoints {
                 sm: 1.0,
                 xxl: 16384.0,
@@ -358,7 +370,15 @@ mod tests {
     #[test]
     fn variant_selection_uses_local_token_scale() {
         let base = Breakpoints::default();
-        let local = tokens("[breakpoints]\nmd=700px\n[tabs]\nbreakpoint-rules=md:outline");
+        let local = tokens(r##"{
+    "breakpoints": {
+        "md": 700,
+    },
+    "tabs": {
+        "breakpoint-rules": "md:outline",
+    },
+}
+"##);
         assert_eq!(
             variant_for_tokens(&local, "tabs", &base, 699.9, "default"),
             "default"
@@ -367,7 +387,15 @@ mod tests {
             variant_for_tokens(&local, "tabs", &base, 700.0, "default"),
             "outline"
         );
-        let invalid = tokens("[breakpoints]\nmd=1100px\n[tabs]\nbreakpoint-rules=md:outline");
+        let invalid = tokens(r##"{
+    "breakpoints": {
+        "md": 1100,
+    },
+    "tabs": {
+        "breakpoint-rules": "md:outline",
+    },
+}
+"##);
         assert_eq!(
             variant_for_tokens(&invalid, "tabs", &base, base.md, "default"),
             "outline"

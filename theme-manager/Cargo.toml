@@ -10,6 +10,8 @@ iced-adaptive-design-gallery = { path = "../gallery" }
 iced-adaptive-design = { path = ".." }
 # Wayland only on Linux: no `x11` feature (see the gallery).
 iced = { version = "0.14", default-features = false, features = ["wgpu", "tiny-skia", "crisp", "web-colors", "thread-pool", "linux-theme-detection", "wayland", "advanced", "svg", "image", "tokio", "canvas"] }
+ron = "0.12"
+serde = { version = "1", features = ["derive"] }
 rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 
 [[bin]]

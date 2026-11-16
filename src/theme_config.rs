@@ -8,10 +8,10 @@
 //! 1. **Hardcoded** ([`Builder::hardcode`]): set in code. *Extremely discouraged.* Prefer a
 //!    token in the app theme: a hardcoded value cannot be changed by the user or the
 //!    packager, and every one is reported at startup ([`ThemeConfig::hardcoded`]).
-//! 2. **The app theme file**, `$XDG_CONFIG_HOME/<app-id>/theme.conf`. The app declares its
+//! 2. **The app theme file**, `$XDG_CONFIG_HOME/<app-id>/theme.ron`. The app declares its
 //!    tokens and their defaults in a [`Schema`], so the file can be deleted: the app writes a
 //!    fresh one (every token commented out with its default and a description).
-//! 3. **The toolkit theme file**, `$XDG_CONFIG_HOME/iced-adaptive-design/theme.conf`. The toolkit
+//! 3. **The toolkit theme file**, `$XDG_CONFIG_HOME/iced-adaptive-design/theme.ron`. The toolkit
 //!    declares the tokens it understands ([`Schema::toolkit`]) with their defaults; it too is
 //!    regenerated when missing.
 //!
@@ -21,12 +21,14 @@
 //!
 //! # Tokens
 //!
-//! A token is a typed value ([`Value`]: a color, a number, a bool or text) under a section and a
-//! key, in the same key-file format as the desktop config.
+//! A token is a typed value ([`Value`]: a color, a number, a gradient, a bool or text) under a section and a
+//! key, in a file of [RON](https://github.com/ron-rs/ron): a map of sections to maps of keys, the same
+//! shape as the desktop config. Colors are strings, lengths and numbers are numbers, and a
+//! gradient is `(angle: 90, stops: [(0.0, "#fff"), (1.0, "#000")])`; see [`Document`].
 //!
-//! * **Toolkit tokens** (see [`Schema::toolkit`]): `[colors]` and `[light:colors]`/`[dark:colors]` (the palette:
-//!   `accent`, `window-bg`, `card-bg`, …; the scheme's variant wins over the base), `[metrics]`
-//!   (radii, paddings, heights, spacing) and `[typography]` (`text-scale`, `base-size`).
+//! * **Toolkit tokens** (see [`Schema::toolkit`]): `"colors"` and `"light:colors"`/`"dark:colors"` (the palette:
+//!   `accent`, `window-bg`, `card-bg`, …; the scheme's variant wins over the base), `"metrics"`
+//!   (radii, paddings, heights, spacing) and `"typography"` (`text-scale`, `base-size`).
 //!   Radii are **not** clamped to the HIG maxima here: a different vibe may be rounder or squarer.
 //! * **App tokens**: any other section and key the app declares, for its own objects: a cover's
 //!   size, a brand color, a chip's padding. Read them with
@@ -42,7 +44,7 @@
 //!
 //! let cfg = ThemeConfig::builder("org.example.Player")
 //!     .schema(schema)
-//!     .app_text("[cover]\nsize=120\n[metrics]\nradius-l=20\n")   // the app theme file's text
+//!     .app_text(r#"{ "cover": { "size": 120 }, "metrics": { "radius-l": 20 } }"#)   // the app theme file's text
 //!     .build();
 //!
 //! assert_eq!(cfg.number("cover", "size"), Some(120.0));            // the app file
@@ -60,8 +62,12 @@
 //! let theme = Theme::from_config(&config::current()).with_theme_config(&cfg);
 //! ```
 
+mod document;
 mod gradient;
 mod variable;
+pub use document::Document;
+/// The RON crate a [`Document`] holds its values in, so callers use the same version.
+pub use ron;
 pub use gradient::Gradient;
 pub use variable::{Rounding, VariableType};
 
@@ -140,6 +146,58 @@ impl Value {
             Self::Text(t) => t.clone(),
         }
     }
+    /// The value as the RON a file holds (see [`VariableType::from_ron`]): lengths and
+    /// percentages are plain numbers, colors are hex strings, a gradient is
+    /// `{"angle": .., "stops": [[position, "color"], ..]}`.
+    pub fn to_ron(&self) -> ron::Value {
+        use ron::Value as R;
+        let num = |n: f64| R::Number(ron::Number::from(n));
+        match self {
+            Self::Integer(n) => R::Number(ron::Number::from(*n)),
+            Self::Decimal(n) | Self::Length(n) | Self::Percentage(n) => num(*n),
+            Self::Number(n) => num(*n as f64),
+            Self::Color(c) => R::String(crate::color::to_hex(*c)),
+            Self::Gradient(g) => {
+                let mut map = ron::Map::new();
+                map.insert(R::String("angle".into()), num(g.angle as f64));
+                let stops = g
+                    .stops
+                    .iter()
+                    .map(|(p, c)| {
+                        R::Seq(vec![num(*p as f64), R::String(crate::color::to_hex(*c))])
+                    })
+                    .collect();
+                map.insert(R::String("stops".into()), R::Seq(stops));
+                R::Map(map)
+            }
+            Self::Bool(b) => R::Bool(*b),
+            Self::Text(t) => R::String(t.clone()),
+        }
+    }
+    /// The value as a theme file holds it (RON): numbers are plain numbers (a length is in px),
+    /// colors and text are strings, a gradient is its structure.
+    pub fn to_ron_text(&self) -> String {
+        let string = |s: &str| ron::ser::to_string(s).unwrap_or_else(|_| format!("{s:?}"));
+        match self {
+            Self::Integer(n) => n.to_string(),
+            Self::Decimal(n) | Self::Length(n) | Self::Percentage(n) => ron_number(*n),
+            Self::Number(n) => ron_number(*n as f64),
+            Self::Color(c) => string(&crate::color::to_hex(*c)),
+            Self::Gradient(g) => g.to_ron_text(),
+            Self::Bool(b) => b.to_string(),
+            Self::Text(t) => string(t),
+        }
+    }
+}
+
+/// A float as RON writes it: always with a decimal point or an exponent, so it reads back as a
+/// float, and with no floating-point noise (`24.0`, `0.5`).
+fn ron_number(n: f64) -> String {
+    let mut t = format!("{n}");
+    if !t.contains(['.', 'e', 'E']) {
+        t.push_str(".0");
+    }
+    t
 }
 
 // ----------------------------------------------------------------- schema
@@ -280,8 +338,10 @@ pub const BORDER_EDGES: &[&str] = &["all", "no-bottom", "no-top", "no-left", "no
 pub const TRACK_STYLES: &[&str] = &["plain", "dither"];
 /// The values of `[progress] style`.
 pub const PROGRESS_STYLES: &[&str] = &["smooth", "blocks"];
-/// The values of `[windows] glyph-set`: the artwork of the window buttons.
+/// The values of `[window-decorations] glyph-set`: the artwork of the window buttons.
 pub const GLYPH_SETS: &[&str] = &["symbolic", "classic"];
+/// The values of `[window-decorations] button-fill`.
+pub const BUTTON_FILLS: &[&str] = &["none", "circle"];
 /// The values of `[typography] disabled-style`.
 pub const DISABLED_STYLES: &[&str] = &["fade", "emboss"];
 /// The values of `[menu] separator`.
@@ -488,9 +548,9 @@ pub const GRADIENT_SURFACES: &[(&str, &str)] = &[
     ("progress", "The filled part of a progress bar"),
 ];
 
-/// The enum values of `[windows] titlebar-align`.
+/// The enum values of `[window-decorations] titlebar-align`.
 pub const TITLEBAR_ALIGNS: &[&str] = &["start", "center", "end"];
-/// The enum values of `[windows] titlebar-font-weight`.
+/// The enum values of `[window-decorations] titlebar-font-weight`.
 pub const TITLEBAR_WEIGHTS: &[&str] = &["normal", "bold"];
 /// The enum values of `[metrics] focus-style`.
 pub const FOCUS_STYLES: &[&str] = &["ring", "dotted", "none"];
@@ -519,43 +579,43 @@ fn declare_design_tokens(mut s: Schema) -> Schema {
         max: Some(max),
     };
     s = s.variable(
-        "windows",
+        "window-decorations",
         "frame-border-width",
         len(32.0),
         None,
         "Width of the frame around a client-side decorated window, in px",
     );
     s = s.variable(
-        "windows",
+        "window-decorations",
         "frame-border",
         VariableType::Color,
         None,
         "Color of the window frame (a solid frame)",
     );
     s = s.variable(
-        "windows",
+        "window-decorations",
         "frame-border-style",
         enum_type(BORDER_STYLES),
         None,
         "solid, or a bevel: raised, sunken, etched, bump, window (colors from [frame.window])",
     );
     s = s.variable(
-        "windows",
+        "window-decorations",
         "titlebar-align",
         enum_type(TITLEBAR_ALIGNS),
         None,
         "Where the window title sits: start, center or end",
     );
     s = s.variable(
-        "windows",
+        "window-decorations",
         "titlebar-font-weight",
         enum_type(TITLEBAR_WEIGHTS),
         None,
         "Weight of the window title: normal or bold",
     );
-    s = s.variable("windows", "flat-headerbars", VariableType::Bool, None, "Header bars with no background of their own (libadwaita's flat bars); false for a title bar with a color or gradient. Over the desktop's [appearance] flat-headerbars");
+    s = s.variable("window-decorations", "flat-headerbars", VariableType::Bool, None, "Header bars with no background of their own (libadwaita's flat bars); false for a title bar with a color or gradient. Over the desktop's [appearance] flat-headerbars");
     s = s.variable(
-        "windows",
+        "window-decorations",
         "titlebar-icon",
         VariableType::Bool,
         None,
@@ -568,13 +628,13 @@ fn declare_design_tokens(mut s: Schema) -> Schema {
             ("border", "Border color"),
         ] {
             s = s.variable(
-                "windows", &format!("{action}-{part}"), VariableType::Color, None,
+                "window-decorations", &format!("{action}-{part}"), VariableType::Color, None,
                 &format!("{doc} of the {action} window control (unset: button style; restore falls back to maximize)"),
             );
         }
     }
     s = s.variable(
-        "windows",
+        "window-decorations",
         "button-style",
         VariableType::String {
             values: vec![],
@@ -939,22 +999,32 @@ fn declare_design_tokens(mut s: Schema) -> Schema {
         "Disabled text: fade, or emboss (grey over a white 1px offset copy)",
     );
     s = s.variable(
-        "windows",
+        "window-decorations",
         "glyph-set",
         enum_type(GLYPH_SETS),
         None,
         "The artwork of the window buttons: symbolic icons, or classic pixel glyphs",
     );
-    s = s.variable("windows", "close-gap", len(32.0), None, "The gap in px before the close button (over button-gap): classic title bars keep minimize and maximize together and the close button apart");
+    s = s.variable("window-decorations", "close-gap", len(32.0), None, "The gap in px before the close button (over button-gap): classic title bars keep minimize and maximize together and the close button apart");
     s = s.variable(
-        "windows",
+        "window-decorations",
+        "button-fill",
+        enum_type(BUTTON_FILLS),
+        None,
+        "The window buttons at rest: `none` is the bare glyph (a fill shows only under the pointer), `circle` a filled disc behind it",
+    );
+    s = s.variable("window-decorations", "button-corner-clearance", len(32.0), None, "The least distance in px between a window button's outer corner and the rounded window corner (default: half the space above the button); the side inset grows to keep it, whatever the window radius");
+    s = s.variable("window-decorations", "button-separation", len(64.0), None, "Extra space in px between the window buttons and the title bar's own actions, so the two groups read as separate");
+    s = s.variable("window-decorations", "button-inset", len(32.0), None, "Extra space in px between the outermost window button and the title bar's edge, over the title bar padding (libadwaita: the 5 px of padding around each circular button, so the buttons keep clear of the rounded corner)");
+    s = s.variable(
+        "window-decorations",
         "button-width",
         len(64.0),
         None,
         "Width of a window button in px (unset: button-size)",
     );
     s = s.variable(
-        "windows",
+        "window-decorations",
         "button-height",
         len(64.0),
         None,
@@ -1003,41 +1073,49 @@ impl Schema {
             .into_iter()
             .chain(self.variations.iter().map(String::as_str))
     }
-    fn parse_value(&self, section: &str, key: &str, raw: &str) -> Option<Value> {
-        let spec = self.get(section, key)?;
+    /// The typed value a file's RON gives `[section] key`, or what was wrong with it.
+    fn value_from_ron(&self, section: &str, key: &str, v: &ron::Value) -> Result<Value, String> {
+        let spec = self
+            .get(section, key)
+            .ok_or_else(|| "not a declared token".to_string())?;
         if key == "breakpoint-rules" {
+            let ron::Value::String(raw) = v else {
+                return Err("expected a string of breakpoint rules, like \"xs:compact,md:default\"".into());
+            };
             crate::breakpoints::Rules::parse(raw, |name| {
                 self.variants
                     .iter()
                     .any(|(widget, variant)| widget == section && variant == name)
             })
-            .ok()?;
+            .map_err(|e| e.to_string())?;
         }
-        spec.ty.parse(raw)
+        spec.ty.from_ron(v)
     }
 
-    /// Validate a .conf against exactly this schema, without reading or writing files.
+    /// Validate a theme file's RON against exactly this schema, without reading or writing files.
     pub fn validate(&self, text: &str) -> ValidationReport {
-        let mut report = ValidationReport {
-            errors: syntax_errors(text),
-            unknown: Vec::new(),
+        let mut report = ValidationReport::default();
+        let doc = match Document::parse(text) {
+            Ok(doc) => doc,
+            Err(error) => {
+                report.errors.push(error);
+                return report;
+            }
         };
-        for ((section, key), raw) in crate::config::parse_keyfile(text) {
+        for (section, key, v) in doc.entries() {
             let base = if let Some((variation, base)) = section.split_once(':') {
                 if !self.variation_keys().any(|k| k == variation) {
-                    report.unknown.push((section, key));
+                    report.unknown.push((section.into(), key.into()));
                     continue;
                 }
                 base
             } else {
-                &section
+                section
             };
-            match self.get(base, &key) {
-                Some(spec) if self.parse_value(base, &key, &raw).is_none() => report
-                    .errors
-                    .push(format!("[{section}] {key}: invalid {:?}", spec.ty)),
-                None => report.unknown.push((section, key)),
-                _ => {}
+            if self.get(base, key).is_none() {
+                report.unknown.push((section.into(), key.into()));
+            } else if let Err(why) = self.value_from_ron(base, key, v) {
+                report.errors.push(format!("[{section}] {key}: {why}"));
             }
         }
         report
@@ -1316,13 +1394,13 @@ impl Schema {
             "How the app relates to the desktop's look: inherit, override or optout",
         );
         s = s.text(
-            "windows",
+            "window-decorations",
             "button-layout",
             "appmenu:close",
             "Window buttons and their side: `start:end`, e.g. `:minimize,maximize,close`",
         );
         s = s.variable(
-            "windows",
+            "window-decorations",
             "button-size",
             VariableType::Length {
                 min: Some(8.0),
@@ -1332,7 +1410,7 @@ impl Schema {
             "Window button edge in px",
         );
         s = s.variable(
-            "windows",
+            "window-decorations",
             "button-gap",
             VariableType::Length {
                 min: Some(0.0),
@@ -1342,7 +1420,7 @@ impl Schema {
             "Space between window buttons in px",
         );
         s = s.variable(
-            "windows",
+            "window-decorations",
             "button-icon-size",
             VariableType::Length {
                 min: Some(8.0),
@@ -1352,7 +1430,7 @@ impl Schema {
             "Window button icon size in px",
         );
         s = s.variable(
-            "windows",
+            "window-decorations",
             "button-radius",
             VariableType::Percentage {
                 min: Some(0.0),
@@ -1368,7 +1446,7 @@ impl Schema {
             ("titlebar-right-click", "Right-clicking the title bar"),
         ] {
             s = s.variable(
-                "windows",
+                "window-decorations",
                 key,
                 VariableType::String {
                     values: ["toggle-maximize", "menu", "minimize", "none"]
@@ -1428,50 +1506,53 @@ impl Schema {
 
     /// The text of a file for this schema: every token commented out with its default and a
     /// description, so the file documents without pinning anything. Deleting a layer's file and
-    /// asking for it again gives this.
+    /// asking for it again gives this. It is valid RON: uncomment a `"key": value,` line to set it.
     pub fn template(&self, title: &str) -> String {
         let mut out = format!(
-            "# {title}\n# Generated from the declared defaults. Delete this file to get a fresh one.\n# Uncomment a line to change it; commented lines are the defaults and change nothing.\n"
+            "// {title}\n// Generated from the declared defaults. Delete this file to get a fresh one.\n// Uncomment a line to change it; commented lines are the defaults and change nothing.\n{{\n"
         );
+        let line = |s: &Spec| {
+            format!(
+                "        // {}\n        // Expects {}.\n        // \"{}\": {},\n",
+                s.doc.replace('\n', "\n        // "),
+                s.ty.expectation(),
+                s.key,
+                s.default
+                    .as_ref()
+                    .map(Value::to_ron_text)
+                    .unwrap_or_else(|| "/* unset (no fallback) */".into())
+            )
+        };
         let mut sections: Vec<&str> = Vec::new();
         for s in &self.specs {
             if !sections.contains(&s.section.as_str()) {
                 sections.push(&s.section);
             }
         }
-        for section in sections {
-            out.push_str(&format!("\n[{section}]\n"));
-            for s in self.specs.iter().filter(|s| s.section == section) {
-                out.push_str(&format!(
-                    "# {}\n# Type: {:?}\n#{}={}\n",
-                    s.doc.replace('\n', "\n# "),
-                    s.ty,
-                    s.key,
-                    s.default
-                        .as_ref()
-                        .map(Value::to_text)
-                        .unwrap_or_else(|| "# unset (no fallback)".into())
-                ));
+        for section in &sections {
+            out.push_str(&format!("    \"{section}\": {{\n"));
+            for s in self.specs.iter().filter(|s| s.section == *section) {
+                out.push_str(&line(s));
             }
+            out.push_str("    },\n");
         }
         for variation in self.variation_keys() {
             for section in &sections_for_schema(self) {
-                out.push_str(&format!("\n[{variation}:{section}]\n# Overrides [{section}] while {variation} is active.\n"));
-                for spec in self.specs.iter().filter(|s| &s.section == section) {
-                    out.push_str(&format!(
-                        "#{}={}\n",
-                        spec.key,
-                        spec.default
-                            .as_ref()
-                            .map(Value::to_text)
-                            .unwrap_or_else(|| "# unset (no fallback)".into())
-                    ));
-                }
+                out.push_str(&format!(
+                    "    // Overrides \"{section}\" while {variation} is active.\n    \"{variation}:{section}\": {{}},\n"
+                ));
             }
         }
+        out.push_str("}\n");
         out
     }
 }
+/// A one-entry RON document for tests: `ron_one("tabs", "radius", "4")`. `value` is RON text.
+#[cfg(test)]
+pub(crate) fn ron_one(section: &str, key: &str, value: &str) -> String {
+    format!("{{ {section:?}: {{ {key:?}: {value} }} }}")
+}
+
 /// Validation errors and undeclared keys, including undeclared variation keys.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ValidationReport {
@@ -1482,37 +1563,6 @@ impl ValidationReport {
     pub fn is_valid(&self) -> bool {
         self.errors.is_empty() && self.unknown.is_empty()
     }
-}
-fn syntax_errors(text: &str) -> Vec<String> {
-    let mut section = false;
-    text.lines()
-        .enumerate()
-        .filter_map(|(i, line)| {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with(['#', ';']) {
-                return None;
-            }
-            if line.starts_with('[') {
-                if line.ends_with(']')
-                    && line.len() > 2
-                    && !line[1..line.len() - 1].contains(['[', ']'])
-                {
-                    section = true;
-                    return None;
-                }
-            } else if section
-                && line
-                    .split_once('=')
-                    .is_some_and(|(key, _)| !key.trim().is_empty())
-            {
-                return None;
-            }
-            Some(format!(
-                "line {}: expected [section] or key=value inside a section",
-                i + 1
-            ))
-        })
-        .collect()
 }
 fn sections_for_schema(schema: &Schema) -> Vec<String> {
     schema
@@ -1764,7 +1814,7 @@ pub fn theme_dirs() -> Vec<PathBuf> {
 }
 
 /// Which theme file applies: `IAD_THEME=<path>` if it names a readable file (`IAD_THEME=none`
-/// skips external theme discovery), else the first `default.conf` in [`theme_dirs`].
+/// skips external theme discovery), else the first `default.ron` in [`theme_dirs`].
 /// This selects only the external layer: a bundled [`Builder::base_theme`] still applies.
 /// Without either layer, the toolkit uses its bare defaults.
 pub fn theme_path() -> Option<PathBuf> {
@@ -1791,13 +1841,13 @@ fn pick_theme(env: Option<&str>, dirs: &[PathBuf]) -> Option<PathBuf> {
         None => {}
     }
     dirs.iter()
-        .map(|d| d.join("default.conf"))
+        .map(|d| d.join("default.ron"))
         .find(|p| p.is_file())
 }
 
 /// Where the theme file of the app `app_id` is.
 pub fn app_path(app_id: &str) -> Option<PathBuf> {
-    config_home().map(|h| h.join(app_id).join("theme.conf"))
+    config_home().map(|h| h.join(app_id).join("theme.ron"))
 }
 
 /// How an app relates to the look the desktop provides.
@@ -1808,7 +1858,7 @@ pub fn app_path(app_id: &str) -> Option<PathBuf> {
 ///   in code. Allowed, **discouraged** (it can fight the user's theme) and reported on stderr at
 ///   [`install`], listing each token.
 /// * **`OptOut`**: the app uses only its own look and never consults the desktop: no theme file
-///   lookup, no `desktop.conf`, no portal scheme. For apps with their own identity (a music
+///   lookup, no `desktop.ron`, no portal scheme. For apps with their own identity (a music
 ///   player). It bundles its look in its own theme text or hardcoded tokens.
 ///
 /// Declared with [`Builder::inheritance`] or `[theme] mode=inherit|override|optout` in the app
@@ -1894,7 +1944,7 @@ impl Builder {
     /// A bundled base theme, validated below the selected toolkit and app theme layers.
     /// It remains active when `IAD_THEME` is unset or `none`, discovery finds no file,
     /// files are disabled, or automatic desktop inheritance is opted out.
-    /// Prefer `include_str!` with a bundled `.conf` file (recommended: `libadwaita.conf`).
+    /// Prefer `include_str!` with a bundled `.ron` file (recommended: `libadwaita.ron`).
     pub fn base_theme(mut self, text: impl Into<String>) -> Self {
         self.base_theme = Some(text.into());
         self
@@ -1963,19 +2013,18 @@ impl Builder {
             &self.schema,
             &format!("{} theme: this app's look", self.app_id),
         );
+        let app_doc = Document::parse(&app_text).unwrap_or_default();
         let keep = self.default_variants.unwrap_or_else(|| {
-            crate::config::parse_keyfile(&app_text)
-                .get(&("theme".to_string(), "default-variants".to_string()))
-                .and_then(|v| DefaultVariants::parse(v))
+            app_doc
+                .text("theme", "default-variants")
+                .and_then(DefaultVariants::parse)
                 .unwrap_or_default()
         });
         let toolkit = Schema::toolkit().without_default_variants(keep);
         let schema = toolkit.clone().with(&self.schema);
-        let declared = self.inheritance.or_else(|| {
-            crate::config::parse_keyfile(&app_text)
-                .get(&("theme".to_string(), "mode".to_string()))
-                .and_then(|m| Inheritance::parse(m))
-        });
+        let declared = self
+            .inheritance
+            .or_else(|| app_doc.text("theme", "mode").and_then(Inheritance::parse));
         let opt_out = declared == Some(Inheritance::OptOut);
         let toolkit_text = match (&self.toolkit_text, self.files && !opt_out) {
             (Some(t), _) => t.clone(),
@@ -2013,26 +2062,29 @@ impl Builder {
             if source == Source::App {
                 cfg.inherited = cfg.values.clone();
             }
-            cfg.warnings.extend(
-                syntax_errors(text)
-                    .into_iter()
-                    .map(|error| format!("{}: {error}", source.label())),
-            );
-            for ((section, key), raw) in crate::config::parse_keyfile(text) {
-                cfg.set_from_text(&section, &key, &raw, source);
+            match Document::parse(text) {
+                Ok(doc) => {
+                    for (section, key, v) in doc.entries() {
+                        cfg.set_from_ron(section, key, v, source);
+                    }
+                }
+                Err(error) => cfg.warnings.push(format!("{}: {error}", source.label())),
             }
         }
         for (section, key, value) in self.hardcoded {
-            let valid = cfg.schema.get(&section, &key).is_some_and(|spec| {
-                spec.ty.kind() == value.kind() && spec.ty.parse(&value.to_text()).is_some()
-            });
-            if valid {
-                cfg.set_from_text(&section, &key, &value.to_text(), Source::Hardcoded);
-                cfg.hardcoded.push((section, key));
-            } else {
-                cfg.warnings.push(format!(
+            let checked = cfg
+                .schema
+                .get(&section, &key)
+                .and_then(|spec| spec.ty.from_value(&value));
+            match checked {
+                Some(value) => {
+                    cfg.values
+                        .insert((section.clone(), key.clone()), (Some(value), Source::Hardcoded));
+                    cfg.hardcoded.push((section, key));
+                }
+                None => cfg.warnings.push(format!(
                     "[{section}] {key}: invalid or undeclared hardcoded value; ignored"
-                ));
+                )),
             }
         }
         if let Some(variation) = self.variation {
@@ -2073,7 +2125,7 @@ impl ThemeConfig {
         Builder::new(app_id)
     }
 
-    fn set_from_text(&mut self, section: &str, key: &str, raw: &str, source: Source) {
+    fn set_from_ron(&mut self, section: &str, key: &str, v: &ron::Value, source: Source) {
         let base = if let Some((variation, base)) = section.split_once(':') {
             if !self.schema.variation_keys().any(|key| key == variation) {
                 self.unknown.push((section.into(), key.into()));
@@ -2083,13 +2135,18 @@ impl ThemeConfig {
         } else {
             section
         };
-        let Some(spec) = self.schema.get(base, key) else {
+        if self.schema.get(base, key).is_none() {
             self.unknown.push((section.into(), key.into()));
             return;
-        };
-        match self.schema.parse_value(base, key, raw) {
-            Some(value) => { self.values.insert((section.into(), key.into()), (Some(value), source)); }
-            None => self.warnings.push(format!("[{section}] {key}: {raw:?} is invalid for {:?}; next valid lower layer or declared fallback used", spec.ty)),
+        }
+        match self.schema.value_from_ron(base, key, v) {
+            Ok(value) => {
+                self.values
+                    .insert((section.into(), key.into()), (Some(value), source));
+            }
+            Err(why) => self.warnings.push(format!(
+                "[{section}] {key}: {why}; next valid lower layer or declared fallback used"
+            )),
         }
     }
     /// Return a config with this declared variation cascaded over every base property.
@@ -2541,7 +2598,7 @@ pub fn default_font() -> iced::Font {
     font().unwrap_or(iced::Font::DEFAULT)
 }
 
-/// The frame around a client-side decorated window, from `[windows] frame-border-*`.
+/// The frame around a client-side decorated window, from `[window-decorations] frame-border-*`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WindowFrame {
     /// `frame-border-width` in px (always above 0 here).
@@ -2556,40 +2613,40 @@ pub struct WindowFrame {
 pub fn window_frame() -> Option<WindowFrame> {
     let cfg = current();
     let width = cfg
-        .number("windows", "frame-border-width")
+        .number("window-decorations", "frame-border-width")
         .filter(|w| *w > 0.0)?;
     let bevel = cfg
-        .text("windows", "frame-border-style")
+        .text("window-decorations", "frame-border-style")
         .and_then(crate::primitives::bevel::BevelStyle::parse);
     Some(WindowFrame { width, bevel })
 }
 
-/// Where the window title sits (`[windows] titlebar-align`): `"start"`, `"center"` (default) or
+/// Where the window title sits (`[window-decorations] titlebar-align`): `"start"`, `"center"` (default) or
 /// `"end"`.
 pub fn titlebar_align() -> &'static str {
-    match current().text("windows", "titlebar-align") {
+    match current().text("window-decorations", "titlebar-align") {
         Some("start") => "start",
         Some("end") => "end",
         _ => "center",
     }
 }
 
-/// Whether the window title is bold (`[windows] titlebar-font-weight`): unset is the toolkit's
+/// Whether the window title is bold (`[window-decorations] titlebar-font-weight`): unset is the toolkit's
 /// own bold heading.
 pub fn titlebar_bold() -> bool {
-    current().text("windows", "titlebar-font-weight") != Some("normal")
+    current().text("window-decorations", "titlebar-font-weight") != Some("normal")
 }
 
-/// Whether the title bar shows the application icon at its start (`[windows] titlebar-icon`).
+/// Whether the title bar shows the application icon at its start (`[window-decorations] titlebar-icon`).
 pub fn titlebar_icon() -> bool {
-    current().bool("windows", "titlebar-icon").unwrap_or(false)
+    current().bool("window-decorations", "titlebar-icon").unwrap_or(false)
 }
 
-/// The button variant of the window buttons (`[windows] button-style`), `None` when unset (the
+/// The button variant of the window buttons (`[window-decorations] button-style`), `None` when unset (the
 /// toolkit's own round flat buttons).
 pub fn window_button_style() -> Option<String> {
     current()
-        .text("windows", "button-style")
+        .text("window-decorations", "button-style")
         .filter(|s| !s.is_empty())
         .map(str::to_string)
 }
@@ -2598,62 +2655,86 @@ pub fn window_button_style() -> Option<String> {
 /// absent colors leave the selected button style unchanged.
 pub(crate) fn window_control_color(tokens: &Tokens, action: &str, part: &str) -> Option<Color> {
     tokens
-        .color("windows", &format!("{action}-{part}"))
+        .color("window-decorations", &format!("{action}-{part}"))
         .or_else(|| {
             (action == "restore")
-                .then(|| tokens.color("windows", &format!("maximize-{part}")))
+                .then(|| tokens.color("window-decorations", &format!("maximize-{part}")))
                 .flatten()
         })
 }
 
-/// The window button edge in px (`[windows] button-size`).
+/// The window button edge in px (`[window-decorations] button-size`).
 pub fn window_button_size() -> f32 {
-    current().number("windows", "button-size").unwrap_or(24.0)
+    current().number("window-decorations", "button-size").unwrap_or(24.0)
 }
 
-/// The window button size as `(width, height)` in px: `[windows] button-width` and
+/// The window button size as `(width, height)` in px: `[window-decorations] button-width` and
 /// `button-height`, each defaulting to [`window_button_size`].
 pub fn window_button_dims() -> (f32, f32) {
     let size = window_button_size();
     let cfg = current();
     (
-        cfg.number("windows", "button-width").unwrap_or(size),
-        cfg.number("windows", "button-height").unwrap_or(size),
+        cfg.number("window-decorations", "button-width").unwrap_or(size),
+        cfg.number("window-decorations", "button-height").unwrap_or(size),
     )
 }
 
-/// Whether the window buttons are the classic pixel glyphs (`[windows] glyph-set=classic`).
+/// Whether the window buttons are the classic pixel glyphs (`[window-decorations] glyph-set=classic`).
 pub fn classic_window_glyphs() -> bool {
-    current().text("windows", "glyph-set") == Some("classic")
+    current().text("window-decorations", "glyph-set") == Some("classic")
 }
 
-/// The gap before the close button, when the theme sets one (`[windows] close-gap`).
+/// The gap before the close button, when the theme sets one (`[window-decorations] close-gap`).
 pub fn window_close_gap() -> Option<f32> {
-    current().number("windows", "close-gap")
+    current().number("window-decorations", "close-gap")
 }
 
-/// The space between window buttons in px (`[windows] button-gap`).
+/// Whether the window buttons are drawn as a filled disc at rest (`[window-decorations] button-fill=circle`);
+/// by default they are the bare glyph, with a fill only under the pointer.
+pub fn window_buttons_filled() -> bool {
+    current().text("window-decorations", "button-fill") == Some("circle")
+}
+
+/// The least distance in px between a window button's corner and the rounded window corner
+/// (`[window-decorations] button-corner-clearance`), when the theme sets one.
+pub fn window_button_corner_clearance() -> Option<f32> {
+    current().number("window-decorations", "button-corner-clearance")
+}
+
+/// The extra space in px between the window buttons and the title bar's own actions
+/// (`[window-decorations] button-separation`). Default 0.
+pub fn window_button_separation() -> f32 {
+    current().number("window-decorations", "button-separation").unwrap_or(0.0)
+}
+
+/// The extra space in px between the outermost window button and the title bar's edge
+/// (`[window-decorations] button-inset`), over the title bar padding. Default 0.
+pub fn window_button_inset() -> f32 {
+    current().number("window-decorations", "button-inset").unwrap_or(0.0)
+}
+
+/// The space between window buttons in px (`[window-decorations] button-gap`).
 pub fn window_button_gap() -> f32 {
-    current().number("windows", "button-gap").unwrap_or(4.0)
+    current().number("window-decorations", "button-gap").unwrap_or(4.0)
 }
 
-/// The window button icon size in px (`[windows] button-icon-size`).
+/// The window button icon size in px (`[window-decorations] button-icon-size`).
 pub fn window_button_icon_size() -> f32 {
     current()
-        .number("windows", "button-icon-size")
+        .number("window-decorations", "button-icon-size")
         .unwrap_or(16.0)
 }
 
-/// The window button corner radius in px: `[windows] button-radius` percent of the button size.
+/// The window button corner radius in px: `[window-decorations] button-radius` percent of the button size.
 pub fn window_button_radius() -> f32 {
-    window_button_size() * current().number("windows", "button-radius").unwrap_or(50.0) / 100.0
+    window_button_size() * current().number("window-decorations", "button-radius").unwrap_or(50.0) / 100.0
 }
 
-/// What a title-bar click does (`[windows] titlebar-<click>-click`): `toggle-maximize`, `menu`,
+/// What a title-bar click does (`[window-decorations] titlebar-<click>-click`): `toggle-maximize`, `menu`,
 /// `minimize` or `none`. `click` is `double`, `middle` or `right`.
 pub fn titlebar_action(click: &str) -> String {
     current()
-        .text("windows", &format!("titlebar-{click}-click"))
+        .text("window-decorations", &format!("titlebar-{click}-click"))
         .unwrap_or("none")
         .to_string()
 }
@@ -2704,8 +2785,21 @@ mod tests {
     #[test]
     fn the_app_theme_beats_the_toolkit_theme() {
         let c = build(
-            "[cover]\nsize=100\n[metrics]\nradius-l=2\n",
-            "[cover]\nsize=120\n",
+            r##"{
+    "cover": {
+        "size": 100,
+    },
+    "metrics": {
+        "radius-l": 2,
+    },
+}
+"##,
+            r##"{
+    "cover": {
+        "size": 120,
+    },
+}
+"##,
         );
         assert_eq!(c.number("cover", "size"), Some(120.0));
         assert_eq!(c.source("cover", "size"), Source::App);
@@ -2718,8 +2812,18 @@ mod tests {
     fn hardcoded_beats_everything_and_is_reported() {
         let c = ThemeConfig::builder("test")
             .schema(schema())
-            .toolkit_text("[cover]\nsize=100\n")
-            .app_text("[cover]\nsize=120\n")
+            .toolkit_text(r##"{
+    "cover": {
+        "size": 100,
+    },
+}
+"##)
+            .app_text(r##"{
+    "cover": {
+        "size": 120,
+    },
+}
+"##)
             .hardcode("cover", "size", Value::Number(64.0))
             .build();
         assert_eq!(c.number("cover", "size"), Some(64.0));
@@ -2743,8 +2847,19 @@ mod tests {
     #[test]
     fn invalid_values_fall_back_to_the_lower_layer() {
         let c = build(
-            "[cover]\nsize=100\n",
-            "[cover]\nsize=wide\nbackground=nope\n",
+            r##"{
+    "cover": {
+        "size": 100,
+    },
+}
+"##,
+            r##"{
+    "cover": {
+        "size": "wide",
+        "background": "nope",
+    },
+}
+"##,
         );
         assert_eq!(c.number("cover", "size"), Some(100.0));
         assert_eq!(c.source("cover", "size"), Source::Theme);
@@ -2754,7 +2869,15 @@ mod tests {
 
     #[test]
     fn unknown_tokens_are_listed_not_used() {
-        let c = build("", "[cover]\ncolour=#fff\n[elsewhere]\nx=1\n");
+        let c = build("", r##"{
+    "cover": {
+        "colour": "#fff",
+    },
+    "elsewhere": {
+        "x": 1,
+    },
+}
+"##);
         assert_eq!(c.unknown().len(), 2);
         assert!(c.warnings().is_empty());
     }
@@ -2762,8 +2885,8 @@ mod tests {
     #[test]
     fn a_template_documents_every_token_and_pins_nothing() {
         let t = schema().template("Test theme");
-        assert!(t.contains("[cover]") && t.contains("#size=88") && t.contains("# Cover edge"));
-        assert!(t.contains("#background=#9c4ad1") && t.contains("#rounded=true"));
+        assert!(t.contains("\"cover\": {") && t.contains("// \"size\": 88.0,") && t.contains("// Cover edge"));
+        assert!(t.contains("// \"background\": \"#9c4ad1\",") && t.contains("// \"rounded\": true,"));
         // Read back, it sets nothing: every line is a comment.
         let c = build("", &t);
         assert!(c.entries().all(|(_, _, s)| s == Source::Default));
@@ -2777,30 +2900,43 @@ mod tests {
         for action in ["minimize", "maximize", "restore", "close"] {
             for part in ["bg", "fg", "border"] {
                 let key = format!("{action}-{part}");
-                let valid = Schema::toolkit().validate(&format!("[windows]\n{key}=#123456\n"));
+                let valid = Schema::toolkit().validate(&ron_one("window-decorations", &key, "\"#123456\""));
                 assert!(valid.errors.is_empty() && valid.unknown.is_empty());
                 let invalid =
-                    Schema::toolkit().validate(&format!("[windows]\n{key}=not-a-color\n"));
+                    Schema::toolkit().validate(&ron_one("window-decorations", &key, "\"not-a-color\""));
                 assert!(!invalid.errors.is_empty());
             }
         }
         let cfg = ThemeConfig::builder("x").files(false)
-            .toolkit_text("[windows]\nmaximize-bg=#123456\nmaximize-fg=#ffffff\nrestore-fg=#000000\nclose-bg=#ff0000\n")
-            .app_text("[windows]\nclose-bg=invalid\n")
+            .toolkit_text(r##"{
+    "window-decorations": {
+        "maximize-bg": "#123456",
+        "maximize-fg": "#ffffff",
+        "restore-fg": "#000000",
+        "close-bg": "#ff0000",
+    },
+}
+"##)
+            .app_text(r##"{
+    "window-decorations": {
+        "close-bg": "invalid",
+    },
+}
+"##)
             .build();
         let tokens = cfg.tokens();
         assert_eq!(
             window_control_color(&tokens, "restore", "bg"),
-            cfg.color("windows", "maximize-bg")
+            cfg.color("window-decorations", "maximize-bg")
         );
         assert_eq!(
             window_control_color(&tokens, "restore", "fg"),
-            cfg.color("windows", "restore-fg")
+            cfg.color("window-decorations", "restore-fg")
         );
         assert_eq!(window_control_color(&tokens, "minimize", "bg"), None);
         assert_eq!(
             window_control_color(&tokens, "close", "bg"),
-            cfg.color("windows", "close-bg")
+            cfg.color("window-decorations", "close-bg")
         );
         assert_eq!(cfg.warnings().len(), 1);
     }
@@ -2831,9 +2967,14 @@ mod tests {
         let _ = build();
         let app = app_path("org.example.App").unwrap();
         assert!(app.exists());
-        assert!(std::fs::read_to_string(&app).unwrap().contains("#size=88"));
+        assert!(std::fs::read_to_string(&app).unwrap().contains("// \"size\": 88.0,"));
         // The user edits it, then deletes it: the app writes a fresh one.
-        std::fs::write(&app, "[cover]\nsize=200\n").unwrap();
+        std::fs::write(&app, r##"{
+    "cover": {
+        "size": 200,
+    },
+}
+"##).unwrap();
         assert_eq!(build().number("cover", "size"), Some(200.0));
         std::fs::remove_file(&app).unwrap();
         assert_eq!(build().number("cover", "size"), Some(88.0));
@@ -2850,17 +2991,17 @@ mod tests {
         }
         let file = root.join("custom.conf");
         std::fs::write(&file, "").unwrap();
-        std::fs::write(b.join("default.conf"), "").unwrap();
+        std::fs::write(b.join("default.ron"), "").unwrap();
         let dirs = [a.clone(), b.clone()];
-        assert_eq!(pick_theme(None, &dirs), Some(b.join("default.conf")));
-        std::fs::write(a.join("default.conf"), "").unwrap();
-        assert_eq!(pick_theme(None, &dirs), Some(a.join("default.conf")));
+        assert_eq!(pick_theme(None, &dirs), Some(b.join("default.ron")));
+        std::fs::write(a.join("default.ron"), "").unwrap();
+        assert_eq!(pick_theme(None, &dirs), Some(a.join("default.ron")));
         assert_eq!(pick_theme(file.to_str(), &dirs), Some(file.clone()));
         assert_eq!(pick_theme(Some("none"), &dirs), None);
         // An unreadable env path falls through to the data dirs.
         assert_eq!(
             pick_theme(Some("/nonexistent/x.conf"), &dirs),
-            Some(a.join("default.conf"))
+            Some(a.join("default.ron"))
         );
         assert_eq!(pick_theme(None, &[root.join("empty")]), None);
         let _ = std::fs::remove_dir_all(&root);
@@ -2868,7 +3009,13 @@ mod tests {
 
     #[test]
     fn metric_tokens_apply_unclamped_and_only_when_set() {
-        let c = build("", "[metrics]\nradius-l=30\ncard-padding=20\n");
+        let c = build("", r##"{
+    "metrics": {
+        "radius-l": 30,
+        "card-padding": 20,
+    },
+}
+"##);
         let mut m = Metrics::default();
         c.apply_to_metrics(&mut m);
         assert_eq!(m.radius_l, 30.0);
@@ -2882,7 +3029,15 @@ mod tests {
     fn color_tokens_apply_per_scheme() {
         let c = build(
             "",
-            "[colors]\ncard-bg=#ff0000\n[dark:colors]\ncard-bg=#00ff00\n",
+            r##"{
+    "colors": {
+        "card-bg": "#ff0000",
+    },
+    "dark:colors": {
+        "card-bg": "#00ff00",
+    },
+}
+"##,
         );
         let mut light = Palette::new(Scheme::Light);
         c.apply_to_palette(&mut light, Scheme::Light);
@@ -2895,7 +3050,12 @@ mod tests {
     #[test]
     fn typography_follows_the_scale_and_base_only_when_set() {
         assert!(build("", "").typography().is_none());
-        let t = build("", "[typography]\ntext-scale=1.25\n")
+        let t = build("", r##"{
+    "typography": {
+        "text-scale": 1.25,
+    },
+}
+"##)
             .typography()
             .unwrap();
         assert!((t.base - Typography::default().base * 1.25).abs() < 1e-4);
@@ -2903,7 +3063,12 @@ mod tests {
 
     #[test]
     fn the_accent_token_sets_a_custom_accent() {
-        let c = build("", "[colors]\naccent=#e01b24\n");
+        let c = build("", r##"{
+    "colors": {
+        "accent": "#e01b24",
+    },
+}
+"##);
         let mut p = Palette::new(Scheme::Light);
         c.apply_to_palette(&mut p, Scheme::Light);
         assert_eq!(crate::color::to_hex(p.accent_bg_color), "#e01b24");
@@ -2922,7 +3087,16 @@ mod tests {
     fn a_theme_carries_the_tokens_and_does_not_clamp_radii() {
         let c = build(
             "",
-            "[metrics]\nradius-l=40\n[cover]\nbackground=#102030\nsize=96\n",
+            r##"{
+    "metrics": {
+        "radius-l": 40,
+    },
+    "cover": {
+        "background": "#102030",
+        "size": 96,
+    },
+}
+"##,
         );
         let theme = crate::Theme::light().with_theme_config(&c);
         // Rounder than the HIG allows: a different vibe.
@@ -2946,7 +3120,13 @@ mod tests {
 
     #[test]
     fn metric_tokens_reach_the_config_the_widgets_read() {
-        let c = build("", "[metrics]\ncard-padding=30\nrow-min-height=70\n");
+        let c = build("", r##"{
+    "metrics": {
+        "card-padding": 30,
+        "row-min-height": 70,
+    },
+}
+"##);
         let cfg = crate::config::Config::default().with_theme_config(&c);
         assert_eq!(cfg.metrics().card_padding, iced::Padding::from(30.0));
         assert_eq!(cfg.metrics().row_min_height, 70.0);
@@ -2962,7 +3142,12 @@ mod tests {
 
     #[test]
     fn the_palette_token_changes_the_semantic_layer() {
-        let c = build("", "[colors]\ncard-bg=#123456\n");
+        let c = build("", r##"{
+    "colors": {
+        "card-bg": "#123456",
+    },
+}
+"##);
         let theme = crate::Theme::light().with_theme_config(&c);
         assert_eq!(crate::color::to_hex(theme.semantic.card.bg), "#123456");
     }
@@ -2976,7 +3161,7 @@ mod tree_navigation_schema_tests {
     fn breakpoint_thresholds_are_optional_validated_and_documented() {
         let schema = Schema::toolkit();
         let template = schema.template("Breakpoint thresholds");
-        assert!(template.contains("[breakpoints]"));
+        assert!(template.contains("\"breakpoints\": {"));
         assert!(schema.validate(&template).is_valid());
         assert!(schema.validate(&template).unknown.is_empty());
         for key in ["sm", "md", "lg", "xl", "xxl"] {
@@ -2989,8 +3174,8 @@ mod tree_navigation_schema_tests {
                     max: Some(16384.0)
                 }
             );
-            assert!(template.contains(&format!("#{key}=")));
-            let valid = format!("[breakpoints]\n{key}=800px");
+            assert!(template.contains(&format!("// \"{key}\":")));
+            let valid = ron_one("breakpoints", key, "800");
             let report = schema.validate(&valid);
             assert!(report.is_valid());
             assert!(report.unknown.is_empty());
@@ -2999,8 +3184,9 @@ mod tree_navigation_schema_tests {
                 build("", &valid).tokens().number("breakpoints", key),
                 Some(800.0)
             );
-            for raw in ["0px", "-1px", "NaNpx", "infpx", "16385px", "800"] {
-                let invalid = format!("[breakpoints]\n{key}={raw}");
+            // A length is a plain number of px: a string, zero, a negative, NaN and too big are not.
+            for raw in ["0", "-1", "NaN", "inf", "16385", "\"800px\""] {
+                let invalid = ron_one("breakpoints", key, raw);
                 let report = schema.validate(&invalid);
                 assert!(!report.is_valid(), "{invalid}");
                 assert!(report.unknown.is_empty());
@@ -3013,10 +3199,10 @@ mod tree_navigation_schema_tests {
                     Some(800.0)
                 );
             }
-            for raw in ["1px", "16384px"] {
+            for raw in ["1", "16384"] {
                 assert!(
                     schema
-                        .validate(&format!("[breakpoints]\n{key}={raw}"))
+                        .validate(&ron_one("breakpoints", key, raw))
                         .is_valid()
                 );
             }
@@ -3041,7 +3227,7 @@ mod tree_navigation_schema_tests {
                     .get(&format!("{widget}.{name}"), "breakpoint-rules")
                     .is_none()
             );
-            let valid = format!("[{widget}]\nbreakpoint-rules=xs:{name}");
+            let valid = ron_one(widget, "breakpoint-rules", &format!("\"xs:{name}\""));
             assert!(schema.validate(&valid).is_valid());
             for rules in [
                 "md",
@@ -3050,7 +3236,7 @@ mod tree_navigation_schema_tests {
                 "xs:bad name",
                 "xs:flat,xs:flat",
             ] {
-                let invalid = format!("[{widget}]\nbreakpoint-rules={rules}");
+                let invalid = ron_one(widget, "breakpoint-rules", &format!("{rules:?}"));
                 assert!(!schema.validate(&invalid).is_valid(), "{invalid}");
                 let cfg = build(&valid, &invalid);
                 assert_eq!(
@@ -3089,8 +3275,24 @@ mod tree_navigation_schema_tests {
         }
         let custom = Schema::new().variant("tabs", "compact", &[]);
         let cfg = ThemeConfig::builder("breakpoint-tests").files(false).schema(custom)
-            .toolkit_text("[tabs]\nbreakpoint-rules=xs:default\n[dark:tabs]\nbreakpoint-rules=xs:compact")
-            .app_text("[light:tabs]\nbreakpoint-rules=md:outline\n[dark:tabs]\nbreakpoint-rules=xs:missing")
+            .toolkit_text(r##"{
+    "tabs": {
+        "breakpoint-rules": "xs:default",
+    },
+    "dark:tabs": {
+        "breakpoint-rules": "xs:compact",
+    },
+}
+"##)
+            .app_text(r##"{
+    "light:tabs": {
+        "breakpoint-rules": "md:outline",
+    },
+    "dark:tabs": {
+        "breakpoint-rules": "xs:missing",
+    },
+}
+"##)
             .build();
         assert_eq!(
             cfg.clone()
@@ -3106,7 +3308,12 @@ mod tree_navigation_schema_tests {
             .files(false)
             .default_variants(DefaultVariants::None)
             .toolkit_text("")
-            .app_text("[tabs]\nbreakpoint-rules=xs:outline")
+            .app_text(r##"{
+    "tabs": {
+        "breakpoint-rules": "xs:outline",
+    },
+}
+"##)
             .build();
         assert_eq!(opted_out.text("tabs", "breakpoint-rules"), None);
     }
@@ -3127,17 +3334,17 @@ mod tree_navigation_schema_tests {
             assert!(matches!(spec.ty, VariableType::Length { .. }));
             assert!(
                 !schema
-                    .validate(&format!("[{section}]\n{key}=-1px"))
+                    .validate(&ron_one(&section, key, "-1"))
                     .is_valid()
             );
             let cfg = ThemeConfig::builder("geometry-variants")
                 .files(false)
                 .schema(schema)
                 .toolkit_text(format!(
-                    "[{widget}]\n{key}=10px\n[{section}]\n{key}=12px\n[dark:{section}]\n{key}=18px"
+                    "{{ {widget:?}: {{ {key:?}: 10 }}, {section:?}: {{ {key:?}: 12 }}, \"dark:{section}\": {{ {key:?}: 18 }} }}"
                 ))
                 .app_text(format!(
-                    "[light:{section}]\n{key}=14px\n[dark:{section}]\n{key}=NaNpx"
+                    "{{ \"light:{section}\": {{ {key:?}: 14 }}, \"dark:{section}\": {{ {key:?}: NaN }} }}"
                 ))
                 .build();
             let light = cfg.clone().with_variation("light").tokens();
@@ -3149,7 +3356,7 @@ mod tree_navigation_schema_tests {
             let empty = ThemeConfig::builder("geometry-variants")
                 .files(false)
                 .schema(Schema::new().variant(widget, "empty", &[]))
-                .toolkit_text(format!("[{widget}]\n{key}=16px"))
+                .toolkit_text(ron_one(widget, key, "16"))
                 .app_text("")
                 .build()
                 .tokens();
@@ -3294,8 +3501,8 @@ mod tree_navigation_schema_tests {
                 assert_eq!(cfg.number(section, key), None);
                 assert!(!cfg.is_set(section, key));
                 let inherited = build(
-                    &format!("[{section}]\n{key}=12px"),
-                    &format!("[{section}]\n{key}=NaNpx"),
+                    &ron_one(section, key, "12"),
+                    &ron_one(section, key, "NaN"),
                 );
                 assert_eq!(inherited.number(section, key), Some(12.0));
             }
@@ -3310,13 +3517,13 @@ mod tree_navigation_schema_tests {
                 && s.key != "breakpoint-rules"
         }) {
             let length = matches!(spec.ty, VariableType::Length { .. });
-            let valid = if length { "2px" } else { "0.5" };
+            let valid = if length { "2" } else { "0.5" };
             for raw in if length {
-                ["-1px", "NaNpx", "infpx", "100000px"]
+                ["-1", "NaN", "inf", "100000"]
             } else {
                 ["-1", "NaN", "inf", "100000"]
             } {
-                let text = format!("[{}]\n{}={raw}", spec.section, spec.key);
+                let text = ron_one(&spec.section, &spec.key, raw);
                 assert!(!schema.validate(&text).is_valid(), "{text}");
                 let cfg = build("", &text);
                 assert_eq!(
@@ -3324,15 +3531,15 @@ mod tree_navigation_schema_tests {
                     spec.default.as_ref(),
                     "{text}"
                 );
-                let lower = format!("[{}]\n{}={valid}", spec.section, spec.key);
+                let lower = ron_one(&spec.section, &spec.key, valid);
                 let cfg = build(&lower, &text);
                 assert_eq!(
                     cfg.number(&spec.section, &spec.key),
                     Some(if length { 2.0 } else { 0.5 })
                 );
             }
-            let zero = if length { "0px" } else { "0" };
-            let text = format!("[{}]\n{}={zero}", spec.section, spec.key);
+            let zero = "0";
+            let text = ron_one(&spec.section, &spec.key, zero);
             assert_eq!(
                 schema.validate(&text).is_valid(),
                 !(spec.section == "tree"
@@ -3346,12 +3553,12 @@ mod tree_navigation_schema_tests {
         ] {
             assert!(
                 !schema
-                    .validate(&format!("[{}]\n{}=1.001", section_key.0, section_key.1))
+                    .validate(&ron_one(section_key.0, section_key.1, "1.001"))
                     .is_valid()
             );
             assert!(
                 schema
-                    .validate(&format!("[{}]\n{}=1", section_key.0, section_key.1))
+                    .validate(&ron_one(section_key.0, section_key.1, "1"))
                     .is_valid()
             );
         }
@@ -3401,15 +3608,39 @@ mod typed_variable_tests {
     #[test]
     fn invalid_properties_use_lower_layers_then_fallback_including_none() {
         let cfg = build(
-            "[panel]\ngap=12px\noptional=yes",
-            "[panel]\ngap=500px\noptional=no",
+            r##"{
+    "panel": {
+        "gap": 12,
+        "optional": "yes",
+    },
+}
+"##,
+            r##"{
+    "panel": {
+        "gap": 500,
+        "optional": "no",
+    },
+}
+"##,
         );
         assert_eq!(cfg.get("panel", "gap"), Some(&Value::Length(12.0)));
         assert_eq!(cfg.text("panel", "optional"), Some("yes"));
         assert_eq!(cfg.warnings().len(), 2);
         let cfg = build(
-            "[panel]\ngap=no\noptional=no",
-            "[panel]\ngap=500px\noptional=no",
+            r##"{
+    "panel": {
+        "gap": "no",
+        "optional": "no",
+    },
+}
+"##,
+            r##"{
+    "panel": {
+        "gap": 500,
+        "optional": "no",
+    },
+}
+"##,
         );
         assert_eq!(cfg.get("panel", "gap"), Some(&Value::Length(8.0)));
         assert_eq!(cfg.get("panel", "optional"), None);
@@ -3417,8 +3648,21 @@ mod typed_variable_tests {
     #[test]
     fn variations_always_override_base_and_can_be_switched_without_losing_values() {
         let cfg = build(
-            "[dark:panel]\ngap=20px",
-            "[panel]\ngap=10px\n[high-contrast:panel]\ngap=30px",
+            r##"{
+    "dark:panel": {
+        "gap": 20,
+    },
+}
+"##,
+            r##"{
+    "panel": {
+        "gap": 10,
+    },
+    "high-contrast:panel": {
+        "gap": 30,
+    },
+}
+"##,
         );
         assert_eq!(cfg.number("panel", "gap"), Some(10.0));
         assert_eq!(
@@ -3440,32 +3684,76 @@ mod typed_variable_tests {
     fn invalid_variations_fall_through_to_base_values() {
         let cfg = build(
             "",
-            "[panel]\ngap=12px\noptional=yes\n[dark:panel]\ngap=no\noptional=no",
+            r##"{
+    "panel": {
+        "gap": 12,
+        "optional": "yes",
+    },
+    "dark:panel": {
+        "gap": "no",
+        "optional": "no",
+    },
+}
+"##,
         )
         .with_variation("dark");
         assert_eq!(cfg.get("panel", "gap"), Some(&Value::Length(12.0)));
         assert_eq!(cfg.text("panel", "optional"), Some("yes"));
         assert_eq!(cfg.tokens().text("panel", "optional"), Some("yes"));
-        let cfg = build("[dark:panel]\ngap=24px", "[dark:panel]\ngap=no").with_variation("dark");
+        let cfg = build(r##"{
+    "dark:panel": {
+        "gap": 24,
+    },
+}
+"##, r##"{
+    "dark:panel": {
+        "gap": "no",
+    },
+}
+"##).with_variation("dark");
         assert_eq!(cfg.get("panel", "gap"), Some(&Value::Length(24.0)));
     }
     #[test]
     fn templates_validate_and_include_variations_and_optional_fallbacks() {
         let schema = schema();
         let template = schema.template("Example");
-        assert!(template.contains("[dark:panel]") && template.contains("[high-contrast:panel]"));
-        assert!(template.contains("#gap=8px") && template.contains("no fallback"));
+        assert!(template.contains("\"dark:panel\": {") && template.contains("\"high-contrast:panel\": {"));
+        assert!(template.contains("// \"gap\": 8.0,") && template.contains("no fallback"));
         assert!(schema.validate(&template).is_valid());
         let report =
-            schema.validate("[panel]\ngap=1em\nunknown=yes\n[typo:panel]\ngap=20px\nmalformed");
-        assert_eq!(report.errors.len(), 2);
+            schema.validate(r##"{
+    "panel": {
+        "gap": "1em",
+        "unknown": "yes",
+    },
+    "typo:panel": {
+        "gap": 20,
+    },
+}
+"##);
+        assert_eq!(report.errors.len(), 1);
         assert_eq!(report.unknown.len(), 2);
+        // Malformed RON is one error that says where.
+        let broken = schema.validate("{ \"panel\": { \"gap\": } }");
+        assert_eq!(broken.errors.len(), 1);
+        assert!(broken.errors[0].contains("1:"), "{:?}", broken.errors);
     }
     #[test]
     fn themes_automatically_cascade_light_dark_and_respect_custom_variations() {
         let cfg = build(
             "",
-            "[dark:metrics]\nrow-min-height=80\n[dark:colors]\ncard-bg=#123456\n[high-contrast:metrics]\nrow-min-height=90",
+            r##"{
+    "dark:metrics": {
+        "row-min-height": 80,
+    },
+    "dark:colors": {
+        "card-bg": "#123456",
+    },
+    "high-contrast:metrics": {
+        "row-min-height": 90,
+    },
+}
+"##,
         );
         let light = crate::Theme::light().with_theme_config(&cfg);
         let dark = crate::Theme::dark().with_theme_config(&cfg);
@@ -3498,12 +3786,12 @@ mod typed_variable_tests {
     }
 }
 
-/// The libadwaita look, read from `themes/libadwaita.conf`, for tests that assert its values.
+/// The libadwaita look, read from `themes/libadwaita.ron`, for tests that assert its values.
 #[cfg(test)]
 pub(crate) fn libadwaita() -> ThemeConfig {
     ThemeConfig::builder("libadwaita-test")
         .files(false)
-        .app_text(include_str!("../themes/libadwaita.conf"))
+        .app_text(include_str!("../themes/libadwaita.ron"))
         .build()
 }
 
@@ -3522,18 +3810,29 @@ mod libadwaita_theme_tests {
     #[test]
     fn every_shipped_theme_validates_against_the_toolkit_schema() {
         for (name, text) in [
-            ("libadwaita", include_str!("../themes/libadwaita.conf")),
-            ("cosmic", include_str!("../themes/cosmic.conf")),
-            ("solarized", include_str!("../themes/solarized.conf")),
-            ("terminal", include_str!("../themes/terminal.conf")),
-            ("bubblegum", include_str!("../themes/bubblegum.conf")),
-            ("synthwave", include_str!("../themes/synthwave.conf")),
-            ("win95", include_str!("../themes/win95.conf")),
-            ("winxp", include_str!("../themes/winxp.conf")),
-            ("win7", include_str!("../themes/win7.conf")),
-            ("mate", include_str!("../themes/mate.conf")),
-            ("gnome2", include_str!("../themes/gnome2.conf")),
+            ("libadwaita", include_str!("../themes/libadwaita.ron")),
+            ("cosmic", include_str!("../themes/cosmic.ron")),
+            ("solarized", include_str!("../themes/solarized.ron")),
+            ("terminal", include_str!("../themes/terminal.ron")),
+            ("bubblegum", include_str!("../themes/bubblegum.ron")),
+            ("synthwave", include_str!("../themes/synthwave.ron")),
+            ("win95", include_str!("../themes/win95.ron")),
+            ("winxp", include_str!("../themes/winxp.ron")),
+            ("win7", include_str!("../themes/win7.ron")),
+            ("mate", include_str!("../themes/mate.ron")),
+            ("gnome2", include_str!("../themes/gnome2.ron")),
         ] {
+            // RON keeps only the last of two sections with the same name, silently: a section
+            // appears once per file.
+            let mut sections: Vec<&str> = text
+                .lines()
+                .filter_map(|l| l.strip_prefix("    \"")?.split_once("\": {"))
+                .map(|(name, _)| name)
+                .collect();
+            let all = sections.len();
+            sections.sort_unstable();
+            sections.dedup();
+            assert_eq!(all, sections.len(), "{name} repeats a section");
             let report = Schema::toolkit().validate(text);
             assert!(report.errors.is_empty(), "{name}: {:?}", report.errors);
             assert!(report.unknown.is_empty(), "{name}: {:?}", report.unknown);
@@ -3568,8 +3867,8 @@ mod libadwaita_theme_tests {
         let mut shadows = Shadows::bare();
         cfg.apply_to_shadows(&mut shadows);
         assert!(shadows.card().ring.is_some());
-        assert_eq!(cfg.text("windows", "button-layout"), Some("appmenu:close"));
-        assert_eq!(cfg.number("windows", "button-size"), Some(24.0));
+        assert_eq!(cfg.text("window-decorations", "button-layout"), Some("appmenu:close"));
+        assert_eq!(cfg.number("window-decorations", "button-size"), Some(24.0));
     }
 }
 
@@ -3588,38 +3887,74 @@ mod inheritance_tests {
     fn the_mode_is_inferred_from_what_the_app_sets() {
         assert_eq!(cfg("").inheritance(), Inheritance::Inherit);
         assert_eq!(
-            cfg("[theme]\nname=x\nkey=x\n").inheritance(),
+            cfg(r##"{
+    "theme": {
+        "name": "x",
+        "key": "x",
+    },
+}
+"##).inheritance(),
             Inheritance::Inherit,
             "metadata is not an override"
         );
-        let c = cfg("[metrics]\nradius-m=3\n");
+        let c = cfg(r##"{
+    "metrics": {
+        "radius-m": 3,
+    },
+}
+"##);
         assert_eq!(c.inheritance(), Inheritance::OverrideValue);
         assert_eq!(
             c.overrides(),
             vec![("metrics".to_string(), "radius-m".to_string())]
         );
-        let c = cfg("[dark:colors]\ncard-bg=#000000\n");
+        let c = cfg(r##"{
+    "dark:colors": {
+        "card-bg": "#000000",
+    },
+}
+"##);
         assert_eq!(c.inheritance(), Inheritance::OverrideValue);
     }
 
     #[test]
     fn the_file_declares_the_mode_and_code_wins() {
         assert_eq!(
-            cfg("[theme]\nmode=optout\n").inheritance(),
+            cfg(r##"{
+    "theme": {
+        "mode": "optout",
+    },
+}
+"##).inheritance(),
             Inheritance::OptOut
         );
         assert_eq!(
-            cfg("[theme]\nmode=override\n").inheritance(),
+            cfg(r##"{
+    "theme": {
+        "mode": "override",
+    },
+}
+"##).inheritance(),
             Inheritance::OverrideValue
         );
         assert_eq!(
-            cfg("[theme]\nmode=bogus\n").inheritance(),
+            cfg(r##"{
+    "theme": {
+        "mode": "bogus",
+    },
+}
+"##).inheritance(),
             Inheritance::Inherit,
             "an invalid mode is not a mode"
         );
         let c = ThemeConfig::builder("test")
             .files(false)
-            .app_text("[theme]\nmode=optout\n")
+            .app_text(r##"{
+    "theme": {
+        "mode": "optout",
+    },
+}
+"##)
             .inheritance(Inheritance::Inherit)
             .build();
         assert_eq!(c.inheritance(), Inheritance::Inherit);
@@ -3627,12 +3962,23 @@ mod inheritance_tests {
 
     #[test]
     fn opting_out_discards_the_desktop_files_and_the_portal_scheme() {
-        let desktop = crate::config::Config::from_keyfile(
-            "[appearance]\ncolor-scheme=dark\ntext-scale=1.5\n",
+        let desktop = crate::config::Config::from_ron(
+            r##"{
+    "appearance": {
+        "color-scheme": "dark",
+        "text-scale": 1.5,
+    },
+}
+"##,
         );
         let out = desktop
             .clone()
-            .with_theme_config(&cfg("[theme]\nmode=optout\n"));
+            .with_theme_config(&cfg(r##"{
+    "theme": {
+        "mode": "optout",
+    },
+}
+"##));
         assert!(out.desktop_opt_out);
         assert_eq!(out.text_scale, 1.0);
         let inherit = desktop.with_theme_config(&cfg(""));
@@ -3659,7 +4005,12 @@ mod policy_tests {
 
     #[test]
     fn a_policy_that_forbids_overrides_drops_the_apps_tokens_and_lists_them() {
-        let c = app("[metrics]\nradius-m=3\n");
+        let c = app(r##"{
+    "metrics": {
+        "radius-m": 3,
+    },
+}
+"##);
         assert_eq!(c.number("metrics", "radius-m"), Some(3.0));
         let kept = c.for_policy(true);
         assert_eq!(kept.number("metrics", "radius-m"), Some(3.0));
@@ -3678,7 +4029,15 @@ mod policy_tests {
 
     #[test]
     fn the_policy_leaves_inherit_and_optout_apps_alone() {
-        let opt = app("[theme]\nmode=optout\n[metrics]\nradius-m=3\n");
+        let opt = app(r##"{
+    "theme": {
+        "mode": "optout",
+    },
+    "metrics": {
+        "radius-m": 3,
+    },
+}
+"##);
         assert_eq!(
             opt.for_policy(false).number("metrics", "radius-m"),
             Some(3.0)
@@ -3692,10 +4051,20 @@ mod policy_tests {
     fn the_config_applies_the_policy_to_the_apps_theme() {
         let mut desktop = crate::config::Config::default();
         desktop.allow_app_overrides = false;
-        let out = desktop.with_theme_config(&app("[metrics]\nradius-m=3\n"));
+        let out = desktop.with_theme_config(&app(r##"{
+    "metrics": {
+        "radius-m": 3,
+    },
+}
+"##));
         assert_eq!(out.metrics().radius_m, Metrics::default().radius_m);
         let free =
-            crate::config::Config::default().with_theme_config(&app("[metrics]\nradius-m=3\n"));
+            crate::config::Config::default().with_theme_config(&app(r##"{
+    "metrics": {
+        "radius-m": 3,
+    },
+}
+"##));
         assert_eq!(free.metrics().radius_m, 3.0);
     }
 
@@ -3732,7 +4101,14 @@ mod primary_and_contrast_tests {
 
     #[test]
     fn suggested_buttons_use_the_primary_color_not_the_accent() {
-        let t = themed("[colors]\naccent=#ff0000\nprimary=#00aa00\nprimary-fg=#fffffe\n");
+        let t = themed(r##"{
+    "colors": {
+        "accent": "#ff0000",
+        "primary": "#00aa00",
+        "primary-fg": "#fffffe",
+    },
+}
+"##);
         let style = crate::styles::button::suggested(&t, iced::widget::button::Status::Active);
         assert_eq!(
             style.background,
@@ -3746,9 +4122,22 @@ mod primary_and_contrast_tests {
 
     #[test]
     fn text_on_fills_is_the_themes_fg_until_it_opts_in_to_contrast() {
-        let fixed = themed("[colors]\nwarning=#ffee00\nwarning-fg=#ffffff\n");
+        let fixed = themed(r##"{
+    "colors": {
+        "warning": "#ffee00",
+        "warning-fg": "#ffffff",
+    },
+}
+"##);
         assert_eq!(fixed.semantic.warning.fg, iced::Color::WHITE);
-        let auto = themed("[colors]\nwarning=#ffee00\nwarning-fg=#ffffff\nauto-contrast=true\n");
+        let auto = themed(r##"{
+    "colors": {
+        "warning": "#ffee00",
+        "warning-fg": "#ffffff",
+        "auto-contrast": true,
+    },
+}
+"##);
         assert_eq!(auto.semantic.warning.fg, crate::color::DARK_TEXT);
     }
 }
@@ -3807,7 +4196,13 @@ mod variant_tests {
             assert!(schema.get(&section, "bg").unwrap().default.is_none());
         }
         // A bad value is reported, not applied.
-        let r = schema.validate("[button.flat]\nbg=nope\nradius=3px\n");
+        let r = schema.validate(r##"{
+    "button.flat": {
+        "bg": "nope",
+        "radius": 3,
+    },
+}
+"##);
         assert_eq!(r.errors.len(), 1, "{:?}", r.errors);
     }
 
@@ -3816,7 +4211,12 @@ mod variant_tests {
         let t = build(
             ThemeConfig::builder("t")
                 .schema(brand())
-                .app_text("[button.brand]\nfg=#112233\n"),
+                .app_text(r##"{
+    "button.brand": {
+        "fg": "#112233",
+    },
+}
+"##),
         );
         let v = t.variant("button", "brand");
         assert!(v.exists());
@@ -3838,7 +4238,12 @@ mod variant_tests {
         let plain = crate::Theme::light();
         let t = build(
             ThemeConfig::builder("t")
-                .toolkit_text("[button.suggested]\nbg=#00aa00\n")
+                .toolkit_text(r##"{
+    "button.suggested": {
+        "bg": "#00aa00",
+    },
+}
+"##)
                 .app_text(""),
         );
         let green = crate::color::hex(0x00aa00);
@@ -3860,7 +4265,12 @@ mod variant_tests {
         // A radius alone leaves a flat button flat.
         let t = build(
             ThemeConfig::builder("t")
-                .toolkit_text("[button.flat]\nradius=3px\n")
+                .toolkit_text(r##"{
+    "button.flat": {
+        "radius": 3,
+    },
+}
+"##)
                 .app_text(""),
         );
         let flat = sb::flat(&t, Status::Active);
@@ -3899,7 +4309,15 @@ mod variant_tests {
         // The file can ask for it too, and a file naming a dropped variant reports it as unknown.
         let cfg = ThemeConfig::builder("t")
             .files(false)
-            .app_text("[theme]\ndefault-variants=none\n[button.suggested]\nbg=#00aa00\n")
+            .app_text(r##"{
+    "theme": {
+        "default-variants": "none",
+    },
+    "button.suggested": {
+        "bg": "#00aa00",
+    },
+}
+"##)
             .build();
         assert!(
             !cfg.schema()
@@ -3944,40 +4362,49 @@ mod design_language_tests {
     use crate::primitives::bevel::BevelStyle;
     use iced::widget::button::Status;
 
-    const WIN95: &str = "\
-[theme]
-name=Test 95
-[colors]
-window-bg=#c0c0c0
-window-fg=#000000
-focus-ring=#000000
-[gradients]
-titlebar=linear-gradient(90deg, #000080 0%, #1084d0 100%)
-[windows]
-frame-border-width=4px
-frame-border=#c0c0c0
-frame-border-style=window
-titlebar-align=start
-titlebar-font-weight=bold
-titlebar-icon=true
-button-style=win95
-[typography]
-font-family=Tahoma
-monospace-font-family=Fixedsys
-[metrics]
-focus-style=dotted
-[button.default]
-bg=#c0c0c0
-border-style=raised
-border-width=2px
-border-light=#ffffff
-border-dark=#000000
-border-light-inner=#dfdfdf
-border-dark-inner=#808080
-bg-gradient=linear-gradient(180deg, #ffffff 0%, #c0c0c0 100%)
-[frame.field]
-border-style=sunken
-";
+    const WIN95: &str = r##"{
+    "theme": {
+        "name": "Test 95",
+    },
+    "colors": {
+        "window-bg": "#c0c0c0",
+        "window-fg": "#000000",
+        "focus-ring": "#000000",
+    },
+    "gradients": {
+        "titlebar": (angle: 90.0, stops: [(0.0, "#000080"), (1.0, "#1084d0")]),
+    },
+    "window-decorations": {
+        "frame-border-width": 4,
+        "frame-border": "#c0c0c0",
+        "frame-border-style": "window",
+        "titlebar-align": "start",
+        "titlebar-font-weight": "bold",
+        "titlebar-icon": true,
+        "button-style": "win95",
+    },
+    "typography": {
+        "font-family": "Tahoma",
+        "monospace-font-family": "Fixedsys",
+    },
+    "metrics": {
+        "focus-style": "dotted",
+    },
+    "button.default": {
+        "bg": "#c0c0c0",
+        "border-style": "raised",
+        "border-width": 2,
+        "border-light": "#ffffff",
+        "border-dark": "#000000",
+        "border-light-inner": "#dfdfdf",
+        "border-dark-inner": "#808080",
+        "bg-gradient": (angle: 180.0, stops: [(0.0, "#ffffff"), (1.0, "#c0c0c0")]),
+    },
+    "frame.field": {
+        "border-style": "sunken",
+    },
+}
+"##;
 
     fn cfg(text: &str) -> ThemeConfig {
         ThemeConfig::builder("t")
@@ -4000,15 +4427,60 @@ border-style=sunken
     #[test]
     fn invalid_design_values_are_refused() {
         for bad in [
-            "[button.default]\nborder-style=groove\n",
-            "[typography]\nfont-family=\n",
-            "[typography]\nfont-family=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
-            "[windows]\ntitlebar-align=middle\n",
-            "[windows]\ntitlebar-font-weight=heavy\n",
-            "[windows]\nframe-border-width=900px\n",
-            "[metrics]\nfocus-style=wavy\n",
-            "[gradients]\ntitlebar=linear-gradient(90deg, #000)\n",
-            "[button.default]\nbg-gradient=#ffffff\n",
+            r##"{
+    "button.default": {
+        "border-style": "groove",
+    },
+}
+"##,
+            r##"{
+    "typography": {
+        "font-family": "",
+    },
+}
+"##,
+            r##"{
+    "typography": {
+        "font-family": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    },
+}
+"##,
+            r##"{
+    "window-decorations": {
+        "titlebar-align": "middle",
+    },
+}
+"##,
+            r##"{
+    "window-decorations": {
+        "titlebar-font-weight": "heavy",
+    },
+}
+"##,
+            r##"{
+    "window-decorations": {
+        "frame-border-width": 900,
+    },
+}
+"##,
+            r##"{
+    "metrics": {
+        "focus-style": "wavy",
+    },
+}
+"##,
+            r##"{
+    "gradients": {
+        "titlebar": (angle: 90.0, stops: [(0.0, "#000")]),
+    },
+}
+"##,
+            r##"{
+    "button.default": {
+        "bg-gradient": "#ffffff",
+    },
+}
+"##,
         ] {
             let c = cfg(bad);
             assert!(!c.warnings().is_empty(), "{bad:?} was accepted");
@@ -4084,7 +4556,12 @@ border-style=sunken
     #[test]
     fn a_variant_without_a_gradient_or_bevel_is_as_before() {
         let plain = crate::Theme::light();
-        let themed = crate::Theme::light().with_theme_config(&cfg("[button.flat]\nbg=#ff0000\n"));
+        let themed = crate::Theme::light().with_theme_config(&cfg(r##"{
+    "button.flat": {
+        "bg": "#ff0000",
+    },
+}
+"##));
         let a = crate::styles::button::variant("default")(&plain, Status::Active);
         let b = crate::styles::button::variant("default")(&themed, Status::Active);
         assert_eq!(a.background, b.background);

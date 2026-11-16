@@ -4,15 +4,38 @@ use iad::theme_config::{Inheritance, Source, ThemeConfig};
 use iced_adaptive_design as iad;
 use std::process::Command;
 
-const BASE: &str = "[metrics]\nradius-window=15\nspace-m=12\n[colors]\nwindow-bg=#ffffff\n[dark:colors]\nwindow-bg=#222222\n";
+const BASE: &str = r##"{
+    "metrics": {
+        "radius-window": 15,
+        "space-m": 12,
+    },
+    "colors": {
+        "window-bg": "#ffffff",
+    },
+    "dark:colors": {
+        "window-bg": "#222222",
+    },
+}
+"##;
 
 #[test]
 fn base_toolkit_and_app_layers_are_validated_in_order() {
     let cfg = ThemeConfig::builder("base-test")
         .files(false)
         .base_theme(BASE)
-        .toolkit_text("[metrics]\nradius-window=21\nspace-m=invalid\n")
-        .app_text("[metrics]\nradius-window=25\n")
+        .toolkit_text(r##"{
+    "metrics": {
+        "radius-window": 21,
+        "space-m": "invalid",
+    },
+}
+"##)
+        .app_text(r##"{
+    "metrics": {
+        "radius-window": 25,
+    },
+}
+"##)
         .build();
     let theme = iad::Theme::light().with_theme_config(&cfg);
     assert_eq!(theme.metrics.radius_window, 25.0);
@@ -51,7 +74,12 @@ fn external_theme_overrides_are_not_app_overrides() {
     let cfg = ThemeConfig::builder("base-test")
         .files(false)
         .base_theme(BASE)
-        .toolkit_text("[metrics]\nradius-window=21\n")
+        .toolkit_text(r##"{
+    "metrics": {
+        "radius-window": 21,
+    },
+}
+"##)
         .build();
     assert_eq!(cfg.inheritance(), Inheritance::Inherit);
     assert!(cfg.overrides().is_empty());
@@ -65,9 +93,27 @@ fn external_theme_overrides_are_not_app_overrides() {
 fn invalid_layers_preserve_the_last_valid_value() {
     let cfg = ThemeConfig::builder("base-test")
         .files(false)
-        .base_theme("[metrics]\nradius-window=invalid\nspace-m=12\n")
-        .toolkit_text("[metrics]\nradius-window=21\nspace-m=invalid\n")
-        .app_text("[metrics]\nradius-window=invalid\nspace-m=invalid\n")
+        .base_theme(r##"{
+    "metrics": {
+        "radius-window": "invalid",
+        "space-m": 12,
+    },
+}
+"##)
+        .toolkit_text(r##"{
+    "metrics": {
+        "radius-window": 21,
+        "space-m": "invalid",
+    },
+}
+"##)
+        .app_text(r##"{
+    "metrics": {
+        "radius-window": "invalid",
+        "space-m": "invalid",
+    },
+}
+"##)
         .build();
     let theme = iad::Theme::light().with_theme_config(&cfg);
     assert_eq!(theme.metrics.radius_window, 21.0);
@@ -76,7 +122,12 @@ fn invalid_layers_preserve_the_last_valid_value() {
 
     let invalid_base = ThemeConfig::builder("base-test")
         .files(false)
-        .base_theme("[metrics]\nradius-window=invalid\n")
+        .base_theme(r##"{
+    "metrics": {
+        "radius-window": "invalid",
+    },
+}
+"##)
         .build();
     assert_eq!(invalid_base.number("metrics", "radius-window"), Some(0.0));
     assert_eq!(
@@ -90,8 +141,22 @@ fn desktop_policy_rejects_app_values_but_retains_both_theme_layers() {
     let cfg = ThemeConfig::builder("base-test")
         .files(false)
         .base_theme(BASE)
-        .toolkit_text("[metrics]\nradius-window=21\n")
-        .app_text("[metrics]\nradius-window=25\nspace-m=18\n[colors]\nwindow-bg=#ff0000\n")
+        .toolkit_text(r##"{
+    "metrics": {
+        "radius-window": 21,
+    },
+}
+"##)
+        .app_text(r##"{
+    "metrics": {
+        "radius-window": 25,
+        "space-m": 18,
+    },
+    "colors": {
+        "window-bg": "#ff0000",
+    },
+}
+"##)
         .build();
     let mut desktop = iad::config::Config::default();
     desktop.allow_app_overrides = false;
@@ -111,10 +176,21 @@ fn discovery_matrix() {
     let root = std::env::temp_dir().join(format!("iad-base-theme-{}", std::process::id()));
     std::fs::create_dir_all(root.join("installed/iad/themes")).unwrap();
     let selected = root.join("selected.conf");
-    std::fs::write(&selected, "[metrics]\nradius-window=21\nspace-m=invalid\n").unwrap();
+    std::fs::write(&selected, r##"{
+    "metrics": {
+        "radius-window": 21,
+        "space-m": "invalid",
+    },
+}
+"##).unwrap();
     std::fs::write(
-        root.join("installed/iad/themes/default.conf"),
-        "[metrics]\nradius-window=23\n",
+        root.join("installed/iad/themes/default.ron"),
+        r##"{
+    "metrics": {
+        "radius-window": 23,
+    },
+}
+"##,
     )
     .unwrap();
     for base in [false, true] {

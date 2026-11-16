@@ -5,7 +5,8 @@ use iced_adaptive_design as iad;
 use std::path::PathBuf;
 
 /// Which variant of the theme is being edited: the base, or the one for a color scheme.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum Variant {
     Base,
     Light,
@@ -50,7 +51,7 @@ pub(crate) struct Preset {
     pub(crate) path: PathBuf,
     /// Where the entry points, when the file is a symlink.
     pub(crate) target: Option<PathBuf>,
-    /// `default.conf` points at this file: the global theme, the one apps use when `IAD_THEME` is unset.
+    /// `default.ron` points at this file: the global theme, the one apps use when `IAD_THEME` is unset.
     pub(crate) is_default: bool,
 }
 
@@ -62,9 +63,10 @@ pub(crate) enum Target {
     New,
 }
 
-/// What the editor remembers between runs, in `$XDG_CONFIG_HOME/iad-theme-editor/state.conf`:
-/// `[state] last-file`, `folders`, `recent` (paths joined with `:`), `section`, `variant`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// What the editor remembers between runs, as RON in `$XDG_CONFIG_HOME/iad-theme-editor/state.ron`:
+/// the last file, the theme folders, the recent files, the section and the variant.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub(crate) struct State {
     pub(crate) last_file: Option<PathBuf>,
     pub(crate) folders: Vec<PathBuf>,
@@ -76,47 +78,14 @@ pub(crate) struct State {
 pub(crate) const RECENT_MAX: usize = 8;
 
 impl State {
+    /// The state a file holds; a missing or unreadable one is the default.
     pub(crate) fn parse(text: &str) -> Self {
-        let kv = iad::config::parse_keyfile(text);
-        let get = |k: &str| kv.get(&("state".to_string(), k.to_string()));
-        let paths = |k: &str| {
-            get(k)
-                .map(|v| {
-                    v.split(':')
-                        .filter(|p| !p.is_empty())
-                        .map(PathBuf::from)
-                        .collect()
-                })
-                .unwrap_or_default()
-        };
-        Self {
-            last_file: get("last-file")
-                .filter(|v| !v.is_empty())
-                .map(PathBuf::from),
-            folders: paths("folders"),
-            recent: paths("recent"),
-            section: get("section").filter(|v| !v.is_empty()).cloned(),
-            variant: get("variant").and_then(|v| Variant::from_key(v)),
-        }
+        ron::from_str(text).unwrap_or_default()
     }
 
     pub(crate) fn to_text(&self) -> String {
-        let join = |ps: &[PathBuf]| {
-            ps.iter()
-                .map(|p| p.display().to_string())
-                .collect::<Vec<_>>()
-                .join(":")
-        };
-        format!(
-            "[state]\nlast-file={}\nfolders={}\nrecent={}\nsection={}\nvariant={}\n",
-            self.last_file
-                .as_ref()
-                .map_or(String::new(), |p| p.display().to_string()),
-            join(&self.folders),
-            join(&self.recent),
-            self.section.clone().unwrap_or_default(),
-            self.variant.map_or("base", Variant::key),
-        )
+        let pretty = ron::ser::PrettyConfig::default();
+        ron::ser::to_string_pretty(self, pretty).unwrap_or_default() + "\n"
     }
 
     /// Puts `path` first in the recent list, once, keeping at most [`RECENT_MAX`].
@@ -135,23 +104,23 @@ pub(crate) fn state_path() -> Option<PathBuf> {
     std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
-        .map(|d| d.join("iad-theme-editor/state.conf"))
+        .map(|d| d.join("iad-theme-editor/state.ron"))
 }
 
-/// The `*.conf` files directly in `dir`, by name.
+/// The `*.ron` files directly in `dir`, by name.
 pub(crate) fn scan_folder(dir: &std::path::Path) -> Vec<PathBuf> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.is_file() && p.extension().is_some_and(|x| x == "conf"))
+        .filter(|p| p.is_file() && p.extension().is_some_and(|x| x == "ron"))
         .collect();
     files.sort();
     files
 }
 
-/// A theme file's display name: its `[theme] name`, else its file name without `.conf`.
+/// A theme file's display name: its `[theme] name`, else its file name without `.ron`.
 pub(crate) fn theme_name(path: &std::path::Path) -> String {
     let stem = path
         .file_stem()
@@ -159,10 +128,9 @@ pub(crate) fn theme_name(path: &std::path::Path) -> String {
     std::fs::read_to_string(path)
         .ok()
         .and_then(|t| {
-            iad::config::parse_keyfile(&t)
-                .get(&("theme".to_string(), "name".to_string()))
-                .filter(|n| !n.is_empty())
-                .cloned()
+            iad::theme_config::Document::parse(&t)
+                .ok()
+                .and_then(|d| d.text("theme", "name").filter(|n| !n.is_empty()).map(String::from))
         })
         .unwrap_or(stem)
 }
@@ -176,18 +144,18 @@ pub(crate) fn is_link(p: &std::path::Path) -> bool {
 }
 
 pub(crate) fn is_default_name(p: &std::path::Path) -> bool {
-    p.file_name().is_some_and(|n| n == "default.conf")
+    p.file_name().is_some_and(|n| n == "default.ron")
 }
 
-// DECISION (user, 2026-11-16): every theme is a file of its own, always, and `default.conf` in the
+// DECISION (user, 2026-11-16): every theme is a file of its own, always, and `default.ron` in the
 // standard theme directory is always a symlink to the current global theme's file. "Set as global
 // theme" is the one way to share a theme: it points that symlink at the theme (copying a bundled
 // theme into the directory first). A regular file that is in the way is kept as a theme of its own,
 // never overwritten. There is no registering by symlink, and no unregistering.
 
-/// The file `default.conf` in `dir` leads to (through the symlink), if there is one.
+/// The file `default.ron` in `dir` leads to (through the symlink), if there is one.
 pub(crate) fn default_target(dir: &std::path::Path) -> Option<PathBuf> {
-    let link = dir.join("default.conf");
+    let link = dir.join("default.ron");
     std::fs::symlink_metadata(&link)
         .ok()
         .and_then(|_| std::fs::canonicalize(link).ok())
@@ -212,11 +180,11 @@ fn free_name(dir: &std::path::Path, text: &str, fallback: &str) -> PathBuf {
     } else {
         stem
     };
-    let mut candidate = dir.join(format!("{stem}.conf"));
+    let mut candidate = dir.join(format!("{stem}.ron"));
     let mut n = 1;
     while std::fs::symlink_metadata(&candidate).is_ok() {
         n += 1;
-        candidate = dir.join(format!("{stem}-{n}.conf"));
+        candidate = dir.join(format!("{stem}-{n}.ron"));
     }
     candidate
 }
@@ -224,19 +192,19 @@ fn free_name(dir: &std::path::Path, text: &str, fallback: &str) -> PathBuf {
 /// What setting the global theme did.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Linked {
-    /// `default.conf`.
+    /// `default.ron`.
     pub(crate) link: PathBuf,
-    /// A regular `default.conf` that was in the way, kept as a theme of its own at this path.
+    /// A regular `default.ron` that was in the way, kept as a theme of its own at this path.
     pub(crate) kept: Option<PathBuf>,
 }
 
-/// Points `default.conf` in `dir` at `file`: it creates or replaces the symlink, atomically (a
+/// Points `default.ron` in `dir` at `file`: it creates or replaces the symlink, atomically (a
 /// temporary symlink is renamed over it), so an app never finds it missing. A regular file called
-/// `default.conf` is not overwritten: it is renamed to a theme file of its own first, and when it
+/// `default.ron` is not overwritten: it is renamed to a theme file of its own first, and when it
 /// is `file` itself the link leads to that new name (`Linked::kept`).
 pub(crate) fn set_default(dir: &std::path::Path, file: &std::path::Path) -> Result<Linked, String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let link = dir.join("default.conf");
+    let link = dir.join("default.ron");
     let mut target = canon(file);
     let mut kept = None;
     if std::fs::symlink_metadata(&link).is_ok_and(|m| !m.file_type().is_symlink()) {
@@ -249,7 +217,7 @@ pub(crate) fn set_default(dir: &std::path::Path, file: &std::path::Path) -> Resu
         }
         kept = Some(new);
     }
-    let temp = dir.join(format!(".default.conf.{}.tmp", std::process::id()));
+    let temp = dir.join(format!(".default.ron.{}.tmp", std::process::id()));
     let _ = std::fs::remove_file(&temp);
     std::os::unix::fs::symlink(&target, &temp).map_err(|e| format!("{}: {e}", temp.display()))?;
     std::fs::rename(&temp, &link).map_err(|e| {
@@ -260,12 +228,12 @@ pub(crate) fn set_default(dir: &std::path::Path, file: &std::path::Path) -> Resu
 }
 
 /// Makes the bundled theme `key` the global theme: its text is installed as its own file,
-/// `<key>.conf` in `dir` (an installed file of that name with other text is the user's and is
-/// never overwritten), and `default.conf` points at it.
+/// `<key>.ron` in `dir` (an installed file of that name with other text is the user's and is
+/// never overwritten), and `default.ron` points at it.
 pub(crate) fn set_global_bundled(dir: &std::path::Path, key: &str) -> Result<Linked, String> {
     let text = crate::bundled::text(key).ok_or_else(|| format!("no bundled theme {key}"))?;
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let file = dir.join(format!("{key}.conf"));
+    let file = dir.join(format!("{key}.ron"));
     match std::fs::read_to_string(&file) {
         Ok(existing) if existing == text => {}
         Ok(_) => {
@@ -279,10 +247,10 @@ pub(crate) fn set_global_bundled(dir: &std::path::Path, key: &str) -> Result<Lin
     set_default(dir, &file)
 }
 
-/// Removes the global theme: the `default.conf` symlink in `dir` (never the theme it leads to).
+/// Removes the global theme: the `default.ron` symlink in `dir` (never the theme it leads to).
 /// Apps then show the bare toolkit look, or their own base theme.
 pub(crate) fn clear_global(dir: &std::path::Path) -> Result<(), String> {
-    let link = dir.join("default.conf");
+    let link = dir.join("default.ron");
     match std::fs::symlink_metadata(&link) {
         Err(_) => Err("there is no global theme".into()),
         Ok(m) if m.file_type().is_symlink() => {
@@ -293,7 +261,7 @@ pub(crate) fn clear_global(dir: &std::path::Path) -> Result<(), String> {
 }
 
 /// The themes available, each once: the installed ones (the files in the data dirs `dirs`, and
-/// the file `default.conf` leads to, marked), the bundled ones not installed unchanged, those in
+/// the file `default.ron` leads to, marked), the bundled ones not installed unchanged, those in
 /// the folders the user added, then the recently opened ones.
 pub(crate) fn list_presets(
     dirs: &[PathBuf],

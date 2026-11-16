@@ -273,11 +273,11 @@ mod tests {
     #[test]
     fn shipped_reference_themes_resolve_without_invalid_values() {
         for (name, text) in [
-            ("win95", include_str!("../../themes/win95.conf")),
-            ("winxp", include_str!("../../themes/winxp.conf")),
-            ("win7", include_str!("../../themes/win7.conf")),
-            ("mate", include_str!("../../themes/mate.conf")),
-            ("gnome2", include_str!("../../themes/gnome2.conf")),
+            ("win95", include_str!("../../themes/win95.ron")),
+            ("winxp", include_str!("../../themes/winxp.ron")),
+            ("win7", include_str!("../../themes/win7.ron")),
+            ("mate", include_str!("../../themes/mate.ron")),
+            ("gnome2", include_str!("../../themes/gnome2.ron")),
         ] {
             let config = design::resolve(
                 match name {

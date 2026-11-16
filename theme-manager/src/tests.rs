@@ -34,7 +34,15 @@ fn geometry_sections_have_searchable_friendly_labels() {
 
 #[test]
 fn preview_geometry_uses_scheme_tokens_without_changing_editor_chrome() {
-    let text = "[metrics]\nradius-m=7\n[dark:metrics]\nradius-m=9\n";
+    let text = r##"{
+    "metrics": {
+        "radius-m": 7,
+    },
+    "dark:metrics": {
+        "radius-m": 9,
+    },
+}
+"##;
     let light = preview::Preview::build(text, false);
     let dark = preview::Preview::build(text, true);
     assert_eq!(light.metrics.radius_m, 7.0);
@@ -67,13 +75,13 @@ fn named_widget_variants_are_discoverable_separately_from_schemes() {
 fn breakpoint_helper_adds_edits_removes_and_undoes_rules() {
     let mut e = editor();
     let _ = e.update(Msg::Rule("tabs".into(), 0, Some((None, None))));
-    assert!(e.generate().contains("breakpoint-rules=xs:"));
+    assert!((tok(&e.generate(), "breakpoint-rules").is_some_and(|t| t.starts_with("xs:"))));
     let _ = e.update(Msg::Rule(
         "tabs".into(),
         0,
         Some((Some("md".into()), Some("outline".into()))),
     ));
-    assert!(e.generate().contains("breakpoint-rules=md:outline"));
+    assert!((tok(&e.generate(), "breakpoint-rules").as_deref() == Some("md:outline")));
     let _ = e.update(Msg::Rule("tabs".into(), 0, None));
     assert!(!e.generate().contains("md:outline"));
     let _ = e.update(Msg::Undo);
@@ -93,7 +101,7 @@ fn invalid_breakpoint_rules_never_enter_values_or_save_from_loaded_files() {
         assert!(!e.generate().contains(rules));
     }
     let dir = temp_dir("invalid-rules");
-    let path = dir.join("theme.conf");
+    let path = dir.join("theme.ron");
     e.values.insert(
         ("tabs".into(), "breakpoint-rules".into()),
         "md:missing".into(),
@@ -106,7 +114,15 @@ fn invalid_breakpoint_rules_never_enter_values_or_save_from_loaded_files() {
 #[test]
 fn preview_width_rules_use_local_tokens_and_inclusive_breakpoints() {
     let p = preview::Preview::build(
-        "[tabs]\nbreakpoint-rules=xs:pills,md:outline\n[breakpoints]\nmd=800\n",
+        r##"{
+    "tabs": {
+        "breakpoint-rules": "xs:pills,md:outline",
+    },
+    "breakpoints": {
+        "md": 800,
+    },
+}
+"##,
         false,
     );
     let boundary = p.scale().md;
@@ -125,7 +141,16 @@ fn preview_tree_layout_uses_local_geometry_and_scheme_overrides() {
         Some("tiny-skia"),
     ))
     .unwrap();
-    let source = "[tree.default]\nrow-height=47px\nlevel-offset=31px\n[dark:tree.default]\nrow-height=61px\n";
+    let source = r##"{
+    "tree.default": {
+        "row-height": 47,
+        "level-offset": 31,
+    },
+    "dark:tree.default": {
+        "row-height": 61,
+    },
+}
+"##;
     for (dark, expected) in [(false, 47.0), (true, 61.0)] {
         let preview = preview::Preview::build(source, dark);
         let mut element = preview.tree_sample(800.0);
@@ -135,14 +160,34 @@ fn preview_tree_layout_uses_local_geometry_and_scheme_overrides() {
             &renderer,
             &layout::Limits::new(iced::Size::ZERO, iced::Size::new(800.0, 1000.0)),
         );
-        // Project, Sources, main.rs, theme.conf: all expanded in the actual sample.
+        // Project, Sources, main.rs, theme.ron: all expanded in the actual sample.
         assert_eq!(node.size().height, expected * 4.0);
     }
 }
 
 #[test]
 fn preview_navigation_resolves_all_density_dimensions_locally() {
-    let source = "[navigation]\nbreakpoint-rules=xs:sm,md:lg\n[navigation.sm]\nrow-height=33px\nrow-padding=7px\ngap=3px\ninset=5px\n[navigation.lg]\nrow-height=63px\nrow-padding=17px\ngap=13px\ninset=15px\n[dark:navigation.lg]\nrow-height=71px\n";
+    let source = r##"{
+    "navigation": {
+        "breakpoint-rules": "xs:sm,md:lg",
+    },
+    "navigation.sm": {
+        "row-height": 33,
+        "row-padding": 7,
+        "gap": 3,
+        "inset": 5,
+    },
+    "navigation.lg": {
+        "row-height": 63,
+        "row-padding": 17,
+        "gap": 13,
+        "inset": 15,
+    },
+    "dark:navigation.lg": {
+        "row-height": 71,
+    },
+}
+"##;
     let light = preview::Preview::build(source, false);
     let dark = preview::Preview::build(source, true);
     let boundary = light.scale().md;
@@ -193,11 +238,36 @@ fn tabs_and_toolbar_preview_use_local_rules_and_geometry_without_global_writes()
             || node.children().iter().any(|n| has_height(n, height))
     }
     let a = preview::Preview::build(
-        "[tabs]\nbreakpoint-rules=xs:default,md:pills\n[tabs.default]\nindicator-height=17px\n[toolbar]\nbreakpoint-rules=xs:raised,md:flat\n[toolbar.raised]\nshadow-height=23px\n",
+        r##"{
+    "tabs": {
+        "breakpoint-rules": "xs:default,md:pills",
+    },
+    "tabs.default": {
+        "indicator-height": 17,
+    },
+    "toolbar": {
+        "breakpoint-rules": "xs:raised,md:flat",
+    },
+    "toolbar.raised": {
+        "shadow-height": 23,
+    },
+}
+"##,
         false,
     );
     let b = preview::Preview::build(
-        "[tabs.default]\nindicator-height=3px\n[toolbar]\nbreakpoint-rules=xs:raised\n[toolbar.raised]\nshadow-height=7px\n",
+        r##"{
+    "tabs.default": {
+        "indicator-height": 3,
+    },
+    "toolbar": {
+        "breakpoint-rules": "xs:raised",
+    },
+    "toolbar.raised": {
+        "shadow-height": 7,
+    },
+}
+"##,
         false,
     );
     let narrow = a.scale().md - 1.0;
@@ -226,7 +296,22 @@ fn tabs_and_toolbar_preview_use_local_rules_and_geometry_without_global_writes()
 #[test]
 fn overrides_only_excludes_base_and_other_scheme_values_and_combines_filters() {
     let mut e = with_text(
-        "[colors]\nwindow-bg=#112233\nwindow-fg=#ffffff\n[light:colors]\nwindow-bg=#112233\n[dark:colors]\nwindow-fg=#111111\n[dark:metrics]\nradius-m=9\n",
+        r##"{
+    "colors": {
+        "window-bg": "#112233",
+        "window-fg": "#ffffff",
+    },
+    "light:colors": {
+        "window-bg": "#112233",
+    },
+    "dark:colors": {
+        "window-fg": "#111111",
+    },
+    "dark:metrics": {
+        "radius-m": 9,
+    },
+}
+"##,
     );
     let visible = |e: &Editor, section, key| e.visible(e.spec(section, key).unwrap());
     let _ = e.update(Msg::Variant(Variant::Light));
@@ -259,7 +344,15 @@ fn overrides_only_excludes_base_and_other_scheme_values_and_combines_filters() {
 
 #[test]
 fn resetting_an_override_updates_filter_results_without_removing_the_base() {
-    let mut e = with_text("[colors]\nwindow-bg=#112233\n[dark:colors]\nwindow-bg=#445566\n");
+    let mut e = with_text(r##"{
+    "colors": {
+        "window-bg": "#112233",
+    },
+    "dark:colors": {
+        "window-bg": "#445566",
+    },
+}
+"##);
     let _ = e.update(Msg::Section(tokens::ALL_SECTIONS.into()));
     let _ = e.update(Msg::Variant(Variant::Dark));
     let _ = e.update(Msg::OverridesOnly(true));
@@ -290,7 +383,15 @@ fn base_disables_and_clears_overrides_only() {
 
 #[test]
 fn all_page_visits_each_schema_token_once_without_changing_saved_values() {
-    let mut e = with_text("[colors]\nwindow-bg=#112233\n[dark:metrics]\nradius-m=9\n");
+    let mut e = with_text(r##"{
+    "colors": {
+        "window-bg": "#112233",
+    },
+    "dark:metrics": {
+        "radius-m": 9,
+    },
+}
+"##);
     let before = e.generate();
     assert_eq!(
         e.section_choices()
@@ -331,7 +432,18 @@ fn all_page_visits_each_schema_token_once_without_changing_saved_values() {
 #[test]
 fn all_search_and_override_filters_share_the_same_single_page() {
     let mut e = with_text(
-        "[metrics]\nradius-m=7\n[dark:metrics]\nradius-m=9\n[dark:colors]\nwindow-bg=#112233\n",
+        r##"{
+    "metrics": {
+        "radius-m": 7,
+    },
+    "dark:metrics": {
+        "radius-m": 9,
+    },
+    "dark:colors": {
+        "window-bg": "#112233",
+    },
+}
+"##,
     );
     let _ = e.update(Msg::Section(tokens::ALL_SECTIONS.into()));
     let _ = e.update(Msg::Variant(Variant::Dark));
@@ -356,7 +468,7 @@ fn all_search_and_override_filters_share_the_same_single_page() {
 #[test]
 fn all_navigation_is_remembered_across_runs() {
     let d = temp_dir("all-section-state");
-    let state = d.join("state.conf");
+    let state = d.join("state.ron");
     let mut e = Editor::with(Some(state.clone()), None).0;
     let _ = e.update(Msg::Section(tokens::ALL_SECTIONS.into()));
     let restored = Editor::with(Some(state), None).0;
@@ -373,9 +485,49 @@ fn editor() -> Editor {
     e
 }
 
+/// The gradient a token's RON holds.
+fn gradient_of(v: &ron::Value) -> iad::theme_config::Gradient {
+    iad::theme_config::Gradient::from_ron(v).expect("a valid gradient")
+}
+
+/// The typed text a token has in a theme file's text (`12px`, `#112233`), looked up by key
+/// in any section.
+fn tok(text: &str, key: &str) -> Option<String> {
+    let doc = iad::theme_config::Document::parse(text).ok()?;
+    let schema = Schema::toolkit();
+    doc.entries().find(|(_, k, _)| *k == key).map(|(section, k, v)| {
+        let base = section.split_once(':').map_or(section, |(_, b)| b);
+        schema
+            .get(base, k)
+            .and_then(|spec| spec.ty.from_ron(v).ok())
+            .map(|t| t.to_text().trim_end_matches("px").to_string())
+            .unwrap_or_else(|| ron::ser::to_string(v).unwrap_or_default())
+    })
+}
+
+/// [`tok`] in one section (`"dark:colors"`).
+fn tok_in(text: &str, section: &str, key: &str) -> Option<String> {
+    let doc = iad::theme_config::Document::parse(text).ok()?;
+    let base = section.split_once(':').map_or(section, |(_, b)| b);
+    let v = doc.get(section, key)?;
+    Some(
+        Schema::toolkit()
+            .get(base, key)
+            .and_then(|spec| spec.ty.from_ron(v).ok())
+            .map(|t| t.to_text().trim_end_matches("px").to_string())
+            .unwrap_or_else(|| ron::ser::to_string(v).unwrap_or_default()),
+    )
+}
+
+/// Whether the file text has a section of that name.
+fn has_section(text: &str, section: &str) -> bool {
+    iad::theme_config::Document::parse(text)
+        .is_ok_and(|d| d.entries().any(|(s, _, _)| s == section))
+}
+
 fn with_text(text: &str) -> Editor {
     let mut e = editor();
-    e.values = iad::config::parse_keyfile(text).into_iter().collect();
+    e.values = super::values_of(text);
     e.clean = e.generate();
     e.refresh();
     e
@@ -414,9 +566,9 @@ fn the_shipped_themes_round_trip_through_the_editor() {
         let text = read(&f);
         let e = with_text(&text);
         let out = e.generate();
-        let a: BTreeMap<_, _> = iad::config::parse_keyfile(&text).into_iter().collect();
-        let b: BTreeMap<_, _> = iad::config::parse_keyfile(&out).into_iter().collect();
-        assert_eq!(a, b, "{}", f.display());
+        // Everything the file sets is still set after a round trip (and nothing else).
+        let keys = |t: &str| -> Vec<_> { super::values_of(t).into_keys().collect() };
+        assert_eq!(keys(&text), keys(&out), "{}", f.display());
         let report = Schema::toolkit().validate(&out);
         assert!(
             report.errors.is_empty() && report.unknown.is_empty(),
@@ -429,7 +581,7 @@ fn the_shipped_themes_round_trip_through_the_editor() {
 #[test]
 fn only_what_is_set_is_written_and_a_variant_goes_in_its_own_section() {
     let mut e = editor();
-    assert!(!e.generate().lines().any(|l| l.starts_with('[')));
+    assert_eq!(super::values_of(&e.generate()).len(), 0, "nothing set, nothing written");
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
     let _ = e.update(Msg::Variant(Variant::Dark));
     let _ = e.update(Msg::Input(
@@ -438,12 +590,13 @@ fn only_what_is_set_is_written_and_a_variant_goes_in_its_own_section() {
         "#101010".into(),
     ));
     let out = e.generate();
-    assert!(out.contains("[metrics]\nradius-m=7\n"));
-    assert!(out.contains("[dark:colors]\nwindow-bg=#101010\n"));
-    assert!(!out.contains("[colors]"));
+    assert_eq!(tok(&out, "radius-m").as_deref(), Some("7"));
+    assert!(has_section(&out, "dark:colors"));
+    assert_eq!(tok(&out, "window-bg").as_deref(), Some("#101010"));
+    assert!(!has_section(&out, "colors"));
     // An unset dark value shows the base's, and reset returns to it.
     let _ = e.update(Msg::Reset("colors".into(), "window-bg".into()));
-    assert!(!e.generate().lines().any(|l| l.starts_with("[dark:")));
+    assert!(!has_section(&e.generate(), "dark:colors"));
 }
 
 #[test]
@@ -456,19 +609,28 @@ fn a_value_that_is_not_valid_yet_is_not_written() {
     ));
     assert!(!e.generate().contains("window-bg"));
     let _ = e.update(Msg::Input(
-        "windows".into(),
+        "window-decorations".into(),
         "button-size".into(),
         "30".into(),
     ));
-    assert!(e.generate().contains("button-size=30px"));
+    assert!((tok(&e.generate(), "button-size").as_deref() == Some("30")));
 }
 
 #[test]
 fn unknown_keys_are_kept() {
-    let e = with_text("[player]\nartwork=disc\n[colors]\naccent=#112233\n");
+    let e = with_text(r##"{
+    "player": {
+        "artwork": "disc",
+    },
+    "colors": {
+        "accent": "#112233",
+    },
+}
+"##);
     let out = e.generate();
-    assert!(out.contains("[player]\nartwork=disc\n"));
-    assert!(out.contains("accent=#112233"));
+    assert_eq!(tok(&out, "artwork").as_deref(), Some("\"disc\""));
+    assert!(has_section(&out, "player"));
+    assert!(tok(&out, "accent").as_deref() == Some("#112233"));
 }
 
 // ---------------------------------------------------------- the dot
@@ -476,16 +638,21 @@ fn unknown_keys_are_kept() {
 #[test]
 fn the_unsaved_dot_shows_only_when_there_are_unsaved_changes() {
     let d = temp_dir("dot");
-    let f = d.join("t.conf");
-    std::fs::write(&f, "[metrics]\nradius-m=1\n").unwrap();
+    let f = d.join("t.ron");
+    std::fs::write(&f, r##"{
+    "metrics": {
+        "radius-m": 1,
+    },
+}
+"##).unwrap();
     let mut e = editor();
     e.load(f.clone());
     assert!(!e.dirty());
     assert_eq!(e.dot(), "");
-    assert!(!e.title().contains('●') && e.title().starts_with("t.conf"));
+    assert!(!e.title().contains('●') && e.title().starts_with("t.ron"));
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "9".into()));
     assert_eq!(e.dot(), "● ");
-    assert!(e.title().starts_with("● t.conf"));
+    assert!(e.title().starts_with("● t.ron"));
     let _ = e.update(Msg::SavedAs(Some(f.clone())));
     assert_eq!(e.dot(), "");
     assert!(!e.title().contains('●'));
@@ -497,18 +664,18 @@ fn the_unsaved_dot_shows_only_when_there_are_unsaved_changes() {
 #[test]
 fn save_upserts_the_original_file() {
     let d = temp_dir("save");
-    let f = d.join("mine.conf");
+    let f = d.join("mine.ron");
     let mut e = editor();
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
     let _ = e.update(Msg::SavedAs(Some(f.clone())));
     // Created.
-    assert!(read(&f).contains("[metrics]\nradius-m=7\n"));
+    assert_eq!(tok(&read(&f), "radius-m").as_deref(), Some("7"));
     assert!(!e.dirty());
     // Replaced, by Save, at the same path.
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "8".into()));
     assert!(e.dirty());
     let _ = e.update(Msg::Save);
-    assert!(read(&f).contains("radius-m=8") && !read(&f).contains("radius-m=7"));
+    assert!((tok(&read(&f), "radius-m").as_deref() == Some("8")) && !(tok(&read(&f), "radius-m").as_deref() == Some("7")));
     assert_eq!(e.path, Some(f));
     assert!(!e.dirty());
     let _ = std::fs::remove_dir_all(d);
@@ -517,16 +684,21 @@ fn save_upserts_the_original_file() {
 #[test]
 fn save_writes_through_a_symlink_to_its_target() {
     let d = temp_dir("through");
-    let real = d.join("real.conf");
-    let link = d.join("link.conf");
-    std::fs::write(&real, "[metrics]\nradius-m=1\n").unwrap();
+    let real = d.join("real.ron");
+    let link = d.join("link.ron");
+    std::fs::write(&real, r##"{
+    "metrics": {
+        "radius-m": 1,
+    },
+}
+"##).unwrap();
     symlink(&real, &link).unwrap();
     let mut e = editor();
     e.load(link.clone());
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "5".into()));
     let _ = e.update(Msg::Save);
     assert!(is_link(&link), "the link is still a link");
-    assert!(read(&real).contains("radius-m=5"));
+    assert!((tok(&read(&real), "radius-m").as_deref() == Some("5")));
     assert!(!e.dirty());
     let _ = std::fs::remove_dir_all(d);
 }
@@ -555,9 +727,9 @@ fn theme_picker_bounds_and_wraps_long_names_and_paths_at_narrow_widths() {
         bundled: None,
         group: "Folders",
         name: "夜空のテーマ العربية Ελληνικά हिन्दी café 🎨 AnUnbrokenVeryLongThemeName".repeat(16),
-        path: PathBuf::from(format!("/themes/{}.conf", "long-directory-name".repeat(24))),
+        path: PathBuf::from(format!("/themes/{}.ron", "long-directory-name".repeat(24))),
         target: Some(PathBuf::from(format!(
-            "/linked/{}.conf",
+            "/linked/{}.ron",
             "another-long-name".repeat(24)
         ))),
         is_default: true,
@@ -579,7 +751,7 @@ fn theme_picker_bounds_and_wraps_long_names_and_paths_at_narrow_widths() {
         group: "Folders",
         bundled: None,
         name: "Theme".into(),
-        path: "/themes/theme.conf".into(),
+        path: "/themes/theme.ron".into(),
         target: None,
         is_default: false,
     };
@@ -631,8 +803,13 @@ fn theme_picker_bounds_and_wraps_long_names_and_paths_at_narrow_widths() {
 #[test]
 fn theme_picker_keeps_unsaved_confirmation_accessible() {
     let d = temp_dir("picker-confirm");
-    let target = d.join("other.conf");
-    std::fs::write(&target, "[metrics]\nradius-m=2\n").unwrap();
+    let target = d.join("other.ron");
+    std::fs::write(&target, r##"{
+    "metrics": {
+        "radius-m": 2,
+    },
+}
+"##).unwrap();
     let mut e = editor();
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
     let _ = e.update(Msg::ThemePicker(true));
@@ -671,25 +848,35 @@ fn a_clean_environment_lists_only_the_bundled_themes() {
 #[test]
 fn a_folder_scan_lists_only_conf_files_by_name() {
     let d = temp_dir("scan");
-    for f in ["b.conf", "a.conf", "notes.txt", "c.conf.bak"] {
+    for f in ["b.ron", "a.ron", "notes.txt", "c.ron.bak"] {
         std::fs::write(d.join(f), "").unwrap();
     }
-    std::fs::create_dir(d.join("sub.conf")).unwrap();
-    symlink(d.join("nowhere.conf"), d.join("broken.conf")).unwrap();
+    std::fs::create_dir(d.join("sub.ron")).unwrap();
+    symlink(d.join("nowhere.ron"), d.join("broken.ron")).unwrap();
     let names: Vec<_> = scan_folder(&d)
         .iter()
         .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
         .collect();
-    assert_eq!(names, ["a.conf", "b.conf"]);
+    assert_eq!(names, ["a.ron", "b.ron"]);
     let _ = std::fs::remove_dir_all(d);
 }
 
 #[test]
 fn switching_with_unsaved_changes_needs_a_second_click() {
     let d = temp_dir("switch");
-    let (a, b) = (d.join("a.conf"), d.join("b.conf"));
-    std::fs::write(&a, "[metrics]\nradius-m=1\n").unwrap();
-    std::fs::write(&b, "[metrics]\nradius-m=2\n").unwrap();
+    let (a, b) = (d.join("a.ron"), d.join("b.ron"));
+    std::fs::write(&a, r##"{
+    "metrics": {
+        "radius-m": 1,
+    },
+}
+"##).unwrap();
+    std::fs::write(&b, r##"{
+    "metrics": {
+        "radius-m": 2,
+    },
+}
+"##).unwrap();
     let mut e = editor();
     e.pick(Target::File(a.clone()));
     assert_eq!(e.path, Some(a.clone()));
@@ -702,10 +889,10 @@ fn switching_with_unsaved_changes_needs_a_second_click() {
     e.pick(Target::File(a.clone()));
     assert_eq!(e.path, Some(b.clone()), "the first click only warns");
     assert!(e.status.contains("click again"));
-    assert_eq!(e.values[&("metrics".into(), "radius-m".into())], "9");
+    assert_eq!(tok(&e.generate(), "radius-m").as_deref(), Some("9"));
     e.pick(Target::File(a.clone()));
     assert_eq!(e.path, Some(a.clone()));
-    assert_eq!(e.values[&("metrics".into(), "radius-m".into())], "1");
+    assert_eq!(tok(&e.generate(), "radius-m").as_deref(), Some("1"));
     // New is a switch too: it starts empty, with no path, and is not dirty.
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "4".into()));
     let _ = e.update(Msg::New);
@@ -720,34 +907,31 @@ fn switching_with_unsaved_changes_needs_a_second_click() {
 #[test]
 fn the_state_round_trips() {
     let state = State {
-        last_file: Some("/a/one.conf".into()),
+        last_file: Some("/a/one.ron".into()),
         folders: vec!["/x".into(), "/y".into()],
-        recent: vec!["/a/one.conf".into(), "/b/two.conf".into()],
+        recent: vec!["/a/one.ron".into(), "/b/two.ron".into()],
         section: Some("metrics".into()),
         variant: Some(Variant::Dark),
     };
     assert_eq!(State::parse(&state.to_text()), state);
     assert_eq!(State::parse(""), State::default());
-    assert!(
-        state
-            .to_text()
-            .starts_with("[state]\nlast-file=/a/one.conf\n")
-    );
+    // It is plain RON a person can read and edit.
+    assert!(state.to_text().contains("last_file: Some(\"/a/one.ron\")"), "{}", state.to_text());
 }
 
 #[test]
 fn the_recent_list_has_no_duplicates_and_a_limit() {
     let mut s = State::default();
     for i in 0..12 {
-        s.remember(std::path::Path::new(&format!("/t/{i}.conf")));
+        s.remember(std::path::Path::new(&format!("/t/{i}.ron")));
     }
-    s.remember(std::path::Path::new("/t/5.conf"));
+    s.remember(std::path::Path::new("/t/5.ron"));
     assert_eq!(s.recent.len(), RECENT_MAX);
-    assert_eq!(s.recent[0], PathBuf::from("/t/5.conf"));
+    assert_eq!(s.recent[0], PathBuf::from("/t/5.ron"));
     assert_eq!(
         s.recent
             .iter()
-            .filter(|p| **p == PathBuf::from("/t/5.conf"))
+            .filter(|p| **p == PathBuf::from("/t/5.ron"))
             .count(),
         1
     );
@@ -756,9 +940,15 @@ fn the_recent_list_has_no_duplicates_and_a_limit() {
 #[test]
 fn the_open_file_section_and_variant_are_remembered_across_runs() {
     let d = temp_dir("state");
-    let state = d.join("state.conf");
-    let theme = d.join("t.conf");
-    std::fs::write(&theme, "[theme]\nname=T\nkey=t\n").unwrap();
+    let state = d.join("state.ron");
+    let theme = d.join("t.ron");
+    std::fs::write(&theme, r##"{
+    "theme": {
+        "name": "T",
+        "key": "t",
+    },
+}
+"##).unwrap();
     let (mut e, _) = Editor::with(Some(state.clone()), None);
     e.theme_dirs = Vec::new();
     let _ = e.update(Msg::Pick(theme.clone()));
@@ -772,7 +962,7 @@ fn the_open_file_section_and_variant_are_remembered_across_runs() {
     assert_eq!(again.state.folders, vec![d.clone()]);
     assert!(again.presets.iter().any(|p| p.path == theme));
     // A file on the command line wins over the last one.
-    let other = d.join("o.conf");
+    let other = d.join("o.ron");
     std::fs::write(&other, "").unwrap();
     let (cli, _) = Editor::with(Some(state), Some(other.clone()));
     assert_eq!(cli.path, Some(other));
@@ -782,15 +972,15 @@ fn the_open_file_section_and_variant_are_remembered_across_runs() {
 #[test]
 fn saving_remembers_the_file_as_last_and_recent() {
     let d = temp_dir("remember");
-    let state = d.join("state.conf");
+    let state = d.join("state.ron");
     let (mut e, _) = Editor::with(Some(state.clone()), None);
     e.theme_dirs = Vec::new();
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
-    let file = d.join("mine.conf");
+    let file = d.join("mine.ron");
     let _ = e.update(Msg::SavedAs(Some(file.clone())));
     assert_eq!(e.state.last_file, Some(file.clone()));
     assert_eq!(e.state.recent.first(), Some(&file));
-    assert!(read(&state).contains("mine.conf"));
+    assert!(read(&state).contains("mine.ron"));
     assert!(!read(&state).contains("embedded"));
     let _ = std::fs::remove_dir_all(d);
 }
@@ -801,14 +991,14 @@ fn saving_remembers_the_file_as_last_and_recent() {
 fn save_only_updates_the_file_and_registers_nothing() {
     let d = temp_dir("save-only");
     let data = d.join("data");
-    let file = d.join("a.conf");
+    let file = d.join("a.ron");
     std::fs::write(&file, "").unwrap();
     let mut e = editor();
     e.theme_dirs = vec![data.clone()];
     e.load(file.clone());
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
     let _ = e.update(Msg::Save);
-    assert!(read(&file).contains("radius-m=7") && !e.dirty());
+    assert!((tok(&read(&file), "radius-m").as_deref() == Some("7")) && !e.dirty());
     assert!(!data.exists(), "Save does not register");
     let _ = std::fs::remove_dir_all(d);
 }
@@ -826,11 +1016,11 @@ fn undo_and_redo_walk_the_edits_and_typing_in_one_token_is_one_step() {
     set(&mut e, "metrics", "radius-l", "5");
     assert_eq!(e.undo.len(), 2, "the two edits of radius-m are one step");
     let _ = e.update(Msg::Undo);
-    assert!(e.generate().contains("radius-m=12") && !e.generate().contains("radius-l"));
+    assert!((tok(&e.generate(), "radius-m").as_deref() == Some("12")) && tok(&e.generate(), "radius-l").is_none());
     let _ = e.update(Msg::Undo);
     assert!(!e.generate().contains("radius-m"));
     let _ = e.update(Msg::Redo);
-    assert!(e.generate().contains("radius-m=12"));
+    assert!((tok(&e.generate(), "radius-m").as_deref() == Some("12")));
     // A new edit drops what could have been redone.
     set(&mut e, "metrics", "radius-s", "2");
     assert!(e.redo.is_empty());
@@ -851,7 +1041,7 @@ fn undo_has_a_limit_and_opening_a_file_starts_it_over() {
     }
     assert_eq!(e.undo.len(), UNDO_MAX);
     let d = temp_dir("undo-open");
-    let f = d.join("a.conf");
+    let f = d.join("a.ron");
     std::fs::write(&f, "").unwrap();
     e.load(f);
     assert!(e.undo.is_empty() && e.redo.is_empty());
@@ -877,7 +1067,15 @@ fn the_search_looks_at_names_descriptions_and_sections() {
 
 #[test]
 fn modified_only_shows_what_any_variant_sets_and_the_counts_follow() {
-    let mut e = with_text("[metrics]\nradius-m=4\n[dark:colors]\nwindow-bg=#101010\n");
+    let mut e = with_text(r##"{
+    "metrics": {
+        "radius-m": 4,
+    },
+    "dark:colors": {
+        "window-bg": "#101010",
+    },
+}
+"##);
     e.modified_only = true;
     let shown: Vec<(&str, &str)> = e
         .specs
@@ -894,20 +1092,30 @@ fn modified_only_shows_what_any_variant_sets_and_the_counts_follow() {
 #[test]
 fn resetting_a_group_removes_only_what_the_current_variant_sets() {
     let mut e =
-        with_text("[metrics]\nradius-m=4\nradius-l=5\nspace-m=9\n[dark:metrics]\nradius-m=2\n");
+        with_text(r##"{
+    "metrics": {
+        "radius-m": 4,
+        "radius-l": 5,
+        "space-m": 9,
+    },
+    "dark:metrics": {
+        "radius-m": 2,
+    },
+}
+"##);
     let _ = e.update(Msg::ResetGroup("metrics".into(), "radius".into()));
     let out = e.generate();
     assert!(
-        !out.contains("radius-m=4") && !out.contains("radius-l"),
+        !(tok(&out, "radius-m").as_deref() == Some("4")) && tok(&out, "radius-l").is_none(),
         "{out}"
     );
     assert!(
-        out.contains("space-m=9") && out.contains("[dark:metrics]"),
+        (tok(&out, "space-m").as_deref() == Some("9")) && has_section(&out, "dark:metrics"),
         "{out}"
     );
     let _ = e.update(Msg::Undo);
     assert!(
-        e.generate().contains("radius-l=5"),
+        (tok(&e.generate(), "radius-l").as_deref() == Some("5")),
         "reset is one undo step"
     );
 }
@@ -915,18 +1123,29 @@ fn resetting_a_group_removes_only_what_the_current_variant_sets() {
 #[test]
 fn copy_from_base_fills_only_what_the_variant_does_not_set() {
     let mut e = with_text(
-        "[theme]\nname=X\n[colors]\nwindow-bg=#111111\nview-bg=#222222\n[dark:colors]\nview-bg=#999999\n",
+        r##"{
+    "theme": {
+        "name": "X",
+    },
+    "colors": {
+        "window-bg": "#111111",
+        "view-bg": "#222222",
+    },
+    "dark:colors": {
+        "view-bg": "#999999",
+    },
+}
+"##,
     );
     let _ = e.update(Msg::Variant(Variant::Base));
     assert_eq!(e.copy_from_base(), 0, "nothing to copy into the base");
     let _ = e.update(Msg::Variant(Variant::Dark));
     let _ = e.update(Msg::CopyFromBase);
     let out = e.generate();
-    assert!(
-        out.contains("[dark:colors]\nwindow-bg=#111111\nview-bg=#999999\n"),
-        "{out}"
-    );
-    assert!(!out.contains("[dark:theme]"), "the identity is not copied");
+    assert!(has_section(&out, "dark:colors"), "{out}");
+    assert_eq!(tok_in(&out, "dark:colors", "window-bg").as_deref(), Some("#111111"), "{out}");
+    assert_eq!(tok_in(&out, "dark:colors", "view-bg").as_deref(), Some("#999999"), "{out}");
+    assert!(!has_section(&out, "dark:theme"), "the identity is not copied");
     assert!(e.status.contains("Copied 1"), "{}", e.status);
 }
 
@@ -948,7 +1167,7 @@ fn a_gradient_is_edited_by_angle_stops_and_colors() {
     );
     let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Start));
     assert!(
-        e.generate().contains(&format!("{k}=linear-gradient(90deg")),
+        tok(&e.generate(), &k).is_some_and(|t| t.starts_with("linear-gradient(90deg")),
         "{}",
         e.generate()
     );
@@ -958,12 +1177,12 @@ fn a_gradient_is_edited_by_angle_stops_and_colors() {
         GradEdit::Angle("45".into()),
     ));
     assert!(
-        e.generate().contains(&format!("{k}=linear-gradient(45deg")),
+        tok(&e.generate(), &k).is_some_and(|t| t.starts_with("linear-gradient(45deg")),
         "{}",
         e.generate()
     );
     let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Add));
-    let g = iad::theme_config::Gradient::parse(&e.values[&(s.clone(), k.clone())]).unwrap();
+    let g = gradient_of(&e.values[&(s.clone(), k.clone())]);
     assert_eq!(g.stops.len(), 3);
     let _ = e.update(Msg::Gradient(
         s.clone(),
@@ -971,13 +1190,12 @@ fn a_gradient_is_edited_by_angle_stops_and_colors() {
         GradEdit::Color(0, "#ff0000".into()),
     ));
     let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Remove(1)));
-    let g = iad::theme_config::Gradient::parse(&e.values[&(s.clone(), k.clone())]).unwrap();
+    let g = gradient_of(&e.values[&(s.clone(), k.clone())]);
     assert_eq!(g.stops.len(), 2);
     assert_eq!(g.stops[0].1, iced::Color::from_rgb(1.0, 0.0, 0.0));
     let _ = e.update(Msg::Gradient(s.clone(), k.clone(), GradEdit::Remove(0)));
     assert_eq!(
-        iad::theme_config::Gradient::parse(&e.values[&(s, k)])
-            .unwrap()
+        gradient_of(&e.values[&(s, k)])
             .stops
             .len(),
         2,
@@ -1034,15 +1252,13 @@ fn the_bundled_themes_are_valid_and_match_the_themes_directory() {
         assert_eq!(
             read(
                 &PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../themes"))
-                    .join(format!("{key}.conf"))
+                    .join(format!("{key}.ron"))
             ),
             text
         );
-        let parsed = iad::config::parse_keyfile(text);
+        let parsed = iad::theme_config::Document::parse(text).unwrap();
         assert_eq!(
-            parsed
-                .get(&("theme".to_string(), "key".to_string()))
-                .map(String::as_str),
+            parsed.text("theme", "key"),
             Some(key),
             "the file's own key names it"
         );
@@ -1063,7 +1279,7 @@ fn opening_a_bundled_theme_gives_an_unsaved_copy_that_never_writes_the_bundle() 
     e.theme_dirs = vec![d.join("data")];
     let _ = e.update(Msg::PickBundled("terminal"));
     assert!(e.path.is_none() && e.source == Some("terminal") && !e.dirty());
-    assert!(e.generate().contains("name=Terminal"));
+    assert!((tok(&e.generate(), "name").as_deref() == Some("Terminal")));
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "9".into()));
     assert!(e.dirty());
     // Switching to another bundled theme asks first, then discards.
@@ -1072,12 +1288,12 @@ fn opening_a_bundled_theme_gives_an_unsaved_copy_that_never_writes_the_bundle() 
     let _ = e.update(Msg::PickBundled("cosmic"));
     assert_eq!(e.source, Some("cosmic"));
     // Save as gives it a file of its own and forgets the bundle.
-    assert!(e.save_to(d.join("mine.conf")));
-    assert!(e.source.is_none() && e.path == Some(d.join("mine.conf")));
-    assert!(read(&d.join("mine.conf")).contains("name=COSMIC"));
+    assert!(e.save_to(d.join("mine.ron")));
+    assert!(e.source.is_none() && e.path == Some(d.join("mine.ron")));
+    assert!(tok(&read(&d.join("mine.ron")), "name").is_some_and(|n| n.contains("COSMIC")));
     assert_eq!(
         crate::bundled::text("cosmic").unwrap(),
-        include_str!("../../themes/cosmic.conf")
+        include_str!("../../themes/cosmic.ron")
     );
     let _ = std::fs::remove_dir_all(d);
 }
@@ -1086,14 +1302,20 @@ fn opening_a_bundled_theme_gives_an_unsaved_copy_that_never_writes_the_bundle() 
 fn the_global_theme_saves_first_instead_of_refusing() {
     let d = temp_dir("global-dirty");
     let data = d.join("data");
-    let f = d.join("t.conf");
-    std::fs::write(&f, "[theme]\nname=T\nkey=t\n").unwrap();
+    let f = d.join("t.ron");
+    std::fs::write(&f, r##"{
+    "theme": {
+        "name": "T",
+        "key": "t",
+    },
+}
+"##).unwrap();
     let mut e = editor();
     e.theme_dirs = vec![data.clone()];
     // Untitled: Save as opens, and nothing is linked yet.
     assert!(e.update(Msg::SetGlobal).units() > 0, "Save as opens");
     assert_eq!(e.after_save, Some(AfterSave::Global));
-    assert!(!data.join("default.conf").exists());
+    assert!(!data.join("default.ron").exists());
     // Cancelling the dialog forgets the plan.
     let _ = e.update(Msg::SavedAs(None));
     assert_eq!(e.after_save, None);
@@ -1112,7 +1334,7 @@ fn the_global_theme_saves_first_instead_of_refusing() {
     assert!(e.dirty());
     let _ = e.update(Msg::SetGlobal);
     assert!(!e.dirty() && e.is_global(), "{}", e.status);
-    assert!(read(&f).contains("radius-m=7"));
+    assert!((tok(&read(&f), "radius-m").as_deref() == Some("7")));
     assert_eq!(default_target(&data), Some(canon(&f)));
     // A bundled theme that was edited has no file either: Save as first.
     let _ = e.update(Msg::PickBundled("terminal"));
@@ -1152,8 +1374,13 @@ fn the_gallery_starts_with_the_unsaved_values_in_a_temp_file_and_restarts() {
     )
     .unwrap();
     std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let f = d.join("t.conf");
-    std::fs::write(&f, "[metrics]\nradius-m=1\n").unwrap();
+    let f = d.join("t.ron");
+    std::fs::write(&f, r##"{
+    "metrics": {
+        "radius-m": 1,
+    },
+}
+"##).unwrap();
     let mut e = editor();
     e.exe = Some(exe);
     e.load(f.clone());
@@ -1169,12 +1396,18 @@ fn the_gallery_starts_with_the_unsaved_values_in_a_temp_file_and_restarts() {
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     assert!(
-        seen.starts_with("gallery\n") && seen.contains("radius-m=7"),
+        seen.starts_with("gallery\n")
+            && tok(seen.split_once("scheme=").map_or("", |(_, rest)| rest.split_once('\n').map_or("", |(_, t)| t)), "radius-m").as_deref() == Some("7"),
         "{seen}"
     );
     assert_eq!(
         read(&f),
-        "[metrics]\nradius-m=1\n",
+        r##"{
+    "metrics": {
+        "radius-m": 1,
+    },
+}
+"##,
         "the open file is untouched"
     );
     // The chosen scheme reaches the new gallery, and only it.
@@ -1217,7 +1450,7 @@ fn dirty_is_cached_for_the_values_and_follows_every_change() {
     assert!(!e.dirty(), "undo back to the saved text is clean again");
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
     let d = temp_dir("dirty-cache");
-    assert!(e.save_to(d.join("t.conf")));
+    assert!(e.save_to(d.join("t.ron")));
     assert!(!e.dirty(), "saving makes the new text the clean one");
     let _ = std::fs::remove_dir_all(d);
 }
@@ -1283,7 +1516,9 @@ fn block_heights_match_the_real_layout() {
             .collect();
         e.values.insert(
             (grad.section.clone(), grad.key.clone()),
-            format!("linear-gradient(90deg, {})", list.join(", ")),
+            iad::theme_config::Gradient::parse(&format!("linear-gradient(90deg, {})", list.join(", ")))
+                .map(|g| iad::theme_config::Value::Gradient(g).to_ron())
+                .unwrap(),
         );
         e.refresh();
         assert_heights_match(&e, 760.0);
@@ -1305,7 +1540,7 @@ fn block_heights_match_the_real_layout() {
         "bogus:nothing",
     ] {
         for at in &rules {
-            e.values.insert(at.clone(), raw.to_string());
+            e.values.insert(at.clone(), ron::Value::String(raw.to_string()));
         }
         e.refresh();
         assert_heights_match(&e, 760.0);
@@ -1356,22 +1591,32 @@ fn only_the_blocks_near_the_view_are_built_and_the_page_keeps_its_height() {
     assert_eq!(e.built(&blocks, gap), 0..blocks.len());
 }
 
-// ----------------------------------------- every theme is a file; default.conf is a symlink
+// ----------------------------------------- every theme is a file; default.ron is a symlink
 
 #[test]
 fn setting_the_global_theme_points_default_conf_at_the_file_and_replaces_it_atomically() {
     let d = temp_dir("link-global");
     let (data, other) = (d.join("data"), d.join("else"));
     std::fs::create_dir_all(&other).unwrap();
-    let (a, b) = (other.join("a.conf"), other.join("b.conf"));
-    std::fs::write(&a, "[theme]\nname=A\n").unwrap();
-    std::fs::write(&b, "[theme]\nname=B\n").unwrap();
+    let (a, b) = (other.join("a.ron"), other.join("b.ron"));
+    std::fs::write(&a, r##"{
+    "theme": {
+        "name": "A",
+    },
+}
+"##).unwrap();
+    std::fs::write(&b, r##"{
+    "theme": {
+        "name": "B",
+    },
+}
+"##).unwrap();
     assert_eq!(default_target(&data), None);
     let linked = set_default(&data, &a).unwrap();
     assert_eq!(
         linked,
         Linked {
-            link: data.join("default.conf"),
+            link: data.join("default.ron"),
             kept: None
         }
     );
@@ -1389,21 +1634,41 @@ fn a_regular_default_conf_is_kept_as_a_theme_of_its_own_not_overwritten() {
     let d = temp_dir("keep-default");
     let data = d.join("data");
     std::fs::create_dir_all(&data).unwrap();
-    std::fs::write(data.join("default.conf"), "[theme]\nname=Old Look\n").unwrap();
-    let a = d.join("a.conf");
-    std::fs::write(&a, "[theme]\nname=A\n").unwrap();
+    std::fs::write(data.join("default.ron"), r##"{
+    "theme": {
+        "name": "Old Look",
+    },
+}
+"##).unwrap();
+    let a = d.join("a.ron");
+    std::fs::write(&a, r##"{
+    "theme": {
+        "name": "A",
+    },
+}
+"##).unwrap();
     let linked = set_default(&data, &a).unwrap();
-    assert!(is_link(&data.join("default.conf")));
+    assert!(is_link(&data.join("default.ron")));
     assert_eq!(default_target(&data), Some(canon(&a)));
     let kept = linked.kept.unwrap();
-    assert_eq!(kept, data.join("Old_Look.conf"));
-    assert_eq!(read(&kept), "[theme]\nname=Old Look\n");
+    assert_eq!(kept, data.join("Old_Look.ron"));
+    assert_eq!(read(&kept), r##"{
+    "theme": {
+        "name": "Old Look",
+    },
+}
+"##);
     // Again: another regular file in the way gets another name.
-    std::fs::remove_file(data.join("default.conf")).unwrap();
-    std::fs::write(data.join("default.conf"), "[theme]\nname=Old Look\n").unwrap();
+    std::fs::remove_file(data.join("default.ron")).unwrap();
+    std::fs::write(data.join("default.ron"), r##"{
+    "theme": {
+        "name": "Old Look",
+    },
+}
+"##).unwrap();
     assert_eq!(
         set_default(&data, &a).unwrap().kept,
-        Some(data.join("Old_Look-2.conf"))
+        Some(data.join("Old_Look-2.ron"))
     );
     let _ = std::fs::remove_dir_all(d);
 }
@@ -1413,17 +1678,27 @@ fn the_open_regular_default_conf_moves_to_its_own_name_and_becomes_the_target() 
     let d = temp_dir("open-default");
     let data = d.join("data");
     std::fs::create_dir_all(&data).unwrap();
-    let file = data.join("default.conf");
-    std::fs::write(&file, "[theme]\nname=Mine\n").unwrap();
+    let file = data.join("default.ron");
+    std::fs::write(&file, r##"{
+    "theme": {
+        "name": "Mine",
+    },
+}
+"##).unwrap();
     let mut e = editor();
     e.theme_dirs = vec![data.clone()];
     e.load(file.clone());
     let _ = e.update(Msg::SetGlobal);
-    let moved = data.join("Mine.conf");
+    let moved = data.join("Mine.ron");
     assert!(is_link(&file) && default_target(&data) == Some(canon(&moved)));
     assert_eq!(e.path, Some(moved.clone()));
     assert!(e.is_global(), "{}", e.status);
-    assert_eq!(read(&moved), "[theme]\nname=Mine\n");
+    assert_eq!(read(&moved), r##"{
+    "theme": {
+        "name": "Mine",
+    },
+}
+"##);
     let _ = std::fs::remove_dir_all(d);
 }
 
@@ -1431,14 +1706,14 @@ fn the_open_regular_default_conf_moves_to_its_own_name_and_becomes_the_target() 
 fn removing_the_global_theme_removes_the_symlink_and_never_a_theme_file() {
     let d = temp_dir("clear-global");
     assert!(clear_global(&d).is_err());
-    let a = d.join("a.conf");
+    let a = d.join("a.ron");
     std::fs::write(&a, "x").unwrap();
-    symlink(&a, d.join("default.conf")).unwrap();
+    symlink(&a, d.join("default.ron")).unwrap();
     clear_global(&d).unwrap();
-    assert!(!d.join("default.conf").exists() && a.is_file());
-    std::fs::write(d.join("default.conf"), "y").unwrap();
+    assert!(!d.join("default.ron").exists() && a.is_file());
+    std::fs::write(d.join("default.ron"), "y").unwrap();
     assert!(clear_global(&d).unwrap_err().contains("regular file"));
-    assert!(d.join("default.conf").is_file());
+    assert!(d.join("default.ron").is_file());
     let _ = std::fs::remove_dir_all(d);
 }
 
@@ -1453,13 +1728,13 @@ fn a_bundled_theme_is_copied_as_its_own_file_and_linked() {
     let _ = e.update(Msg::SetGlobal);
     assert!(e.is_global(), "{}", e.status);
     assert_eq!(
-        read(&data.join("solarized.conf")),
+        read(&data.join("solarized.ron")),
         crate::bundled::text("solarized").unwrap()
     );
-    assert!(is_link(&data.join("default.conf")));
+    assert!(is_link(&data.join("default.ron")));
     assert_eq!(
         default_target(&data),
-        Some(canon(&data.join("solarized.conf")))
+        Some(canon(&data.join("solarized.ron")))
     );
     // Installed unchanged, it is listed once, as the installed file, marked as the global one.
     let list = list_presets(&[data.clone()], &[], &[]);
@@ -1473,12 +1748,12 @@ fn a_bundled_theme_is_copied_as_its_own_file_and_linked() {
     let _ = e.update(Msg::SetGlobal);
     assert_eq!(
         default_target(&data),
-        Some(canon(&data.join("cosmic.conf")))
+        Some(canon(&data.join("cosmic.ron")))
     );
-    assert!(data.join("solarized.conf").is_file());
+    assert!(data.join("solarized.ron").is_file());
     let _ = e.update(Msg::ClearGlobal);
-    assert!(!e.is_global() && !data.join("default.conf").exists());
-    assert!(data.join("cosmic.conf").is_file() && data.join("solarized.conf").is_file());
+    assert!(!e.is_global() && !data.join("default.ron").exists());
+    assert!(data.join("cosmic.ron").is_file() && data.join("solarized.ron").is_file());
     let _ = std::fs::remove_dir_all(d);
 }
 
@@ -1487,11 +1762,21 @@ fn an_installed_file_with_other_values_is_never_overwritten_by_a_bundled_theme()
     let d = temp_dir("bundled-keep");
     let data = d.join("data");
     std::fs::create_dir_all(&data).unwrap();
-    std::fs::write(data.join("terminal.conf"), "[metrics]\nradius-m=1\n").unwrap();
+    std::fs::write(data.join("terminal.ron"), r##"{
+    "metrics": {
+        "radius-m": 1,
+    },
+}
+"##).unwrap();
     let err = set_global_bundled(&data, "terminal").unwrap_err();
     assert!(err.contains("already exists"), "{err}");
-    assert_eq!(read(&data.join("terminal.conf")), "[metrics]\nradius-m=1\n");
-    assert!(!data.join("default.conf").exists());
+    assert_eq!(read(&data.join("terminal.ron")), r##"{
+    "metrics": {
+        "radius-m": 1,
+    },
+}
+"##);
+    assert!(!data.join("default.ron").exists());
     assert!(set_global_bundled(&data, "nope").is_err());
     let _ = std::fs::remove_dir_all(d);
 }
@@ -1503,17 +1788,27 @@ fn the_list_groups_the_installed_bundled_folder_and_recent_themes() {
     let folder = d.join("folder");
     std::fs::create_dir_all(&data).unwrap();
     std::fs::create_dir_all(&folder).unwrap();
-    std::fs::write(data.join("own.conf"), "[theme]\nname=Own\n").unwrap();
-    std::fs::write(folder.join("mine.conf"), "[theme]\nname=Mine\n").unwrap();
-    std::fs::write(folder.join("plain.conf"), "").unwrap();
-    let far = temp_dir("recent").join("far.conf");
+    std::fs::write(data.join("own.ron"), r##"{
+    "theme": {
+        "name": "Own",
+    },
+}
+"##).unwrap();
+    std::fs::write(folder.join("mine.ron"), r##"{
+    "theme": {
+        "name": "Mine",
+    },
+}
+"##).unwrap();
+    std::fs::write(folder.join("plain.ron"), "").unwrap();
+    let far = temp_dir("recent").join("far.ron");
     std::fs::write(&far, "").unwrap();
     // The global theme lives outside the directory: it is listed as installed, marked.
-    set_default(&data, &folder.join("plain.conf")).unwrap();
+    set_default(&data, &folder.join("plain.ron")).unwrap();
     let list = file_presets(
         &[data.clone()],
         &[folder.clone()],
-        &[far, folder.join("mine.conf"), d.join("gone.conf")],
+        &[far, folder.join("mine.ron"), d.join("gone.ron")],
     );
     let group = |n: &str| list.iter().find(|p| p.name == n).map(|p| p.group);
     assert_eq!(group("Own"), Some("Installed"));
@@ -1533,7 +1828,7 @@ fn there_is_no_registering_in_the_menu_or_on_save_as() {
     let mut e = editor();
     e.theme_dirs = vec![data.clone()];
     let _ = e.update(Msg::Input("metrics".into(), "radius-m".into(), "7".into()));
-    let _ = e.update(Msg::SavedAs(Some(d.join("mine.conf"))));
+    let _ = e.update(Msg::SavedAs(Some(d.join("mine.ron"))));
     assert!(!data.exists(), "Save as writes the file and nothing else");
     let _ = std::fs::remove_dir_all(d);
 }

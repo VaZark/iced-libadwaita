@@ -1,20 +1,20 @@
-.TH IAD\-THEME.CONF 5 "2026-11-03" "iced-adaptive-design 0.1.0" "iced-adaptive-design Manual"
+.TH IAD\-THEME.RON 5 "2026-11-03" "iced-adaptive-design 0.1.0" "iced-adaptive-design Manual"
 .SH NAME
-theme.conf \- the theme files of an iad application and of the toolkit
+theme.ron \- the theme files of an iad application and of the toolkit
 .SH DESCRIPTION
-The desktop configuration (\fBiad\-desktop.conf\fR(5)) is shared by every application. An application that needs its own look (its own colors, paddings and radii, tokens for objects only it has) uses theme files, in the same key\-file format.
+The desktop configuration (\fBiad\-desktop.ron\fR(5)) is shared by every application. An application that needs its own look (its own colors, paddings and radii, tokens for objects only it has) uses theme files, in the same RON format.
 .PP
-Every setting is a \fItoken\fR: a typed value (a color \fI#rrggbb\fR or \fI#rrggbbaa\fR, a number, a bool or text) under a section and a key. A token only takes effect when it is set.
+Every setting is a \fItoken\fR: a typed value (a color string \fI"#rrggbb"\fR or \fI"#rrggbbaa"\fR, a number, a bool, text, or a structure such as a gradient) under a section and a key. A token only takes effect when it is set.
 .SH FILES
 Highest priority first:
 .IP 1. 3
 \fBHardcoded\fR in the application's code (\fBBuilder::hardcode\fR). Extremely discouraged: it cannot be changed without a rebuild, and every one is reported on stderr at startup.
 .IP 2. 3
-The application theme file, \fI$XDG_CONFIG_HOME/<app\-id>/theme.conf\fR. The application declares its tokens and their defaults in a schema.
+The application theme file, \fI$XDG_CONFIG_HOME/<app\-id>/theme.ron\fR. The application declares its tokens and their defaults in a schema.
 .IP 3. 3
-The installed theme file: \fBIAD_THEME\fR=\fI<path>\fR (\fBnone\fR skips the external theme), else \fIdefault.conf\fR in \fI$XDG_DATA_HOME/iad/themes\fR, else in \fIiad/themes\fR of each \fI$XDG_DATA_DIRS\fR entry. The first file found is the only one read. A desktop or distribution installs its look there. The toolkit never writes it.
+The installed theme file: \fBIAD_THEME\fR=\fI<path>\fR (\fBnone\fR skips the external theme), else \fIdefault.ron\fR in \fI$XDG_DATA_HOME/iad/themes\fR, else in \fIiad/themes\fR of each \fI$XDG_DATA_DIRS\fR entry. The first file found is the only one read. A desktop or distribution installs its look there. The toolkit never writes it.
 .IP 4. 3
-The bundled base supplied by \fBBuilder::base_theme\fR or \fBConfig::load_with_base_theme\fR. Applications should bundle at least one theme file; \fIlibadwaita.conf\fR is recommended. An unset \fBIAD_THEME\fR or \fBIAD_THEME=none\fR never disables this explicit base. The selected external theme overlays it, with invalid values falling back to the base.
+The bundled base supplied by \fBBuilder::base_theme\fR or \fBConfig::load_with_base_theme\fR. Applications should bundle at least one theme file; \fIlibadwaita.ron\fR is recommended. An unset \fBIAD_THEME\fR or \fBIAD_THEME=none\fR never disables this explicit base. The selected external theme overlays it, with invalid values falling back to the base.
 .PP
 Below these, a token is its declared default. The toolkit has no built\-in look: without a bundled base or selected theme file it draws like HTML without CSS (black on white, square, thin grey rules, no shadows).
 .PP
@@ -28,9 +28,9 @@ Numbers in px: \fBspace\-xs\fR to \fBspace\-xl\fR, \fBradius\-s\fR, \fBradius\-m
 \fBtext\-scale\fR multiplies every text size; \fBbase\-size\fR is the body size in px before the scale.
 .SS [shadows]
 \fBcard\fR, \fBpopover\fR, \fBdialog\fR, \fBosd\fR: CSS box\-shadow lists, e.g. \fI0 1px 3px 1px rgba(0, 0, 6, 0.07)\fR.
-.SS [windows]
+.SS [window-decorations]
 \fBbutton\-layout\fR (\fIstart:end\fR, e.g. \fI:minimize,maximize,close\fR), \fBbutton\-size\fR (px), \fBbutton\-radius\fR (percent of the size, 50% is a circle), \fBtitlebar\-double\-click\fR, \fBtitlebar\-middle\-click\fR and \fBtitlebar\-right\-click\fR (\fBtoggle\-maximize\fR, \fBmenu\fR, \fBminimize\fR, \fBlower\fR, \fBnone\fR).
 .SS Other sections
 Whatever the application declares for its own objects.
 .SH SEE ALSO
-\fBiad\-desktop.conf\fR(5), \fBiad\fR(7)
+\fBiad\-desktop.ron\fR(5), \fBiad\fR(7)
