@@ -726,7 +726,7 @@ mod tests {
         for theme in [
             Theme::light(),
             Theme::dark(),
-            Theme::light().with_tint(Some(Color::from_rgba(0.0, 0.0, 0.0, 0.9))),
+            Theme::light().with_auto_contrast(true).with_tint(Some(Color::from_rgba(0.0, 0.0, 0.0, 0.9))),
         ] {
             for status in [
                 Status::Active,

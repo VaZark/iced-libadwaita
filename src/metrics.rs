@@ -25,7 +25,8 @@ pub enum CollapseBehavior {
     Flex,
 }
 
-/// Layout tokens. Defaults follow libadwaita's stylesheet (logical px).
+/// Layout tokens (logical px). The defaults are the bare baseline; `themes/libadwaita.conf` has
+/// libadwaita's.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Metrics {
     // Spacing scale (use for `spacing(..)` / ad-hoc padding).
@@ -55,7 +56,22 @@ pub struct Metrics {
     /// Pill buttons, circular widgets.
     pub radius_pill: f32,
 
+    // Composed-widget rhythm.
+    /// The gap between the parts of a composed widget (a picker's swatches and sections, a
+    /// legend, the blocks of rich text).
+    pub gap: f32,
+    /// The padding around a composed widget's panel.
+    pub inset: f32,
+    /// Padding of a code block.
+    pub code_padding: f32,
+    /// Horizontal padding of inline code.
+    pub inline_padding_x: f32,
+    /// Vertical padding of an empty state in a scrolling view.
+    pub empty_padding_y: f32,
+
     // Controls.
+    /// Compact buttons (dialog and menu action buttons).
+    pub small_button_padding: Padding,
     pub button_padding: Padding,
     pub button_min_height: f32,
     pub pill_padding: Padding,
@@ -127,74 +143,82 @@ pub struct Metrics {
 }
 
 impl Default for Metrics {
+    /// The bare baseline: small and square, like unstyled HTML. A theme file sets the look.
     fn default() -> Self {
         Self {
-            space_xxs: 2.0,
-            space_xs: 4.0,
-            space_s: 6.0,
-            space_m: 12.0,
-            space_l: 18.0,
-            space_xl: 24.0,
-            space_xxl: 36.0,
+            space_xxs: 1.0,
+            space_xs: 2.0,
+            space_s: 4.0,
+            space_m: 8.0,
+            space_l: 12.0,
+            space_xl: 16.0,
+            space_xxl: 24.0,
 
-            radius_s: 4.0,
-            radius_m: 9.0,
-            radius_l: 12.0,
-            radius_menu: 9.0,
-            radius_popover: 15.0,
-            radius_toast: 24.0,
-            radius_window: 15.0,
-            radius_pill: 999.0,
+            radius_s: 0.0,
+            radius_m: 0.0,
+            radius_l: 0.0,
+            radius_menu: 0.0,
+            radius_popover: 0.0,
+            radius_toast: 0.0,
+            radius_window: 0.0,
+            radius_pill: 0.0,
 
-            button_padding: Padding::from([5.0, 10.0]),
-            button_min_height: 34.0,
-            pill_padding: Padding::from([10.0, 32.0]),
-            entry_padding: Padding::from([6.0, 9.0]),
-            entry_min_height: 34.0,
+            gap: 8.0,
+            inset: 8.0,
+            code_padding: 6.0,
+            inline_padding_x: 2.0,
+            empty_padding_y: 32.0,
+
+            small_button_padding: Padding::from([1.0, 6.0]),
+            button_padding: Padding::from([1.0, 6.0]),
+            button_min_height: 21.0,
+            pill_padding: Padding::from([1.0, 6.0]),
+            entry_padding: Padding::from([1.0, 2.0]),
+            entry_min_height: 21.0,
             border_width: 1.0,
             focus_ring_width: 2.0,
             icon_size: 16.0,
-            switch_size: 26.0,
-            checkbox_size: 20.0,
-            scrollbar_width: 8.0,
-            scrollbar_slider_width: 4.0,
-            scrollbar_margin: 2.0,
-            progress_height: 8.0,
+            switch_size: 20.0,
+            checkbox_size: 13.0,
+            scrollbar_width: 12.0,
+            scrollbar_slider_width: 12.0,
+            scrollbar_margin: 0.0,
+            progress_height: 10.0,
 
-            row_padding: Padding::from([6.0, 12.0]),
-            row_min_height: 50.0,
-            row_spacing: 12.0,
+            row_padding: Padding::from([4.0, 8.0]),
+            row_min_height: 28.0,
+            row_spacing: 8.0,
             row_wrap_basis: 128.0,
             expander_indent: 24.0,
             row_collapse: CollapseBehavior::Stacked,
             list_spacing: 0.0,
 
-            headerbar_height: 47.0,
-            headerbar_padding: Padding::from([0.0, 6.0]),
-            toolbar_spacing: 6.0,
-            card_padding: Padding::from(12.0),
-            dialog_padding: Padding::from(24.0),
+            headerbar_height: 32.0,
+            headerbar_padding: Padding::from([0.0, 4.0]),
+            toolbar_spacing: 4.0,
+            card_padding: Padding::from(8.0),
+            dialog_padding: Padding::from(16.0),
             dialog_width: 360.0,
-            popover_padding: 8.0,
+            popover_padding: 4.0,
 
-            page_padding: Padding::from([24.0, 12.0]),
-            group_spacing: 24.0,
+            page_padding: Padding::from([8.0, 8.0]),
+            group_spacing: 16.0,
             clamp_maximum: 600.0,
-            sidebar_width: 240.0,
-            sidebar_padding: 6.0,
-            sidebar_spacing: 2.0,
-            sidebar_row_height: 36.0,
-            sidebar_row_padding: 12.0,
+            sidebar_width: 200.0,
+            sidebar_padding: 4.0,
+            sidebar_spacing: 0.0,
+            sidebar_row_height: 24.0,
+            sidebar_row_padding: 8.0,
 
-            gutter: 16.0,
-            band_air: 8.0,
+            gutter: 8.0,
+            band_air: 4.0,
         }
     }
 }
 
 impl Metrics {
     /// The metrics the desktop config implies (density, row behavior). Widgets use this for
-    /// their build-time sizes; `Metrics::default()` stays libadwaita's pure values.
+    /// their build-time sizes; `Metrics::default()` stays the bare baseline.
     pub fn desktop() -> Self {
         crate::config::current().metrics()
     }
@@ -224,29 +248,36 @@ impl Metrics {
         self
     }
 
-    /// A denser variant (roughly GNOME's "compact" / `.compact` toolbars).
+    /// A denser variant: heights, paddings and page spacing shrink to 80%.
     pub fn compact() -> Self {
+        const K: f32 = 0.8;
         let d = Self::default();
+        let pad = |p: Padding| Padding {
+            top: p.top * K,
+            right: p.right * K,
+            bottom: p.bottom * K,
+            left: p.left * K,
+        };
         Self {
-            button_padding: Padding::from([2.0, 8.0]),
-            button_min_height: 28.0,
-            entry_padding: Padding::from([4.0, 8.0]),
-            entry_min_height: 28.0,
-            row_padding: Padding::from([4.0, 10.0]),
-            row_min_height: 40.0,
-            headerbar_height: 38.0,
-            group_spacing: 16.0,
-            sidebar_row_height: 30.0,
-            page_padding: Padding::from([16.0, 10.0]),
-            gutter: 12.0,
-            band_air: 6.0,
+            small_button_padding: pad(d.small_button_padding),
+            button_padding: pad(d.button_padding),
+            button_min_height: d.button_min_height * K,
+            entry_padding: pad(d.entry_padding),
+            entry_min_height: d.entry_min_height * K,
+            row_padding: pad(d.row_padding),
+            row_min_height: d.row_min_height * K,
+            headerbar_height: d.headerbar_height * K,
+            group_spacing: d.group_spacing * K,
+            sidebar_row_height: d.sidebar_row_height * K,
+            page_padding: pad(d.page_padding),
+            gutter: d.gutter * K,
+            band_air: d.band_air * K,
             ..d
         }
     }
 }
 
-/// Text sizes, expressed as in libadwaita's `.title-1` … `.caption` classes
-/// (percent of the base size). `base` is the body size in logical px.
+/// Text sizes (`.title-1` … `.caption`) as multiples of the base size. `base` is the body size in logical px.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Typography {
     pub base: f32,
@@ -259,29 +290,42 @@ pub struct Typography {
     pub caption_heading: f32,
     pub caption: f32,
     pub monospace: f32,
+    /// Labels, chips, tags and badges.
+    pub small: f32,
 }
 
 impl Typography {
+    /// The text sizes the desktop config and the installed theme imply (`[typography]`, the text
+    /// scale), for widgets that size their text when they are built. A [`Theme`](crate::Theme)
+    /// built by [`from_config`](crate::Theme::from_config) carries the same.
+    pub fn desktop() -> Self {
+        let scale = crate::config::current().text_scale;
+        crate::theme_config::current()
+            .typography()
+            .unwrap_or_else(|| Self::with_base(Self::default().base * scale))
+    }
+
     pub fn with_base(base: f32) -> Self {
         Self {
             base,
-            title_1: base * 1.81,
-            title_2: base * 1.36,
-            title_3: base * 1.20,
-            title_4: base * 1.10,
+            title_1: base * 2.0,
+            title_2: base * 1.5,
+            title_3: base * 1.17,
+            title_4: base,
             heading: base,
             body: base,
-            caption_heading: base * 0.82,
-            caption: base * 0.82,
+            caption_heading: base * 0.83,
+            caption: base * 0.83,
             monospace: base,
+            small: base * 0.886,
         }
     }
 }
 
 impl Default for Typography {
-    /// 11pt ≈ 14.67px, GNOME's default interface font size.
+    /// 16px, a browser's default.
     fn default() -> Self {
-        Self::with_base(14.67)
+        Self::with_base(16.0)
     }
 }
 
@@ -290,8 +334,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn window_radius_is_15_and_capped() {
-        assert_eq!(Metrics::default().radius_window, 15.0);
+    fn window_radius_is_square_by_default_and_clamped_when_asked() {
+        assert_eq!(Metrics::default().radius_window, 0.0);
         let m = Metrics {
             radius_window: 40.0,
             ..Metrics::default()

@@ -145,6 +145,10 @@ pub enum Icon {
     FileShow,
     /// A chain: a link to something elsewhere.
     Link,
+    /// A disk: save the current document.
+    Save,
+    /// A disk with a pencil: save under a new name.
+    SaveAs,
 }
 
 impl Icon {
@@ -228,6 +232,8 @@ impl Icon {
         Icon::FileAdd,
         Icon::FileShow,
         Icon::Link,
+        Icon::Save,
+        Icon::SaveAs,
     ];
 }
 
@@ -313,6 +319,8 @@ impl Icon {
             Self::FileAdd => "document-new",
             Self::FileShow => "system-file-manager",
             Self::Link => "insert-link",
+            Self::Save => "document-save",
+            Self::SaveAs => "document-save-as",
         }
     }
     /// Symbolic system identifier, retained for compatibility.
@@ -396,6 +404,8 @@ impl Icon {
             Self::FileAdd => "document-new-symbolic",
             Self::FileShow => "system-file-manager-symbolic",
             Self::Link => "insert-link-symbolic",
+            Self::Save => "document-save-symbolic",
+            Self::SaveAs => "document-save-as-symbolic",
         })
     }
     /// Resolve this symbolic icon at the requested logical size and scale.
@@ -439,27 +449,111 @@ pub struct IconChoice {
 /// the same on every machine and take any colour. Icons that come from the system's icon theme
 /// are left out: they differ between themes and some cannot be tinted.
 pub const ICON_CHOICES: &[IconChoice] = &[
-    IconChoice { name: "folder", label: "Folder", icon: Icon::Folder },
-    IconChoice { name: "note", label: "Note", icon: Icon::Note },
-    IconChoice { name: "heart", label: "Heart", icon: Icon::Heart },
-    IconChoice { name: "moon", label: "Moon", icon: Icon::Moon },
-    IconChoice { name: "tags", label: "Tags", icon: Icon::Tags },
-    IconChoice { name: "pin", label: "Pin", icon: Icon::Pin },
-    IconChoice { name: "archive", label: "Archive", icon: Icon::Archive },
-    IconChoice { name: "eye", label: "Eye", icon: Icon::Eye },
-    IconChoice { name: "check", label: "Done", icon: Icon::CheckCircle },
-    IconChoice { name: "kanban", label: "Board", icon: Icon::Kanban },
-    IconChoice { name: "grid", label: "Grid", icon: Icon::CardGrid },
-    IconChoice { name: "list", label: "List", icon: Icon::FlatList },
-    IconChoice { name: "rows", label: "Rows", icon: Icon::CompactRows },
-    IconChoice { name: "palette", label: "Palette", icon: Icon::Palette },
-    IconChoice { name: "calendar", label: "Calendar", icon: Icon::Calendar },
-    IconChoice { name: "play", label: "Play", icon: Icon::Play },
-    IconChoice { name: "volume", label: "Sound", icon: Icon::Volume },
-    IconChoice { name: "settings", label: "Settings", icon: Icon::Settings },
-    IconChoice { name: "filter", label: "Filter", icon: Icon::Filter },
-    IconChoice { name: "sort", label: "Sort", icon: Icon::Sort },
-    IconChoice { name: "info", label: "Info", icon: Icon::DialogInformation },
+    IconChoice {
+        name: "folder",
+        label: "Folder",
+        icon: Icon::Folder,
+    },
+    IconChoice {
+        name: "note",
+        label: "Note",
+        icon: Icon::Note,
+    },
+    IconChoice {
+        name: "heart",
+        label: "Heart",
+        icon: Icon::Heart,
+    },
+    IconChoice {
+        name: "moon",
+        label: "Moon",
+        icon: Icon::Moon,
+    },
+    IconChoice {
+        name: "tags",
+        label: "Tags",
+        icon: Icon::Tags,
+    },
+    IconChoice {
+        name: "pin",
+        label: "Pin",
+        icon: Icon::Pin,
+    },
+    IconChoice {
+        name: "archive",
+        label: "Archive",
+        icon: Icon::Archive,
+    },
+    IconChoice {
+        name: "eye",
+        label: "Eye",
+        icon: Icon::Eye,
+    },
+    IconChoice {
+        name: "check",
+        label: "Done",
+        icon: Icon::CheckCircle,
+    },
+    IconChoice {
+        name: "kanban",
+        label: "Board",
+        icon: Icon::Kanban,
+    },
+    IconChoice {
+        name: "grid",
+        label: "Grid",
+        icon: Icon::CardGrid,
+    },
+    IconChoice {
+        name: "list",
+        label: "List",
+        icon: Icon::FlatList,
+    },
+    IconChoice {
+        name: "rows",
+        label: "Rows",
+        icon: Icon::CompactRows,
+    },
+    IconChoice {
+        name: "palette",
+        label: "Palette",
+        icon: Icon::Palette,
+    },
+    IconChoice {
+        name: "calendar",
+        label: "Calendar",
+        icon: Icon::Calendar,
+    },
+    IconChoice {
+        name: "play",
+        label: "Play",
+        icon: Icon::Play,
+    },
+    IconChoice {
+        name: "volume",
+        label: "Sound",
+        icon: Icon::Volume,
+    },
+    IconChoice {
+        name: "settings",
+        label: "Settings",
+        icon: Icon::Settings,
+    },
+    IconChoice {
+        name: "filter",
+        label: "Filter",
+        icon: Icon::Filter,
+    },
+    IconChoice {
+        name: "sort",
+        label: "Sort",
+        icon: Icon::Sort,
+    },
+    IconChoice {
+        name: "info",
+        label: "Info",
+        icon: Icon::DialogInformation,
+    },
 ];
 
 impl Icon {
@@ -508,9 +602,7 @@ impl From<Icon> for IconSource {
         if let Some(source) = icon_overrides().read().unwrap().get(&icon).cloned() {
             return source;
         }
-        icon.bundled_source()
-            .map(Self::svg)
-            .unwrap_or(Self::Icon(icon))
+        Self::svg(icon.bundled_source())
     }
 }
 impl From<svg::Handle> for IconSource {
@@ -552,7 +644,11 @@ mod tests {
         names.sort();
         names.dedup();
         assert_eq!(names.len(), ICON_CHOICES.len(), "names are unique");
-        assert!(ICON_CHOICES.iter().all(|c| c.icon.bundled_source().is_some()));
+        assert!(
+            ICON_CHOICES
+                .iter()
+                .all(|c| !c.icon.bundled_source().is_empty())
+        );
         // None, and a name from a newer version, are the folder.
         assert_eq!(Icon::from_choice(None), Icon::Folder);
         assert_eq!(Icon::from_choice(Some("not-yet")), Icon::Folder);
@@ -569,10 +665,7 @@ mod tests {
         set_icon_override(icon, Some(svg.clone().into()));
         assert!(matches!(IconSource::from(icon), IconSource::Svg(handle) if handle == svg));
         set_icon_override(icon, None);
-        assert!(matches!(
-            IconSource::from(icon),
-            IconSource::Icon(Icon::Compact)
-        ));
+        assert!(matches!(IconSource::from(icon), IconSource::Svg(_)));
     }
     #[test]
     fn every_variant_has_a_unique_mapping() {

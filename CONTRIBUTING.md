@@ -6,7 +6,7 @@ Stable Rust (edition 2024) and the system libraries iced needs on Linux (Wayland
 
 ```text
 cargo build                       # the library only
-cargo build --workspace           # library, gallery, xtask
+cargo build --workspace           # library, gallery, theme editor, toys, workspace tools
 cargo test
 cargo clippy --all-targets --workspace
 cargo xtask man                   # build man pages in target/man/
@@ -14,20 +14,27 @@ cargo xtask man                   # build man pages in target/man/
 
 `cargo test` and `cargo clippy` must be clean before you commit.
 
+## Updating iced
+
+Every iced-family dependency update, including patch and lockfile-only changes, requires the [limitation register's upgrade checks](ICED_LIMITATIONS.md#required-iced-update-procedure). Rerun targeted regressions, workspace checks and the listed live gallery/toy scenarios. Record exact locked versions, actual renderer/environment, per-entry results and evidence in `ICED_LIMITATIONS.md`; explicitly carry blocked or unperformed checks as pending. Compilation is not visual or interaction acceptance, and release notes alone do not justify removing a workaround.
+
 ## Formatting
 
 Local pre-commit hooks: dprint formats JSON, Markdown and TOML; `cargo fmt --all` formats Rust. Install with `pre-commit install`. Run everything with `pre-commit run --all-files`.
 
 ## Repo layout
 
-| Path                   | Holds                                                                                          |
-| ---------------------- | ---------------------------------------------------------------------------------------------- |
+| Path                   | Holds                                                                                                                                                                   |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/`                 | the library, in layers (see DESIGN.md): `layouts/`, `primitives/` (headless rules), `binds/`, `components/`, `metas/`, `widgets/`, `styles/`, `windows/`, theme, config |
-| `gallery/`             | the gallery, a separate crate                                                                  |
-| `xtask/`               | repository tasks                                                                               |
-| `docs/man/`            | handwritten overview and config man sources; all built pages go in `target/man/` |
-| `docs/lib/`            | user guide. Published with the crate and `docs/man/`                                                |
-| `docs/hig-inferences/` | design rationale. Not published (`include` in `Cargo.toml`)                                    |
+| `gallery/`             | the gallery, a separate crate                                                                                                                                           |
+| `theme-editor/`        | section-first theme editor, theme picker, registration and external gallery/toy launches                                                                                |
+| `theme-toys/`          | four reference scenes: `win95`, `winxp`, `win7`, `mate`; independent validated bases and optional overlays                                                              |
+| `themes/`              | toolkit theme files: libadwaita, COSMIC, `win95`, `winxp`, `win7`, `mate` (`gnome2` compatibility alias) and additional palettes                                        |
+| `xtask/`               | repository tasks                                                                                                                                                        |
+| `docs/man/`            | handwritten overview and config man sources; all built pages go in `target/man/`                                                                                        |
+| `docs/lib/`            | user guide. Published with the crate and `docs/man/`                                                                                                                    |
+| `docs/hig-inferences/` | design rationale. Not published (`include` in `Cargo.toml`)                                                                                                             |
 
 ## Man pages
 
@@ -41,6 +48,38 @@ A component is an item exported from the `mod.rs` of one of those layers:
 Builder methods on `self` are its properties. A method that takes an element is a slot. `on_*` is an event.
 
 Write the doc comment. The page follows.
+
+## Theme files
+
+The library has no built-in look: with no theme file an app is drawn like HTML without CSS (black on white, square, no shadows). The look is a theme file in the key-file format of [docs/lib/theme-config.md](docs/lib/theme-config.md). `themes/` has the shipped ones. To try one, point `IAD_THEME` at it:
+
+```text
+IAD_THEME=themes/libadwaita.conf cargo run -p iced-adaptive-design-gallery
+IAD_THEME=themes/cosmic.conf      cargo run -p iced-adaptive-design-gallery
+IAD_THEME=none                   cargo run -p iced-adaptive-design-gallery   # the bare look
+```
+
+Without `IAD_THEME`, the first `default.conf` found in `$XDG_DATA_HOME/iad/themes/` (`~/.local/share/iad/themes/`), then in `iad/themes/` of each `$XDG_DATA_DIRS` entry, applies. To make a look your default on this machine:
+
+```text
+mkdir -p ~/.local/share/iad/themes
+ln -s "$PWD/themes/cosmic.conf" ~/.local/share/iad/themes/default.conf
+```
+
+For the standard theme loader, an unreadable `IAD_THEME` path prints a warning and falls through to those directories. `Inheritance::OptOut` skips automatic theme discovery; apps can still supply explicit validated theme layers. The toys use this for their own bundled bases plus an optional `IAD_THEME` overlay; see [theme toys](theme-toys/README.md#theme-resolution).
+
+### Theme editor
+
+Run `cargo run -p iced-adaptive-design-theme-editor -- [FILE]`.
+
+- The **primary sidebar selects token sections**. **All** groups every token on one searchable page. The selected theme in the header opens a **picker dialog** with registered files, added folders and recent files; long names and paths wrap within bounded widths.
+- **Modified only** filters unsaved changes. **Overrides only** shows explicit entries in the active Light/Dark scheme, not inherited Base values; it is unavailable for Base. Typed controls edit values, **Reset** removes an explicit entry, and Light/Dark edits write `[light:*]` / `[dark:*]` sections. **Copy from Base** fills the active scheme from Base. **Ctrl+Z** and **Ctrl+Shift+Z** undo and redo.
+- **Save** updates the current file, following symlinks; an untitled file opens Save as. **Save as** writes a copy, makes it the current file for subsequent saves, and auto-registers it in `$XDG_DATA_HOME/iad/themes/` (normally with a `<name>.conf` symlink, unnecessary if already registered or saved there). A registration failure is reported separately: the saved copy remains current. **Register**, **Unregister** and **Use as the default theme** are available in the main menu.
+- There is **no embedded live preview**. **Try it out** uses a split launch action: run the selected target or choose Gallery, `win95`, `winxp`, `win7` or `mate`. Launch appearance **System / Light / Dark** is independent of the scheme being edited; System removes inherited `TOYS_SCHEME` and `GALLERY_SCHEME` overrides. Current values, including unsaved edits, go to a separate temporary file through `IAD_THEME`; relaunching a target replaces its previous process without saving the open theme. `IAD_GALLERY` / `IAD_TOYS` select executables, otherwise the editor uses sibling binaries or workspace `cargo run`.
+
+The editor remembers the open file, folders, recents, section and variant in `~/.config/iad-theme-editor/state.conf`. See the [editor guide](theme-editor/README.md) and [toy resolution and validation limits](theme-toys/README.md).
+
+A new toolkit token goes in `Schema::toolkit()` (`src/theme_config.rs`) with a type and bounds. Prefer typed numbers (`Length`, `Percentage`) and enum strings. Add its intended libadwaita value to `themes/libadwaita.conf`, run schema tests, then inspect relevant gallery states; compilation alone does not establish visual acceptance.
 
 ## The gallery
 
@@ -58,6 +97,7 @@ GALLERY_MENU=page|dropdown
 GALLERY_ANIM=switch|drawer|reveal|dialog|toast|carousel|page|push|breakpoint
 GALLERY_ANIM=keys                 wait 6 s, then capture: send keys meanwhile
 GALLERY_ANIM=theme                capture system appearance, app override, then system again
+IAD_THEME=path.conf               draw with this theme file (IAD_THEME=none: the bare look)
 GALLERY_ANIM=appshell             open the AppShell window (GALLERY_SHELL_SIZE=WxH)
 GALLERY_ANIM=shell-back|embedded-back
 APPSHELL_PIN=mobile|tablet|desktop
@@ -75,7 +115,7 @@ Screenshots can be stale on slow debug builds. Wait before calling a page broken
 
 ## Working on a component
 
-1. Read its page in `docs/hig-inferences/widgets/` and its **iced mapping**.
+1. Read [ICED_LIMITATIONS.md](ICED_LIMITATIONS.md), then its page in `docs/hig-inferences/widgets/` and its **iced mapping**. Reuse documented workarounds and record newly discovered iced constraints or integration traps in the register.
 2. Give it the shape in [docs/lib/components.md](docs/lib/components.md).
 3. Write its doc comments, then `cargo xtask man`.
 4. Show its states, including disabled, in the gallery.
@@ -87,7 +127,7 @@ Screenshots can be stale on slow debug builds. Wait before calling a page broken
 Not done until it works end to end. Add it to the library, never only to an example. In the same change:
 
 - A `///` comment on the method, then `cargo xtask man`.
-- A control in the component's playground (`gallery/src/plays.rs`): the `specs` entry, its use in `build`, its line in the generated code.
+- A control in the component's playground (`gallery/src/plays.rs`): the `specs` entry and its use in `build`.
 - A line in its `docs/hig-inferences/widgets/` page.
 - If a desktop config key backs the default: `docs/lib/desktop-config.md`, `docs/lib/desktop.conf.example`, `docs/man/iad-desktop.conf.5`.
 

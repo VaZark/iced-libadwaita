@@ -1,5 +1,5 @@
 //! The Reorderable list and Meta parent pages, each a playground (see `playground.rs`): one
-//! live component, a panel of controls for its properties and the code that builds it.
+//! live component, a panel of controls for its properties.
 //!
 //! The meta parent's children: the **reorderable list** (announces both modes), a **hint**
 //! `MetaComponent` (announces `Edit`), a **search** `MetaComponent` (announces only `Search`,
@@ -216,34 +216,7 @@ impl State {
             .into()
         };
 
-        let mut code =
-            String::from("ReorderableList::of(&self.order, |tool| action_row(*tool).into())\n");
-        let mut line = |s: &str| {
-            code.push_str("    ");
-            code.push_str(s);
-            code.push('\n');
-        };
-        if p.bool("title") {
-            line(".title(\"Tools\")");
-        }
-        if p.changed("controls") {
-            line(".controls(false)");
-        }
-        if p.changed("disabled") {
-            line(".disabled(true)");
-        }
-        if p.bool("edit_row") {
-            line(".edit_row(|tool| action_row(*tool).into())");
-        }
-        if p.changed("labels") {
-            line(".labels(\"Rearrange\", \"Save\", \"Discard\")");
-        }
-        if p.changed("lift") {
-            line(&format!(".lift({:.2})", p.number("lift")));
-        }
-        line(".on_event(Msg::List)");
-        code.push_str("\n// update: Msg::List(event) => { self.order.apply(event); }");
-        p.view(m, own, code, Msg::Play)
+        p.view(m, own, Msg::Play)
     }
 
     /// The Meta parent page: a list, a hint, an unrelated child and a plain one.
@@ -280,22 +253,14 @@ impl State {
         .spacing(m.space_m)
         .into();
 
-        let mut code = String::from(
-            "MetaParentComponent::new(&self.modes)\n    .on_child_event(Msg::Child)\n    .listener(Part::List, |mode, report| {\n        ReorderableList::of(&self.order, row)\n            .editing(mode == Some(&Key::Mode(Mode::Edit)))\n            .on_event(Msg::List)\n            .on_change(report.on_change())\n            .into()\n    })\n",
-        );
         if p.bool("hint") {
-            code.push_str("    .meta(Part::Hint, hint())\n");
         }
         if p.bool("search") {
-            code.push_str("    .meta(Part::Search, search())\n");
         }
         if p.bool("plain") {
-            code.push_str("    .child(caption)\n");
         }
         if p.changed("spacing") {
-            code.push_str(&format!("    .spacing({:.0})\n", p.number("spacing")));
         }
-        code.push_str("\n// update: self.modes.notify(&Key::Mode(Mode::Edit)) reaches only\n// the children that announced Edit; Search is for the search child.");
-        p.view(m, preview, code, Msg::ParentPlay)
+        p.view(m, preview, Msg::ParentPlay)
     }
 }

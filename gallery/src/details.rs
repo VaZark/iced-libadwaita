@@ -4,6 +4,301 @@
 use super::*;
 use iced::widget::{column, container, row, text};
 
+fn document_menu(notifications: bool) -> w::Menu<Message> {
+    w::Menu::new("Document")
+        .section([
+            w::MenuItem::action(
+                "Open document",
+                Message::ShowToast("Opened the demo document"),
+            ),
+            w::MenuItem::action("Save a copy", Message::ShowToast("Saved a demo copy")),
+            w::MenuItem::action("Unavailable command", Message::Noop).disabled(),
+        ])
+        .section([w::MenuItem::check(
+            "Notifications",
+            notifications,
+            Message::Notifications(!notifications),
+        )])
+}
+
+fn document_trigger(notifications: bool, m: Metrics) -> w::MenuButton<Message> {
+    w::menu_button(Icon::OpenMenu, document_menu(notifications))
+        .text_trigger("Document")
+        .props(w::MenuProps {
+            label: cmp::TextProps::default().size(iad::Typography::desktop().body),
+            trigger: cmp::ContainerProps::default()
+                .height(Length::Fixed(m.button_min_height))
+                .padding(iced::Padding::from([0.0, m.space_s])),
+            popover: w::PopoverProps::default().offset(m.space_xxs),
+        })
+}
+
+fn aggregate_entry<'a>(
+    value: &'a str,
+    m: Metrics,
+    overrides: Option<cmp::EntryInputProps>,
+) -> cmp::Entry<'a, Message> {
+    let entry = cmp::entry("Name", value)
+        .on_input(Message::Name)
+        .metrics(m)
+        .input_props(
+            cmp::TextInputProps::default()
+                .size(iad::Typography::desktop().title_3)
+                .padding(m.space_m),
+        );
+    match overrides {
+        Some(props) => props.apply(entry),
+        None => entry,
+    }
+}
+
+fn partial_entry_props() -> cmp::EntryInputProps {
+    cmp::EntryInputProps::default()
+        .input_props(cmp::TextInputProps::default().align_x(iced::alignment::Horizontal::Right))
+}
+
+fn document_target<'a>() -> Element<'a> {
+    cmp::flat_button(ty::label("Demo document — left-click to open"))
+        .on_press(Message::ShowToast("Opened the demo document"))
+        .into()
+}
+
+#[cfg(test)]
+mod menu_tests {
+    use super::*;
+    use iced::advanced::{
+        Shell, layout,
+        renderer::{Headless, Renderer},
+        widget::Tree,
+    };
+    use iced::{Event, Rectangle, Size, keyboard, mouse};
+
+    fn key(named: keyboard::key::Named) -> Event {
+        Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(named),
+            modified_key: keyboard::Key::Named(named),
+            physical_key: keyboard::key::Physical::Unidentified(
+                keyboard::key::NativeCode::Unidentified,
+            ),
+            location: keyboard::Location::Standard,
+            modifiers: keyboard::Modifiers::empty(),
+            text: None,
+            repeat: false,
+        })
+    }
+
+    #[test]
+    fn entry_aggregate_default_and_partial_preserve_child_geometry_and_input_events() {
+        let mut renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(iad::Typography::desktop().body),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        let m = Metrics::desktop();
+        let viewport = Rectangle::with_size(Size::new(m.clamp_maximum, m.clamp_maximum));
+        let mut baseline = None;
+        let mut baseline_pixels = None;
+        for (index, props) in [
+            None,
+            Some(cmp::EntryInputProps::default()),
+            Some(partial_entry_props()),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut entry: Element<'_> = aggregate_entry("Ada", m, props).into();
+            let mut tree = Tree::new(&entry);
+            let node = entry.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport.size()),
+            );
+            if let Some(size) = baseline {
+                assert_eq!(
+                    node.size(),
+                    size,
+                    "aggregate must keep configured child size/padding"
+                );
+            } else {
+                baseline = Some(node.size());
+            }
+            let theme = Theme::light();
+            let bounds = Rectangle::with_size(node.size());
+            renderer.reset(bounds);
+            entry.as_widget().draw(
+                &tree,
+                &mut renderer,
+                &theme,
+                &iced::advanced::renderer::Style {
+                    text_color: theme.semantic.window.fg,
+                },
+                layout::Layout::new(&node),
+                mouse::Cursor::Unavailable,
+                &bounds,
+            );
+            let pixels = renderer.screenshot(
+                Size::new(bounds.width.ceil() as u32, bounds.height.ceil() as u32),
+                1.0,
+                theme.semantic.window.bg,
+            );
+            if index == 0 {
+                baseline_pixels = Some(pixels);
+            } else if index == 1 {
+                assert_eq!(
+                    Some(pixels),
+                    baseline_pixels,
+                    "default aggregate must preserve appearance"
+                );
+            } else {
+                assert_ne!(
+                    Some(pixels),
+                    baseline_pixels,
+                    "partial alignment override must reach the native input"
+                );
+            }
+            let mut messages = Vec::new();
+            let character = keyboard::Key::Character("X".into());
+            for event in [
+                Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: character.clone(),
+                    modified_key: character,
+                    physical_key: keyboard::key::Physical::Unidentified(
+                        keyboard::key::NativeCode::Unidentified,
+                    ),
+                    location: keyboard::Location::Standard,
+                    modifiers: keyboard::Modifiers::empty(),
+                    text: Some("X".into()),
+                    repeat: false,
+                }),
+            ] {
+                entry.as_widget_mut().update(
+                    &mut tree,
+                    &event,
+                    layout::Layout::new(&node),
+                    mouse::Cursor::Available(node.bounds().center()),
+                    &renderer,
+                    &mut iced::advanced::clipboard::Null,
+                    &mut Shell::new(&mut messages),
+                    &viewport,
+                );
+            }
+            assert!(
+                matches!(messages.as_slice(), [Message::Name(value)] if value.len() == 4 && value.contains('X')),
+                "aggregate must preserve the caller's input handler: {messages:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn document_text_and_context_menus_activate_live_state_and_preserve_left_click() {
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(iad::Typography::desktop().body),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        let m = Metrics::desktop();
+        let viewport = Rectangle::with_size(Size::new(m.clamp_maximum, m.clamp_maximum));
+        for context in [false, true] {
+            let mut element: Element<'_> = if context {
+                w::context_menu(document_target(), document_menu(false)).into()
+            } else {
+                document_trigger(false, m).into()
+            };
+            let mut tree = Tree::new(&element);
+            let node = element.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport.size()),
+            );
+            if !context {
+                assert_eq!(
+                    node.size().height,
+                    m.button_min_height,
+                    "MenuProps trigger height reaches the real widget"
+                );
+            }
+            let mut messages = Vec::new();
+            if context {
+                for event in [
+                    mouse::Event::ButtonPressed(mouse::Button::Left),
+                    mouse::Event::ButtonReleased(mouse::Button::Left),
+                ] {
+                    element.as_widget_mut().update(
+                        &mut tree,
+                        &Event::Mouse(event),
+                        layout::Layout::new(&node),
+                        mouse::Cursor::Available(node.bounds().center()),
+                        &renderer,
+                        &mut iced::advanced::clipboard::Null,
+                        &mut Shell::new(&mut messages),
+                        &viewport,
+                    );
+                }
+                assert!(matches!(
+                    messages.as_slice(),
+                    [Message::ShowToast("Opened the demo document")]
+                ));
+                messages.clear();
+                let mut plain = document_target();
+                let mut plain_tree = Tree::new(&plain);
+                let plain_node = plain.as_widget_mut().layout(
+                    &mut plain_tree,
+                    &renderer,
+                    &layout::Limits::new(Size::ZERO, viewport.size()),
+                );
+                assert_eq!(plain_node.size(), node.size());
+            }
+            element.as_widget_mut().update(
+                &mut tree,
+                &Event::Mouse(mouse::Event::ButtonPressed(if context {
+                    mouse::Button::Right
+                } else {
+                    mouse::Button::Left
+                })),
+                layout::Layout::new(&node),
+                mouse::Cursor::Available(node.bounds().center()),
+                &renderer,
+                &mut iced::advanced::clipboard::Null,
+                &mut Shell::new(&mut messages),
+                &viewport,
+            );
+            assert!(messages.is_empty());
+            let mut overlay = element
+                .as_widget_mut()
+                .overlay(
+                    &mut tree,
+                    layout::Layout::new(&node),
+                    &renderer,
+                    &viewport,
+                    iced::Vector::ZERO,
+                )
+                .expect("core menu overlay");
+            let menu_node = overlay.as_overlay_mut().layout(&renderer, viewport.size());
+            // End selects the live check item after the disabled command.
+            for event in [
+                key(keyboard::key::Named::End),
+                key(keyboard::key::Named::Enter),
+            ] {
+                overlay.as_overlay_mut().update(
+                    &event,
+                    layout::Layout::new(&menu_node),
+                    mouse::Cursor::Unavailable,
+                    &renderer,
+                    &mut iced::advanced::clipboard::Null,
+                    &mut Shell::new(&mut messages),
+                );
+            }
+            assert!(matches!(
+                messages.as_slice(),
+                [Message::Notifications(true)]
+            ));
+        }
+    }
+}
+
 /// Children stacked vertically with `spacing`.
 fn stack<'a>(spacing: f32, children: Vec<Element<'a>>) -> iced::widget::Column<'a, Message, Theme> {
     column(children).spacing(spacing)
@@ -120,30 +415,6 @@ impl Gallery {
         self.page_frame(col)
     }
 
-    /// A radius setting: its token, the live value and a number input for it (whole pixels up
-    /// to the token's maximum).
-    fn radius_row(
-        &self,
-        i: usize,
-        label: &'static str,
-        token: &'static str,
-        max: f32,
-        m: Metrics,
-    ) -> Element<'_> {
-        let value = [self.radius_m, self.radius_l, self.radius_toast][i];
-        w::ActionRow::new(label)
-            .subtitle(format!("{token} = {value:.0}px"))
-            .suffix(
-                w::NumberInput::new(&self.radius_text[i], move |t| Message::RadiusText(i, t))
-                    .min(0)
-                    .max(max as i32)
-                    .width(100.0)
-                    .metrics(m),
-            )
-            .metrics(m)
-            .into()
-    }
-
     /// What the Open button of a dialog, sheet or shell page sends.
     fn open_message(d: Detail) -> Option<Message> {
         Some(match d {
@@ -164,15 +435,18 @@ impl Gallery {
         let sp = m.space_m;
         let g = |t| self.group(t);
 
-        // A page with a playground shows it: one live component, its controls and its code.
+        // A page with a playground shows it: one live component and its controls.
         let played = self.plays.get(&d).and_then(|p| {
-            plays::build(self, d, p, m)
-                .map(|(el, code)| p.view(m, el, code, move |x| Message::Play(d, x)))
+            plays::build(self, d, p, m).map(|el| p.view(m, el, move |x| Message::Play(d, x)))
         });
         let body: Element<'_> = if let Some(b) = played {
             b
         } else {
             match d {
+            Detail::AccentPicker | Detail::Collapsible | Detail::ExpanderRow
+            | Detail::SectionDivider | Detail::ProfileHeader | Detail::FloatingIndicator
+            | Detail::SlidePages | Detail::SortHeader | Detail::Toolbar | Detail::OverlaySplitView =>
+                self.stable_demo.view(d, m).map(Message::Stable),
             Detail::Button => {
                 let enabled = row![
                     cmp::raised_button(lbl("Default")).on_press(Message::Noop),
@@ -338,6 +612,16 @@ impl Gallery {
                     g("Password").push(w::card(password)),
                     g("Color override").push(w::card(color)),
                     g("Width").push(w::card(width)),
+                    g("Aggregate child props")
+                        .description("All three edit Name. The child starts with theme-sized text and padding. Default EntryInputProps is a no-op; a partial aggregate changes only alignment, preserving size, padding and the input handler.")
+                        .push(w::card(column![
+                            ty::caption("Configured child"),
+                            aggregate_entry(&self.name, m, None),
+                            ty::caption("Default aggregate — unchanged"),
+                            aggregate_entry(&self.name, m, Some(cmp::EntryInputProps::default())),
+                            ty::caption("Partial aggregate — right aligned"),
+                            aggregate_entry(&self.name, m, Some(partial_entry_props())),
+                        ].spacing(m.space_s))),
                     self.sections.view(m).map(Message::Sections),
                 ]
                 .spacing(m.group_spacing)
@@ -400,7 +684,6 @@ impl Gallery {
             Detail::VirtualList => self.upstream.virtual_view(m).map(Message::Upstream),
             Detail::MultilineEntry => self.upstream.editable_view(m).map(Message::Upstream),
             Detail::PageHeader => self.upstream.header_view(m).map(Message::Upstream),
-            Detail::ThemeConfig => self.theme_cfg.view(m).map(Message::ThemeCfg),
             Detail::Surface => self.upstream.surface_view(m).map(Message::Upstream),
             Detail::FlowGrid => self.upstream.grid_view(m).map(Message::Upstream),
             Detail::TableGrid => self.upstream.table_grid_view(m).map(Message::Upstream),
@@ -453,7 +736,6 @@ impl Gallery {
             Detail::ShortcutLabel => self.inline(Inline::ShortcutLabel),
             Detail::MultiSelect => self.inline(Inline::MultiSelect),
             Detail::AnchoredPopover => self.inline(Inline::AnchoredPopover),
-            Detail::Surfaces => self.inline(Inline::Surfaces),
             Detail::AlertDialog
             | Detail::AboutDialog
             | Detail::ShortcutsDialog
@@ -469,18 +751,8 @@ impl Gallery {
             // Shown by its playground (see `plays.rs`).
             Detail::Tabs
             | Detail::Container
-            | Detail::ColorHelpers
             | Detail::IconToggle
             | Detail::ClipWindow
-            | Detail::LineChart
-            | Detail::BarChart
-            | Detail::PieChart
-            | Detail::DonutChart
-            | Detail::BubbleChart
-            | Detail::ComboChart
-            | Detail::Funnel
-            | Detail::Sankey
-            | Detail::Sunburst
             | Detail::Docked
             | Detail::Tree
             | Detail::TreeRow
@@ -562,7 +834,7 @@ impl Gallery {
             ]
             .spacing(m.group_spacing)
             .into(),
-            Detail::Entries => self.entries.view(m).map(Message::Entries),
+            Detail::Entries => self.entries.view(m, self.surface_radius()).map(Message::Entries),
             Detail::PreferencesGroup => column![
                 self.preferences_demo(),
             ]
@@ -607,24 +879,12 @@ impl Gallery {
                     g("Auto-dismiss")
                         .description("Each toast closes after the configured timeout (3000 ms by default), without a timer subscription. Off, they stay until dismissed.")
                         .push(w::SwitchRow::new("Auto-dismiss (configured timeout)", self.toast_auto, Message::ToastAuto).metrics(m)),
-                    g("Radius")
-                        .description("A toast's corner radius is its own theme token (default: a full pill).")
-                        .push(
-                            self.radius_row(2, "Toast radius", "radius_toast", Metrics::MAX_RADIUS_TOAST, m),
-                        ),
                     g("Placement")
                         .description("Where toasts appear, and the container they are placed in. Both are desktop config settings (`[toasts]`).")
                         .push(w::ComboRow::new("Position", &TOAST_POSITIONS, Some(self.toast_position), Message::ToastPosition))
                         .push(
-                            w::ToggleGroupRow::new(
-                                "Container",
-                                vec![
-                                    cmp::ToggleItem::new(w::ToastTarget::Window, "Window").icon(Icon::Window),
-                                    cmp::ToggleItem::new(w::ToastTarget::Content, "Content").icon(Icon::Sidebar),
-                                ],
-                                Some(self.toast_target),
-                                Message::ToastTarget,
-                            )
+                            w::ChoiceRow::new("Container", &[w::ToastTarget::Window, w::ToastTarget::Content], Some(self.toast_target), Message::ToastTarget)
+                                .icons(|t| Some(match t { w::ToastTarget::Window => Icon::Window, w::ToastTarget::Content => Icon::Sidebar }))
                             .subtitle("The whole window, or only the content area beside the sidebar")
                             .metrics(m),
                         ),
@@ -633,118 +893,7 @@ impl Gallery {
                 .into()
             }
             // ------------------------------------------------------------ theming
-            Detail::ThemeColors => {
-                let scheme = g("Accent").push(
-                    w::ActionRow::new("Accent color")
-                        .suffix(
-                            w::accent_picker(self.accent, Message::Accent)
-                                .custom(&self.accent_text, Message::AccentText),
-                        )
-                        .metrics(m),
-                );
-                let mut overrides = g("Overrides")
-                    .description("Edits to the theme's tokens.")
-                    .push(
-                        w::ActionRow::new("Transparency")
-                            .subtitle("Percent of the surfaces that is see-through")
-                            .suffix(
-                                w::NumberInput::new(&self.transparency_text, Message::Transparency)
-                                    .min(0)
-                                    .max(90)
-                                    .step(5)
-                                    .width(100.0)
-                                    .metrics(m),
-                            )
-                            .metrics(m),
-                    )
-                    .push(
-                        w::SwitchRow::new("Tint", self.tint_on, Message::TintOn)
-                            .subtitle("Opt-in: a color of its own mixed into the surfaces, its alpha the strength; their transparency is kept")
-                            .metrics(m),
-                    )
-                    ;
-                // Opt-in: the color appears once the tint is on.
-                if self.tint_on {
-                    overrides = overrides.push(
-                        w::ActionRow::new("Tint color")
-                            .suffix(
-                                w::ColorInput::new(
-                                    iad::primitives::color_picker::Hsva::from_rgba(self.tint.r, self.tint.g, self.tint.b, self.tint.a),
-                                    &self.tint_text,
-                                    Message::TintText,
-                                    Message::Tint,
-                                )
-                                .alpha(true)
-                                .metrics(m),
-                            )
-                            .metrics(m),
-                    );
-                }
-                overrides = overrides
-                    .push(w::SwitchRow::new("Compact metrics", self.compact, Message::Compact).metrics(m))
-                    .push(w::SwitchRow::new("Override card color", self.card_override, Message::CardOverride).metrics(m));
-                column![scheme, overrides].spacing(m.group_spacing).into()
-            }
-
-            Detail::ThemeShape => {
-                // Everything here reads the theme's radii at draw time, so the sliders visibly
-                // change it: control radius rounds buttons, entries and toggles; card radius
-                // rounds the card and boxed list; toast radius rounds toasts.
-                let preview = column![
-                    row![
-                        cmp::raised_button(lbl("Default")).on_press(Message::Noop),
-                        cmp::suggested_button(lbl("Suggested")).on_press(Message::Noop),
-                        cmp::destructive_button(lbl("Destructive")).on_press(Message::Noop),
-                    ]
-                    .spacing(m.space_s)
-                    .wrap(),
-                    cmp::entry("Entry", &self.name).on_input(Message::Name).metrics(m),
-                    Element::from(cmp::toggle_group(
-                        vec![
-                            cmp::ToggleItem::new(Tab::One, "One"),
-                            cmp::ToggleItem::new(Tab::Two, "Two"),
-                            cmp::ToggleItem::new(Tab::Three, "Three"),
-                        ],
-                        Some(self.tab),
-                        Message::Tab,
-                    )),
-                    w::boxed_list([
-                        Element::from(w::ActionRow::new("Row in a boxed list").subtitle("Rounded by the card radius").metrics(m)),
-                        Element::from(w::ActionRow::new("Second row").metrics(m)),
-                    ]),
-                ]
-                .spacing(m.space_m);
-                column![
-                    g("Live preview").push(w::card(preview)),
-                    g("Radii")
-                        .push(
-                            self.radius_row(0, "Control radius", "radius_m", Metrics::MAX_RADIUS_M, m),
-                        )
-                        .push(
-                            self.radius_row(1, "Card radius", "radius_l", Metrics::MAX_RADIUS_L, m),
-                        )
-                        .push(
-                            self.radius_row(2, "Toast radius", "radius_toast", Metrics::MAX_RADIUS_TOAST, m),
-                        ),
-                    g("Shadows")
-                        .push(w::SwitchRow::new("Shadows", self.shadows_on, Message::Shadows).subtitle("Adwaita elevation: cards, popovers, dialogs").metrics(m))
-                        .push(
-                            w::SliderRow::new("Shadow intensity", self.shadow_intensity, 0.0..=2.0, Message::ShadowIntensity)
-                                .subtitle(format!("{:.1}x", self.shadow_intensity))
-                                .step(0.1)
-                                .metrics(m),
-                        )
-                        .push(
-                            w::SliderRow::new("Shadow size", self.shadow_scale, 0.0..=2.0, Message::ShadowScale)
-                                .subtitle(format!("{:.1}x", self.shadow_scale))
-                                .step(0.1)
-                                .metrics(m),
-                        ),
-                ]
-                .spacing(m.group_spacing)
-                .into()
-            }
-            Detail::ThemeMotion => column![
+            Detail::Motion => column![
                 g("Animations")
                     .description("libadwaita's easings and springs; honors the system enable-animations setting.")
                     .push(w::SwitchRow::new("Animations", self.anim_enabled, Message::Animations).subtitle("Off: every transition jumps to its end value").metrics(m))
@@ -767,19 +916,11 @@ impl Gallery {
                     ),
             ]
             .into(),
-            Detail::ThemeWindow => column![
+            Detail::WindowShell => column![
                 g("Menu")
                     .push(
-                        w::ToggleGroupRow::new(
-                            "Menu presentation",
-                            vec![
-                                cmp::ToggleItem::new(MenuMode::Auto, "Auto").icon(Icon::Settings),
-                                cmp::ToggleItem::new(MenuMode::Dropdown, "Dropdown").icon(Icon::GoDown),
-                                cmp::ToggleItem::new(MenuMode::FullPage, "Full page").icon(Icon::Window),
-                            ],
-                            Some(self.menu_mode),
-                            Message::MenuMode,
-                        )
+                        w::ChoiceRow::new("Menu presentation", &MenuMode::ALL, Some(self.menu_mode), Message::MenuMode)
+                            .icons(|m| Some(m.icon()))
                         .subtitle("Auto follows the desktop config (full page at the mobile breakpoint)")
                         .metrics(m),
                     ),
@@ -789,19 +930,13 @@ impl Gallery {
                             .subtitle("Drawer over the content, or the parent page of a stack"),
                     )
                     .push(
-                        w::ToggleGroupRow::new(
-                            "Row padding",
-                            vec![
-                                cmp::ToggleItem::new(w::SidebarPadding::Sm, "Small"),
-                                cmp::ToggleItem::new(w::SidebarPadding::Md, "Medium"),
-                                cmp::ToggleItem::new(w::SidebarPadding::Lg, "Large"),
-                            ],
-                            Some(self.sidebar_padding),
-                            Message::SidebarPadding,
-                        )
-                        .subtitle("Small like Mantine, medium like Nautilus, large like GNOME Settings")
+                        w::ChoiceRow::new("Row padding", &w::SidebarPadding::ALL, Some(self.sidebar_padding), Message::SidebarPadding)
+                        .subtitle("Compatibility IDs sm / md / lg; geometry comes from the active theme's navigation variants")
                         .metrics(m),
                     ),
+                g("Config-driven navigation densities")
+                    .description("Custom named variants and local container-width rules, without changing the installed theme or the sidebar controls above.")
+                    .push(w::card(crate::navigation_demo::view(m))),
                 g("Header").push(
                     w::SwitchRow::new("Path bar title", self.path_bar_title, Message::PathBarTitle)
                         .subtitle("A title_widget replaces the title; window buttons stay")
@@ -831,14 +966,6 @@ impl Gallery {
                 .into()
             }
         }
-        };
-        // A page without controls still has the Preview / Code switch: its demo is the preview,
-        // the snippet of the calls it makes is the code.
-        let body: Element<'_> = match (plays::snippet(d), self.plays.get(&d)) {
-            (Some(code), Some(p)) => {
-                p.view(m, body, code.to_string(), move |x| Message::Play(d, x))
-            }
-            _ => body,
         };
         self.page_frame_sized(body, d.container_size())
     }
@@ -1042,7 +1169,15 @@ impl Gallery {
                     )
                     .presentation(presentation)
                 };
+                let commands = || document_menu(self.notifications);
+                let text_menu = document_trigger(self.notifications, m).presentation(presentation);
+                let context_target = w::context_menu(
+                    document_target(),
+                    commands(),
+                );
                 column![
+                    g("Text trigger").description("MenuProps configures the trigger, label and popover using theme metrics. Open Document with a click or the keyboard; Notifications changes the check state.").push(w::card(text_menu)),
+                    g("Context menu").description("Right-click the document, or focus it and press Menu / Shift+F10. Left-click still opens it. Escape or an outside click dismisses the menu.").push(w::card(context_target)),
                     g("Menu button").description("The menu includes a disabled item.").push(w::card(row![menu])),
                     g("Check items").description("A check item shows its state as text after the label, as in GNOME's quick settings: On or Off, or words of your own with state_labels. MenuCheckStyle::Mark opts in to a check mark.").push(w::card(
                         row![checks(w::MenuCheckStyle::Text), checks(w::MenuCheckStyle::Mark)].spacing(m.space_m),
@@ -1054,16 +1189,8 @@ impl Gallery {
                         w::card(cmp::suggested_button(ty::label("Open sheet")).on_press(Message::Sheet(true))),
                     ),
                     g("Presentation").push(
-                        w::ToggleGroupRow::new(
-                            "Menu presentation",
-                            vec![
-                                cmp::ToggleItem::new(MenuMode::Auto, "Auto").icon(Icon::Settings),
-                                cmp::ToggleItem::new(MenuMode::Dropdown, "Dropdown").icon(Icon::GoDown),
-                                cmp::ToggleItem::new(MenuMode::FullPage, "Full page").icon(Icon::Window),
-                            ],
-                            Some(self.menu_mode),
-                            Message::MenuMode,
-                        )
+                        w::ChoiceRow::new("Menu presentation", &MenuMode::ALL, Some(self.menu_mode), Message::MenuMode)
+                            .icons(|m| Some(m.icon()))
                         .subtitle("Auto follows the desktop config")
                         .metrics(m),
                     ),
@@ -1117,18 +1244,6 @@ impl Gallery {
                 .spacing(sp)
                 .align_y(iced::Alignment::Center);
                 column![g("Avatar").push(w::card(avatars))].into()
-            }
-            Inline::Surfaces => {
-                let sem = self.build_theme().semantic;
-                let surfaces = column![
-                    row![cmp::color_swatch("window", sem.window), cmp::color_swatch("view", sem.view), cmp::color_swatch("headerbar", sem.headerbar)].spacing(m.space_s),
-                    row![cmp::color_swatch("card", sem.card), cmp::color_swatch("dialog", sem.dialog), cmp::color_swatch("popover", sem.popover)].spacing(m.space_s),
-                    row![cmp::color_swatch("sidebar", sem.sidebar), cmp::color_swatch("thumbnail", sem.thumbnail), cmp::color_swatch("osd", sem.osd)].spacing(m.space_s),
-                    row![cmp::status_swatch("accent", sem.accent), cmp::status_swatch("destructive", sem.destructive), cmp::status_swatch("success", sem.success)].spacing(m.space_s),
-                    row![cmp::status_swatch("warning", sem.warning), cmp::status_swatch("error", sem.error)].spacing(m.space_s),
-                ]
-                .spacing(m.space_s);
-                column![g("Semantic surfaces").push(w::card(surfaces))].into()
             }
             Inline::Tag => {
                 let tags = row![
@@ -1365,10 +1480,6 @@ impl Gallery {
             column![
                 self.group("Text styles").push(w::card(typo)),
                 self.group("Text colors").push(w::card(colors)),
-                playground::code_block(
-                    m,
-                    "title_1(\"Title 1\")   // title_2, title_3, title_4, heading\nbody(\"Body text\")\ncaption(\"Caption\")   // caption_heading, monospace, dim_label\n\nbody(\"Accent\").style(style::text::accent) // success, warning, error, destructive".to_string(),
-                ),
             ]
             .spacing(m.group_spacing),
         )

@@ -264,7 +264,7 @@ impl State {
     }
 
     /// The playground: one tree and the buttons Mantine's `useTree` demos have.
-    pub fn play<'a>(&'a self, p: &Playground, m: Metrics) -> (Element<'a, Msg>, String) {
+    pub fn play<'a>(&'a self, p: &Playground, m: Metrics) -> Element<'a, Msg> {
         let drag = [DragMode::Off, DragMode::Row, DragMode::Handle][p.choice("drag")];
         let mut tree = Tree::new(&self.shown, &self.tree)
             .lines(p.bool("lines"))
@@ -311,57 +311,7 @@ impl State {
         ]
         .spacing(m.space_m)
         .into();
-
-        let mut code = String::from("Tree::new(&self.data, &self.tree)\n");
-        let mut line = |s: String| {
-            code.push_str("    ");
-            code.push_str(&s);
-            code.push('\n');
-        };
-        if p.bool("lines") {
-            line(".lines(true)".into());
-        }
-        if p.changed("offset") {
-            line(format!(".level_offset({:.0})", p.number("offset")));
-        }
-        if p.bool("checkboxes") {
-            line(".checkboxes(true)".into());
-        }
-        if p.bool("icons") {
-            line(".icons(|node, row| Some(if row.has_children { Icon::Folder } else { Icon::Document }))".into());
-        }
-        match p.choice("search_mode") {
-            1 => line(".highlight(&self.search)          // data unfiltered; matches marked".into()),
-            2 => line(".highlight(&self.search)          // data = tree::filter(&data, &search)".into()),
-            3 => line(".highlight(&self.search).fuzzy(true) // data = filter_with(&data, &search, &fuzzy)".into()),
-            _ => {}
-        }
-        if drag != DragMode::Off {
-            line(format!(
-                ".draggable(DragMode::{})",
-                ["Off", "Row", "Handle"][p.choice("drag")]
-            ));
-        }
-        if p.bool("locked") {
-            line(".allow_drop(|from, to, _| !from.value.starts_with(\"locked\") && to.value != \"locked\")".into());
-        }
-        line(".on_event(Msg::Tree)".into());
-        code.push_str("\n// update: self.tree.apply(&mut self.data, event);");
-        if p.bool("multiple") || p.bool("strict") || p.changed("expand_on_click") {
-            code.push_str("\n// state: ");
-            let mut opts = Vec::new();
-            if p.bool("multiple") {
-                opts.push("tree.multiple = true");
-            }
-            if p.bool("strict") {
-                opts.push("tree.check_strictly = true");
-            }
-            if !p.bool("expand_on_click") {
-                opts.push("tree.expand_on_click = false");
-            }
-            code.push_str(&opts.join("; "));
-        }
-        (preview, code)
+        preview
     }
 
     /// Async loading: a spinner while a branch loads, the error and Retry when it fails.

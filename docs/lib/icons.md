@@ -201,4 +201,4 @@ Bundled common artwork is available through existing `Icon` variants: `ListAdd`
 These defaults use the same 16px viewbox and follow the parent's foreground.
 `icon::set_icon_override` replaces any of them globally; explicitly named system
 icons still use the installed theme. `Icon::bundled_source()` exposes the original
-SVG when one exists.
+SVG: every predefined `Icon` has one.

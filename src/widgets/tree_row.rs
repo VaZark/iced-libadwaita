@@ -29,6 +29,7 @@
 //! [`expandable`](TreeRow::expandable) shows it before the children exist (lazy loading).
 
 use crate::Element;
+use crate::components::{ButtonProps, ContainerProps};
 use crate::styles::button as sb;
 use crate::styles::container as sc;
 use crate::widgets::ActionRow;
@@ -36,6 +37,13 @@ use crate::{Icon, Metrics, Theme};
 use iced::alignment::Vertical;
 use iced::widget::{button, column, container, row, space};
 use iced::{Background, Length};
+
+/// Resolve layout tokens without changing metric inheritance or explicit builder values.
+fn geometry(number: impl Fn(&str) -> Option<f32>, key: &str, fallback: f32) -> f32 {
+    number(key)
+        .filter(|v| v.is_finite() && *v >= 0.0)
+        .unwrap_or(fallback)
+}
 
 /// See the [module](self).
 pub struct TreeRow<'a, M> {
@@ -47,13 +55,60 @@ pub struct TreeRow<'a, M> {
     on_toggle: Option<Box<dyn Fn(bool) -> M + 'a>>,
     children: Vec<Element<'a, M>>,
     indent: f32,
+    indent_explicit: bool,
+    variant: String,
+    explicit_variant: bool,
+    tokens: Option<crate::theme_config::Tokens>,
     metrics: Metrics,
+    handle_padding: Option<iced::Padding>,
+    handle_width: Option<f32>,
+    handle_button_props: ButtonProps,
+    header_button_props: ButtonProps,
+    header_props: ContainerProps,
+    children_props: ContainerProps,
 }
 
 impl<'a, M: 'a> TreeRow<'a, M> {
+    /// Presentation overrides applied after the child's defaults.
+    pub fn handle_button_props(mut self, props: ButtonProps) -> Self {
+        self.handle_button_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn header_button_props(mut self, props: ButtonProps) -> Self {
+        self.header_button_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn header_props(mut self, props: ContainerProps) -> Self {
+        self.header_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn children_props(mut self, props: ContainerProps) -> Self {
+        self.children_props = props;
+        self
+    }
+    /// Presentation for the underlying action row, preserving its content and actions.
+    pub fn row_props(mut self, props: super::rows::ActionRowProps) -> Self {
+        self.row = props.apply(self.row);
+        self
+    }
+    pub fn title_props(mut self, props: crate::components::TextProps) -> Self {
+        self.row = self.row.label_props(props);
+        self
+    }
+    pub fn subtitle_props(mut self, props: crate::components::TextProps) -> Self {
+        self.row = self.row.subtitle_props(props);
+        self
+    }
     pub fn new(title: impl Into<String>) -> Self {
         let metrics = Metrics::desktop();
         Self {
+            handle_button_props: ButtonProps::default(),
+            header_button_props: ButtonProps::default(),
+            header_props: ContainerProps::default(),
+            children_props: ContainerProps::default(),
             row: ActionRow::new(title).metrics(metrics),
             selected: false,
             expanded: false,
@@ -62,10 +117,64 @@ impl<'a, M: 'a> TreeRow<'a, M> {
             on_toggle: None,
             children: Vec::new(),
             // The toolkit's default; `indent(..)` overrides it for this row.
-            indent: metrics.expander_indent,
+            indent: geometry(
+                |key| crate::theme_config::current().number("tree-row", key),
+                "indent",
+                metrics.expander_indent,
+            ),
+            indent_explicit: false,
+            variant: "default".into(),
+            explicit_variant: false,
+            tokens: None,
             metrics,
+            handle_padding: None,
+            handle_width: None,
         }
     }
+    /// Selects a declared `[tree-row.NAME]` variant, inheriting unset keys from `[tree-row]`.
+    /// Undeclared names are neutral; explicit geometry builders take priority.
+    pub fn variant(mut self, name: impl Into<String>) -> Self {
+        self.variant = name.into();
+        self.explicit_variant = true;
+        self
+    }
+
+    /// Use local layout tokens without installing global configuration.
+    pub fn tokens(mut self, tokens: crate::theme_config::Tokens) -> Self {
+        self.tokens = Some(tokens);
+        self
+    }
+
+    /// Use this configuration's tokens locally; explicit metrics/builders remain unchanged.
+    pub fn theme_config(self, config: &crate::theme_config::ThemeConfig) -> Self {
+        self.tokens(config.tokens())
+    }
+
+    /// Apply breakpoint rules for the available container width. An explicit variant wins.
+    /// Call from the parent's responsive view, using its actual available width.
+    pub fn available_width(mut self, width: f32) -> Self {
+        let tokens = self
+            .tokens
+            .clone()
+            .unwrap_or_else(|| crate::theme_config::current().tokens());
+        self.variant = self.selected_variant(&tokens, width);
+        self
+    }
+
+    fn selected_variant(&self, tokens: &crate::theme_config::Tokens, width: f32) -> String {
+        if self.explicit_variant {
+            self.variant.clone()
+        } else {
+            crate::breakpoints::variant_for_tokens(
+                tokens,
+                "tree-row",
+                &crate::breakpoints::Breakpoints::default(),
+                width,
+                "default",
+            )
+        }
+    }
+
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {
         self.row = self.row.subtitle(s);
         self
@@ -110,6 +219,17 @@ impl<'a, M: 'a> TreeRow<'a, M> {
     /// [`Metrics::expander_indent`] (`[rows] expander-indent`); this overrides it for this row.
     pub fn indent(mut self, px: f32) -> Self {
         self.indent = px.max(0.0);
+        self.indent_explicit = true;
+        self
+    }
+    /// The padding around the arrow cell (default: the theme's row padding on the left).
+    pub fn handle_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.handle_padding = Some(p.into());
+        self
+    }
+    /// The width of the arrow cell, which a leaf keeps too (default: the theme's icon size plus 8).
+    pub fn handle_width(mut self, px: f32) -> Self {
+        self.handle_width = Some(px.max(0.0));
         self
     }
     /// A nested row, or any element.
@@ -133,6 +253,23 @@ impl<'a, M: 'a> TreeRow<'a, M> {
     }
 }
 
+impl<'a, M: Clone + 'a> TreeRow<'a, M> {
+    /// Rebuild a row from its actual available size, applying local breakpoint rules.
+    /// The factory recreates owned children on resize; explicit `.variant(..)` wins.
+    ///
+    /// ```ignore
+    /// TreeRow::responsive(move |_| {
+    ///     TreeRow::new("Network")
+    ///         .theme_config(&config)
+    ///         .push(TreeRow::new("Proxy"))
+    /// })
+    /// ```
+    pub fn responsive(view: impl Fn(iced::Size) -> Self + 'a) -> Element<'a, M> {
+        iced::widget::responsive(move |size| Element::from(view(size).available_width(size.width)))
+            .into()
+    }
+}
+
 impl<'a, M: Clone + 'a> From<TreeRow<'a, M>> for Element<'a, M> {
     fn from(x: TreeRow<'a, M>) -> Self {
         let m = x.metrics;
@@ -140,19 +277,29 @@ impl<'a, M: Clone + 'a> From<TreeRow<'a, M>> for Element<'a, M> {
         let action = x.on_activate.clone().or_else(|| toggle.clone());
         let separate_toggle = x.on_activate.is_some();
         // The arrow cell; a leaf keeps its width (GTK's indent-for-icon).
-        let cell = m.icon_size + 8.0;
+        let config = crate::theme_config::current();
+        let tokens = x.tokens.clone().unwrap_or_else(|| config.tokens());
+        let token = |key: &str| tokens.variant_number("tree-row", &x.variant, key);
+        let cell = x
+            .handle_width
+            .unwrap_or_else(|| geometry(token, "handle-width", m.icon_size + 8.0));
+        let glyph_size = geometry(token, "glyph-size", (m.icon_size - 2.0).max(0.0));
+        let separator = geometry(token, "separator-width", 1.0);
         let handle: Element<'a, M> = if x.has_arrow() {
             let icon = if x.expanded {
                 Icon::GoDown
             } else {
                 Icon::GoNext
             };
-            let glyph = container(icon.view(m.icon_size - 2.0)).center(cell);
+            let glyph = container(icon.view(glyph_size)).center(cell);
             if separate_toggle {
-                button(glyph)
-                    .padding(0)
-                    .style(sb::flat)
-                    .on_press_maybe(toggle)
+                x.handle_button_props
+                    .apply(
+                        button(glyph)
+                            .padding(0)
+                            .style(sb::flat)
+                            .on_press_maybe(toggle),
+                    )
                     .into()
             } else {
                 glyph.into()
@@ -162,34 +309,54 @@ impl<'a, M: Clone + 'a> From<TreeRow<'a, M>> for Element<'a, M> {
         };
         let selected = x.selected;
         let header = row![
-            container(handle).padding(iced::Padding::ZERO.left(m.row_padding.left)),
+            container(handle).padding(x.handle_padding.unwrap_or(
+                iced::Padding::ZERO.left(geometry(
+                    token,
+                    "handle-padding-left",
+                    m.row_padding.left
+                ))
+            ),),
             Element::from(x.row),
         ]
         .align_y(Vertical::Center);
         let header: Element<'a, M> = match action {
-            Some(message) => button(header)
-                .padding(0)
-                .width(Length::Fill)
-                .style(sb::list_row)
-                .on_press(message)
+            Some(message) => x
+                .header_button_props
+                .apply(
+                    button(header)
+                        .padding(0)
+                        .width(Length::Fill)
+                        .style(sb::list_row)
+                        .on_press(message),
+                )
                 .into(),
             None => header.into(),
         };
-        let header: Element<'a, M> = container(header)
-            .width(Length::Fill)
-            .style(move |t: &Theme| iced::widget::container::Style {
-                background: selected.then_some(Background::Color(crate::color::alpha(
-                    t.semantic.window.fg,
-                    t.semantic.opacity.flat_hover,
-                ))),
-                ..Default::default()
-            })
+        let header: Element<'a, M> = x
+            .header_props
+            .apply(
+                container(header)
+                    .width(Length::Fill)
+                    .style(move |t: &Theme| iced::widget::container::Style {
+                        background: selected.then_some(Background::Color(crate::color::alpha(
+                            t.semantic.window.fg,
+                            t.semantic.opacity.flat_hover,
+                        ))),
+                        ..Default::default()
+                    }),
+            )
             .into();
         if x.children.is_empty() {
             return header;
         }
 
-        let indent = x.indent;
+        let indent = if x.indent_explicit {
+            x.indent
+        } else {
+            geometry(token, "indent", m.expander_indent)
+        };
+        let variant = x.variant;
+        let style_tokens = x.tokens;
         let mut inner = column![];
         for c in x.children {
             // The hairline spans the list; the child itself is indented.
@@ -203,21 +370,29 @@ impl<'a, M: Clone + 'a> From<TreeRow<'a, M>> for Element<'a, M> {
             };
             inner = inner
                 .push(
-                    container(space().height(1))
+                    container(space().height(separator))
                         .width(Length::Fill)
                         .style(sc::card_separator),
                 )
                 .push(c);
         }
-        let list = container(inner).width(Length::Fill).style(|t: &Theme| {
-            iced::widget::container::Style {
-                background: Some(Background::Color(crate::color::alpha(
-                    t.semantic.card.fg,
-                    0.03,
-                ))),
-                ..Default::default()
-            }
-        });
+        let list =
+            x.children_props.apply(
+                container(inner)
+                    .width(Length::Fill)
+                    .style(move |t: &Theme| iced::widget::container::Style {
+                        background: Some(Background::Color(crate::color::alpha(
+                            t.semantic.card.fg,
+                            style_tokens
+                                .as_ref()
+                                .unwrap_or(&t.tokens)
+                                .variant_number("tree-row", &variant, "children-opacity")
+                                .filter(|v| v.is_finite() && (0.0..=1.0).contains(v))
+                                .unwrap_or(0.03),
+                        ))),
+                        ..Default::default()
+                    }),
+            );
         // The disclosure primitive: always mounted, the revealer slides it (250 ms).
         crate::widgets::Collapsible::new(header, Element::from(list), x.expanded).into()
     }
@@ -335,20 +510,85 @@ mod tests {
     fn accordion_uses_full_surface_disclosure_and_keeps_its_selection_rule() {
         use crate::primitives::Selection;
         use crate::widgets::{Accordion, AccordionItem};
-        let renderer = renderer();
+        use iced::advanced::{Renderer as _, Shell, clipboard, layout, renderer, widget::Tree};
+        use iced::{Event, Rectangle, Size, mouse};
+        let mut renderer = self::renderer();
         for (rule, expected) in [
             (Selection::Multiple, vec![2, 1]),
             (Selection::SINGLE, vec![1]),
         ] {
-            let mut element = Accordion::new(&[2u8], |keys| keys)
+            let mut element: Element<'_, Vec<u8>> = Accordion::new(&[2u8], |keys| keys)
                 .selection(rule)
                 .item(AccordionItem::new(1, "First", space()))
                 .into();
-            assert_eq!(
-                click(&mut element, &renderer, iced::Point::new(319.0, 20.0)),
-                vec![expected]
+            let viewport = Rectangle::with_size(Size::new(320.0, 1000.0));
+            let mut tree = Tree::new(&element);
+            let node = element.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport.size()),
             );
+            let layout = layout::Layout::new(&node);
+            // Draw and click the same tree: the Card resolves its themed boundary
+            // at draw time, so the layout-only click helper cannot initialize it.
+            renderer.reset(viewport);
+            element.as_widget().draw(
+                &tree,
+                &mut renderer,
+                &crate::Theme::light(),
+                &renderer::Style::default(),
+                layout,
+                mouse::Cursor::Unavailable,
+                &viewport,
+            );
+            let mut messages = vec![];
+            for event in [
+                mouse::Event::ButtonPressed(mouse::Button::Left),
+                mouse::Event::ButtonReleased(mouse::Button::Left),
+            ] {
+                element.as_widget_mut().update(
+                    &mut tree,
+                    &Event::Mouse(event),
+                    layout,
+                    mouse::Cursor::Available(iced::Point::new(319.0, 20.0)),
+                    &renderer,
+                    &mut clipboard::Null,
+                    &mut Shell::new(&mut messages),
+                    &viewport,
+                );
+            }
+            assert_eq!(messages, vec![expected]);
         }
+    }
+
+    #[test]
+    fn child_presentation_preserves_independent_arrow_and_header_actions() {
+        let renderer = renderer();
+        let mut row: Element<'_, u8> = TreeRow::new("Branch")
+            .expandable(true)
+            .on_toggle(|_| 1)
+            .on_activate(2)
+            .title_props(crate::components::TextProps::default().size(16))
+            .handle_button_props(ButtonProps::default().style(sb::flat))
+            .header_button_props(ButtonProps::default().style(sb::list_row))
+            .header_props(ContainerProps::default().width(320))
+            .into();
+        let m = Metrics::desktop();
+        assert_eq!(
+            click(
+                &mut row,
+                &renderer,
+                iced::Point::new(
+                    m.row_padding.left + (m.icon_size + 8.0) / 2.0,
+                    m.row_min_height / 2.0
+                )
+            ),
+            vec![1]
+        );
+        assert_eq!(
+            click(&mut row, &renderer, iced::Point::new(300.0, 20.0)),
+            vec![2]
+        );
     }
 
     fn row() -> TreeRow<'static, u8> {
@@ -389,5 +629,72 @@ mod tests {
         let t = row().expanded(true).push(inner).push(iced::widget::space());
         assert_eq!(t.children.len(), 2);
         let _: Element<'static, u8> = t.into();
+    }
+}
+
+#[cfg(test)]
+mod spacing_tests {
+    use super::*;
+
+    #[test]
+    fn the_arrow_cell_is_a_parameter() {
+        let r = TreeRow::<u8>::new("a")
+            .push(TreeRow::new("b"))
+            .handle_padding([0.0, 4.0])
+            .handle_width(30.0)
+            .indent(8.0);
+        assert_eq!(r.handle_width, Some(30.0));
+        let _: Element<'_, u8> = r.into();
+    }
+}
+
+#[cfg(test)]
+mod token_resolver_tests {
+    use super::geometry;
+
+    #[test]
+    fn geometry_preserves_inheritance_and_validates_overrides() {
+        assert_eq!(geometry(|_| None, "handle-width", 24.0), 24.0);
+        assert_eq!(geometry(|_| Some(32.0), "handle-width", 24.0), 32.0);
+        assert_eq!(geometry(|_| Some(0.0), "separator-width", 1.0), 0.0);
+        for invalid in [-1.0, f32::NAN, f32::INFINITY] {
+            assert_eq!(geometry(|_| Some(invalid), "glyph-size", 14.0), 14.0);
+        }
+    }
+}
+
+#[cfg(test)]
+mod local_variant_tests {
+    use super::*;
+    use crate::theme_config::{Schema, ThemeConfig};
+
+    #[test]
+    fn local_rules_and_explicit_variants_do_not_require_global_installation() {
+        let config = ThemeConfig::builder("local-tree-row").files(false)
+            .schema(Schema::toolkit().variant("tree-row", "wide", &[]))
+            .toolkit_text("[tree-row]\nindent=11px\nbreakpoint-rules=xs:default,md:wide\n[tree-row.wide]\nindent=29px")
+            .app_text("").build();
+        let tokens = config.tokens();
+        let row = TreeRow::<u8>::new("local").theme_config(&config);
+        assert_eq!(row.selected_variant(&tokens, 1200.0), "wide");
+        assert_eq!(row.selected_variant(&tokens, 0.0), "default");
+        let row = row.available_width(1200.0);
+        assert_eq!(row.variant, "wide");
+        assert_eq!(
+            tokens.variant_number("tree-row", &row.variant, "indent"),
+            Some(29.0)
+        );
+        assert_eq!(
+            tokens.variant_number("tree-row", "undeclared", "indent"),
+            Some(11.0)
+        );
+        let row = row
+            .variant("undeclared")
+            .indent(7.0)
+            .available_width(1200.0);
+        assert_eq!(row.variant, "undeclared");
+        assert!(row.indent_explicit);
+        assert_eq!(row.indent, 7.0);
+        let _: Element<'_, u8> = row.into();
     }
 }

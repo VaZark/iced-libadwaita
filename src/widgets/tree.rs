@@ -37,6 +37,7 @@
 use crate::Element;
 use crate::components::flat_button;
 use crate::components::typography::label as plain_label;
+use crate::components::{ButtonProps, ContainerProps};
 use crate::primitives::tree::{self, Event, Position, Row, TreeNode, TreeState};
 use crate::styles::button as sb;
 use crate::styles::text as st;
@@ -54,12 +55,76 @@ use iced::{
 use std::ops::Range;
 use std::rc::Rc;
 
-/// The default row height.
+/// Legacy row-height reference; widget defaults are resolved from `[tree] row-height`.
 pub const ROW_HEIGHT: f32 = 32.0;
-/// How far the pointer must travel with a row held before it becomes a drag.
-const DRAG_THRESHOLD: f32 = 4.0;
-/// The width of the grip's hit area (`DragMode::Handle`).
-const GRIP_WIDTH: f32 = 32.0;
+
+/// Resolved once so row layout, virtualization, painting and hit testing agree.
+#[derive(Debug, Clone, Copy)]
+struct TreeLayout {
+    level_offset: f32,
+    row_height: f32,
+    handle_padding: f32,
+    expander_icon_inset: f32,
+    grip_width: f32,
+    drag_threshold: f32,
+    checkbox_size_extra: f32,
+    checkbox_glyph_inset: f32,
+    checkbox_radius: f32,
+    checkbox_border_width: f32,
+    connector_width: f32,
+    drop_border_width: f32,
+    drop_line_width: f32,
+    drop_line_radius: f32,
+    drag_border_width: f32,
+    drag_scale: f32,
+    drag_clip_margin: f32,
+    drag_shadow_offset: f32,
+    icon_size: f32,
+    icon_padding: iced::Padding,
+    label_padding: iced::Padding,
+    checkbox_padding: iced::Padding,
+    row_radius: f32,
+}
+
+impl TreeLayout {
+    /// Design defaults are supplied by the schema, not duplicated in the widget.
+    fn resolve(m: &Metrics, tokens: &crate::theme_config::Tokens, variant: &str) -> Self {
+        Self::resolve_numbers(m, |key| tokens.variant_number("tree", variant, key))
+    }
+
+    fn resolve_numbers(m: &Metrics, number: impl Fn(&str) -> Option<f32>) -> Self {
+        let required =
+            |key: &str| number(key).unwrap_or_else(|| panic!("missing [tree] {key} token"));
+        Self {
+            level_offset: required("level-offset"),
+            row_height: required("row-height"),
+            handle_padding: required("handle-padding"),
+            expander_icon_inset: required("expander-icon-inset"),
+            grip_width: required("grip-width"),
+            drag_threshold: required("drag-threshold"),
+            checkbox_size_extra: required("checkbox-size-extra"),
+            checkbox_glyph_inset: required("checkbox-glyph-inset"),
+            checkbox_radius: required("checkbox-radius"),
+            checkbox_border_width: required("checkbox-border-width"),
+            connector_width: required("connector-width"),
+            drop_border_width: required("drop-border-width"),
+            drop_line_width: required("drop-line-width"),
+            drop_line_radius: required("drop-line-radius"),
+            drag_border_width: required("drag-border-width"),
+            drag_scale: required("drag-scale"),
+            drag_clip_margin: required("drag-clip-margin"),
+            drag_shadow_offset: required("drag-shadow-offset"),
+            icon_size: number("icon-size").unwrap_or(m.icon_size),
+            icon_padding: iced::Padding::from([0.0, number("icon-padding").unwrap_or(m.space_xs)]),
+            label_padding: iced::Padding::from([0.0, number("label-padding").unwrap_or(m.space_s)]),
+            checkbox_padding: iced::Padding::from([
+                0.0,
+                number("checkbox-padding").unwrap_or(m.space_xs),
+            ]),
+            row_radius: number("row-radius").unwrap_or(m.radius_s),
+        }
+    }
+}
 
 /// How a row is picked up.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -106,11 +171,45 @@ pub struct Tree<'a, M> {
     window: Option<Range<usize>>,
     on_event: Option<Emit<'a, M>>,
     metrics: Metrics,
+    variant: String,
+    explicit_variant: bool,
+    tokens: Option<crate::theme_config::Tokens>,
+    icon_padding: Option<iced::Padding>,
+    label_padding: Option<iced::Padding>,
+    checkbox_padding: Option<iced::Padding>,
+    expander_props: ButtonProps,
+    label_button_props: ButtonProps,
+    checkbox_button_props: ButtonProps,
+    row_props: ContainerProps,
 }
 
 impl<'a, M: Clone + 'a> Tree<'a, M> {
+    /// Presentation overrides applied after theme geometry and style.
+    pub fn expander_props(mut self, props: ButtonProps) -> Self {
+        self.expander_props = props;
+        self
+    }
+    /// Presentation overrides applied after theme geometry and style.
+    pub fn label_button_props(mut self, props: ButtonProps) -> Self {
+        self.label_button_props = props;
+        self
+    }
+    /// Presentation overrides applied after theme geometry and style.
+    pub fn checkbox_button_props(mut self, props: ButtonProps) -> Self {
+        self.checkbox_button_props = props;
+        self
+    }
+    /// Presentation overrides applied after theme geometry and style.
+    pub fn row_props(mut self, props: ContainerProps) -> Self {
+        self.row_props = props;
+        self
+    }
     pub fn new(data: &'a [TreeNode], state: &'a TreeState) -> Self {
         Self {
+            expander_props: ButtonProps::default(),
+            label_button_props: ButtonProps::default(),
+            checkbox_button_props: ButtonProps::default(),
+            row_props: ContainerProps::default(),
             data,
             state,
             lines: false,
@@ -126,8 +225,35 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
             window: None,
             on_event: None,
             metrics: Metrics::desktop(),
+            variant: "default".into(),
+            explicit_variant: false,
+            tokens: None,
+            icon_padding: None,
+            label_padding: None,
+            checkbox_padding: None,
         }
     }
+    /// Selects a `[tree.<name>]` variant (default: `"default"`).
+    /// Unset keys inherit `[tree]`; undeclared names leave base geometry unchanged.
+    /// Explicit geometry builders take priority over variant tokens.
+    pub fn variant(mut self, name: impl Into<String>) -> Self {
+        self.variant = name.into();
+        self.explicit_variant = true;
+        self
+    }
+
+    /// Uses a local token snapshot instead of the installed global theme config.
+    /// Inherited metrics come from `.metrics(...)`, not from this snapshot.
+    pub fn tokens(mut self, tokens: crate::theme_config::Tokens) -> Self {
+        self.tokens = Some(tokens);
+        self
+    }
+
+    /// Uses this config's tokens locally; pass its resolved metrics with `.metrics(...)`.
+    pub fn theme_config(self, cfg: &crate::theme_config::ThemeConfig) -> Self {
+        self.tokens(cfg.tokens())
+    }
+
     /// Connecting lines down each level (Mantine's `withLines`).
     pub fn lines(mut self, on: bool) -> Self {
         self.lines = on;
@@ -189,20 +315,63 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
         self.on_event = Some(Rc::new(f));
         self
     }
+    /// The padding around a row's icon (default: the theme's `space_xs` on each side).
+    pub fn icon_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.icon_padding = Some(p.into());
+        self
+    }
+    /// The padding around a row's label (default: the theme's `space_s` on each side).
+    pub fn label_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.label_padding = Some(p.into());
+        self
+    }
+    /// The padding around a row's checkbox (default: the theme's `space_xs` on each side).
+    pub fn checkbox_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.checkbox_padding = Some(p.into());
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
     }
 
-    /// The width of the arrow cell.
-    fn handle(&self) -> f32 {
-        self.metrics.icon_size + 8.0
+    fn resolved_tokens(&self) -> crate::theme_config::Tokens {
+        self.tokens
+            .clone()
+            .unwrap_or_else(|| crate::theme_config::current().tokens())
     }
-    fn indent(&self) -> f32 {
-        self.level_offset.unwrap_or(20.0)
+
+    fn selected_variant(&self, tokens: &crate::theme_config::Tokens, width: f32) -> String {
+        if self.explicit_variant {
+            self.variant.clone()
+        } else {
+            crate::breakpoints::variant_for_tokens(
+                tokens,
+                "tree",
+                &crate::breakpoints::Breakpoints::current(),
+                width,
+                &self.variant,
+            )
+        }
     }
-    fn height(&self) -> f32 {
-        self.row_height.unwrap_or(ROW_HEIGHT)
+
+    #[cfg(test)]
+    fn geometry_with_tokens(&self, tokens: &crate::theme_config::Tokens) -> TreeLayout {
+        self.geometry_for_variant(tokens, &self.variant)
+    }
+
+    fn geometry_for_variant(
+        &self,
+        tokens: &crate::theme_config::Tokens,
+        variant: &str,
+    ) -> TreeLayout {
+        let mut g = TreeLayout::resolve(&self.metrics, tokens, variant);
+        g.level_offset = self.level_offset.unwrap_or(g.level_offset);
+        g.row_height = self.row_height.unwrap_or(g.row_height);
+        g.icon_padding = self.icon_padding.unwrap_or(g.icon_padding);
+        g.label_padding = self.label_padding.unwrap_or(g.label_padding);
+        g.checkbox_padding = self.checkbox_padding.unwrap_or(g.checkbox_padding);
+        g
     }
 
     fn emit(&self, e: Event) -> Option<M> {
@@ -244,8 +413,7 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
     }
 
     /// One row's element.
-    fn row(&self, r: &Row) -> Element<'a, M> {
-        let m = &self.metrics;
+    fn row(&self, r: &Row, g: TreeLayout) -> Element<'a, M> {
         let node = tree::find(self.data, &r.value);
         let selected = self.state.is_selected(&r.value);
         let mut line = row![].align_y(Vertical::Center);
@@ -253,33 +421,35 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
         // Indent: one cell per level, each with its connecting line when asked.
         for _ in 0..r.level {
             let cell: Element<'a, M> = if self.lines {
-                let hairline =
-                    container(space())
-                        .width(1)
-                        .height(Length::Fill)
-                        .style(|t: &Theme| iced::widget::container::Style {
-                            background: Some(Background::Color(crate::color::alpha(
-                                t.semantic.window.fg,
-                                0.15,
-                            ))),
-                            ..Default::default()
-                        });
+                let hairline = container(space())
+                    .width(g.connector_width)
+                    .height(Length::Fill)
+                    .style(|t: &Theme| iced::widget::container::Style {
+                        background: Some(Background::Color(crate::color::alpha(
+                            t.semantic.window.fg,
+                            0.15,
+                        ))),
+                        ..Default::default()
+                    });
                 container(hairline)
-                    .width(self.indent())
+                    .width(g.level_offset)
                     .height(Length::Fill)
                     .align_x(iced::alignment::Horizontal::Center)
                     .into()
             } else {
-                space().width(self.indent()).into()
+                space().width(g.level_offset).into()
             };
             line = line.push(cell);
         }
 
         // The arrow; a leaf keeps its width so labels line up (GTK's indent-for-icon).
-        let arrow = self.handle();
+        let arrow = g.icon_size + g.handle_padding;
         let expander: Element<'a, M> = if r.error.is_some() {
-            flat_button(plain_label("Retry").style(st::error))
-                .on_press_maybe(self.emit(Event::Retry(r.value.clone())))
+            self.expander_props
+                .apply(
+                    flat_button(plain_label("Retry").style(st::error))
+                        .on_press_maybe(self.emit(Event::Retry(r.value.clone()))),
+                )
                 .into()
         } else if r.loading {
             container(plain_label("…").style(st::dim))
@@ -292,10 +462,13 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
             } else {
                 Icon::GoNext
             };
-            button(container(icon.view(m.icon_size - 2.0)).center(arrow))
-                .padding(0)
-                .style(sb::flat)
-                .on_press_maybe(self.emit(Event::Toggle(r.value.clone())))
+            self.expander_props
+                .apply(
+                    button(container(icon.view(g.icon_size - g.expander_icon_inset)).center(arrow))
+                        .padding(0)
+                        .style(sb::flat)
+                        .on_press_maybe(self.emit(Event::Toggle(r.value.clone()))),
+                )
                 .into()
         } else {
             space().width(arrow).into()
@@ -303,12 +476,12 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
         line = line.push(expander);
 
         if self.checkboxes {
-            line = line.push(self.checkbox(r));
+            line = line.push(self.checkbox(r, g));
         }
         if let (Some(f), Some(n)) = (&self.icons, node)
             && let Some(icon) = f(n, r)
         {
-            line = line.push(container(icon.view(m.icon_size)).padding([0.0, m.space_xs]));
+            line = line.push(container(icon.view(g.icon_size)).padding(g.icon_padding));
         }
 
         let text: Element<'a, M> = match (&self.label, node) {
@@ -323,35 +496,39 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
             _ => self.text(r),
         };
         line = line.push(
-            button(text)
-                .padding([0.0, m.space_s])
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .style(sb::flat_toggle(selected))
-                .on_press_maybe(self.emit(Event::Click(r.value.clone()))),
+            self.label_button_props.apply(
+                button(text)
+                    .padding(g.label_padding)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .style(sb::flat_toggle(selected))
+                    .on_press_maybe(self.emit(Event::Click(r.value.clone()))),
+            ),
         );
         if self.drag == DragMode::Handle {
             line = line.push(
-                container(Icon::DragHandle.view(m.icon_size))
-                    .width(GRIP_WIDTH)
-                    .center_x(GRIP_WIDTH),
+                container(Icon::DragHandle.view(g.icon_size))
+                    .width(g.grip_width)
+                    .center_x(g.grip_width),
             );
         }
-        container(line)
-            .height(self.height())
-            .width(Length::Fill)
+        self.row_props
+            .apply(container(line).height(g.row_height).width(Length::Fill))
             .into()
     }
 
-    fn checkbox(&self, r: &Row) -> Element<'a, M> {
-        let m = &self.metrics;
+    fn checkbox(&self, r: &Row, g: TreeLayout) -> Element<'a, M> {
         let on = self.state.is_checked(&r.value);
         let mixed = !on && self.state.is_indeterminate(self.data, &r.value);
-        let size = m.icon_size + 2.0;
+        let size = g.icon_size + g.checkbox_size_extra;
         let mark: Element<'a, M> = if on {
-            Icon::Check.colored(size - 4.0, Color::WHITE).into()
+            Icon::Check
+                .colored(size - g.checkbox_glyph_inset, Color::WHITE)
+                .into()
         } else if mixed {
-            Icon::ListRemove.colored(size - 4.0, Color::WHITE).into()
+            Icon::ListRemove
+                .colored(size - g.checkbox_glyph_inset, Color::WHITE)
+                .into()
         } else {
             space().into()
         };
@@ -366,26 +543,49 @@ impl<'a, M: Clone + 'a> Tree<'a, M> {
                         } else {
                             t.semantic.border
                         },
-                        width: 1.5,
-                        radius: 4.0.into(),
+                        width: g.checkbox_border_width,
+                        radius: g.checkbox_radius.into(),
                     },
                     ..Default::default()
                 });
-        button(container(boxed).padding([0.0, m.space_xs]))
-            .padding(0)
-            .style(sb::flat)
-            .on_press_maybe(self.emit(Event::Check(r.value.clone(), !on)))
+        self.checkbox_button_props
+            .apply(
+                button(container(boxed).padding(g.checkbox_padding))
+                    .padding(0)
+                    .style(sb::flat)
+                    .on_press_maybe(self.emit(Event::Check(r.value.clone(), !on))),
+            )
             .into()
     }
 }
 
 impl<'a, M: Clone + 'a> From<Tree<'a, M>> for Element<'a, M> {
     fn from(t: Tree<'a, M>) -> Self {
+        let tokens = t.resolved_tokens();
+        if !t.explicit_variant && tokens.text("tree", "breakpoint-rules").is_some() {
+            crate::layouts::responsive(move |size| {
+                let variant = t.selected_variant(&tokens, size.width);
+                t.render(&tokens, &variant)
+            })
+            .width(Length::Fill)
+            .height(Length::Shrink)
+            .into()
+        } else {
+            t.render(&tokens, &t.variant)
+        }
+    }
+}
+
+impl<'a, M: Clone + 'a> Tree<'a, M> {
+    fn render(&self, tokens: &crate::theme_config::Tokens, variant: &str) -> Element<'a, M> {
+        let t = self;
+        let g = t.geometry_for_variant(tokens, variant);
         let rows = t.state.rows(t.data);
         let range = t.window.clone().map_or(0..rows.len(), |w| {
             w.start.min(rows.len())..w.end.min(rows.len())
         });
-        let elements: Vec<Element<'a, M>> = rows[range.clone()].iter().map(|r| t.row(r)).collect();
+        let elements: Vec<Element<'a, M>> =
+            rows[range.clone()].iter().map(|r| t.row(r, g)).collect();
         let metas: Vec<RowMeta> = rows[range.clone()]
             .iter()
             .map(|r| RowMeta {
@@ -405,17 +605,17 @@ impl<'a, M: Clone + 'a> From<Tree<'a, M>> for Element<'a, M> {
             }) as Valid<'a>
         });
         let on_drop = t.on_event.clone();
-        let mut list = RowsWidget::new(elements, metas, t.drag, valid, t.indent());
+        let mut list = RowsWidget::new(elements, metas, t.drag, valid, g);
         list.emit = on_drop.map(|f| {
             Rc::new(move |from: String, to: String, position: Position| {
                 f(Event::Drop { from, to, position })
             }) as DropEmit<'a, M>
         });
         let body: Element<'a, M> = Element::new(list);
-        match t.window {
+        match &t.window {
             Some(_) => {
-                let above = range.start as f32 * t.height();
-                let below = (rows.len() - range.end) as f32 * t.height();
+                let above = range.start as f32 * g.row_height;
+                let below = (rows.len() - range.end) as f32 * g.row_height;
                 iced::widget::column![space().height(above), body, space().height(below)].into()
             }
             None => body,
@@ -441,7 +641,7 @@ struct RowsWidget<'a, M> {
     mode: DragMode,
     valid: Option<Valid<'a>>,
     emit: Option<DropEmit<'a, M>>,
-    level_offset: f32,
+    geometry: TreeLayout,
 }
 
 impl<'a, M> RowsWidget<'a, M> {
@@ -450,7 +650,7 @@ impl<'a, M> RowsWidget<'a, M> {
         metas: Vec<RowMeta>,
         mode: DragMode,
         valid: Option<Valid<'a>>,
-        level_offset: f32,
+        geometry: TreeLayout,
     ) -> Self {
         Self {
             rows,
@@ -458,7 +658,7 @@ impl<'a, M> RowsWidget<'a, M> {
             mode,
             valid,
             emit: None,
-            level_offset,
+            geometry,
         }
     }
 }
@@ -617,8 +817,8 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for RowsWidget<'a, M> {
                         match self.mode {
                             DragMode::Handle => {
                                 let grip = Rectangle {
-                                    x: bounds[i].x + bounds[i].width - GRIP_WIDTH,
-                                    width: GRIP_WIDTH,
+                                    x: bounds[i].x + bounds[i].width - self.geometry.grip_width,
+                                    width: self.geometry.grip_width,
                                     ..bounds[i]
                                 };
                                 if grip.contains(p) {
@@ -638,7 +838,8 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for RowsWidget<'a, M> {
                 }
                 IcedEvent::Mouse(mouse::Event::CursorMoved { .. }) => {
                     if let (Some((i, from)), Some(p)) = (state.pending, cursor.position())
-                        && ((p.x - from.x).powi(2) + (p.y - from.y).powi(2)).sqrt() > DRAG_THRESHOLD
+                        && ((p.x - from.x).powi(2) + (p.y - from.y).powi(2)).sqrt()
+                            > self.geometry.drag_threshold
                     {
                         state.pending = None;
                         state.drag = Some(Drag {
@@ -689,8 +890,8 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for RowsWidget<'a, M> {
             && layout.children().any(|c| {
                 let b = c.bounds();
                 cursor.is_over(Rectangle {
-                    x: b.x + b.width - GRIP_WIDTH,
-                    width: GRIP_WIDTH,
+                    x: b.x + b.width - self.geometry.grip_width,
+                    width: self.geometry.grip_width,
                     ..b
                 })
             })
@@ -750,7 +951,7 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for RowsWidget<'a, M> {
                 renderer.fill_quad(
                     Quad {
                         bounds: bounds[i],
-                        border: Border::default().rounded(theme.metrics.radius_s),
+                        border: Border::default().rounded(self.geometry.row_radius),
                         shadow: Shadow::default(),
                         snap: false,
                     },
@@ -763,15 +964,15 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for RowsWidget<'a, M> {
         // and ringed to say "inside".
         if let Some((j, pos)) = drop {
             let b = bounds[j];
-            let indent = self.metas[j].level as f32 * self.level_offset;
+            let indent = self.metas[j].level as f32 * self.geometry.level_offset;
             match pos {
                 Position::Inside => renderer.fill_quad(
                     Quad {
                         bounds: b,
                         border: Border {
                             color: accent,
-                            width: 1.5,
-                            radius: theme.metrics.radius_s.into(),
+                            width: self.geometry.drop_border_width,
+                            radius: self.geometry.row_radius.into(),
                         },
                         shadow: Shadow::default(),
                         snap: false,
@@ -783,14 +984,17 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for RowsWidget<'a, M> {
                         b.y
                     } else {
                         b.y + b.height
-                    } - 1.0;
+                    } - self.geometry.drop_line_width / 2.0;
                     renderer.fill_quad(
                         Quad {
                             bounds: Rectangle::new(
                                 Point::new(b.x + indent, y),
-                                Size::new(b.width - indent, 2.0),
+                                Size::new(
+                                    (b.width - indent).max(0.0),
+                                    self.geometry.drop_line_width,
+                                ),
                             ),
-                            border: Border::default().rounded(1.0),
+                            border: Border::default().rounded(self.geometry.drop_line_radius),
                             shadow: Shadow::default(),
                             snap: false,
                         },
@@ -815,48 +1019,51 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for RowsWidget<'a, M> {
             let lift = theme.shadows.popover();
             let (cx, cy) = (b.x + b.width / 2.0, b.y + b.height / 2.0);
             let grow = Transformation::translate(cx, cy)
-                * Transformation::scale(1.01)
+                * Transformation::scale(self.geometry.drag_scale)
                 * Transformation::translate(-cx, -cy);
             let solid = Color {
                 a: 1.0,
                 ..theme.semantic.view.bg
             };
-            renderer.with_layer(layout.bounds().expand(24.0), |renderer| {
-                renderer.with_translation(Vector::new(0.0, dy), |renderer| {
-                    renderer.with_transformation(grow, |renderer| {
-                        renderer.fill_quad(
-                            Quad {
-                                bounds: b,
-                                border: Border {
-                                    color: accent,
-                                    width: 2.0,
-                                    radius: theme.metrics.radius_s.into(),
+            renderer.with_layer(
+                layout.bounds().expand(self.geometry.drag_clip_margin),
+                |renderer| {
+                    renderer.with_translation(Vector::new(0.0, dy), |renderer| {
+                        renderer.with_transformation(grow, |renderer| {
+                            renderer.fill_quad(
+                                Quad {
+                                    bounds: b,
+                                    border: Border {
+                                        color: accent,
+                                        width: self.geometry.drag_border_width,
+                                        radius: self.geometry.row_radius.into(),
+                                    },
+                                    shadow: Shadow {
+                                        color: lift.shadow.color,
+                                        offset: Vector::new(0.0, self.geometry.drag_shadow_offset),
+                                        blur_radius: lift.shadow.blur_radius,
+                                    },
+                                    snap: false,
                                 },
-                                shadow: Shadow {
-                                    color: lift.shadow.color,
-                                    offset: Vector::new(0.0, 2.0),
-                                    blur_radius: lift.shadow.blur_radius,
-                                },
-                                snap: false,
-                            },
-                            Background::Color(solid),
-                        );
-                        let vp = Rectangle {
-                            y: viewport.y - dy,
-                            ..*viewport
-                        };
-                        row.as_widget().draw(
-                            ct,
-                            renderer,
-                            theme,
-                            style,
-                            l,
-                            mouse::Cursor::Unavailable,
-                            &vp,
-                        );
+                                Background::Color(solid),
+                            );
+                            let vp = Rectangle {
+                                y: viewport.y - dy,
+                                ..*viewport
+                            };
+                            row.as_widget().draw(
+                                ct,
+                                renderer,
+                                theme,
+                                style,
+                                l,
+                                mouse::Cursor::Unavailable,
+                                &vp,
+                            );
+                        });
                     });
-                });
-            });
+                },
+            );
         }
     }
 
@@ -904,11 +1111,160 @@ mod tests {
     use super::*;
     use crate::primitives::tree::TreeNode as N;
 
+    #[test]
+    fn layout_resolves_design_tokens_and_inherits_only_metrics() {
+        let m = Metrics::desktop();
+        let inherited = [
+            "icon-size",
+            "icon-padding",
+            "label-padding",
+            "checkbox-padding",
+            "row-radius",
+        ];
+        let g = TreeLayout::resolve_numbers(&m, |key| (!inherited.contains(&key)).then_some(7.0));
+        assert_eq!(g.level_offset, 7.0);
+        assert_eq!(g.row_height, 7.0);
+        assert_eq!(g.grip_width, 7.0);
+        assert_eq!(g.drag_threshold, 7.0);
+        assert_eq!(g.checkbox_border_width, 7.0);
+        assert_eq!(g.connector_width, 7.0);
+        assert_eq!(g.drop_line_width, 7.0);
+        assert_eq!(g.icon_size, m.icon_size);
+        assert_eq!(g.icon_padding, iced::Padding::from([0.0, m.space_xs]));
+        assert_eq!(g.label_padding, iced::Padding::from([0.0, m.space_s]));
+        assert_eq!(g.row_radius, m.radius_s);
+        let explicit = TreeLayout::resolve_numbers(&m, |_| Some(9.0));
+        assert_eq!(explicit.icon_size, 9.0);
+        assert_eq!(explicit.checkbox_padding, iced::Padding::from([0.0, 9.0]));
+        assert_eq!(explicit.row_radius, 9.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "missing [tree] level-offset token")]
+    fn design_tokens_are_required() {
+        TreeLayout::resolve_numbers(&Metrics::desktop(), |_| None);
+    }
+
+    #[test]
+    fn variants_inherit_per_key_and_explicit_builders_win() {
+        use crate::theme_config::{Schema, ThemeConfig};
+        let tokens = ThemeConfig::builder("tree-variants")
+            .files(false)
+            .schema(Schema::new().variant("tree", "compact", &[]))
+            .app_text("[tree]\nlevel-offset=21px\nrow-height=35px\nicon-padding=6px\n[tree.compact]\nrow-height=27px\nlabel-padding=3px")
+            .build()
+            .tokens();
+        let d = data();
+        let state = TreeState::new();
+        let t = Tree::<()>::new(&d, &state);
+        assert_eq!(t.variant, "default");
+        let base = t.geometry_with_tokens(&tokens);
+        let t = t.variant("compact");
+        let compact = t.geometry_with_tokens(&tokens);
+        assert_eq!(compact.row_height, 27.0);
+        assert_eq!(compact.level_offset, 21.0);
+        assert_eq!(compact.icon_padding, iced::Padding::from([0.0, 6.0]));
+        assert_eq!(compact.label_padding, iced::Padding::from([0.0, 3.0]));
+        assert_eq!(compact.grip_width, base.grip_width);
+        let explicit = t
+            .level_offset(45.0)
+            .row_height(50.0)
+            .icon_padding(1.0)
+            .label_padding(2.0)
+            .checkbox_padding(3.0)
+            .geometry_with_tokens(&tokens);
+        assert_eq!(explicit.level_offset, 45.0);
+        assert_eq!(explicit.row_height, 50.0);
+        assert_eq!(explicit.icon_padding, iced::Padding::from(1.0));
+        assert_eq!(explicit.label_padding, iced::Padding::from(2.0));
+        assert_eq!(explicit.checkbox_padding, iced::Padding::from(3.0));
+        let unknown = Tree::<()>::new(&d, &state)
+            .variant("undeclared")
+            .geometry_with_tokens(&tokens);
+        assert_eq!(unknown.row_height, base.row_height);
+        assert_eq!(unknown.level_offset, base.level_offset);
+        assert_eq!(unknown.label_padding, base.label_padding);
+        assert_eq!(unknown.icon_size, base.icon_size);
+    }
+
+    #[test]
+    fn responsive_boundaries_local_isolation_and_explicit_precedence() {
+        use crate::theme_config::{Schema, ThemeConfig};
+        let cfg = ThemeConfig::builder("tree-local")
+            .files(false)
+            .schema(Schema::new().variant("tree", "narrow", &[]).variant("tree", "wide", &[]))
+            .app_text("[tree]\nbreakpoint-rules=xs:narrow,md:wide\nlevel-offset=23px\n[tree.narrow]\nrow-height=26px\n[tree.wide]\nrow-height=42px\ngrip-width=48px")
+            .build();
+        let other = ThemeConfig::builder("tree-other")
+            .files(false)
+            .app_text("[tree]\nrow-height=61px")
+            .build();
+        let d = data();
+        let state = TreeState::new();
+        let mut metrics = Metrics::desktop();
+        metrics.icon_size = 29.0;
+        let t = Tree::<()>::new(&d, &state)
+            .theme_config(&cfg)
+            .metrics(metrics);
+        let tokens = t.resolved_tokens();
+        let md = crate::breakpoints::Breakpoints::current().md;
+        for (width, expected, height) in [
+            (0.0, "narrow", 26.0),
+            (md - 0.01, "narrow", 26.0),
+            (md, "wide", 42.0),
+            (md + 1.0, "wide", 42.0),
+        ] {
+            let variant = t.selected_variant(&tokens, width);
+            assert_eq!(variant, expected);
+            let g = t.geometry_for_variant(&tokens, &variant);
+            assert_eq!(g.row_height, height);
+            assert_eq!(g.level_offset, 23.0);
+            assert_eq!(g.icon_size, 29.0);
+            if expected == "wide" {
+                assert_eq!(g.grip_width, 48.0);
+            }
+        }
+        let independent = Tree::<()>::new(&d, &state).tokens(other.tokens());
+        assert_eq!(
+            independent
+                .geometry_with_tokens(&independent.resolved_tokens())
+                .row_height,
+            61.0
+        );
+        assert_eq!(
+            t.geometry_with_tokens(&t.resolved_tokens()).level_offset,
+            23.0
+        );
+        let explicit = t.variant("undeclared").row_height(57.0);
+        assert_eq!(explicit.selected_variant(&tokens, md), "undeclared");
+        let g = explicit.geometry_for_variant(&tokens, "undeclared");
+        assert_eq!(g.row_height, 57.0);
+        assert_eq!(g.level_offset, 23.0);
+        let _: Element<'_, ()> = explicit.into();
+        // No rules means the original unwrapped rows widget is retained.
+        let plain: Element<'_, ()> = independent.into();
+        assert_eq!(plain.as_widget().children().len(), state.rows(&d).len());
+    }
+
     fn data() -> Vec<N> {
         vec![
             N::branch("a", "A", vec![N::new("a1", "A1")]),
             N::new("b", "B"),
         ]
+    }
+
+    #[test]
+    fn the_row_parts_take_their_own_padding() {
+        let d = data();
+        let state = TreeState::new();
+        let t = Tree::<()>::new(&d, &state)
+            .checkboxes(true)
+            .icons(|_, _| Some(Icon::Folder))
+            .icon_padding([0.0, 1.0])
+            .label_padding([0.0, 2.0])
+            .checkbox_padding([0.0, 3.0]);
+        assert_eq!(t.label_padding, Some(iced::Padding::from([0.0, 2.0])));
+        let _: Element<'_, ()> = t.into();
     }
 
     /// The rows the widget builds: open branches show their children; a window builds fewer.
@@ -933,5 +1289,96 @@ mod tests {
         let d = data();
         assert!(!tree::can_move(&d, "a", "a1"));
         assert!(tree::can_move(&d, "b", "a1"));
+    }
+}
+
+/// Owned presentation overrides for a nested `Tree`; values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct TreeProps {
+    pub expander_props: Option<ButtonProps>,
+    pub label_button_props: Option<ButtonProps>,
+    pub checkbox_button_props: Option<ButtonProps>,
+    pub row_props: Option<ContainerProps>,
+    pub level_offset: Option<f32>,
+    pub row_height: Option<f32>,
+    pub icon_padding: Option<iced::Padding>,
+    pub label_padding: Option<iced::Padding>,
+    pub checkbox_padding: Option<iced::Padding>,
+    pub metrics: Option<Metrics>,
+}
+impl TreeProps {
+    pub fn expander_props(mut self, value: impl Into<ButtonProps>) -> Self {
+        self.expander_props = Some(value.into());
+        self
+    }
+    pub fn label_button_props(mut self, value: impl Into<ButtonProps>) -> Self {
+        self.label_button_props = Some(value.into());
+        self
+    }
+    pub fn checkbox_button_props(mut self, value: impl Into<ButtonProps>) -> Self {
+        self.checkbox_button_props = Some(value.into());
+        self
+    }
+    pub fn row_props(mut self, value: impl Into<ContainerProps>) -> Self {
+        self.row_props = Some(value.into());
+        self
+    }
+    pub fn level_offset(mut self, value: impl Into<f32>) -> Self {
+        self.level_offset = Some(value.into());
+        self
+    }
+    pub fn row_height(mut self, value: impl Into<f32>) -> Self {
+        self.row_height = Some(value.into());
+        self
+    }
+    pub fn icon_padding(mut self, value: impl Into<iced::Padding>) -> Self {
+        self.icon_padding = Some(value.into());
+        self
+    }
+    pub fn label_padding(mut self, value: impl Into<iced::Padding>) -> Self {
+        self.label_padding = Some(value.into());
+        self
+    }
+    pub fn checkbox_padding(mut self, value: impl Into<iced::Padding>) -> Self {
+        self.checkbox_padding = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn apply<'a, M: Clone + 'a>(&self, widget: Tree<'a, M>) -> Tree<'a, M> {
+        let mut widget = widget;
+        if let Some(props) = &self.expander_props {
+            widget.expander_props.merge(props);
+        }
+        if let Some(props) = &self.label_button_props {
+            widget.label_button_props.merge(props);
+        }
+        if let Some(props) = &self.checkbox_button_props {
+            widget.checkbox_button_props.merge(props);
+        }
+        if let Some(props) = &self.row_props {
+            widget.row_props.merge(props);
+        }
+        if let Some(value) = &self.level_offset {
+            widget = widget.level_offset(value.clone());
+        }
+        if let Some(value) = &self.row_height {
+            widget = widget.row_height(value.clone());
+        }
+        if let Some(value) = &self.icon_padding {
+            widget = widget.icon_padding(value.clone());
+        }
+        if let Some(value) = &self.label_padding {
+            widget = widget.label_padding(value.clone());
+        }
+        if let Some(value) = &self.checkbox_padding {
+            widget = widget.checkbox_padding(value.clone());
+        }
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
+        }
+        widget
     }
 }

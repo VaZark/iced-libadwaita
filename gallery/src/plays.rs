@@ -1,6 +1,5 @@
 //! The playgrounds of the gallery's component pages (see `playground.rs`): for each page, the
-//! controls (`specs`) and the live component built from their values (`build`), with the code
-//! that builds it. A page that is not here shows its own demo: it needs more than a single
+//! controls (`specs`) and the live component built from their values (`build`). A page that is not here shows its own demo: it needs more than a single
 //! instance can express (async states, a wizard flow, app-wide theme settings, a layout that
 //! depends on the container).
 
@@ -38,27 +37,6 @@ fn on_text(d: Detail, k: &'static str) -> impl Fn(String) -> Message {
     move |v| Message::Play(d, PMsg::Text(k, v))
 }
 
-/// The code shown under a preview: a constructor, then one line per property that is not at
-/// its default.
-struct Code(String);
-
-impl Code {
-    fn new(head: &str) -> Self {
-        Self(format!("{head}\n"))
-    }
-    fn add(mut self, on: bool, line: &str) -> Self {
-        if on {
-            self.0.push_str("    ");
-            self.0.push_str(line);
-            self.0.push('\n');
-        }
-        self
-    }
-    fn done(self) -> String {
-        self.0.trim_end().to_string()
-    }
-}
-
 const ROLES: [&str; 5] = ["Accent", "Success", "Warning", "Error", "Destructive"];
 const ROLE_OF: [Role; 5] = [
     Role::Accent,
@@ -67,38 +45,6 @@ const ROLE_OF: [Role; 5] = [
     Role::Error,
     Role::Destructive,
 ];
-
-/// The properties every cartesian chart (line, bar) shares: which elements are drawn, and the
-/// color.
-fn cartesian_specs() -> Vec<Spec> {
-    use Spec as S;
-    vec![
-        S::bool("value_axis", "Value axis", true),
-        S::bool("category_axis", "Category axis", true),
-        S::bool("grid", "Gridlines", true),
-        S::bool("tooltip", "Tooltip", true),
-        S::bool("hover", "Hover highlight", true),
-        S::choice("color", "Color", &["Series colors", "Accent"], 0),
-        S::number("height", "Height (px)", 80.0..=420.0, 240.0),
-    ]
-}
-
-/// The code lines for the cartesian properties that are not at their defaults.
-fn cartesian_code(code: Code, p: &crate::playground::Playground) -> Code {
-    code.add(!p.bool("value_axis"), ".value_axis(false)")
-        .add(!p.bool("category_axis"), ".category_axis(false)")
-        .add(!p.bool("grid"), ".grid(false)")
-        .add(!p.bool("tooltip"), ".tooltip(false)")
-        .add(!p.bool("hover"), ".hover(false)")
-        .add(
-            p.choice("color") == 1,
-            ".colors(|theme, _| theme.palette.accent_bg_color)",
-        )
-        .add(
-            p.number("height") != 240.0,
-            &format!(".height({:.0}.0)", p.number("height")),
-        )
-}
 
 pub fn specs(d: Detail) -> Vec<Spec> {
     use Spec as S;
@@ -268,108 +214,6 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::number("padding", "Horizontal padding (px)", 0.0..=48.0, 12.0),
             S::number("parent", "Parent width (px)", 300.0..=1500.0, 1400.0),
         ],
-        Detail::LineChart => {
-            let mut v = vec![
-                S::choice("curve", "Curve", &["Linear", "Step", "Smooth"], 0),
-                S::choice("fill", "Fill", &["Lines", "Area", "Stacked", "100%"], 0),
-                S::number("series", "Series", 1.0..=3.0, 3.0),
-                S::bool("points", "Points", true),
-                S::bool("legend", "Legend", true),
-            ];
-            v.extend(cartesian_specs());
-            v
-        }
-        Detail::BarChart => {
-            let mut v = vec![
-                S::choice("data", "Data", &["Months", "Histogram"], 0),
-                S::choice("layout", "Layout", &["Grouped", "Stacked", "100%"], 0),
-                S::bool("horizontal", "Horizontal", false),
-                S::number("series", "Series", 1.0..=3.0, 3.0),
-                S::number("gap", "Gap between bars", 0.0..=0.9, 0.2),
-                S::number("radius", "Corner radius", 0.0..=12.0, 2.0),
-                S::number("min_bar", "Minimum bar height (px)", 0.0..=12.0, 0.0),
-                S::number("empty_bar", "Empty bar stub (px)", 0.0..=6.0, 0.0),
-                S::bool("selection", "Highlight categories 2 to 4", false),
-                S::bool("legend", "Legend", true),
-            ];
-            v.extend(cartesian_specs());
-            v
-        }
-        Detail::DonutChart => vec![
-            S::choice("rings", "Rings", &["One", "Two"], 0),
-            S::number("thickness", "Ring thickness (px)", 8.0..=60.0, 28.0),
-            S::number("ring_gap", "Gap between rings (px)", 0.0..=16.0, 4.0),
-            S::number("pad", "Gap between slices (rad)", 0.0..=0.1, 0.015),
-            S::text("center", "Center title (empty: the total)", ""),
-            S::bool("labels", "Percent labels", true),
-            S::bool("legend", "Legend", true),
-            S::bool("tooltip", "Tooltip", true),
-            S::number("height", "Height (px)", 160.0..=420.0, 280.0),
-        ],
-        Detail::BubbleChart => vec![
-            S::number("series", "Series", 1.0..=3.0, 3.0),
-            S::number("rmin", "Smallest radius (px)", 2.0..=20.0, 5.0),
-            S::number("rmax", "Largest radius (px)", 10.0..=60.0, 26.0),
-            S::number("opacity", "Fill opacity", 0.1..=1.0, 0.55),
-            S::bool("titles", "Axis titles", true),
-            S::bool("legend", "Legend", true),
-            S::bool("value_axis", "Y axis labels", true),
-            S::bool("category_axis", "X axis labels", true),
-            S::bool("grid", "Gridlines", true),
-            S::bool("tooltip", "Tooltip", true),
-            S::bool("hover", "Hover highlight", true),
-            S::choice("color", "Color", &["Series colors", "Accent"], 0),
-            S::number("height", "Height (px)", 200.0..=480.0, 320.0),
-        ],
-        Detail::ComboChart => vec![
-            S::bool("area", "Trend as an area", true),
-            S::bool("revenue", "Revenue as bars", true),
-            S::bool("costs", "Costs as bars", true),
-            S::bool("target", "Target as a line", true),
-            S::bool("stack", "Stack the bars", false),
-            S::choice(
-                "curve",
-                "Curve (lines, areas)",
-                &["Linear", "Step", "Smooth"],
-                0,
-            ),
-            S::bool("points", "Points on lines", true),
-            S::bool("legend", "Legend", true),
-            S::bool("value_axis", "Value axis", true),
-            S::bool("category_axis", "Category axis", true),
-            S::bool("grid", "Gridlines", true),
-            S::bool("tooltip", "Tooltip", true),
-            S::bool("hover", "Hover highlight", true),
-            S::number("height", "Height (px)", 160.0..=420.0, 280.0),
-        ],
-        Detail::PieChart => vec![
-            S::number("donut", "Hole (fraction of the radius)", 0.0..=0.9, 0.0),
-            S::number("pad", "Gap between slices (rad)", 0.0..=0.1, 0.01),
-            S::text("center", "Center text", "Browsers"),
-            S::bool("labels", "Percent labels", true),
-            S::bool("legend", "Legend", true),
-            S::bool("tooltip", "Tooltip", true),
-            S::number("height", "Height (px)", 120.0..=420.0, 260.0),
-        ],
-        Detail::Funnel => vec![
-            S::choice("shape", "Shape", &["Continuous", "Blocks"], 0),
-            S::number("gap", "Gap between stages (px)", 0.0..=16.0, 2.0),
-            S::bool("labels", "Labels", true),
-            S::bool("tooltip", "Tooltip", true),
-            S::number("height", "Height (px)", 120.0..=420.0, 260.0),
-        ],
-        Detail::Sankey => vec![
-            S::bool("labels", "Node labels", true),
-            S::bool("tooltip", "Tooltip", true),
-            S::number("height", "Height (px)", 160.0..=480.0, 300.0),
-        ],
-        Detail::Sunburst => vec![
-            S::number("hole", "Hole (fraction of the radius)", 0.0..=0.9, 0.25),
-            S::bool("labels", "Labels", true),
-            S::bool("legend", "Legend", true),
-            S::bool("tooltip", "Tooltip", true),
-            S::number("height", "Height (px)", 160.0..=480.0, 300.0),
-        ],
         Detail::Divider => vec![
             S::choice("orientation", "Orientation", &["Horizontal", "Vertical"], 0),
             S::text("label", "Label", "Label"),
@@ -526,22 +370,6 @@ pub fn specs(d: Detail) -> Vec<Spec> {
                 0,
             ),
         ],
-        Detail::ColorHelpers => vec![
-            S::text("seed", "Seed (a name)", "Evening drive"),
-            S::choice(
-                "tag",
-                "Tag color",
-                &[
-                    "Dark blue #3b4a7a",
-                    "Amber #e5a50a",
-                    "Pink #c04a9a",
-                    "Gray #77767b",
-                ],
-                0,
-            ),
-            S::choice("page", "Page", &["Light", "Dark"], 1),
-            S::number("ratio", "Minimum contrast", 1.0..=7.0, 4.5),
-        ],
         Detail::ClipWindow => vec![
             S::number("height", "Window height (px)", 0.0..=220.0, 90.0),
             S::choice("anchor", "Anchor", &["Top", "Bottom"], 1),
@@ -621,13 +449,13 @@ pub fn specs(d: Detail) -> Vec<Spec> {
     }
 }
 
-/// The live component for `d` built from the playground's values, and its code.
+/// The live component for `d` built from the playground's values.
 pub fn build<'a>(
     g: &'a Gallery,
     d: Detail,
     p: &'a crate::playground::Playground,
     m: Metrics,
-) -> Option<(Element<'a>, String)> {
+) -> Option<Element<'a>> {
     let lbl = |s: &str| -> Element<'a> { cmp::typography::label(s.to_string()).into() };
     let noop = Message::Noop;
     Some(match d {
@@ -645,18 +473,7 @@ pub fn build<'a>(
                     .on_press_maybe(press)
                     .into(),
             };
-            let ctor = [
-                "raised_button",
-                "flat_button",
-                "suggested_button",
-                "destructive_button",
-                "pill_button",
-                "suggested_pill_button",
-            ][style];
-            let code = Code::new(&format!("{ctor}(label(\"{}\"))", p.text("label")))
-                .add(!p.bool("disabled"), ".on_press(Msg::Pressed)")
-                .done();
-            (button, code)
+            button
         }
         Detail::ButtonContent => {
             let icon = [
@@ -684,22 +501,7 @@ pub fn build<'a>(
                     .on_press_maybe(press)
                     .into()
             };
-            let code = if p.choice("style") == 2 {
-                format!(
-                    "suggested_circular_button(Icon::{:?}.view(16.0))   // round, around any content\n    .size({:.0}.0)   // the diameter\n    .on_press(Msg::Play)",
-                    icon.unwrap_or(Icon::Play),
-                    p.number("circ_size")
-                )
-            } else {
-                Code::new(&format!("ButtonContent::new(\"{}\")", p.text("label")))
-                    .add(
-                        icon.is_some(),
-                        &format!(".icon(Icon::{:?})", icon.unwrap_or(Icon::Home)),
-                    )
-                    .add(p.choice("style") == 1, "// in suggested_button(..)")
-                    .done()
-            };
-            (button, code)
+            button
         }
         Detail::ToggleGroup => {
             let names = [
@@ -721,24 +523,14 @@ pub fn build<'a>(
             if p.bool("fill") {
                 tg = tg.width(Length::Fill);
             }
-            let code = Code::new("toggle_group(items, Some(selected), Msg::Select)")
-                .add(
-                    icons,
-                    "// each item: ToggleItem::new(value, label).icon(..)",
-                )
-                .add(p.bool("fill"), ".width(Length::Fill)")
-                .done();
-            (Element::from(tg), code)
+            Element::from(tg)
         }
         Detail::LinkButton => {
             let b = cmp::link_button(p.text("label").to_string());
             let b: Element<'a> = b
                 .on_press_maybe((!p.bool("disabled")).then_some(noop))
                 .into();
-            let code = Code::new(&format!("link_button(\"{}\")", p.text("label")))
-                .add(!p.bool("disabled"), ".on_press(Msg::Open)")
-                .done();
-            (b, code)
+            b
         }
         Detail::TextInput => {
             let state = [
@@ -772,48 +564,21 @@ pub fn build<'a>(
                 }
                 e.into()
             };
-            let code = Code::new(if p.bool("password") {
-                "password_entry(\"Password\", &self.value)"
-            } else {
-                "entry(\"Placeholder\", &self.value)"
-            })
-            .add(!p.bool("disabled"), ".on_input(Msg::Value)")
-            .add(
-                state.is_some() && !p.bool("password"),
-                &format!(
-                    ".state(EntryState::{})",
-                    ["", "Error", "Warning", "Success"][p.choice("state")]
-                ),
-            )
-            .add(
-                p.bool("fixed") && !p.bool("password"),
-                ".width(Length::Fixed(240.0))",
-            )
-            .done();
-            (el, code)
+            el
         }
         Detail::Switch => {
             let mut s = cmp::switch(p.bool("active"));
             if !p.bool("disabled") {
                 s = s.on_toggle(on_bool(d, "active"));
             }
-            let code = Code::new("switch(self.active)")
-                .add(!p.bool("disabled"), ".on_toggle(Msg::Active)")
-                .done();
-            (s.into(), code)
+            s.into()
         }
         Detail::CheckButton => {
             let mut c = cmp::check_button(p.text("label").to_string(), p.bool("active"));
             if !p.bool("disabled") {
                 c = c.on_toggle(on_bool(d, "active"));
             }
-            let code = Code::new(&format!(
-                "check_button(\"{}\", self.active)",
-                p.text("label")
-            ))
-            .add(!p.bool("disabled"), ".on_toggle(Msg::Active)")
-            .done();
-            (c.into(), code)
+            c.into()
         }
         Detail::RadioButton => {
             let sel = Some(p.choice("selected"));
@@ -826,10 +591,7 @@ pub fn build<'a>(
             };
             let el =
                 column![mk(0, "Radio A"), mk(1, "Radio B"), mk(2, "Radio C")].spacing(m.space_s);
-            let code = Code::new("radio_button(\"Radio A\", 0, self.selected, Msg::Select)")
-                .add(true, "// one per option, same `selected`")
-                .done();
-            (el.into(), code)
+            el.into()
         }
         Detail::Scale => {
             let v = p.number("value");
@@ -848,10 +610,7 @@ pub fn build<'a>(
             if p.bool("readout") {
                 col = col.push(ty::dim_label(format!("value {v:.0}")));
             }
-            let code = Code::new("scale(0.0..=100.0, self.value, Msg::Value)")
-                .add(vertical, ".orientation(Axis::Vertical).height(180.0)")
-                .done();
-            (col.into(), code)
+            col.into()
         }
         Detail::Dropdown => {
             let sel = p.choice("selected");
@@ -868,13 +627,7 @@ pub fn build<'a>(
                 )
                 .into()
             };
-            let code = Code::new("dropdown(&FRUITS, self.selected, Msg::Pick)")
-                .add(
-                    p.bool("disabled"),
-                    "// disabled: dropdown_disabled(self.selected)",
-                )
-                .done();
-            (el, code)
+            el
         }
         Detail::ActionRow => {
             let mut r = w::ActionRow::new(p.text("title").to_string()).metrics(m);
@@ -890,16 +643,7 @@ pub fn build<'a>(
             if p.bool("chevron") {
                 r = r.chevron(true).on_activate(Message::ShowToast("Opened"));
             }
-            let code = Code::new(&format!("ActionRow::new(\"{}\")", p.text("title")))
-                .add(p.bool("subtitle"), ".subtitle(\"A secondary line\")")
-                .add(p.bool("prefix"), ".prefix(avatar(40.0, title))")
-                .add(
-                    p.bool("suffix"),
-                    ".suffix(raised_button(label(\"Action\")).on_press(Msg::Action))",
-                )
-                .add(p.bool("chevron"), ".chevron(true).on_activate(Msg::Open)")
-                .done();
-            (stage(Element::from(r)), code)
+            stage(Element::from(r))
         }
         Detail::TreeRow => {
             let selected = p.bool("selected");
@@ -954,32 +698,7 @@ pub fn build<'a>(
                     }
                 }
             }
-            let children = ["rows", "mixed elements", "nested tree rows"][kind];
-            let code = Code::new("TreeRow::new(\"Notifications\")")
-                .add(p.bool("subtitle"), ".subtitle(\"Expand for details\")")
-                .add(p.bool("prefix"), ".prefix(Icon::Home.view(16.0))")
-                .add(p.bool("suffix"), ".suffix(Badge::count(n, 99))")
-                .add(
-                    true,
-                    ".expanded(self.open).on_toggle(Msg::Toggle)   // the arrow",
-                )
-                .add(
-                    true,
-                    ".selected(self.selected).on_activate(Msg::Select) // the title",
-                )
-                .add(
-                    p.changed("indent"),
-                    &format!(
-                        ".indent({:.0}.0)   // omitted: the toolkit's [rows] expander-indent",
-                        p.number("indent")
-                    ),
-                )
-                .add(
-                    true,
-                    &format!(".push(..)   // {children}: rows, other TreeRows, or any element"),
-                )
-                .done();
-            (Element::from(r), code)
+            Element::from(r)
         }
         Detail::ButtonRow => {
             let mut r = w::ButtonRow::new(p.text("title").to_string()).on_activate(Message::Noop);
@@ -988,12 +707,7 @@ pub fn build<'a>(
                 2 => r.role(Role::Destructive),
                 _ => r,
             };
-            let code = Code::new(&format!("ButtonRow::new(\"{}\")", p.text("title")))
-                .add(p.choice("role") == 1, ".role(Role::Accent)")
-                .add(p.choice("role") == 2, ".role(Role::Destructive)")
-                .add(true, ".on_activate(Msg::Activate)")
-                .done();
-            (stage(Element::from(r)), code)
+            stage(Element::from(r))
         }
         Detail::Card => {
             let n = p.number("children") as usize;
@@ -1004,12 +718,7 @@ pub fn build<'a>(
             for i in 1..n {
                 c = c.push(ty::body(format!("Child {}", i + 1)));
             }
-            let code = Code::new("Card::new(child)")
-                .add(n > 1, &format!(".push(..) // {} children", n))
-                .add(p.changed("padding"), &format!(".padding({pad:.0})"))
-                .add(!p.bool("separators"), ".separators(false)")
-                .done();
-            (Element::from(c), code)
+            Element::from(c)
         }
         Detail::Clamp => {
             let max = p.number("max");
@@ -1019,10 +728,7 @@ pub fn build<'a>(
                     .metrics(m),
                 max,
             );
-            let code = Code::new("clamp(entry, max)")
-                .add(true, &format!("// max = {max:.0}"))
-                .done();
-            (stage(el), code)
+            stage(el)
         }
         Detail::StatusPage => {
             let icon = [Icon::Search, Icon::Home, Icon::Settings][p.choice("icon")];
@@ -1036,19 +742,7 @@ pub fn build<'a>(
                 page = page
                     .child(cmp::suggested_pill_button(lbl("Try Again")).on_press(Message::Noop));
             }
-            let code = Code::new("status_page()")
-                .add(true, &format!(".icon(Icon::{icon:?}.colored(64.0, dim))"))
-                .add(true, &format!(".title(\"{}\")", p.text("title")))
-                .add(
-                    true,
-                    &format!(".description(\"{}\")", p.text("description")),
-                )
-                .add(
-                    p.bool("action"),
-                    ".child(suggested_pill_button(label(\"Try Again\")))",
-                )
-                .done();
-            (container(page).height(Length::Fixed(280.0)).into(), code)
+            container(page).height(Length::Fixed(280.0)).into()
         }
         Detail::WrapBox => {
             let tags: Vec<Element<'a>> = [
@@ -1069,8 +763,7 @@ pub fn build<'a>(
             .take(p.number("count") as usize)
             .map(|t| cmp::tag(t, Role::Accent))
             .collect();
-            let code = Code::new(&format!("wrap_box(tags, {:.0})", p.number("spacing"))).done();
-            (stage(w::wrap_box(tags, p.number("spacing"))), code)
+            stage(w::wrap_box(tags, p.number("spacing")))
         }
         Detail::Collapse => {
             let behavior = if p.choice("behavior") == 0 {
@@ -1083,21 +776,11 @@ pub fn build<'a>(
                 .basis(260.0)
                 .collapse(behavior)
                 .metrics(m);
-            let code = Code::new("SliderRow::new(\"Volume\", self.value, 0.0..=100.0, Msg::Value)")
-                .add(true, ".basis(260.0)")
-                .add(
-                    true,
-                    &format!(
-                        ".collapse(CollapseBehavior::{})",
-                        ["Stacked", "Flex"][p.choice("behavior")]
-                    ),
-                )
-                .done();
-            (stage(Element::from(r)), code)
+            stage(Element::from(r))
         }
         Detail::Tree => {
-            let (el, code) = g.tree_demo.play(p, m);
-            (el.map(Message::Tree), code)
+            let el = g.tree_demo.play(p, m);
+            el.map(Message::Tree)
         }
         Detail::Container => {
             // The page is narrower than a Lg container, so the preview is drawn at 40%: the
@@ -1152,393 +835,7 @@ pub fn build<'a>(
                 "Parent {parent:.0} px; the container is {content_px:.0} px wide, the content {:.0} px. Drawn at 40%.",
                 (content_px - 2.0 * pad).max(0.0)
             ));
-            let size_code = match p.choice("size") {
-                0 => "ContainerSize::Xs".to_string(),
-                1 => "ContainerSize::Sm".to_string(),
-                2 => "ContainerSize::Md".to_string(),
-                3 => "ContainerSize::Lg".to_string(),
-                4 => "ContainerSize::Xl".to_string(),
-                _ => format!("ContainerSize::Px({:.0}.0)", p.number("custom")),
-            };
-            let code = Code::new("Container::new(content)")
-                .add(
-                    !fluid && p.choice("size") != 2,
-                    &format!(".size({size_code})   // the default is Md (960)"),
-                )
-                .add(fluid, ".fluid(true)   // no maximum: fills its parent")
-                .add(
-                    pad != 12.0,
-                    &format!(
-                        ".padding({pad:.0}.0)   // the default is the page padding, sides only"
-                    ),
-                )
-                .done();
-            (column![note, parent_box].spacing(m.space_s).into(), code)
-        }
-        Detail::LineChart => {
-            let n = p.number("series") as usize;
-            let mut c = w::LineChart::new(
-                crate::chart_demo::MONTHS,
-                crate::chart_demo::sales().into_iter().take(n),
-            )
-            .curve(
-                [
-                    iad::primitives::chart::shape::Curve::Linear,
-                    iad::primitives::chart::shape::Curve::Step,
-                    iad::primitives::chart::shape::Curve::Monotone,
-                ][p.choice("curve")],
-            )
-            .points(p.bool("points"))
-            .legend(p.bool("legend"))
-            .value_axis(p.bool("value_axis"))
-            .category_axis(p.bool("category_axis"))
-            .grid(p.bool("grid"))
-            .tooltip(p.bool("tooltip"))
-            .hover(p.bool("hover"))
-            .height(p.number("height"));
-            c = match p.choice("fill") {
-                1 => c.area(true),
-                2 => c.stacked(true),
-                3 => c.normalized(true),
-                _ => c,
-            };
-            if p.choice("color") == 1 {
-                c = c.colors(|t, _| t.palette.accent_bg_color);
-            }
-            let code = Code::new("LineChart::new(months, series)")
-                .add(p.choice("curve") == 1, ".curve(Curve::Step)")
-                .add(p.choice("curve") == 2, ".curve(Curve::Monotone)")
-                .add(p.choice("fill") == 1, ".area(true)")
-                .add(p.choice("fill") == 2, ".stacked(true)")
-                .add(p.choice("fill") == 3, ".normalized(true)")
-                .add(!p.bool("points"), ".points(false)")
-                .add(!p.bool("legend"), ".legend(false)");
-            (c.into(), cartesian_code(code, p).done())
-        }
-        Detail::BarChart => {
-            let n = p.number("series") as usize;
-            let histogram = p.choice("data") == 1;
-            let hist = iad::primitives::histogram::Histogram::from_values(
-                (0..300).map(|i| 100.0 * ((i as f32 * 0.618_034).fract()).powi(2)),
-                0.0,
-                100.0,
-                12,
-            );
-            let mut c = if histogram {
-                w::BarChart::histogram(&hist)
-            } else {
-                w::BarChart::new(
-                    crate::chart_demo::MONTHS,
-                    crate::chart_demo::sales().into_iter().take(n),
-                )
-            }
-            .layout(
-                [
-                    w::BarLayout::Grouped,
-                    w::BarLayout::Stacked,
-                    w::BarLayout::Normalized,
-                ][p.choice("layout")],
-            )
-            .horizontal(p.bool("horizontal"))
-            .gap(p.number("gap"))
-            .bar_radius(p.number("radius"))
-            .min_bar_height(p.number("min_bar"))
-            .empty_bar_height(p.number("empty_bar"))
-            .legend(p.bool("legend"))
-            .value_axis(p.bool("value_axis"))
-            .category_axis(p.bool("category_axis"))
-            .grid(p.bool("grid"))
-            .tooltip(p.bool("tooltip"))
-            .hover(p.bool("hover"))
-            .height(p.number("height"));
-            if p.bool("selection") {
-                c = c.selected(|i| (1..=3).contains(&i));
-            }
-            if p.choice("color") == 1 {
-                c = c.colors(|t, _| t.palette.accent_bg_color);
-            }
-            let head = if histogram {
-                "BarChart::histogram(&histogram)"
-            } else {
-                "BarChart::new(months, series)"
-            };
-            let code = Code::new(head)
-                .add(p.choice("layout") == 1, ".layout(BarLayout::Stacked)")
-                .add(p.choice("layout") == 2, ".layout(BarLayout::Normalized)")
-                .add(p.bool("horizontal"), ".horizontal(true)")
-                .add(
-                    p.number("gap") != 0.2,
-                    &format!(".gap({:.2})", p.number("gap")),
-                )
-                .add(
-                    p.number("radius") != 2.0,
-                    &format!(".bar_radius({:.0}.0)", p.number("radius")),
-                )
-                .add(
-                    p.number("min_bar") > 0.0,
-                    &format!(".min_bar_height({:.0}.0)", p.number("min_bar")),
-                )
-                .add(
-                    p.number("empty_bar") > 0.0,
-                    &format!(".empty_bar_height({:.0}.0)", p.number("empty_bar")),
-                )
-                .add(p.bool("selection"), ".selected(|i| (1..=3).contains(&i))")
-                .add(!p.bool("legend"), ".legend(false)");
-            (c.into(), cartesian_code(code, p).done())
-        }
-        Detail::DonutChart => {
-            let (outer, inner) = crate::chart_demo::revenue();
-            let mut c = w::DonutChart::new(outer)
-                .thickness(p.number("thickness"))
-                .ring_gap(p.number("ring_gap"))
-                .pad(p.number("pad"))
-                .labels(p.bool("labels"))
-                .legend(p.bool("legend"))
-                .tooltip(p.bool("tooltip"))
-                .height(p.number("height"));
-            let two = p.choice("rings") == 1;
-            if two {
-                c = c.ring(inner);
-            }
-            let centered = !p.text("center").is_empty();
-            if centered {
-                c = c.center(p.text("center").to_string(), "this quarter");
-            }
-            let code = Code::new("DonutChart::new(by_region)   // the outer ring")
-                .add(two, ".ring(by_product)             // another ring, inside")
-                .add(
-                    p.number("thickness") != 28.0,
-                    &format!(".thickness({:.0}.0)", p.number("thickness")),
-                )
-                .add(
-                    p.number("ring_gap") != 4.0,
-                    &format!(".ring_gap({:.0}.0)", p.number("ring_gap")),
-                )
-                .add(
-                    p.number("pad") != 0.015,
-                    &format!(".pad({:.3})", p.number("pad")),
-                )
-                .add(
-                    centered,
-                    &format!(
-                        ".center({:?}, \"this quarter\")   // default: the total",
-                        p.text("center")
-                    ),
-                )
-                .add(!p.bool("labels"), ".labels(false)")
-                .add(!p.bool("legend"), ".legend(false)")
-                .add(!p.bool("tooltip"), ".tooltip(false)")
-                .add(
-                    p.number("height") != 280.0,
-                    &format!(".height({:.0}.0)", p.number("height")),
-                )
-                .done();
-            (c.into(), code)
-        }
-        Detail::BubbleChart => {
-            let n = p.number("series") as usize;
-            let mut c = w::BubbleChart::new(crate::chart_demo::markets().into_iter().take(n))
-                .radii(p.number("rmin"), p.number("rmax"))
-                .opacity(p.number("opacity"))
-                .size_name("Market (m)")
-                .legend(p.bool("legend"))
-                .value_axis(p.bool("value_axis"))
-                .category_axis(p.bool("category_axis"))
-                .grid(p.bool("grid"))
-                .tooltip(p.bool("tooltip"))
-                .hover(p.bool("hover"))
-                .height(p.number("height"));
-            if p.bool("titles") {
-                c = c.x_title("Marketing spend").y_title("Sales");
-            }
-            if p.choice("color") == 1 {
-                c = c.colors(|t, _| t.palette.accent_bg_color);
-            }
-            let code = Code::new(
-                "BubbleChart::new(series)   // BubbleSeries::new(name, [Bubble::new(x, y, size)])",
-            )
-            .add(
-                p.number("rmin") != 5.0 || p.number("rmax") != 26.0,
-                &format!(
-                    ".radii({:.0}.0, {:.0}.0)   // area follows the size",
-                    p.number("rmin"),
-                    p.number("rmax")
-                ),
-            )
-            .add(
-                p.number("opacity") != 0.55,
-                &format!(".opacity({:.2})", p.number("opacity")),
-            )
-            .add(
-                p.bool("titles"),
-                ".x_title(\"Marketing spend\").y_title(\"Sales\")",
-            )
-            .add(!p.bool("legend"), ".legend(false)")
-            .add(!p.bool("value_axis"), ".value_axis(false)")
-            .add(!p.bool("category_axis"), ".category_axis(false)")
-            .add(!p.bool("grid"), ".grid(false)")
-            .add(!p.bool("tooltip"), ".tooltip(false)")
-            .add(!p.bool("hover"), ".hover(false)")
-            .add(
-                p.choice("color") == 1,
-                ".colors(|theme, _| theme.palette.accent_bg_color)",
-            )
-            .add(
-                p.number("height") != 320.0,
-                &format!(".height({:.0}.0)", p.number("height")),
-            )
-            .done();
-            (c.into(), code)
-        }
-        Detail::ComboChart => {
-            let (cats, series) = crate::chart_demo::quarters();
-            let [trend, revenue, costs, target] = series;
-            let curve = [
-                iad::primitives::chart::shape::Curve::Linear,
-                iad::primitives::chart::shape::Curve::Step,
-                iad::primitives::chart::shape::Curve::Monotone,
-            ][p.choice("curve")];
-            let mut c = w::ComboChart::new(cats)
-                .stack_bars(p.bool("stack"))
-                .curve(curve)
-                .points(p.bool("points"))
-                .legend(p.bool("legend"))
-                .value_axis(p.bool("value_axis"))
-                .category_axis(p.bool("category_axis"))
-                .grid(p.bool("grid"))
-                .tooltip(p.bool("tooltip"))
-                .hover(p.bool("hover"))
-                .height(p.number("height"));
-            // Painted in the order added: the backdrop first.
-            let mut code = Code::new("ComboChart::new(quarters)   // one canvas, one scale");
-            if p.bool("area") {
-                c = c.area(trend);
-                code = code.add(true, ".area(trend)          // painted first");
-            }
-            if p.bool("revenue") {
-                c = c.bars(revenue);
-                code = code.add(true, ".bars(revenue)");
-            }
-            if p.bool("costs") {
-                c = c.bars(costs);
-                code = code.add(true, ".bars(costs)           // bars share the category");
-            }
-            if p.bool("target") {
-                c = c.line(target);
-                code = code.add(true, ".line(target)         // painted last, on top");
-            }
-            let code = code
-                .add(p.bool("stack"), ".stack_bars(true)")
-                .add(p.choice("curve") == 1, ".curve(Curve::Step)")
-                .add(p.choice("curve") == 2, ".curve(Curve::Monotone)")
-                .add(!p.bool("points"), ".points(false)")
-                .add(!p.bool("legend"), ".legend(false)")
-                .add(!p.bool("value_axis"), ".value_axis(false)")
-                .add(!p.bool("category_axis"), ".category_axis(false)")
-                .add(!p.bool("grid"), ".grid(false)")
-                .add(!p.bool("tooltip"), ".tooltip(false)")
-                .add(!p.bool("hover"), ".hover(false)")
-                .add(
-                    p.number("height") != 280.0,
-                    &format!(".height({:.0}.0)", p.number("height")),
-                )
-                .done();
-            (c.into(), code)
-        }
-        Detail::PieChart => {
-            let c = w::PieChart::new(crate::chart_demo::browsers())
-                .donut(p.number("donut"))
-                .pad(p.number("pad"))
-                .labels(p.bool("labels"))
-                .legend(p.bool("legend"))
-                .tooltip(p.bool("tooltip"))
-                .height(p.number("height"));
-            let donut = p.number("donut") > 0.0;
-            let c = if donut && !p.text("center").is_empty() {
-                c.center(p.text("center").to_string())
-            } else {
-                c
-            };
-            let code = Code::new("PieChart::new(items)")
-                .add(donut, &format!(".donut({:.2})", p.number("donut")))
-                .add(
-                    donut && !p.text("center").is_empty(),
-                    &format!(".center({:?})", p.text("center")),
-                )
-                .add(
-                    p.number("pad") != 0.01,
-                    &format!(".pad({:.3})", p.number("pad")),
-                )
-                .add(!p.bool("labels"), ".labels(false)")
-                .add(!p.bool("legend"), ".legend(false)")
-                .add(!p.bool("tooltip"), ".tooltip(false)")
-                .add(
-                    p.number("height") != 260.0,
-                    &format!(".height({:.0}.0)", p.number("height")),
-                )
-                .done();
-            (c.into(), code)
-        }
-        Detail::Funnel => {
-            let blocks = p.choice("shape") == 1;
-            let c = w::Funnel::new(crate::chart_demo::stages())
-                .shape(if blocks {
-                    w::FunnelShape::Blocks
-                } else {
-                    w::FunnelShape::Continuous
-                })
-                .gap(p.number("gap"))
-                .labels(p.bool("labels"))
-                .tooltip(p.bool("tooltip"))
-                .height(p.number("height"));
-            let code = Code::new("Funnel::new(stages)")
-                .add(blocks, ".shape(FunnelShape::Blocks)")
-                .add(
-                    p.number("gap") != 2.0,
-                    &format!(".gap({:.0}.0)", p.number("gap")),
-                )
-                .add(!p.bool("labels"), ".labels(false)")
-                .add(!p.bool("tooltip"), ".tooltip(false)")
-                .add(
-                    p.number("height") != 260.0,
-                    &format!(".height({:.0}.0)", p.number("height")),
-                )
-                .done();
-            (c.into(), code)
-        }
-        Detail::Sankey => {
-            let c = crate::chart_demo::budget()
-                .labels(p.bool("labels"))
-                .tooltip(p.bool("tooltip"))
-                .height(p.number("height"));
-            let code = Code::new("Sankey::new()   // nodes are made as links name them\n    .link(\"Salary\", \"Income\", 5000.0)\n    .link(\"Income\", \"Savings\", 2400.0)")
-                .add(!p.bool("labels"), ".labels(false)")
-                .add(!p.bool("tooltip"), ".tooltip(false)")
-                .add(p.number("height") != 300.0, &format!(".height({:.0}.0)", p.number("height")))
-                .done();
-            (c.into(), code)
-        }
-        Detail::Sunburst => {
-            let c = w::Sunburst::new(crate::chart_demo::disk())
-                .hole(p.number("hole"))
-                .labels(p.bool("labels"))
-                .legend(p.bool("legend"))
-                .tooltip(p.bool("tooltip"))
-                .height(p.number("height"));
-            let code = Code::new("Sunburst::new(TreeValue::branch(\"Disk\", [..]))")
-                .add(
-                    p.number("hole") != 0.25,
-                    &format!(".hole({:.2})", p.number("hole")),
-                )
-                .add(!p.bool("labels"), ".labels(false)")
-                .add(!p.bool("legend"), ".legend(false)")
-                .add(!p.bool("tooltip"), ".tooltip(false)")
-                .add(
-                    p.number("height") != 300.0,
-                    &format!(".height({:.0}.0)", p.number("height")),
-                )
-                .done();
-            (c.into(), code)
+            column![note, parent_box].spacing(m.space_s).into()
         }
         Detail::Divider => {
             let variant = [
@@ -1586,38 +883,11 @@ pub fn build<'a>(
                 ]
                 .into()
             };
-            let code = Code::new("divider()")
-                .add(vertical, ".vertical()")
-                .add(
-                    !vertical && !label.is_empty(),
-                    &format!(".label(body(\"{label}\"))"),
-                )
-                .add(
-                    !vertical && !label.is_empty() && p.choice("position") != 1,
-                    &format!(".label_position(LabelPosition::{:?})", position),
-                )
-                .add(
-                    p.choice("variant") > 0,
-                    &format!(".variant(DividerVariant::{variant:?})"),
-                )
-                .add(
-                    p.changed("size"),
-                    &format!(".size({:.0}.0)", p.number("size")),
-                )
-                .add(
-                    p.choice("tone") > 0,
-                    &format!(".tone(DividerTone::{tone:?})"),
-                )
-                .add(
-                    p.changed("spacing"),
-                    &format!(".spacing({:.0}.0)", p.number("spacing")),
-                )
-                .done();
-            (preview, code)
+            preview
         }
         Detail::Splitter => {
-            let (el, code) = g.widgets_demo.split_play(p, m);
-            (el.map(Message::Widgets), code)
+            let el = g.widgets_demo.split_play(p, m);
+            el.map(Message::Widgets)
         }
         Detail::Docked => {
             let side = [
@@ -1686,49 +956,15 @@ pub fn build<'a>(
                     border: iced::Border::default().rounded(t.metrics.radius_m),
                     ..Default::default()
                 });
-            let side_name = ["Bottom", "Top", "Left", "Right"][p.choice("side")];
-            let size_code = [
-                "",
-                ".size(DockSize::Fixed(120.0))",
-                ".size(DockSize::Fraction(0.4))",
-                ".size(DockSize::FullScreen)   // the whole base, every border flush",
-            ][p.choice("size")];
-            let length_code = [
-                "",
-                ".length(DockSize::Fixed(320.0))",
-                ".length(DockSize::Fraction(0.5))",
-            ][p.choice("length")];
-            let align_code = ["", ".align(Align::Center)", ".align(Align::End)"][p.choice("align")];
-            let code = Code::new("Dock::new(content, surface)")
-                .add(true, ".open(self.open)")
-                .add(p.choice("side") != 0, &format!(".side(Side::{side_name})"))
-                .add(p.choice("size") != 0, size_code)
-                .add(p.choice("length") != 0, length_code)
-                .add(p.choice("align") != 0, align_code)
-                .add(
-                    p.choice("mode") == 1,
-                    ".mode(DockMode::Overlay)   // over the content: it is faded and disabled",
-                )
-                .add(
-                    p.choice("scope") == 1,
-                    ".scope(DockScope::Window)   // corners on the window's edge take its radius",
-                )
-                .add(!p.bool("border"), ".border(false)")
-                .add(p.choice("mode") == 1 && !p.bool("scrim"), ".scrim(false)")
-                .add(
-                    p.choice("mode") == 1,
-                    ".on_outside(Msg::Close)   // a press outside",
-                )
-                .done();
-            (Element::from(preview), code)
+            Element::from(preview)
         }
         Detail::NumberInput => {
-            let (el, code) = g.widgets_demo.number_play(p, m);
-            (el.map(Message::Widgets), code)
+            let el = g.widgets_demo.number_play(p, m);
+            el.map(Message::Widgets)
         }
         Detail::ColorPicker => {
-            let (el, code) = g.widgets_demo.color_play(p, m);
-            (el.map(Message::Widgets), code)
+            let el = g.widgets_demo.color_play(p, m, g.surface_radius());
+            el.map(Message::Widgets)
         }
         Detail::Timeline => {
             let n = p.number("count") as usize;
@@ -1765,40 +1001,7 @@ pub fn build<'a>(
                 }
                 t = t.item(item);
             }
-            let code = Code::new(&format!(
-                "Timeline::new({})",
-                (p.number("active") as usize).min(n - 1)
-            ))
-            .add(
-                p.changed("bullet"),
-                &format!(".bullet_size({:.0}.0)", p.number("bullet")),
-            )
-            .add(
-                p.changed("line_width"),
-                &format!(".line_width({:.0}.0)", p.number("line_width")),
-            )
-            .add(p.bool("reverse"), ".reverse_active(true)")
-            .add(p.choice("align") == 1, ".align(TimelineAlign::Right)")
-            .add(
-                true,
-                ".item(TimelineItem::new(\"Created\").body(caption(\"12 min ago\")))",
-            )
-            .add(
-                p.choice("variant") > 0,
-                &format!(
-                    ".item(TimelineItem::new(\"Assigned\").line(DividerVariant::{variant:?}))"
-                ),
-            )
-            .add(
-                p.bool("invalid"),
-                ".item(TimelineItem::new(\"Reviewed\").invalid(true))",
-            )
-            .add(
-                p.bool("loading"),
-                ".item(TimelineItem::new(\"Merged\").loading(true))",
-            )
-            .done();
-            (Element::from(t), code)
+            Element::from(t)
         }
         Detail::Spoiler => {
             if p.choice("mode") == 1 {
@@ -1808,13 +1011,7 @@ pub fn build<'a>(
                 ]
                 .spacing(m.space_s)
                 .into();
-                let step = ["", ".step(5)", ".step(10)"][p.choice("step")];
-                let code = format!(
-                    "// state: 100 items, the first {} shown\nSpoilerState::new(100, {}){step}\n\n// view: only the shown items are built\nSpoiler::items(&self.shown, |i| row_for(&self.data[i]))\n    .on_event(Msg::Spoiler)\n\n// update: Msg::Spoiler(e) => {{ self.shown.apply(e); }}",
-                    p.number("initial") as usize,
-                    p.number("initial") as usize
-                );
-                (el.map(Message::Widgets), code)
+                el.map(Message::Widgets)
             } else {
                 let open = p.bool("expanded");
                 let paragraph = "A spoiler shows the start of something long and keeps the rest out of the way. The control under it only appears when the content is taller than the maximum height, and the cut fades into the page. Press it to slide the rest open, and again to hide it. ".repeat(3);
@@ -1829,18 +1026,7 @@ pub fn build<'a>(
                     .expanded(open)
                     .on_toggle(on_bool(d, "expanded"))
                     .metrics(m);
-                let code = Code::new("Spoiler::new(long_text)")
-                    .add(fixed, ".width(Length::Fixed(240.0))")
-                    .add(
-                        p.changed("max_height"),
-                        &format!(".max_height({:.0}.0)", p.number("max_height")),
-                    )
-                    .add(
-                        true,
-                        ".expanded(self.open).on_toggle(Msg::Open)   // controlled",
-                    )
-                    .done();
-                (Element::from(s), code)
+                Element::from(s)
             }
         }
         Detail::Tabs => {
@@ -1884,64 +1070,7 @@ pub fn build<'a>(
                 }
                 tabs = tabs.tab(t);
             }
-            let code = Code::new("Tabs::new(Some(self.tab), Msg::Tab)")
-                .add(
-                    p.choice("variant") > 0,
-                    &format!(
-                        ".variant(TabsVariant::{})",
-                        ["Default", "Outline", "Pills", "Floating"][p.choice("variant")]
-                    ),
-                )
-                .add(p.bool("grow"), ".grow(true)")
-                .add(
-                    p.bool("closable"),
-                    ".on_close(Msg::CloseTab)   // the app removes the tab",
-                )
-                .add(
-                    true,
-                    &format!(
-                        ".tab(TabItem::new(0, \"Gallery\"){}{})",
-                        if p.bool("icons") {
-                            ".icon(Icon::Home)"
-                        } else {
-                            ""
-                        },
-                        if p.bool("panels") {
-                            ".panel(|| gallery())"
-                        } else {
-                            ""
-                        }
-                    ),
-                )
-                .add(
-                    p.bool("show_messages"),
-                    &format!(
-                        ".tab(TabItem::new(1, \"Messages\"){})",
-                        if p.bool("closable") {
-                            ".closable(true)"
-                        } else {
-                            ""
-                        }
-                    ),
-                )
-                .add(
-                    p.bool("show_settings"),
-                    &format!(
-                        ".tab(TabItem::new(2, \"Settings\"){}{})",
-                        if p.bool("disabled") {
-                            ".disabled(true)"
-                        } else {
-                            ""
-                        },
-                        if p.bool("closable") {
-                            ".closable(true)"
-                        } else {
-                            ""
-                        }
-                    ),
-                )
-                .done();
-            (Element::from(tabs), code)
+            Element::from(tabs)
         }
         Detail::ViewSwitcher => {
             let items = vec![
@@ -1954,10 +1083,7 @@ pub fn build<'a>(
                 Some(p.choice("selected")),
                 on_pick(d, "selected"),
             ));
-            (
-                stage(el),
-                Code::new("view_switcher(items, Some(self.selected), Msg::Select)").done(),
-            )
+            stage(el)
         }
         Detail::PathBar => {
             let el = w::path_bar(
@@ -1969,30 +1095,17 @@ pub fn build<'a>(
                 p.choice("current"),
                 on_pick(d, "current"),
             );
-            (
-                stage(el),
-                Code::new("path_bar(segments, self.current, Msg::Go)").done(),
-            )
+            stage(el)
         }
         Detail::ShortcutLabel => {
-            let code = Code::new(&format!("shortcut_label(\"{}\")", p.text("keys"))).done();
-            (
-                stage(
-                    row![ty::body("Action"), w::shortcut_label(p.text("keys"))].spacing(m.space_m),
-                ),
-                code,
-            )
+            stage(row![ty::body("Action"), w::shortcut_label(p.text("keys"))].spacing(m.space_m))
         }
         Detail::Banner => {
             let mut b = w::banner(p.text("title").to_string()).revealed(p.bool("revealed"));
             if p.bool("button") {
                 b = b.button("Retry", Message::Play(d, PMsg::Bool("revealed", false)));
             }
-            let code = Code::new(&format!("banner(\"{}\")", p.text("title")))
-                .add(p.bool("button"), ".button(\"Retry\", Msg::Retry)")
-                .add(true, ".revealed(self.revealed)")
-                .done();
-            (Element::from(b), code)
+            Element::from(b)
         }
         Detail::Progress => {
             let v = p.number("value");
@@ -2003,71 +1116,7 @@ pub fn build<'a>(
                 3 => bar.style(style::progress_bar::error),
                 _ => bar,
             };
-            let code = Code::new("progress_bar(0.0..=100.0, value)")
-                .add(
-                    p.choice("role") > 0,
-                    &format!(
-                        ".style(style::progress_bar::{})",
-                        ["", "success", "warning", "error"][p.choice("role")]
-                    ),
-                )
-                .done();
-            (stage(Element::from(bar)), code)
-        }
-        Detail::ColorHelpers => {
-            let seed = p.text("seed").to_string();
-            let tag = [0x3b4a7au32, 0xe5a50a, 0xc04a9a, 0x77767b][p.choice("tag")];
-            let page = if p.choice("page") == 0 {
-                0xfafafau32
-            } else {
-                0x242424
-            };
-            let ratio = p.number("ratio");
-            let (tag_c, page_c) = (iad::color::hex(tag), iad::color::hex(page));
-            let fixed = iad::color::ensure_contrast(tag_c, page_c, ratio);
-            let sample = |label: String, c: iced::Color| -> Element<'a> {
-                container(
-                    column![
-                        text("Late night").size(18).color(c),
-                        ty::caption(format!(
-                            "{label}: {:.1}:1",
-                            iad::color::contrast_ratio(c, page_c)
-                        ))
-                        .color(c),
-                    ]
-                    .spacing(4),
-                )
-                .padding(m.space_m)
-                .width(Length::Fill)
-                .style(move |_: &iad::Theme| iced::widget::container::Style {
-                    background: Some(page_c.into()),
-                    border: iced::Border::default().rounded(8),
-                    ..Default::default()
-                })
-                .into()
-            };
-            let el = column![
-                row![
-                    cmp::avatar(48.0, seed.clone()),
-                    column![
-                        ty::heading(seed.clone()),
-                        ty::caption("color::from_seed: the same text, the same color")
-                            .style(iad::styles::text::dim),
-                    ],
-                ]
-                .spacing(m.space_m)
-                .align_y(iced::Alignment::Center),
-                row![
-                    sample("as given".into(), tag_c),
-                    sample(format!("ensure_contrast({ratio:.1})"), fixed),
-                ]
-                .spacing(m.space_m),
-            ]
-            .spacing(m.space_l);
-            let code = format!(
-                "// the same text is always the same color\nlet c = color::from_seed(\"{seed}\");\nlet c = color::from_index(3);\n\n// a color too close to its surface is moved towards white or black until it reads\nlet text = color::ensure_contrast(tag_color, page_bg, {ratio:.1});   // 4.5 is the WCAG minimum for text"
-            );
-            (stage(Element::from(el)), code)
+            stage(Element::from(bar))
         }
         Detail::ClipWindow => {
             use iced::widget::{container as ct, row};
@@ -2117,12 +1166,7 @@ pub fn build<'a>(
             } else {
                 clipped.into()
             };
-            let code = Code::new("ClipWindow::new(content)")
-                .add(true, &format!(".height({height:.0}.0)   // animate this: the window follows"))
-                .add(p.choice("anchor") == 1, ".anchor(ClipAnchor::Bottom)   // the bottom stays, the top is cut")
-                .add(true, "// a container with a smaller Fixed height reflows its child: a cover shrinks.\n// ClipWindow measures the content at full size and moves it.")
-                .done();
-            (el, code)
+            el
         }
         Detail::IconToggle => {
             let icon = [
@@ -2139,16 +1183,7 @@ pub fn build<'a>(
             if p.bool("tooltip") {
                 b = b.tooltip(format!("{icon:?}"));
             }
-            let code = Code::new(&format!("IconToggleButton::new(Icon::{icon:?}, self.on)"))
-                .add(
-                    p.number("size") != 16.0,
-                    &format!(".size({:.0}.0)", p.number("size")),
-                )
-                .add(p.bool("disabled"), ".disabled(true)")
-                .add(p.bool("tooltip"), &format!(".tooltip(\"{icon:?}\")"))
-                .add(true, ".on_toggle(Msg::Toggle)   // gets the new state")
-                .done();
-            (stage(Element::from(b)), code)
+            stage(Element::from(b))
         }
         Detail::Avatar => {
             let shape = [
@@ -2162,64 +1197,24 @@ pub fn build<'a>(
             if let Some(i) = icon_source(p.choice("icon")) {
                 a = a.icon(i);
             }
-            let code = Code::new(&format!(
-                "avatar({:.0}, \"{}\")",
-                p.number("size"),
-                p.text("name")
-            ))
-            .add(!p.bool("initials"), ".show_initials(false)")
-            .add(p.choice("icon") == 1, ".icon(Icon::Check)")
-            .add(p.choice("icon") == 2, ".icon(Icon::Star)")
-            .add(
-                p.choice("icon") == 3,
-                ".icon(IconSource::svg(include_str!(\"vinyl.svg\")))",
-            )
-            .add(p.choice("shape") == 1, ".shape(AvatarShape::Rounded)")
-            .add(p.choice("shape") == 2, ".shape(AvatarShape::Square)")
-            .add(
-                true,
-                "// the color is color::from_seed(name): the same name, the same color",
-            )
-            .done();
-            (stage(Element::from(a)), code)
+            stage(Element::from(a))
         }
         Detail::Tag => {
             let r = p.choice("role");
-            let code = Code::new(&format!(
-                "tag(\"{}\", Role::{:?})",
-                p.text("label"),
-                ROLE_OF[r]
-            ))
-            .done();
-            (
-                stage(cmp::tag(p.text("label").to_string(), ROLE_OF[r])),
-                code,
-            )
+            stage(cmp::tag(p.text("label").to_string(), ROLE_OF[r]))
         }
         Detail::BadgeChip => {
             let role = ROLE_OF[p.choice("role")];
             let label = p.text("label").to_string();
-            let (el, code): (Element<'a>, String) = match p.choice("kind") {
-                0 => (
-                    cmp::Badge::new(label.clone())
-                        .role(role)
-                        .solid(p.bool("solid"))
-                        .into(),
-                    Code::new(&format!("Badge::new(\"{label}\")"))
-                        .add(true, &format!(".role(Role::{role:?})"))
-                        .add(p.bool("solid"), ".solid(true)")
-                        .done(),
-                ),
-                1 => (
-                    cmp::Badge::count(p.number("count") as u32, 99)
-                        .role(role)
-                        .solid(p.bool("solid"))
-                        .into(),
-                    Code::new(&format!("Badge::count({}, 99)", p.number("count") as u32))
-                        .add(true, &format!(".role(Role::{role:?})"))
-                        .add(p.bool("solid"), ".solid(true)")
-                        .done(),
-                ),
+            let el: Element<'a> = match p.choice("kind") {
+                0 => cmp::Badge::new(label.clone())
+                    .role(role)
+                    .solid(p.bool("solid"))
+                    .into(),
+                1 => cmp::Badge::count(p.number("count") as u32, 99)
+                    .role(role)
+                    .solid(p.bool("solid"))
+                    .into(),
                 3 => {
                     let size = p.number("size");
                     let icon = icon_source(p.choice("icon"));
@@ -2227,260 +1222,54 @@ pub fn build<'a>(
                         Some(i) => i.view(size * 0.55).into(),
                         None => ty::caption(label.clone()).into(),
                     };
-                    (
-                        {
-                            let mut b = cmp::RoundBadge::new(content)
-                                .role(role)
-                                .solid(p.bool("solid"))
-                                .size(size);
-                            if p.choice("color") == 1 {
-                                b = b.color(iced::Color::from_rgb8(0xc0, 0x4a, 0x9a));
-                            }
-                            b.into()
-                        },
-                        Code::new("RoundBadge::new(content)   // any element")
-                            .add(true, &format!(".role(Role::{role:?})"))
-                            .add(p.bool("solid"), ".solid(true)")
-                            .add(
-                                p.choice("color") == 1,
-                                ".color(playlist_color)   // in place of the role's",
-                            )
-                            .add(size != 20.0, &format!(".size({size:.0}.0)"))
-                            .done(),
-                    )
+                    let mut b = cmp::RoundBadge::new(content)
+                        .role(role)
+                        .solid(p.bool("solid"))
+                        .size(size);
+                    if p.choice("color") == 1 {
+                        b = b.color(iced::Color::from_rgb8(0xc0, 0x4a, 0x9a));
+                    }
+                    b.into()
                 }
-                _ => (
-                    {
-                        let mut c = cmp::Chip::new(label.clone())
-                            .role(role)
-                            .selected(p.bool("selected"))
-                            .disabled(p.bool("disabled"))
-                            .on_press(Message::Noop)
-                            .on_remove(Message::Noop)
-                            .size(
-                                [
-                                    cmp::ChipSize::Small,
-                                    cmp::ChipSize::Medium,
-                                    cmp::ChipSize::Large,
-                                ][p.choice("chip_size")],
-                            );
-                        if let Some(i) = icon_source(p.choice("icon")) {
-                            c = c.icon(i);
+                _ => {
+                    let mut c = cmp::Chip::new(label.clone())
+                        .role(role)
+                        .selected(p.bool("selected"))
+                        .disabled(p.bool("disabled"))
+                        .on_press(Message::Noop)
+                        .on_remove(Message::Noop)
+                        .size(
+                            [
+                                cmp::ChipSize::Small,
+                                cmp::ChipSize::Medium,
+                                cmp::ChipSize::Large,
+                            ][p.choice("chip_size")],
+                        );
+                    if let Some(i) = icon_source(p.choice("icon")) {
+                        c = c.icon(i);
+                    }
+                    if p.choice("color") == 1 {
+                        c = c.color(
+                            [
+                                iced::Color::from_rgb8(0xc0, 0x4a, 0x9a),
+                                iced::Color::from_rgb8(0x3b, 0x4a, 0x7a),
+                                iced::Color::from_rgb8(0xe5, 0xa5, 0x0a),
+                            ][p.choice("tint")],
+                        );
+                        if p.choice("contrast") == 1 {
+                            c = c.min_contrast(0.0);
                         }
-                        if p.choice("color") == 1 {
-                            c = c.color(
-                                [
-                                    iced::Color::from_rgb8(0xc0, 0x4a, 0x9a),
-                                    iced::Color::from_rgb8(0x3b, 0x4a, 0x7a),
-                                    iced::Color::from_rgb8(0xe5, 0xa5, 0x0a),
-                                ][p.choice("tint")],
-                            );
-                            if p.choice("contrast") == 1 {
-                                c = c.min_contrast(0.0);
-                            }
-                            if p.choice("text") == 1 {
-                                c = c.text_color(iced::Color::from_rgb8(0x2a, 0x2a, 0x2a));
-                            }
-                            if p.bool("on_color") {
-                                c = c.on_color(iced::Color::WHITE);
-                            }
+                        if p.choice("text") == 1 {
+                            c = c.text_color(iced::Color::from_rgb8(0x2a, 0x2a, 0x2a));
                         }
-                        c.into()
-                    },
-                    Code::new(&format!("Chip::new(\"{label}\")"))
-                        .add(p.choice("chip_size") == 0, ".size(ChipSize::Small)")
-                        .add(p.choice("chip_size") == 2, ".size(ChipSize::Large)")
-                        .add(p.choice("icon") == 1, ".icon(Icon::Check)")
-                        .add(p.choice("icon") == 2, ".icon(Icon::Star)")
-                        .add(
-                            p.choice("icon") == 3,
-                            ".icon(IconSource::svg(include_str!(\"star.svg\")))   // your own",
-                        )
-                        .add(
-                            p.choice("color") == 1,
-                            ".color(tag_color)   // in place of the role's",
-                        )
-                        .add(
-                            p.choice("color") == 1 && p.choice("contrast") == 1,
-                            ".min_contrast(0.0)   // keep the color as given (default 4.5)",
-                        )
-                        .add(
-                            p.choice("color") == 1 && p.choice("text") == 1,
-                            ".text_color(dark_gray)   // unselected text, used as given",
-                        )
-                        .add(
-                            p.choice("color") == 1 && p.bool("on_color"),
-                            ".on_color(Color::WHITE)   // the selected text",
-                        )
-                        .add(p.choice("color") == 0, &format!(".role(Role::{role:?})"))
-                        .add(p.bool("selected"), ".selected(true)")
-                        .add(p.bool("disabled"), ".disabled(true)")
-                        .add(true, ".on_press(Msg::Press).on_remove(Msg::Remove)")
-                        .done(),
-                ),
+                        if p.bool("on_color") {
+                            c = c.on_color(iced::Color::WHITE);
+                        }
+                    }
+                    c.into()
+                }
             };
-            (stage(container(el).padding(m.space_s)), code)
-        }
-        _ => return None,
-    })
-}
-
-/// The code of a page that has no playground (its demo needs more than one instance, or it is
-/// not a component with properties to play with).
-pub fn snippet(d: Detail) -> Option<&'static str> {
-    Some(match d {
-        Detail::TableVirtual => {
-            "// the app keeps a Viewport (from on_scroll) and passes only the window's rows\nlet window = self.viewport.window(TOTAL, ResponsiveTable::pitch(ROW), 4);   // layouts::virtualize\nlet rows: Vec<Person> = window.clone().map(person).collect();\n\nResponsiveTable::new(&rows)\n    .column(Column::new(\"Name\", |p| heading(&p.name).into()).min_width(160.0))\n    .virtualized(TOTAL, window.start, ROW)   // rows of a long list: spacers stand in for the rest\n    .on_scroll(Msg::Scroll)                  // Msg::Scroll(vp) => self.viewport = vp\n\n// a virtualized table is always a table: cards have no fixed height"
-        }
-        Detail::TableAsync => {
-            "// rows fetched 50 at a time as they are scrolled to (primitives::loading)\nlet mut chunks = Chunks::new(TOTAL, 50);\n\n// Msg::Scroll(vp): ask for the chunks the window touches, once each\nfor chunk in chunks.request(vp.window(TOTAL, pitch, 4)) {\n    tasks.push(Task::perform(fetch(chunk), move |r| Msg::Fetched(chunk, r)));\n}\n// Msg::Fetched(chunk, r): cache it, then chunks.finish(chunk, r.map(|_| ()))\n\n// a row is a placeholder until its chunk arrives; a failed chunk is not asked for again\nmatch chunks.slot(row) {\n    Slot::Ready => ready_cells(row),\n    Slot::Loading => skeleton_cells(),\n    Slot::Failed(reason) => error_cells(reason, /* Retry: chunks.retry(chunk) */),\n}"
-        }
-        Detail::TreeAsync => {
-            "// data: a branch with children still to come\nTreeNode::lazy(\"remote\", \"remote\")\n\n// update: opening it returns an effect; fetch, then merge\nif let Some(TreeEffect::Load(v)) = self.tree.apply(&mut self.data, event) {\n    return Task::perform(fetch(v.clone()), move |r| Msg::Loaded(v.clone(), r));\n}\nMsg::Loaded(v, r) => self.tree.finish_load(&mut self.data, &v, r)   // Err: shows the error and Retry"
-        }
-        Detail::TreeVirtualized => {
-            "let total = self.tree.rows(&self.data).len();\nlet range = self.viewport.window(total, TREE_ROW_HEIGHT, 4);   // layouts::virtualize\n\nscrollable(Tree::new(&self.data, &self.tree).window(range).on_event(Msg::Tree))\n    .on_scroll(|vp| Msg::Scroll(vp.absolute_offset().y, vp.bounds().height))\n\n// rows have a fixed height; only the window is built, the rest is spacing"
-        }
-        Detail::TreeFiles => {
-            "Tree::new(&self.files, &self.tree)\n    .lines(true)\n    .icons(|node, row| Some(if row.has_children { Icon::Folder } else { Icon::Document }))\n    .on_event(Msg::Tree)"
-        }
-        Detail::TreeDocs => {
-            "Tree::new(&self.docs, &self.tree)\n    .draggable(DragMode::Row)\n    .highlight(&self.search)\n    .label(|p| {\n        let n = p.node.children.len();\n        if n == 0 { return p.text; }\n        row![p.text, Badge::count(n as u32, 99)].spacing(8).into()   // a count per branch\n    })\n    .on_event(Msg::Tree)\n\n// search: self.tree.set_expanded(tree::matching_ancestors(&self.docs, &query))"
-        }
-        Detail::Form => {
-            "Form::new()\n    .step(Step::new(\"Profile\", move || {\n        EntryRow::text(\"Name\", &self.name, Msg::Name)\n            .validity(self.validity(&\"name\"))\n            .into()\n    }))\n    .on_submit(Msg::Submit)\n    .on_reset(Msg::Reset)\n\n// update: self.form.submit(&spec, &|k| self.validity(k))"
-        }
-        Detail::Stepper => {
-            "Stepper::new()\n    .active(state.active())\n    .orientation(StepperOrientation::Horizontal)\n    .on_step_click(Msg::Go)\n    .step(StepperStep::new(\"Account\").content(|| body(\"...\")))\n    .step(StepperStep::new(\"Profile\").description(\"Fruit and birthday\"))\n    .step(StepperStep::new(\"Review\").allow_click(true))\n    .completed(done)\n\n// state: StepperState::new(3), .forward() / .back() / .goto(i)"
-        }
-        Detail::Autocomplete => {
-            "Autocomplete::new(&self.text, &self.lookup, Msg::Input)\n    .on_select(Msg::Pick)\n    .on_retry(Msg::Retry)\n    .item(|place: &Place| text(place.name).into())\n    .placeholder(\"Search cities\")\n    .search_icon(true)\n\n// the lookup: Lookup<Query, Place> debounces and drops stale responses"
-        }
-        Detail::Data => {
-            "ResponsiveTable::new(&rows)\n    .column(Column::new(\"Name\", |r| text(r.name).into()).sortable(Col::Name))\n    .sort(&self.sort)                         // SortState: asc / desc / unsorted\n    .on_sort(Msg::Sort)\n    .footer(|| Pagination::new(&self.paging, Msg::Page).siblings(1).into())\n\n// InfiniteList for load-more: request ids discard stale pages"
-        }
-        Detail::TextView => {
-            "text_view(&self.content)\n    .placeholder(\"Type here…\")\n    .on_action(Msg::Edit)   // omit for a read-only view\n    .height(90.0)           // fixed, scrolls (the default)\n\n// a textarea: a maximum makes it grow with its text, then scroll\ntext_view(&self.content)\n    .min_lines(2)           // never shorter than this (default 1)\n    .max_lines(6)           // grows up to six lines\n    .max_height(120.0)      // or px; with both, the smaller applies\n    .on_action(Msg::Edit)\n\n// update: self.content.perform(action)"
-        }
-        Detail::Carousel => {
-            "carousel(pages, self.position, Msg::Carousel)\n    .indicator(CarouselIndicator::Dots) // or Lines"
-        }
-        Detail::Indicator => {
-            "Indicator::new(avatar(48.0, \"Ada\"), Badge::count(3, 99).role(Role::Error).solid(true))\n    .corner(Side::Bottom, Align::End)\n    .offset(4.0)\n    .show(unread > 0)"
-        }
-        Detail::ResponsiveTable => {
-            "ResponsiveTable::<Person, Msg>::new(&PEOPLE)\n    .column(Column::new(\"Name\", |p| heading(p.name).into()).min_width(110.0))\n    .column(Column::new(\"Role\", |p| body(p.role).into()).min_width(90.0).align_y(Vertical::Top))   // Top, Center (default), Bottom\n    .mode(TableMode::Auto) // Auto (default), Table, Cards"
-        }
-        Detail::Accordion => {
-            "Accordion::new(&self.open, Msg::Open)\n    .selection(Selection::Single)   // or Multiple\n    .item(AccordionItem::new(0u8, \"Shipping\", body).subtitle(\"2-4 days\"))\n    .item(AccordionItem::new(1u8, \"Returns\", body))"
-        }
-        Detail::CardButton => {
-            "as_button(column![heading(\"Title\"), body(\"Any content\")])\n    .on_press(Msg::Open)"
-        }
-        Detail::DateInput => {
-            "DateInput::new(&self.text, self.nav.date, Msg::Text)\n    .calendar(self.nav)           // CalendarView: Month / Year / Decade\n    .selected(self.pick)\n    .on_pick(Msg::Pick)\n    .on_nav(Msg::Nav)\n    .dialog(true)                 // a dialog over a faded window; .scrim(false) keeps it clear\n    .min(Date::new(2026, 11, 1))"
-        }
-        Detail::DateRange => {
-            "DateRangeInput::new(&self.text, self.nav.date, Msg::Text)   // \"2026-11-02 \u{2013} 2026-11-09\"\n    .dialog(true)                 // a dialog over a faded window; .scrim(false) keeps it clear\n    .calendar(self.nav)\n    .selected(self.range)\n    .hover(self.hover)            // the preview of the range being picked"
-        }
-        Detail::RangeSlider => {
-            "range_slider(0.0..=100.0, self.value, Msg::Range)\n\nRangeSliderRow::new(\"Volume\", self.value, 0.0..=100.0, Msg::Range)"
-        }
-        Detail::ThemeConfig => {
-            "// 1. declare the tokens of the app's own objects, with their defaults\nlet schema = Schema::new()\n    .color(\"cover\", \"background\", \"#9c4ad1\", \"Behind a missing cover\")\n    .number(\"cover\", \"size\", 88.0, \"The cover edge in px\");\n\n// 2. load: hardcoded > app theme file > toolkit theme file > declared default\n//    ~/.config/<app-id>/theme.conf and ~/.config/iced-adaptive-design/theme.conf are written\n//    from the declared defaults (every line commented) when missing: delete them to reset\nlet cfg = ThemeConfig::builder(\"org.example.Player\")\n    .schema(schema)\n    // .hardcode(\"cover\", \"size\", Value::Number(64.0))   // extremely discouraged\n    .build();\n\n// 3. install: metric tokens reach every widget, palette and typography tokens the theme\ntheme_config::install(cfg.clone());\nconfig::install(Config::load().with_theme_config(&cfg));\nlet theme = Theme::from_config(&config::current()).with_theme_config(&cfg);\n\n// 4. read the app's own tokens anywhere a Theme is given\nlet bg = theme.token_color(\"cover\", \"background\");\nlet size = theme.token_number(\"cover\", \"size\");"
-        }
-        Detail::FlowGrid => {
-            "// the item sets its density, the grid arranges the items\nFlowGrid::new(albums.iter().map(|a| {\n    ItemCard::new(&a.name)\n        .subtitle(format!(\"{} \u{b7} {}\", a.artist, a.year))\n        .picture(cover(a.id, if compact { 36.0 } else { 88.0 }))\n        .density(density)        // Comfort: a card. Compact: a tight ItemRow\n        .on_press(Msg::Open(a.id))\n        .into()\n}))\n.max_width(180.0)             // as many columns as fit, each at most this wide\n.cols(1)                     // or a fixed count: one column is a list\n.row_height(RowHeight::Shared) // a row is as tall as its tallest (default); Own, Fixed(px)"
-        }
-        Detail::TableGrid => {
-            "TableGrid::new([\n    TableCell::new(chart).span(8),\n    TableCell::new(summary).span(4),\n    TableCell::new(table).span(12),            // a cell that does not fit starts the next row\n    TableCell::new(note).span(6).offset(3),    // columns left empty before the cell\n])\n.columns(12)                                   // the default\n.spacing(12.0)"
-        }
-        Detail::Surface => {
-            "// the gutter is a token (Metrics::gutter, [metrics] gutter in the theme config), written once\nsurface::scrolling(page)      // a page that scrolls: the gutter on every side\nsurface::full(sheet_body)     // a page that does not scroll as a whole\nsurface::band(heading)        // a section: the side gutter\nsurface::toolbar(play_row)    // the side gutter and a little air\nsurface::row(track)           // a row of a flat list, hover starting on the gutter\nsurface::bar_padding()        // the padding of a bar\n\n// enforce it: nothing but surface writes a gutter\n//   cargo xtask lint-gutters src      (a line marked `// gutter-ok` is allowed)"
-        }
-        Detail::Reorderable => {
-            "// a live list: always editable, every drop committed, no Edit / Cancel / Done\nlet queue = ReorderState::live(items);\n\nReorderableList::of(&self.queue, |track| track_row(track))   // no controls bar: it is live\n    .row_action(|track| icon_button(Icon::Delete).on_press(Msg::Remove(track.id)).into())   // before the grip\n    .on_event(Msg::Queue)\n\n// update\nMsg::Queue(e) => { self.queue.apply(e); }      // each Reorder is committed\nMsg::Remove(i) => { self.queue.remove(i); }"
-        }
-        Detail::SectionHeading => {
-            "SectionHeading::new(\"Recently played\")\n    .subtitle(\"Fresh this week\")\n    .link(\"View all\", Msg::OpenHistory)   // \"View all ›\" at the far end"
-        }
-        Detail::ItemRow => {
-            "// the columns, written ONCE: the header and every row take their widths from them\nlet cols = ItemColumns::new()\n    .picture(true)                                   // room for the cover (PICTURE_WIDTH)\n    .title(Col::Title, \"Title\")                       // grows\n    .subtitle(Col::Artist, \"Artist\")                  // its own column in compact mode\n    .column(Col::Album, \"Album\")                     // every column grows by default...\n        .width(Length::Fixed(160.0))                 // ...or is given a width\n    .column(Col::Time, \"Time\").width(Length::Fixed(TIME_WIDTH)).align(Horizontal::Right)\n    .suffix(true)                                    // room for the menu (SUFFIX_WIDTH)\n    .compact(self.compact);\n\ncols.header(&self.sort, Msg::Sort)                   // Msg::Sort(c) => self.sort.activate(c, false)\n\nVirtualList::new(n, 56.0, &self.viewport, |i| {\n    let row = cols.row(&t.title)                     // compact as the columns are, with the list inset\n        .subtitle(&t.artist)\n        .picture(Avatar::new(PICTURE_WIDTH, &t.title).icon(Icon::MusicNote).shape(AvatarShape::Rounded))\n        .cell(caption(&t.album))                     // the next column's width and alignment\n        .cell(caption(t.time()))\n        .suffix(menu_button(Icon::ViewMore, menu))\n        .height(Length::Fill);                       // centered in the row the list gives it\n    as_button(row).width(Length::Fill).style(flat_row(8.0, 0.08, 0.14)).on_press(Msg::Play(i)).into()   // the caller makes it a control\n})\n\n// or without the shared spec: ItemRow::new(..).column(width, cell).align(Horizontal::Right)\n\n// the row is content (a <tr>); the caller wraps it in a surface\nItemRow::new(..)                                      // no hover, press or padding\ncard_button(ItemRow::new(..).inset()).padding(0).on_press(m)\ncard_button(ItemRow::new(..)).on_press(m)             // the card is the target\nItemRow::new(..).padding(8)                           // its own inset"
-        }
-        Detail::ChipGroup => {
-            "ChipGroup::new(\n    tags.iter().map(|t| ChipOption::new(t.id, &t.name).color(t.color).icon(Icon::Tag)),\n    &self.selected,\n    Msg::Toggle,                    // gets the key of the pressed chip\n)\n.search(&self.query, Msg::Query)    // an entry above filters by label as you type\n// or filter without drawing an entry (two groups sharing one field):\n.query(&self.query)\n.on_color(Color::WHITE)             // selected chips with their own color\n.size(ChipSize::Small)"
-        }
-        Detail::History => {
-            "let mut history = History::new(Place::Home);\n\nhistory.open(Place::Album(7));    // pushes the place you leave\nhistory.back();                  // returns to it: not a fixed parent\nhistory.go(Place::Library);      // a sidebar entry: forgets the trail\nhistory.can_back();              // enable the back button"
-        }
-        Detail::VirtualList => {
-            "// the app keeps the viewport; the list builds only the rows in it\nVirtualList::new(10_000, 40.0, &self.viewport, |i| {\n    // the whole row is the target: rounded, with a hover you can see on a plain page\n    button(row_for(i)).width(Length::Fill).style(style::button::flat_row(8.0, 0.08, 0.14)).on_press(Msg::Play(i)).into()\n})\n    .on_scroll(Msg::Scroll)   // Msg::Scroll(vp) => self.viewport = vp\n    .overscan(4)               // rows built past each edge\n    .id(LIST)                  // for scroll_to / snap_to"
-        }
-        Detail::MultilineEntry => {
-            "EntryRow::multiline(\"Description\", &self.bio, Msg::Input)\n\n// update\nMsg::Input(action) => self.bio.perform(action)\n\n// restrict input to one line\nEntryRow::new(\"Nickname\", EntryInput::Multiline(text_view(&self.nick)\n    .single_line(true).on_action(Msg::NickInput)))"
-        }
-        Detail::PageHeader => {
-            "DetailHeader::new(\"Evening drive\")\n    .kind(\"Playlist\")\n    .cover(cover)\n    .description(body(\"Slow songs for a long road.\"))\n    .facts(caption(\"24 songs, 1 hr 32 min\"))\n    .primary(suggested_circular_button(Icon::Play.view(16.0)).on_press(Msg::Play))\n    .action(icon_button(Icon::Heart))\n    .end(flat_button(text(\"Share\")))\n    .tint(cover_color)            // the wash: style::container::wash(color)\n    .narrow(width < 576.0)        // the arrangement, from the app's width"
-        }
-        Detail::Icons => {
-            "Icon::Star.view(16.0)                 // from the installed theme\n\n// anything that takes an icon takes your own SVG too\nlet mine = IconSource::svg(include_str!(\"vinyl.svg\"));\nMenuItem::action(\"Rate\", Msg::Rate).icon(mine.clone())\nmenu_button(mine, menu)\nChip::new(\"Jazz\").icon(mine).color(tag_color)"
-        }
-        Detail::Composed => {
-            "// HistogramRangeSlider is in the library; this is how it is DEFINED with ComposedComponent:\n// data + callback, and a conversion\npub struct HistogramRangeSlider<'a, M> {\n    histogram: &'a Histogram,\n    range: (f32, f32),                       // the shared state\n    on_change: Box<dyn Fn((f32, f32)) -> M + 'a>,\n}\n\nimpl<'a, M: 'a> From<HistogramRangeSlider<'a, M>> for Element<'a, M> {\n    fn from(c: HistogramRangeSlider<'a, M>) -> Self {\n        let h = c.histogram;\n        ComposedComponent::new(c.range, c.on_change)   // state + one message for every part\n            // each part is built from the state and answers with the NEXT state\n            .part(move |r| BarChart::histogram(h)\n                .minimal()                                  // only the bars, as a range picker\n                .selected(move |i| h.selected(i, *r))      // bars inside the range\n                .on_pick(move |i| h.bin_range(i))           // a pressed bar is a range\n                .into())\n            .part(|r| range_slider(0.0..=100.0, *r, |moved| moved).into())\n            .normalize(|(lo, hi)| (lo.min(hi), lo.max(hi))) // the rule, in one place\n            .into()\n    }\n}\n\n// USE it like any component; the slider's bounds are the histogram's own\nHistogramRangeSlider::new(&self.histogram, self.range, Msg::Range).step(1.0)\n\n// or build one in the view when it depends on a filter, and pass it owned\nHistogramRangeSlider::new(Histogram::from_values(filtered, 0.0, 100.0, 20), self.range, Msg::Range)"
-        }
-        Detail::SyncedText => {
-            "SyncedText::new(LYRICS, &self.lines, Msg::Seek).position(self.pos)\n\n// update: when the current line changes, scroll to it\nif synced::current(&self.lines, self.pos) != before {\n    return follow_synced_text(LYRICS, now, self.lines.len());\n}"
-        }
-        Detail::MultiSelect => {
-            "MultiSelect::new(&FRUITS, &self.chosen, Msg::Toggle)\n    .placeholder(\"Pick fruits\")\n    .max_chips(2)\n    .width(Length::Fixed(260.0))"
-        }
-        Detail::AnchoredPopover => {
-            "Popover::new(text(\"Open\"), popover([menu_item(\"First\", false, Msg::A)], 160.0))\n    .side(Side::Bottom)\n    .align(PopoverAlign::Start)\n    .offset(8.0)\n    .popover_width(140.0)\n    .bounds(PopoverBounds::Window)   // omitted: kept inside the content area it opened from\n\n// it flips to the other side and shifts to stay inside its bounds"
-        }
-        Detail::Surfaces => {
-            "let sem = theme.semantic;\ncolor_swatch(\"card\", sem.card)\nstatus_swatch(\"accent\", sem.accent)\n\n// every surface and status color is a field of `Theme::semantic`"
-        }
-        Detail::Toast => {
-            "toast_stack_from(content, &self.toasts, |toast| {\n    Toast::new(&toast.title).action(\"Undo\", Msg::Undo).status(Role::Success)\n})\n\n// self.toasts: notifications::Queue<_> (limit, replace, auto-dismiss from `now`)"
-        }
-        Detail::SwitchAndComboRows => {
-            "SwitchRow::new(\"Enabled\", self.on, Msg::Toggle)\nComboRow::new(\"Font\", &FONTS, self.font, Msg::Font).disabled_when(|o| *o == \"Inter\")\nSpinRow::new(\"Text scale\", self.scale, 1.0..=10.0, 1.0, Msg::Scale)\nSliderRow::new(\"Volume\", self.volume, 0.0..=100.0, Msg::Volume)"
-        }
-        Detail::PreferencesGroup => {
-            "preferences_group()\n    .title(\"Appearance\")\n    .description(\"How the app looks\")\n    .header_suffix(flat_button(label(\"Reset\")))\n    .push(EntryRow::switch(\"Notifications\", self.notifications, Msg::Notifications))"
-        }
-        Detail::ThemeColors => {
-            "Theme::new(Scheme::Dark)\n    .accent(AccentColor::Teal)\n    .with_semantic(|s| s.card.bg = hex(0x3d2c5a))\n\n// desktop config: [appearance] color-scheme=dark, accent=teal, density=compact"
-        }
-        Detail::ThemeShape => {
-            "Theme::new(scheme)\n    .with_metrics(Metrics { radius_l: 12.0, radius_toast: 24.0, ..Metrics::default() })\n    .with_shadows(Shadows::default().with_scale(1.0).with_intensity(1.0))\n\n// no shadows: Shadows::none()"
-        }
-        Detail::ThemeMotion => {
-            "// desktop config\n[motion]\nanimations=on        # off = every trigger jumps to its end\npage-push=none        # default = its own animation\n\n// in a widget\nTrigger::Reveal.spec(Spec::STYLE)   // resolves the user's choice"
-        }
-        Detail::ThemeWindow => {
-            "// desktop config\n[menus]\npresentation=dropdown      # or full-page\n[navigation]\nmobile-sidebar=parent-page # or drawer\n\nprimary_menu(menu).presentation(MenuPresentation::Dropdown)"
-        }
-        Detail::MetaComponent => {
-            "// the content decides the height? build the variant without measuring the container\nMetaComponent::new()\n    .selected(editing.then_some(Mode::Entry))\n    .when_selected(Mode::Entry, |_| entry())\n    .variant(Mode::Text, When::always(), |_| text())\n    .flow(0.0)   // instead of .into(): takes its content's size, not the container's\n\n// the usual form: chosen by the container's width, fills it\nMetaComponent::new()\n    .selected(self.searching.then_some(Bar::Search))      // on-select trigger\n    .when_selected(Bar::Search, |_| search_entry())\n    .variant(Bar::Compact, Trigger::selected(Bar::Menu) | !wide, |_| menu())\n    .variant(Bar::Path, When::always(), |_| path_bar())   // fallback"
-        }
-        Detail::Resizable => {
-            "Resizable::new(meta_component, self.frame)       // frame: iced::Size\n    .on_resize(Msg::Frame)\n    .constraints(Constraints::new(Size::new(220.0, 120.0), Size::new(900.0, 500.0))\n        .snap_to(breakpoints, 8.0))"
-        }
-        Detail::AlertDialog => {
-            "AlertDialog::new(\"Discard Changes?\")\n    .body(\"Unsaved changes will be permanently lost.\")\n    .response(\"Cancel\", ResponseAppearance::Default, Msg::Close)\n    .response(\"Save\", ResponseAppearance::Suggested, Msg::Save)\n    .response(\"Discard\", ResponseAppearance::Destructive, Msg::Discard)"
-        }
-        Detail::AboutDialog => {
-            "AboutDialog::new(\"Gallery\")\n    .developer_name(\"The authors\")\n    .version(\"0.1.0\")\n    .comments(\"Widget gallery.\")\n    .website(\"https://iced.rs\")\n    .license(\"MIT OR Apache-2.0\")"
-        }
-        Detail::ShortcutsDialog => {
-            "shortcuts_dialog(vec![(\n    \"General\".into(),\n    vec![(\"Preferences\".into(), \"Ctrl+,\".into())],\n)], Msg::Close)"
-        }
-        Detail::PreferencesDialog => {
-            "preferences_dialog(\n    \"Preferences\",\n    preferences_page().push(preferences_group().title(\"General\").push(row)),\n    Msg::Close,\n)"
-        }
-        Detail::AppShell => {
-            "// gallery/src/appshell.rs: an app shell assembled from library parts\nAdaptive over Layouts              // width classes -> whole layouts; Close(old) then Open(new)\nSidebarList::new(items).follow(..) // the navbar and the drawer list\nheader_bar().title(\"Gallery\")\ndock_drawer(main, drawer, Side::Right, Dim::Fraction(0.4))"
+            stage(container(el).padding(m.space_s))
         }
         _ => return None,
     })

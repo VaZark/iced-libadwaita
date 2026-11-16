@@ -79,6 +79,9 @@ struct Expansion<'a, M> {
 
 /// See the [module](self).
 pub struct ChipGroup<'a, K: Clone, M> {
+    chip_props: crate::components::badge::ChipProps,
+    entry_props: crate::components::EntryProps,
+    label_props: crate::components::TextProps,
     options: Vec<ChipOption<K>>,
     selected: std::borrow::Cow<'a, [K]>,
     on_toggle: Box<dyn Fn(K) -> M + 'a>,
@@ -91,10 +94,27 @@ pub struct ChipGroup<'a, K: Clone, M> {
     min_contrast: f32,
     max_lines: Option<usize>,
     expand: Option<Expansion<'a, M>>,
+    spacing: Option<f32>,
+    search_gap: Option<f32>,
     metrics: Metrics,
 }
 
 impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
+    pub fn chip_props(mut self, props: crate::components::badge::ChipProps) -> Self {
+        self.chip_props = props;
+        self
+    }
+
+    pub fn entry_props(mut self, props: crate::components::EntryProps) -> Self {
+        self.entry_props = props;
+        self
+    }
+
+    pub fn label_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
     /// `selected` are the keys that are on; `on_toggle` gets the key of a pressed chip.
     pub fn new(
         options: impl IntoIterator<Item = ChipOption<K>>,
@@ -102,6 +122,10 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
         on_toggle: impl Fn(K) -> M + 'a,
     ) -> Self {
         Self {
+            chip_props: Default::default(),
+            entry_props: Default::default(),
+            label_props: Default::default(),
+
             options: options.into_iter().collect(),
             selected: selected.into(),
             on_toggle: Box::new(on_toggle),
@@ -114,6 +138,8 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
             min_contrast: 4.5,
             max_lines: None,
             expand: None,
+            spacing: None,
+            search_gap: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -175,6 +201,16 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
         self.min_contrast = ratio;
         self
     }
+    /// The gap between chips, across and between lines (default `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The gap between the search entry and the chips (default `space_m`).
+    pub fn search_spacing(mut self, px: f32) -> Self {
+        self.search_gap = Some(px);
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -193,9 +229,11 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> ChipGroup<'a, K, M> {
 impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for Element<'a, M> {
     fn from(g: ChipGroup<'a, K, M>) -> Self {
         let m = g.metrics;
+        let gap = g.spacing.unwrap_or(m.space_s);
         let visible = g.visible();
         let body: Element<'a, M> = if visible.is_empty() {
-            ty::caption(g.empty.clone()).style(st::dim).into()
+            g.label_props
+                .apply(ty::caption(g.empty.clone()).style(st::dim))
         } else {
             let chips: Vec<Element<'a, M>> = visible
                 .into_iter()
@@ -213,7 +251,7 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for
                             c = c.on_color(on);
                         }
                     }
-                    Element::from(c)
+                    Element::from(g.chip_props.apply(c))
                 })
                 .collect();
             if let Some(Expansion {
@@ -242,17 +280,17 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for
                     items,
                     lines: g.max_lines.unwrap_or(3),
                     expanded,
-                    gap: m.space_s,
+                    gap,
                 })
             } else {
                 let wrapped = row(chips)
-                    .spacing(m.space_s)
+                    .spacing(gap)
                     .width(iced::Length::Fill)
                     .wrap()
-                    .vertical_spacing(m.space_s);
+                    .vertical_spacing(gap);
                 if let Some(lines) = g.max_lines {
                     let lines = lines as f32;
-                    let height = lines * g.size.height(&m) + (lines - 1.0) * m.space_s + 1.0;
+                    let height = lines * g.size.height(&m) + (lines - 1.0) * gap + 1.0;
                     iced::widget::container(wrapped)
                         .width(iced::Length::Fill)
                         .max_height(height)
@@ -266,12 +304,14 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<ChipGroup<'a, K, M>> for
         // The entry is drawn only when `search` gave it somewhere to send what is typed.
         match (g.query, g.on_query) {
             (Some(q), Some(on_query)) => column![
-                entry(g.placeholder, q.to_string())
-                    .on_input(on_query)
-                    .metrics(m),
+                g.entry_props.apply(
+                    entry(g.placeholder, q.to_string())
+                        .on_input(on_query)
+                        .metrics(m)
+                ),
                 body
             ]
-            .spacing(m.space_m)
+            .spacing(g.search_gap.unwrap_or(m.space_m))
             .into(),
             _ => body,
         }
@@ -661,5 +701,82 @@ mod tests {
             &layout::Limits::new(Size::ZERO, Size::new(300.0, 2000.0)),
         );
         assert!(!tree.state.downcast_ref::<FlowState>().overflow);
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_chip_and_search_gaps_are_parameters() {
+        let sel: [u8; 0] = [];
+        let g = ChipGroup::<u8, ()>::new([ChipOption::new(1, "a")], &sel, |_| ())
+            .spacing(1.0)
+            .search_spacing(2.0);
+        assert_eq!((g.spacing, g.search_gap), (Some(1.0), Some(2.0)));
+        let _: Element<'_, ()> = g.into();
+    }
+}
+
+/// Presentation-only overrides supported by [`ChipGroup`]. Values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct ChipGroupProps {
+    pub spacing: Option<f32>,
+    pub search_spacing: Option<f32>,
+    pub metrics: Option<crate::Metrics>,
+    pub entry_props: Option<crate::components::EntryProps>,
+    pub label_props: Option<crate::components::TextProps>,
+    pub chip_props: Option<crate::components::badge::ChipProps>,
+}
+impl ChipGroupProps {
+    pub fn spacing(mut self, value: impl Into<f32>) -> Self {
+        self.spacing = Some(value.into());
+        self
+    }
+    pub fn search_spacing(mut self, value: impl Into<f32>) -> Self {
+        self.search_spacing = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<crate::Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn entry_props(mut self, value: impl Into<crate::components::EntryProps>) -> Self {
+        self.entry_props = Some(value.into());
+        self
+    }
+    pub fn label_props(mut self, value: impl Into<crate::components::TextProps>) -> Self {
+        self.label_props = Some(value.into());
+        self
+    }
+    pub fn chip_props(mut self, value: impl Into<crate::components::badge::ChipProps>) -> Self {
+        self.chip_props = Some(value.into());
+        self
+    }
+    pub fn apply<'a, K: PartialEq + Clone + 'a, M: Clone + 'a>(
+        &self,
+        widget: ChipGroup<'a, K, M>,
+    ) -> ChipGroup<'a, K, M> {
+        let mut widget = widget;
+        if let Some(value) = &self.spacing {
+            widget = widget.spacing(value.clone());
+        }
+        if let Some(value) = &self.search_spacing {
+            widget = widget.search_spacing(value.clone());
+        }
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
+        }
+        if let Some(props) = &self.entry_props {
+            widget.entry_props.merge(props);
+        }
+        if let Some(props) = &self.label_props {
+            widget.label_props.merge(props);
+        }
+        if let Some(props) = &self.chip_props {
+            widget.chip_props.merge(props);
+        }
+        widget
     }
 }

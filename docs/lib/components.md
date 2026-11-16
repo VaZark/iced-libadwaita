@@ -22,6 +22,12 @@ This page is the guide. The API of each component (constructors, properties, slo
 - Two booleans that exclude each other are one parameter with an enum: `NumberInput::drag(NumberDrag)`, `Dock::mode(DockMode)`.
 - Overlays have the fade on and `close_on_outside` true by default.
 
+### Child presentation
+
+Use the child's native typed props for meaningful parent-built children, not a string-keyed part/style map. Defaults are no-ops; supplied fields customize presentation without taking over parent-owned values, state, validation, security or events. Caller-supplied `Element` slots retain their own presentation. See [typed child props: contract and usage](child-props.md#contract-and-usage) for examples and current audit coverage; wrapping, clipping and growing text are local caller policies.
+
+For menu triggers and arbitrary-content context targets, see [public menus](windows-and-menus.md#menus).
+
 ### Number input
 
 ```rust
@@ -137,34 +143,16 @@ Tag names are the snake_case constructors. Attribute names are the properties. C
 
 ### Application entries and custom inputs
 
-Use `widgets::EntryRow` and its constructors for application forms. Every entry
-fills its parent width and shares `components::InputWrapper` for the label,
-required marker, description and validation message. `InputWrapper` is the shared
-`Field` presentation; use `.validity(...)` and `.interaction(...)` to reveal errors
-from your form state.
+Use `widgets::EntryRow` and its constructors for application forms. Every entry fills its parent width and shares `components::InputWrapper` for the label, required marker, description and validation message. `InputWrapper` is the shared `Field` presentation; use `.validity(...)` and `.interaction(...)` to reveal errors from your form state.
 
-- `EntryRow::text` edits a single-line string. For password mode, submit behavior and
-  left/right sections, pass a configured `Entry` as `EntryInput::Text`.
-- `EntryRow::number` edits a number. A configured `NumberInput` as `EntryInput::Number`
-  keeps numeric limits, precision and drag behavior, with step controls at the right edge.
-- `EntryRow::date` edits a date. A configured `DateInput` as `EntryInput::Date` sets
-  `.dialog(false)` for a dropdown calendar or `.dialog(true)` for a modal. Its calendar
-  icon is on the right.
-- `EntryRow::switch` edits a boolean. `EntryRow::action` shows a read-only value with one
-  trailing action. Use `ActionRow::navigation` for navigation destinations.
-- `EntryRow::select`, `multiselect` and `chips` present selections from
-  the left edge; dropdown triggers span the available width.
-- `EntryRow::multiline` uses an application-owned `text_editor::Content`. Perform the
-  received actions on that content. It grows from one to twelve lines, then
-  scrolls. `EntryInput::Multiline(text_view(...).max_lines(6))` changes that limit;
-  `.single_line(true)` ignores Enter and normalizes pasted line breaks to spaces.
+- `EntryRow::text` edits a single-line string. For password mode, submit behavior and left/right sections, pass a configured `Entry` as `EntryInput::Text`.
+- `EntryRow::number` edits a number. A configured `NumberInput` as `EntryInput::Number` keeps numeric limits, precision and drag behavior, with step controls at the right edge.
+- `EntryRow::date` edits a date. A configured `DateInput` as `EntryInput::Date` sets `.dialog(false)` for a dropdown calendar or `.dialog(true)` for a modal. Its calendar icon is on the right.
+- `EntryRow::switch` edits a boolean. `EntryRow::action` shows a read-only value with one trailing action. Use `ActionRow::navigation` for navigation destinations.
+- `EntryRow::select`, `multiselect` and `chips` present selections from the left edge; dropdown triggers span the available width.
+- `EntryRow::multiline` uses an application-owned `text_editor::Content`. Perform the received actions on that content. It grows from one to twelve lines, then scrolls. `EntryInput::Multiline(text_view(...).max_lines(6))` changes that limit; `.single_line(true)` ignores Enter and normalizes pasted line breaks to spaces.
 
-`EntryRow::new(label, EntryInput::Text(entry(...)))` selects the input type explicitly.
-`EntryInput` also has Number, Date, Switch, Action, Select, Multiline and Custom variants. Low-level
-`Entry`, `TextView`, `NumberInput` and `DateInput` components are building blocks
-for custom widgets; prefer the `EntryRow` constructors in application forms. Use
-`EntryRow::text(label, value, on_input)` for text, and
-`EntryRow::new(label, EntryInput::Text(password_entry(...)))` for a password.
+`EntryRow::new(label, EntryInput::Text(entry(...)))` selects the input type explicitly. `EntryInput` also has Number, Date, Switch, Action, Select, Multiline and Custom variants. Low-level `Entry`, `TextView`, `NumberInput` and `DateInput` components are building blocks for custom widgets; prefer the `EntryRow` constructors in application forms. Use `EntryRow::text(label, value, on_input)` for text, and `EntryRow::new(label, EntryInput::Text(password_entry(...)))` for a password.
 
 Single-value scales and two-thumb ranges share oriented pointer handling:
 
@@ -181,43 +169,16 @@ range_slider(0.0..=100.0, (self.lo, self.hi), Msg::Range)
     .step(5.0);
 ```
 
-Both default to horizontal. Vertical controls increase upward; their height is
-the track length, and horizontal controls use width for length. Number entries
-keep relative scrubbing via `NumberDrag::{Vertical, Horizontal}` and
-`NumberDrag::Select` for text selection. Scales now return the library's `Scale`
-widget rather than iced's `Slider`, sharing range controls' keyboard, touch,
-focus and drag-offset handling.
+Both default to horizontal. Vertical controls increase upward; their height is the track length, and horizontal controls use width for length. Number entries keep relative scrubbing via `NumberDrag::{Vertical, Horizontal}` and `NumberDrag::Select` for text selection. Scales now return the library's `Scale` widget rather than iced's `Slider`, sharing range controls' keyboard, touch, focus and drag-offset handling.
 
-`Accordion` composes `TreeRow` disclosures under its single/multiple selection
-rule. A tree row's whole header surface, including padding and blank space, runs
-`on_activate`; when no activation is set, it runs `on_toggle` instead. With both
-callbacks, the arrow remains a separate toggle target. Interactive prefixes and
-suffixes keep their own actions, and expanded child content is outside the header
-action surface.
+`Accordion` composes `TreeRow` disclosures under its single/multiple selection rule. A tree row's whole header surface, including padding and blank space, runs `on_activate`; when no activation is set, it runs `on_toggle` instead. With both callbacks, the arrow remains a separate toggle target. Interactive prefixes and suffixes keep their own actions, and expanded child content is outside the header action surface.
 
-Toasts close automatically after `[toasts] timeout` milliseconds (default 3000).
-They schedule their own expiry; no timer subscription is needed. Use
-`Toast::timeout(5000)` for an individual delay, or `Toast::timeout(0)` to keep it
-open. Set `on_dismiss` to remove a toast from application state when it expires
-or its close button is pressed. Queue-backed toast stacks preserve each toast's
-clock when another notification is removed.
+Toasts close automatically after `[toasts] timeout` milliseconds (default 3000). They schedule their own expiry; no timer subscription is needed. Use `Toast::timeout(5000)` for an individual delay, or `Toast::timeout(0)` to keep it open. Set `on_dismiss` to remove a toast from application state when it expires or its close button is pressed. Queue-backed toast stacks preserve each toast's clock when another notification is removed.
 
-Entry rows support `.flat(true)`: transparent inputs
-with normal editing, validation, and focus behavior. Use `PreferencesGroup::flat(true)`
-to place rows directly on the page without a boxed background or separators,
-matching flat navigation rows such as Weave's Explore links.
+Entry rows support `.flat(true)`: transparent inputs with normal editing, validation, and focus behavior. Use `PreferencesGroup::flat(true)` to place rows directly on the page without a boxed background or separators, matching flat navigation rows such as Weave's Explore links.
 
-`DateInput::dialog(true)` keeps the page's date display editable. The modal is a
-calendar helper with the same editable value above its calendar. Picking a day
-calls `on_pick` when supplied, otherwise it sends the formatted date through
-`on_input`; typed dates are highlighted automatically. `DateInput` exposes
-`calendar` and `on_nav` for controlled navigation.
+`DateInput::dialog(true)` keeps the page's date display editable. The modal is a calendar helper with the same editable value above its calendar. Picking a day calls `on_pick` when supplied, otherwise it sends the formatted date through `on_input`; typed dates are highlighted automatically. `DateInput` exposes `calendar` and `on_nav` for controlled navigation.
 
-For flat entries, `EntryRow` owns the focus border for every input type.
-Focusing an editable child outlines the entire row, including its label, prefix,
-suffix and padding. Embedded controls do not draw a second inner focus border.
-Validation keeps its full-row error or warning border, with help text outside it.
+For flat entries, `EntryRow` owns the focus border for every input type. Focusing an editable child outlines the entire row, including its label, prefix, suffix and padding. Embedded controls do not draw a second inner focus border. Validation keeps its full-row error or warning border, with help text outside it.
 
-`EntryRow` places its label above the input line. Prefixes and suffixes align to
-the input line rather than the combined row height; the outer focus border
-continues to surround the label and every section.
+`EntryRow` places its label above the input line. Prefixes and suffixes align to the input line rather than the combined row height; the outer focus border continues to surround the label and every section.

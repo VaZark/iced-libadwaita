@@ -21,6 +21,8 @@
 //!   size. Compose them in a footer (see the gallery's data page).
 
 use crate::Element;
+use crate::components::{ButtonProps, ContainerProps, TextProps};
+
 use crate::primitives::pagination::{PageItem, Pagination as State};
 use crate::styles::button as sb;
 use crate::{Icon, Metrics, Theme};
@@ -49,13 +51,57 @@ pub struct Pagination<'a, M> {
     size: PaginationSize,
     disabled: bool,
     align: Horizontal,
+    spacing: Option<f32>,
+    cell_padding: Option<f32>,
     metrics: Metrics,
+    page_button_props: ButtonProps,
+    controls_props: ButtonProps,
+    label_props: TextProps,
+    ellipsis_props: TextProps,
+    cell_props: ContainerProps,
+    container_props: ContainerProps,
 }
 
 impl<'a, M: 'a> Pagination<'a, M> {
     /// A pager for `state` (copied), sending the page the user chose.
+    /// Presentation overrides applied after the child's defaults.
+    pub fn page_button_props(mut self, props: ButtonProps) -> Self {
+        self.page_button_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn controls_props(mut self, props: ButtonProps) -> Self {
+        self.controls_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn label_props(mut self, props: TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn ellipsis_props(mut self, props: TextProps) -> Self {
+        self.ellipsis_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn cell_props(mut self, props: ContainerProps) -> Self {
+        self.cell_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
     pub fn new(state: &State, on_change: impl Fn(usize) -> M + 'a) -> Self {
         Self {
+            page_button_props: ButtonProps::default(),
+            controls_props: ButtonProps::default(),
+            label_props: TextProps::default(),
+            ellipsis_props: TextProps::default(),
+            cell_props: ContainerProps::default(),
+            container_props: ContainerProps::default(),
             state: *state,
             on_change: Rc::new(on_change),
             siblings: 1,
@@ -65,6 +111,8 @@ impl<'a, M: 'a> Pagination<'a, M> {
             size: PaginationSize::Medium,
             disabled: false,
             align: Horizontal::Center,
+            spacing: None,
+            cell_padding: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -100,6 +148,17 @@ impl<'a, M: 'a> Pagination<'a, M> {
     /// Where the pager sits in the row it fills (default centered).
     pub fn align(mut self, align: Horizontal) -> Self {
         self.align = align;
+        self
+    }
+    /// The gap between the page buttons (default: the theme's `space_xs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding each side of a page number that decides how wide the buttons are when the
+    /// numbers get long (default: the theme's `space_m`).
+    pub fn cell_padding(mut self, px: f32) -> Self {
+        self.cell_padding = Some(px.max(0.0));
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -138,11 +197,16 @@ impl<'a, M: Clone + 'a> From<Pagination<'a, M>> for Element<'a, M> {
             .max()
             .unwrap_or(1);
         let h = p.side();
-        let w = h.max(digits as f32 * p.text_size() * 0.62 + 2.0 * p.metrics.space_m);
+        let w = h.max(
+            digits as f32 * p.text_size() * 0.62
+                + 2.0 * p.cell_padding.unwrap_or(p.metrics.space_m),
+        );
         let cell = |content: Element<'a, M>| {
-            container(content)
-                .center_x(Length::Fixed(w))
-                .center_y(Length::Fixed(h))
+            p.cell_props.apply(
+                container(content)
+                    .center_x(Length::Fixed(w))
+                    .center_y(Length::Fixed(h)),
+            )
         };
         let icon = |icon: Icon, enabled: bool| -> Element<'a, M> {
             icon.view(p.metrics.icon_size)
@@ -153,9 +217,11 @@ impl<'a, M: Clone + 'a> From<Pagination<'a, M>> for Element<'a, M> {
         };
         let control = |ic: Icon, target: Option<usize>| -> Element<'a, M> {
             let enabled = target.is_some() && !p.disabled;
-            let b = button(cell(icon(ic, enabled)))
-                .padding(Padding::ZERO)
-                .style(sb::default);
+            let b = p.controls_props.apply(
+                button(cell(icon(ic, enabled)))
+                    .padding(Padding::ZERO)
+                    .style(sb::default),
+            );
             let on_change = p.on_change.clone();
             match target.filter(|_| !p.disabled) {
                 Some(page) => b.on_press_with(move || on_change(page)),
@@ -164,7 +230,9 @@ impl<'a, M: Clone + 'a> From<Pagination<'a, M>> for Element<'a, M> {
             .into()
         };
 
-        let mut r = row![].spacing(p.metrics.space_xs).align_y(Vertical::Center);
+        let mut r = row![]
+            .spacing(p.spacing.unwrap_or(p.metrics.space_xs))
+            .align_y(Vertical::Center);
         if p.edges {
             r = r.push(control(Icon::GoFirst, p.state.first_page()));
         }
@@ -175,12 +243,18 @@ impl<'a, M: Clone + 'a> From<Pagination<'a, M>> for Element<'a, M> {
             r = r.push(match item {
                 PageItem::Page(n) => {
                     let active = n == p.state.page();
-                    let label = text(n.to_string())
-                        .size(p.text_size())
-                        .wrapping(text::Wrapping::None);
-                    let b = button(cell(label.into()))
-                        .padding(Padding::ZERO)
-                        .style(if active { sb::suggested } else { sb::default });
+                    let label = p.label_props.apply(
+                        text(n.to_string())
+                            .size(p.text_size())
+                            .wrapping(text::Wrapping::None),
+                    );
+                    let b = p.page_button_props.apply(
+                        button(cell(label)).padding(Padding::ZERO).style(if active {
+                            sb::suggested
+                        } else {
+                            sb::default
+                        }),
+                    );
                     let on_change = p.on_change.clone();
                     if p.disabled {
                         b
@@ -190,10 +264,11 @@ impl<'a, M: Clone + 'a> From<Pagination<'a, M>> for Element<'a, M> {
                     .into()
                 }
                 PageItem::Ellipsis => Element::from(cell(
-                    text("\u{2026}")
-                        .size(p.text_size())
-                        .style(crate::styles::text::dim)
-                        .into(),
+                    p.ellipsis_props.apply(
+                        text("\u{2026}")
+                            .size(p.text_size())
+                            .style(crate::styles::text::dim),
+                    ),
                 )),
             });
         }
@@ -203,7 +278,9 @@ impl<'a, M: Clone + 'a> From<Pagination<'a, M>> for Element<'a, M> {
         if p.edges {
             r = r.push(control(Icon::GoLast, p.state.last_page()));
         }
-        container(r).width(Length::Fill).align_x(p.align).into()
+        p.container_props
+            .apply(container(r).width(Length::Fill).align_x(p.align))
+            .into()
     }
 }
 
@@ -231,4 +308,41 @@ pub fn page_size_dropdown<'a, M: Clone + 'a>(
     on_select: impl Fn(usize) -> M + 'a,
 ) -> crate::widgets::Popover<'a, M> {
     crate::widgets::dropdown(options, Some(PageSize(current)), move |s| on_select(s.0))
+}
+
+#[cfg(test)]
+mod spacing_params_tests {
+    use super::*;
+
+    #[test]
+    fn a_pager_takes_spacing_and_cell_padding() {
+        let state = State::new(100, 10);
+        let p = Pagination::new(&state, |n| n)
+            .spacing(2.0)
+            .cell_padding(3.0);
+        assert_eq!((p.spacing, p.cell_padding), (Some(2.0), Some(3.0)));
+        let _: Element<'_, usize> = p.into();
+    }
+}
+
+#[cfg(test)]
+mod child_props_tests {
+    use super::*;
+    #[test]
+    fn root_bounds_override_defaults_and_controls_keep_their_state() {
+        let state = State::new(100, 10);
+        let element: Element<'_, usize> = Pagination::new(&state, |n| n)
+            .container_props(ContainerProps::default().width(271).height(49))
+            .page_button_props(ButtonProps::default().padding(3))
+            .controls_props(ButtonProps::default().padding(2))
+            .label_props(TextProps::default().size(19))
+            .with_edges(true)
+            .disabled(true)
+            .into();
+        assert_eq!(
+            element.as_widget().size(),
+            iced::Size::new(Length::Fixed(271.0), Length::Fixed(49.0))
+        );
+        assert_eq!(state.page(), 1);
+    }
 }

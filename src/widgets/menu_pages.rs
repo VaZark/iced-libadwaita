@@ -89,18 +89,24 @@ pub(crate) fn blended_height(heights: &[f32], from: usize, to: usize, progress: 
 
 /// A menu row that opens page `target` when it is clicked. See the [module](self).
 pub(crate) struct NavRow<'a, M> {
+    style: Option<crate::components::props::ButtonStyle>,
     content: Element<'a, M, Theme>,
     target: usize,
     request: Request,
 }
 
 impl<'a, M> NavRow<'a, M> {
+    pub(crate) fn style(mut self, style: Option<crate::components::props::ButtonStyle>) -> Self {
+        self.style = style;
+        self
+    }
     pub(crate) fn new(
         content: impl Into<Element<'a, M, Theme>>,
         target: usize,
         request: &Request,
     ) -> Self {
         Self {
+            style: None,
             content: content.into(),
             target,
             request: request.clone(),
@@ -201,7 +207,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for NavRow<'a, M> {
             _ => Status::Active,
         };
         // The same look as the other rows of the menu.
-        let look = sb::menu_item(false)(theme, status);
+        let look = self.style.as_ref().map_or_else(
+            || sb::menu_item(false)(theme, status),
+            |style| style(theme, status),
+        );
         if let Some(background) = look.background {
             renderer.fill_quad(
                 renderer::Quad {

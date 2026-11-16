@@ -123,7 +123,7 @@ impl State {
 
     // -- Splitter
 
-    pub fn split_play<'a>(&'a self, p: &Playground, m: Metrics) -> (Element<'a, Msg>, String) {
+    pub fn split_play<'a>(&'a self, p: &Playground, m: Metrics) -> Element<'a, Msg> {
         let vertical = p.choice("orientation") == 1;
         let sizes = self.split.sizes().to_vec();
         let mut s = Splitter::new(&self.split)
@@ -167,35 +167,17 @@ impl State {
         let preview: Element<'a, Msg> = column![buttons, Element::from(frame)]
             .spacing(m.space_m)
             .into();
-
-        let mut code = String::from("// state\nSplitterState::new(vec![\n");
-        for line in pane_code(p) {
-            code.push_str(&format!("    {line},\n"));
-        }
-        code.push_str("])");
-        if p.choice("redistribute") == 1 {
-            code.push_str("\n    .redistribute(Redistribute::Nearest)");
-        }
-        code.push_str("\n\n// view\nSplitter::new(&self.split)\n");
-        if vertical {
-            code.push_str("    .orientation(SplitterOrientation::Vertical)\n");
-        }
-        if !p.bool("grip") {
-            code.push_str("    .with_handle(false)\n");
-        }
-        if p.changed("line") {
-            code.push_str(&format!("    .line_size({:.0}.0)\n", p.number("line")));
-        }
-        for i in 0..self.split.len() {
-            code.push_str(&format!("    .pane(pane_{})\n", i + 1));
-        }
-        code.push_str("    .on_event(Msg::Split)\n\n// update: self.split.apply(event);   // self.split.toggle(0) from code");
-        (preview, code)
+        preview
     }
 
     // -- Color picker
 
-    pub fn color_play<'a>(&'a self, p: &Playground, m: Metrics) -> (Element<'a, Msg>, String) {
+    pub fn color_play<'a>(
+        &'a self,
+        p: &Playground,
+        m: Metrics,
+        window_radius: f32,
+    ) -> Element<'a, Msg> {
         let formats = ColorFormat::ALL;
         let format = formats[p.choice("format")];
         let as_input = p.choice("kind") == 1;
@@ -204,6 +186,7 @@ impl State {
             let mut i = ColorInput::new(self.color, &self.color_text, Msg::ColorText, Msg::Color)
                 .alpha(p.bool("alpha"))
                 .dialog(p.bool("dialog"))
+                .window_radius(window_radius)
                 .scrim(p.bool("scrim"))
                 .metrics(m);
             if swatches {
@@ -222,57 +205,15 @@ impl State {
             }
             c.into()
         };
-        let mut code = String::from(if as_input {
-            "ColorInput::new(self.color, &self.text, Msg::Text, Msg::Color)\n"
-        } else {
-            "ColorPicker::new(self.color, Msg::Color)\n"
-        });
-        let mut line = |s: String| {
-            code.push_str("    ");
-            code.push_str(&s);
-            code.push('\n');
-        };
-        if as_input && p.bool("dialog") {
-            line(".dialog(true)".into());
-            if !p.bool("scrim") {
-                line(".scrim(false)".into());
-            }
-        }
-        if p.bool("alpha") {
-            line(".alpha(true)".into());
-        }
-        if !as_input && p.choice("format") != 0 {
-            line(format!(".format(ColorFormat::{format:?})"));
-        }
-        if swatches {
-            line(".swatches([\"#e01b24\", \"#ff7800\", \"#33d17a\", \"#3584e4\"])".into());
-        }
-        if !as_input && !p.bool("readout") {
-            line(".readout(false)".into());
-        }
-        if !as_input && p.changed("width") {
-            line(format!(".width({:.0}.0)", p.number("width")));
-        }
-        code.push_str(&format!(
-            "\n// the color: Hsva; Hsva::parse(\"#3584e4\"), color.format(ColorFormat::{format:?}) = {}",
-            self.color.format(format)
-        ));
-        (el, code)
+        el
     }
 
     // -- Number input
 
-    pub fn number_play<'a>(&'a self, p: &Playground, m: Metrics) -> (Element<'a, Msg>, String) {
-        const STEPS: [(i64, u8, &str); 6] = [
-            (1, 0, "1"),
-            (1, 2, "0.01"),
-            (1, 1, "0.1"),
-            (25, 2, "0.25"),
-            (5, 0, "5"),
-            (10, 0, "10"),
-        ];
+    pub fn number_play<'a>(&'a self, p: &Playground, m: Metrics) -> Element<'a, Msg> {
+        const STEPS: [(i64, u8); 6] = [(1, 0), (1, 2), (1, 1), (25, 2), (5, 0), (10, 0)];
         let decimals = p.number("decimals") as u8;
-        let (units, digits, label) = STEPS[p.choice("step")];
+        let (units, digits) = STEPS[p.choice("step")];
         let mut input = NumberInput::new(&self.number, Msg::Number)
             .decimals(decimals)
             .step(Decimal::new(units, digits))
@@ -297,35 +238,7 @@ impl State {
         let el = column![Element::from(input), ty::caption(format!("Value: {shown}"))]
             .spacing(m.space_s)
             .into();
-        let mut code = String::from("NumberInput::new(&self.text, Msg::Text)\n");
-        if decimals != 0 {
-            code.push_str(&format!("    .decimals({decimals})\n"));
-        }
-        if p.bool("limits") {
-            code.push_str("    .min(0)\n    .max(100)\n");
-        }
-        if p.changed("step") {
-            code.push_str(&if digits == 0 {
-                format!("    .step({label})\n")
-            } else {
-                format!("    .step(Decimal::new({units}, {digits}))   // {label}\n")
-            });
-        }
-        if p.choice("drag") != 0 {
-            code.push_str(if p.choice("drag") == 1 {
-                "    .drag(NumberDrag::Horizontal)   // drag right to raise, left to lower\n"
-            } else {
-                "    .drag(NumberDrag::Select)   // dragging selects text\n"
-            });
-        }
-        if !p.bool("handles") {
-            code.push_str("    .handles(false)\n");
-        }
-        if p.bool("disabled") {
-            code.push_str("    .disabled(true)\n");
-        }
-        code.push_str("\n// update: self.text = text;   a handle sends the stepped number as text\n// the number: Numeric::decimal(2).parse(&self.text) -> Option<Decimal> (fixed-point, no float)");
-        (el, code)
+        el
     }
 
     // -- Spoiler
@@ -348,26 +261,6 @@ impl State {
             self.spoiler.total()
         )
     }
-}
-
-fn pane_code(p: &Playground) -> Vec<String> {
-    let n = [2, 3][p.choice("panes")];
-    (0..n)
-        .map(|i| {
-            let mut s = if i == 0 && p.bool("fixed") {
-                "SplitterPane::fixed(240.0)".to_string()
-            } else {
-                "SplitterPane::flex()".to_string()
-            };
-            if p.bool("limits") && i == 0 {
-                s.push_str(".min(SplitterLimit::Px(120.0)).max(SplitterLimit::Fraction(0.6))");
-            }
-            if p.bool("collapsible") && i == 0 {
-                s.push_str(".collapsible(true)");
-            }
-            s
-        })
-        .collect()
 }
 
 fn build_split(p: &Playground) -> SplitterState {

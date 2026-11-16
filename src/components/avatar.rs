@@ -29,6 +29,54 @@ impl AvatarShape {
     }
 }
 
+/// Owned presentation overrides; default values preserve the component defaults.
+#[derive(Clone, Default)]
+pub struct AvatarProps {
+    pub color: Option<Color>,
+    pub text_color: Option<Color>,
+    pub shape: Option<AvatarShape>,
+    pub label_props: super::props::TextProps,
+    pub container_props: super::props::ContainerProps,
+}
+impl AvatarProps {
+    pub fn color(mut self, value: impl Into<Color>) -> Self {
+        self.color = Some(value.into());
+        self
+    }
+    pub fn text_color(mut self, value: impl Into<Color>) -> Self {
+        self.text_color = Some(value.into());
+        self
+    }
+    pub fn shape(mut self, value: impl Into<AvatarShape>) -> Self {
+        self.shape = Some(value.into());
+        self
+    }
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+    pub fn apply(&self, widget: Avatar) -> Avatar {
+        let mut widget = widget;
+        if let Some(value) = self.color.clone() {
+            widget = widget.color(value);
+        }
+        if let Some(value) = self.text_color.clone() {
+            widget = widget.text_color(value);
+        }
+        if let Some(value) = self.shape.clone() {
+            widget = widget.shape(value);
+        }
+
+        widget.label_props.merge(&self.label_props);
+        widget.container_props.merge(&self.container_props);
+        widget
+    }
+}
+
 /// `AdwAvatar`: round badge with initials.
 pub struct Avatar {
     size: f32,
@@ -38,6 +86,8 @@ pub struct Avatar {
     text_color: Option<Color>,
     icon: Option<IconSource>,
     shape: AvatarShape,
+    label_props: super::props::TextProps,
+    container_props: super::props::ContainerProps,
 }
 
 pub fn avatar(size: f32, text: impl Into<String>) -> Avatar {
@@ -45,8 +95,20 @@ pub fn avatar(size: f32, text: impl Into<String>) -> Avatar {
 }
 
 impl Avatar {
+    pub fn label_props(mut self, props: super::props::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+
     pub fn new(size: f32, text: impl Into<String>) -> Self {
         Self {
+            label_props: Default::default(),
+            container_props: Default::default(),
             size,
             text: text.into(),
             show_initials: true,
@@ -114,23 +176,22 @@ impl<'a, M: 'a> From<Avatar> for Element<'a, M> {
                 } else {
                     String::new()
                 };
-                text(label)
-                    .size(a.size * 0.4)
-                    .font(iced::Font {
+                a.label_props
+                    .apply(text(label).size(a.size * 0.4).font(iced::Font {
                         weight: iced::font::Weight::Bold,
                         ..iced::Font::DEFAULT
-                    })
-                    .into()
+                    }))
             }
         };
-        container(content)
-            .center(Length::Fixed(a.size))
-            .style(move |_: &crate::Theme| iced::widget::container::Style {
-                text_color: Some(ink),
-                background: Some(iced::Background::Color(fill)),
-                border: iced::Border::default().rounded(radius),
-                ..Default::default()
-            })
+        a.container_props
+            .apply(container(content).center(Length::Fixed(a.size)).style(
+                move |_: &crate::Theme| iced::widget::container::Style {
+                    text_color: Some(ink),
+                    background: Some(iced::Background::Color(fill)),
+                    border: iced::Border::default().rounded(radius),
+                    ..Default::default()
+                },
+            ))
             .into()
     }
 }

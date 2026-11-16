@@ -9,6 +9,34 @@ use crate::{Icon, Metrics, Theme};
 use iced::widget::{container, row, text_input};
 use iced::{Alignment, Border, Length};
 
+/// Owned presentation overrides; default values preserve the component defaults.
+#[derive(Clone, Default)]
+pub struct SearchBarProps {
+    pub input_props: super::entry::TextInputProps,
+    pub button_props: super::props::ButtonProps,
+    pub container_props: super::props::ContainerProps,
+}
+impl SearchBarProps {
+    pub fn input_props(mut self, props: super::entry::TextInputProps) -> Self {
+        self.input_props = props;
+        self
+    }
+    pub fn button_props(mut self, props: super::props::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+    pub fn apply<'a, M>(&self, mut widget: SearchBar<'a, M>) -> SearchBar<'a, M> {
+        widget.input_props.merge(&self.input_props);
+        widget.button_props.merge(&self.button_props);
+        widget.container_props.merge(&self.container_props);
+        widget
+    }
+}
+
 /// See the [module](self).
 pub struct SearchBar<'a, M> {
     value: &'a str,
@@ -17,23 +45,62 @@ pub struct SearchBar<'a, M> {
     on_close: Option<M>,
     id: Option<iced::widget::Id>,
     width: Length,
+    spacing: Option<f32>,
+    padding: Option<iced::Padding>,
+    input_padding: Option<iced::Padding>,
     metrics: Metrics,
+    input_props: super::entry::TextInputProps,
+    button_props: super::props::ButtonProps,
+    container_props: super::props::ContainerProps,
 }
 
 /// A search bar showing `value` and sending each edit through `on_input`.
 pub fn search_bar<'a, M>(value: &'a str, on_input: impl Fn(String) -> M + 'a) -> SearchBar<'a, M> {
     SearchBar {
+        input_props: Default::default(),
+        button_props: Default::default(),
+        container_props: Default::default(),
         value,
         placeholder: "Search".into(),
         on_input: Box::new(on_input),
         on_close: None,
         id: None,
         width: Length::Fill,
+        spacing: None,
+        padding: None,
+        input_padding: None,
         metrics: Metrics::desktop(),
     }
 }
 
 impl<'a, M> SearchBar<'a, M> {
+    pub fn input_props(mut self, props: super::entry::TextInputProps) -> Self {
+        self.input_props = props;
+        self
+    }
+    pub fn button_props(mut self, props: super::props::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+    pub fn container_props(mut self, props: super::props::ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+    /// The gap between the icon, the field and the close button (default `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding of the pill (default `space_xxs` above and below, `space_m` at the sides).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// The padding inside the text field (default `space_s`).
+    pub fn input_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.input_padding = Some(p.into());
+        self
+    }
     pub fn placeholder(mut self, text: impl Into<String>) -> Self {
         self.placeholder = text.into();
         self
@@ -59,7 +126,7 @@ impl<'a, M: Clone + 'a> From<SearchBar<'a, M>> for Element<'a, M> {
         let m = b.metrics;
         let mut input = text_input(&b.placeholder, b.value)
             .on_input(b.on_input)
-            .padding(m.space_s)
+            .padding(b.input_padding.unwrap_or(iced::Padding::from(m.space_s)))
             .width(Length::Fill)
             .style(|theme: &Theme, status| {
                 // The pill draws the field: the input itself is bare.
@@ -71,27 +138,36 @@ impl<'a, M: Clone + 'a> From<SearchBar<'a, M>> for Element<'a, M> {
         if let Some(id) = b.id {
             input = input.id(id);
         }
-        let mut r = row![Icon::Search.view(m.icon_size), input]
-            .spacing(m.space_s)
+        let mut r = row![Icon::Search.view(m.icon_size), b.input_props.apply(input)]
+            .spacing(b.spacing.unwrap_or(m.space_s))
             .align_y(Alignment::Center);
         if let Some(close) = b.on_close {
-            r = r.push(icon_button(Icon::WindowClose).on_press(close));
+            r = r.push(
+                b.button_props
+                    .apply(icon_button(Icon::WindowClose).on_press(close)),
+            );
         }
-        container(r)
-            .padding([2.0, m.space_m])
-            .width(b.width)
-            .style(|theme: &Theme| {
-                let fg = theme.semantic.window.fg;
-                container::Style {
-                    background: Some(alpha(fg, 0.09).into()),
-                    border: Border {
-                        color: alpha(fg, 0.14),
-                        width: 1.0,
-                        radius: 999.0.into(),
-                    },
-                    ..Default::default()
-                }
-            })
+        b.container_props
+            .apply(
+                container(r)
+                    .padding(
+                        b.padding
+                            .unwrap_or(iced::Padding::from([m.space_xxs, m.space_m])),
+                    )
+                    .width(b.width)
+                    .style(|theme: &Theme| {
+                        let fg = theme.semantic.window.fg;
+                        container::Style {
+                            background: Some(alpha(fg, 0.09).into()),
+                            border: Border {
+                                color: alpha(fg, 0.14),
+                                width: 1.0,
+                                radius: 999.0.into(),
+                            },
+                            ..Default::default()
+                        }
+                    }),
+            )
             .into()
     }
 }
@@ -107,5 +183,23 @@ mod tests {
             .placeholder("What do you want to play?")
             .on_close(2)
             .into();
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn search_bar_gaps_and_padding_are_parameters() {
+        let b = search_bar("", |_: String| ())
+            .spacing(1.0)
+            .padding(2.0)
+            .input_padding(3.0);
+        assert_eq!(
+            (b.spacing, b.padding),
+            (Some(1.0), Some(iced::Padding::from(2.0)))
+        );
+        let _: Element<'_, ()> = b.into();
     }
 }

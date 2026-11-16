@@ -96,6 +96,6 @@ The pieces are public, so apps can use the same rule: `color::contrast_ratio`, `
 
 Overrides, from broad to narrow:
 
-- `Theme::with_auto_contrast(false)` or `[appearance] auto-contrast=false` in the desktop config: keep the palette's fixed `*_fg_color`s (libadwaita's white).
+- `[colors] auto-contrast=true` in the theme (or `Theme::with_auto_contrast(true)`): pick light or dark text on colored fills by contrast. Off by default: the palette's `*_fg_color`s are used.
 - `Theme::with_semantic(|s| s.accent.fg = …)`: a theme-wide hard value for one status color.
 - A component's own prop wins over everything: `Banner::text_color`, `Avatar::text_color`, and `style::button::role_with_text(role, color)` for buttons.

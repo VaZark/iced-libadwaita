@@ -32,6 +32,156 @@ fn linked_radius(r: f32, pos: Position) -> iced::border::Radius {
     }
 }
 
+/// Overrides what the variant's tokens set (`bg`, `fg`, `border`, `border-width`, `radius`,
+/// `hover-bg`, `active-bg`) on `style`, the look the built-in computed for `status`. A token the
+/// theme leaves unset keeps the built-in value.
+fn apply(
+    v: &crate::theme_config::ResolvedVariant<'_>,
+    theme: &Theme,
+    status: Status,
+    mut style: Style,
+) -> Style {
+    let s = &theme.semantic;
+    let disabled = |c: Color| fade(c, s.opacity.disabled);
+    let fill = |c: Color| Some(Background::Color(c));
+    match (v.color("bg"), status) {
+        (Some(bg), Status::Active) => style.background = fill(bg),
+        (Some(bg), Status::Hovered) => {
+            style.background = fill(v.color("hover-bg").unwrap_or_else(|| s.hover_fill(bg)))
+        }
+        (Some(bg), Status::Pressed) => {
+            style.background = fill(v.color("active-bg").unwrap_or_else(|| s.active_fill(bg)))
+        }
+        (Some(bg), Status::Disabled) => style.background = fill(disabled(bg)),
+        (None, Status::Hovered) => {
+            if let Some(c) = v.color("hover-bg") {
+                style.background = fill(c);
+            }
+        }
+        (None, Status::Pressed) => {
+            if let Some(c) = v.color("active-bg") {
+                style.background = fill(c);
+            }
+        }
+        (None, _) => {}
+    }
+    // A gradient fill paints over the flat one; hover and pressed derive from it per stop.
+    let base = v.gradient("bg-gradient");
+    let gradient = match status {
+        Status::Active => base.cloned(),
+        Status::Hovered => v
+            .gradient("hover-bg-gradient")
+            .cloned()
+            .or_else(|| base.map(|g| g.map(|c| s.hover_fill(c)))),
+        Status::Pressed => v
+            .gradient("active-bg-gradient")
+            .cloned()
+            .or_else(|| base.map(|g| g.map(|c| s.active_fill(c)))),
+        Status::Disabled => base.map(|g| g.faded(s.opacity.disabled)),
+    };
+    if let Some(g) = gradient {
+        style.background = Some(g.background());
+    }
+    if let Some(fg) = v.color("fg") {
+        style.text_color = if status == Status::Disabled {
+            disabled(fg)
+        } else {
+            fg
+        };
+    }
+    // A menu bar item turns white on the navy highlight: its own text color while hovered/pressed.
+    match status {
+        Status::Hovered => {
+            if let Some(fg) = v.color("hover-fg") {
+                style.text_color = fg;
+            }
+        }
+        Status::Pressed => {
+            if let Some(fg) = v.color("active-fg").or_else(|| v.color("hover-fg")) {
+                style.text_color = fg;
+            }
+        }
+        _ => {}
+    }
+    // A drawn bevel (`border-style` raised, sunken, …) is the border: no solid one under it.
+    let bevelled = v.text("border-style").is_some_and(|s| s != "solid");
+    if !bevelled {
+        if let Some(c) = v.color("border") {
+            style.border.color = c;
+            if style.border.width == 0.0 {
+                style.border.width = theme.metrics.border_width;
+            }
+        }
+        if let Some(w) = v.length("border-width") {
+            style.border.width = w;
+        }
+    }
+    if let Some(r) = v.length("radius") {
+        style.border.radius = r.into();
+    }
+    style
+}
+
+/// The built-in look of the default variant called `name`; the neutral button for any other name.
+fn builtin(name: &str) -> fn(&Theme, Status) -> Style {
+    match name {
+        "raised" => raised_base,
+        "flat" => flat_base,
+        "headerbar" => headerbar_base,
+        "suggested" => suggested_base,
+        "destructive" => destructive_base,
+        "opaque" => opaque_base,
+        "pill" => pill_base,
+        "suggested-pill" => suggested_pill_base,
+        "link" => link_base,
+        "osd" => osd_base,
+        "card" => card_base,
+        _ => default_base,
+    }
+}
+
+/// `base` with the tokens of the variant `name` over it, when the theme declares it. The public
+/// styles are these: each is the default variant of its name, so a theme can restyle it.
+fn tuned(name: &str, theme: &Theme, status: Status, base: fn(&Theme, Status) -> Style) -> Style {
+    let style = base(theme, status);
+    let v = theme.variant("button", name);
+    if v.exists() {
+        apply(&v, theme, status, style)
+    } else {
+        style
+    }
+}
+
+/// The style of the **variant** `name`: a named set of style tokens (`[button.<name>]` in a theme
+/// file, or declared by the app with [`Schema::variant`](crate::theme_config::Schema::variant)),
+/// over the built-in look of the toolkit's default variant of that name. A name the theme does not
+/// declare (an app that opted out of the defaults, or a typo) draws the neutral button.
+///
+/// ```ignore
+/// button(label).style(styles::button::variant("brand"))
+/// ```
+pub fn variant(name: &str) -> impl Fn(&Theme, Status) -> Style + Clone + use<> {
+    let name = name.to_string();
+    move |theme, status| {
+        let v = theme.variant("button", &name);
+        if !v.exists() {
+            return default(theme, status);
+        }
+        apply(&v, theme, status, builtin(&name)(theme, status))
+    }
+}
+
+/// [`variant`] for a button that is a circle of `size` px: the corner radius is half the size
+/// whatever the variant or the theme says.
+pub fn circular_variant(name: &str, size: f32) -> impl Fn(&Theme, Status) -> Style + Clone + use<> {
+    let style = variant(name);
+    move |theme, status| {
+        let mut s = style(theme, status);
+        s.border.radius = (size / 2.0).into();
+        s
+    }
+}
+
 /// Translucent state-layer button built from `fg` (`alpha(currentColor, x)`).
 fn tinted(
     theme: &Theme,
@@ -95,7 +245,7 @@ fn filled(
 }
 
 /// The standard button: translucent foreground background, 6px radius.
-pub fn default(theme: &Theme, status: Status) -> Style {
+fn default_base(theme: &Theme, status: Status) -> Style {
     tinted(
         theme,
         status,
@@ -106,12 +256,12 @@ pub fn default(theme: &Theme, status: Status) -> Style {
 }
 
 /// `.raised`: identical to default (kept for API parity with GTK).
-pub fn raised(theme: &Theme, status: Status) -> Style {
-    default(theme, status)
+fn raised_base(theme: &Theme, status: Status) -> Style {
+    default_base(theme, status)
 }
 
 /// `.flat`: transparent until hovered.
-pub fn flat(theme: &Theme, status: Status) -> Style {
+fn flat_base(theme: &Theme, status: Status) -> Style {
     tinted(
         theme,
         status,
@@ -122,7 +272,7 @@ pub fn flat(theme: &Theme, status: Status) -> Style {
 }
 
 /// `.flat` using the headerbar foreground.
-pub fn headerbar(theme: &Theme, status: Status) -> Style {
+fn headerbar_base(theme: &Theme, status: Status) -> Style {
     tinted(
         theme,
         status,
@@ -133,18 +283,18 @@ pub fn headerbar(theme: &Theme, status: Status) -> Style {
 }
 
 /// `.suggested-action`.
-pub fn suggested(theme: &Theme, status: Status) -> Style {
-    role(Role::Accent)(theme, status)
+fn suggested_base(theme: &Theme, status: Status) -> Style {
+    role(Role::Primary)(theme, status)
 }
 
 /// `.destructive-action`.
-pub fn destructive(theme: &Theme, status: Status) -> Style {
+fn destructive_base(theme: &Theme, status: Status) -> Style {
     role(Role::Destructive)(theme, status)
 }
 
-/// `.opaque`: solid accent fill (same as suggested, kept for parity).
-pub fn opaque(theme: &Theme, status: Status) -> Style {
-    suggested(theme, status)
+/// `.opaque`: solid primary fill (same as suggested, kept for parity).
+fn opaque_base(theme: &Theme, status: Status) -> Style {
+    suggested_base(theme, status)
 }
 
 /// Solid button for any [`Role`]. `Role::Neutral` falls back to [`default`].
@@ -171,7 +321,7 @@ pub fn role_with_text(r: Role, fg: Color) -> impl Fn(&Theme, Status) -> Style + 
 }
 
 /// `.pill`: fully rounded standard button.
-pub fn pill(theme: &Theme, status: Status) -> Style {
+fn pill_base(theme: &Theme, status: Status) -> Style {
     tinted(
         theme,
         status,
@@ -182,8 +332,8 @@ pub fn pill(theme: &Theme, status: Status) -> Style {
 }
 
 /// `.pill.suggested-action`.
-pub fn suggested_pill(theme: &Theme, status: Status) -> Style {
-    let sw = theme.semantic.accent;
+fn suggested_pill_base(theme: &Theme, status: Status) -> Style {
+    let sw = theme.semantic.primary;
     filled(
         theme,
         status,
@@ -226,7 +376,7 @@ pub fn events(theme: &Theme, status: Status) -> Style {
 }
 
 /// `.card`: a clickable card surface.
-pub fn card(theme: &Theme, status: Status) -> Style {
+fn card_base(theme: &Theme, status: Status) -> Style {
     let s = &theme.semantic;
     let bg = match status {
         Status::Hovered => crate::color::mix(s.card.bg, s.card.fg, 0.04),
@@ -247,7 +397,7 @@ pub fn card(theme: &Theme, status: Status) -> Style {
 }
 
 /// `.osd`: dark translucent button for overlays.
-pub fn osd(theme: &Theme, status: Status) -> Style {
+fn osd_base(theme: &Theme, status: Status) -> Style {
     let osd = theme.semantic.osd;
     let layer = match status {
         Status::Hovered => 0.15,
@@ -265,7 +415,7 @@ pub fn osd(theme: &Theme, status: Status) -> Style {
 
 /// `.link`: accent-colored text that underlines on hover (underline omitted;
 /// iced buttons cannot underline children).
-pub fn link(theme: &Theme, status: Status) -> Style {
+fn link_base(theme: &Theme, status: Status) -> Style {
     let c = theme.semantic.accent.color;
     Style {
         background: None,
@@ -337,7 +487,33 @@ pub fn flat_row(radius: f32, hover: f32, pressed: f32) -> impl Fn(&Theme, Status
     }
 }
 
-/// A row in a `.navigation-sidebar`; `selected` shows the accent-tinted pill.
+/// Add a color layer beneath the target's fill without changing any target geometry
+/// or text/border/shadow properties. Opaque custom fills continue to cover the layer;
+/// transparent hover/pressed fills compose over it just as separate stacked fills do.
+pub(crate) fn with_underlay(mut target: Style, underlay: Color) -> Style {
+    if underlay.a <= 0.0 {
+        return target;
+    }
+    target.background = Some(match target.background {
+        None => Background::Color(underlay),
+        Some(Background::Color(fill)) => {
+            Background::Color(crate::color::composite_over(fill, underlay))
+        }
+        Some(Background::Gradient(iced::Gradient::Linear(mut gradient))) => {
+            if gradient.stops.iter().all(Option::is_none) {
+                Background::Color(underlay)
+            } else {
+                for stop in gradient.stops.iter_mut().flatten() {
+                    stop.color = crate::color::composite_over(stop.color, underlay);
+                }
+                Background::Gradient(iced::Gradient::Linear(gradient))
+            }
+        }
+    });
+    target
+}
+
+/// A row in a `.navigation-sidebar`; `selected` shows the selection fill.
 pub fn sidebar_row(selected: bool) -> impl Fn(&Theme, Status) -> Style + Copy {
     move |theme, status| {
         let fg = theme.semantic.sidebar.fg;
@@ -456,6 +632,173 @@ pub fn menu_item(selected: bool) -> impl Fn(&Theme, Status) -> Style + Copy {
             border: border(theme.metrics.radius_menu),
             shadow: Shadow::default(),
             snap: false,
+        }
+    }
+}
+
+/// The standard button: translucent foreground background, 6px radius (`[button.default]`).
+pub fn default(theme: &Theme, status: Status) -> Style {
+    tuned("default", theme, status, default_base)
+}
+
+/// `.raised`: identical to default (`[button.raised]`).
+pub fn raised(theme: &Theme, status: Status) -> Style {
+    tuned("raised", theme, status, raised_base)
+}
+
+/// `.flat`: transparent until hovered (`[button.flat]`).
+pub fn flat(theme: &Theme, status: Status) -> Style {
+    tuned("flat", theme, status, flat_base)
+}
+
+/// `.flat` using the headerbar foreground (`[button.headerbar]`).
+pub fn headerbar(theme: &Theme, status: Status) -> Style {
+    tuned("headerbar", theme, status, headerbar_base)
+}
+
+/// `.suggested-action`: the primary color (`[button.suggested]`).
+pub fn suggested(theme: &Theme, status: Status) -> Style {
+    tuned("suggested", theme, status, suggested_base)
+}
+
+/// `.destructive-action` (`[button.destructive]`).
+pub fn destructive(theme: &Theme, status: Status) -> Style {
+    tuned("destructive", theme, status, destructive_base)
+}
+
+/// `.opaque`: solid primary fill (`[button.opaque]`).
+pub fn opaque(theme: &Theme, status: Status) -> Style {
+    tuned("opaque", theme, status, opaque_base)
+}
+
+/// `.pill`: fully rounded standard button (`[button.pill]`).
+pub fn pill(theme: &Theme, status: Status) -> Style {
+    tuned("pill", theme, status, pill_base)
+}
+
+/// `.pill.suggested-action` (`[button.suggested-pill]`).
+pub fn suggested_pill(theme: &Theme, status: Status) -> Style {
+    tuned("suggested-pill", theme, status, suggested_pill_base)
+}
+
+/// `.link`: accent-colored text (`[button.link]`).
+pub fn link(theme: &Theme, status: Status) -> Style {
+    tuned("link", theme, status, link_base)
+}
+
+/// `.osd`: dark translucent button for overlays (`[button.osd]`).
+pub fn osd(theme: &Theme, status: Status) -> Style {
+    tuned("osd", theme, status, osd_base)
+}
+
+/// `.card`: a clickable card surface (`[button.card]`).
+pub fn card(theme: &Theme, status: Status) -> Style {
+    tuned("card", theme, status, card_base)
+}
+
+#[cfg(test)]
+mod target_effect_tests {
+    use super::*;
+
+    #[test]
+    fn underlay_preserves_full_target_geometry_and_state_styles() {
+        let theme = Theme::light();
+        let underlay = alpha(theme.semantic.sidebar.fg, 0.3);
+        let asymmetric = iced::border::Radius {
+            top_left: 19.0,
+            top_right: 0.0,
+            bottom_right: 7.0,
+            bottom_left: 3.0,
+        };
+        for radius in [0.0.into(), 999.0.into(), asymmetric] {
+            for status in [
+                Status::Active,
+                Status::Hovered,
+                Status::Pressed,
+                Status::Disabled,
+            ] {
+                let mut target = sidebar_row(false)(&theme, status);
+                target.border = Border {
+                    radius,
+                    width: 2.0,
+                    color: Color::WHITE,
+                };
+                target.shadow = Shadow {
+                    color: Color::BLACK,
+                    offset: Vector::new(3.0, 4.0),
+                    blur_radius: 5.0,
+                };
+                target.snap = true;
+                let effect = with_underlay(target, underlay);
+                assert_eq!(effect.border, target.border);
+                assert_eq!(effect.shadow, target.shadow);
+                assert_eq!(effect.text_color, target.text_color);
+                assert_eq!(effect.snap, target.snap);
+                let expected = match target.background {
+                    Some(Background::Color(fill)) => crate::color::composite_over(fill, underlay),
+                    None => underlay,
+                    _ => unreachable!(),
+                };
+                assert_eq!(effect.background, Some(Background::Color(expected)));
+                assert_eq!(
+                    with_underlay(target, Color::TRANSPARENT).background,
+                    target.background
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn tuned_custom_styles_and_gradients_keep_their_properties() {
+        use crate::theme_config::{Schema, ThemeConfig};
+        let config = ThemeConfig::builder("target-shape")
+            .files(false)
+            .schema(Schema::toolkit().variant("button", "custom", &[]))
+            .toolkit_text("[button.custom]\nradius=99px\nbg=#ffffff\nhover-bg=#0000ff\nactive-bg=#ff0000\nborder-width=2px\nborder=#00ff00")
+            .app_text("").build();
+        let theme = Theme::light().with_theme_config(&config);
+        for status in [
+            Status::Active,
+            Status::Hovered,
+            Status::Pressed,
+            Status::Disabled,
+        ] {
+            let target = variant("custom")(&theme, status);
+            let effect = with_underlay(target, Color::BLACK);
+            assert_eq!(effect.border, target.border);
+            assert_eq!(effect.border.radius, 99.0.into());
+            assert_eq!(effect.text_color, target.text_color);
+            if status != Status::Disabled {
+                // An opaque custom fill still covers the selection beneath it.
+                assert_eq!(effect.background, target.background);
+            }
+        }
+        let gradient = iced::gradient::Linear::new(0.7)
+            .add_stop(0.0, Color::from_rgba(1.0, 0.0, 0.0, 0.4))
+            .add_stop(1.0, Color::from_rgb(0.0, 0.0, 1.0));
+        let target = Style {
+            background: Some(Background::Gradient(gradient.into())),
+            ..Default::default()
+        };
+        let underlay = Color::from_rgba(0.0, 1.0, 0.0, 0.2);
+        let Some(Background::Gradient(iced::Gradient::Linear(effect))) =
+            with_underlay(target, underlay).background
+        else {
+            panic!("gradient must be retained")
+        };
+        assert_eq!(effect.angle, gradient.angle);
+        for (before, after) in gradient.stops.iter().zip(effect.stops.iter()) {
+            match (before, after) {
+                (Some(before), Some(after)) => {
+                    assert_eq!(before.offset, after.offset);
+                    assert_eq!(
+                        after.color,
+                        crate::color::composite_over(before.color, underlay)
+                    );
+                }
+                (None, None) => {}
+                _ => panic!("gradient stop layout changed"),
+            }
         }
     }
 }

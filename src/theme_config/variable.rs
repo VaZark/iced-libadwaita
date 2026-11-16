@@ -24,6 +24,10 @@ pub enum VariableType {
         rounds: Option<Rounding>,
     },
     Color,
+    /// A `linear-gradient(<angle>deg, <color> <pos>%, ...)`, see [`Gradient`](super::Gradient).
+    Gradient,
+    /// A font family name: 1 to 64 characters, no control characters.
+    Font,
     Length {
         min: Option<f64>,
         max: Option<f64>,
@@ -46,6 +50,7 @@ impl VariableType {
     pub(crate) fn untyped(kind: Kind) -> Option<Self> {
         match kind {
             Kind::Color => Some(Self::Color),
+            Kind::Gradient => Some(Self::Gradient),
             Kind::Number => Some(Self::Number),
             Kind::Bool => Some(Self::Bool),
             Kind::Text => Some(Self::String {
@@ -62,6 +67,8 @@ impl VariableType {
             Self::Length { .. } => Kind::Length,
             Self::Percentage { .. } => Kind::Percentage,
             Self::Color => Kind::Color,
+            Self::Gradient => Kind::Gradient,
+            Self::Font => Kind::Text,
             Self::String { .. } => Kind::Text,
             Self::Number => Kind::Number,
             Self::Bool => Kind::Bool,
@@ -142,6 +149,12 @@ impl VariableType {
                     .map(Value::Percentage)
             }
             Self::Color => parse_color(raw).map(Value::Color),
+            Self::Gradient => super::Gradient::parse(raw).map(Value::Gradient),
+            Self::Font => {
+                let name = raw.trim();
+                (!name.is_empty() && name.chars().count() <= 64 && !name.chars().any(char::is_control))
+                    .then(|| Value::Text(name.into()))
+            }
             Self::String {
                 values,
                 accepts_random,
@@ -216,7 +229,7 @@ fn snap(n: f64, step: f64, origin: f64, rounds: Option<Rounding>) -> Option<f64>
     };
     Some(origin + snapped * step)
 }
-fn parse_color(raw: &str) -> Option<iced::Color> {
+pub(super) fn parse_color(raw: &str) -> Option<iced::Color> {
     if !raw.contains('(') {
         let raw = raw.strip_prefix('#').unwrap_or(raw);
         if ![3, 4, 6, 8].contains(&raw.len()) || !raw.bytes().all(|c| c.is_ascii_hexdigit()) {

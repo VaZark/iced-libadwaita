@@ -10,29 +10,28 @@ pub(crate) mod accordion;
 pub(crate) mod autocomplete;
 pub(crate) mod banner;
 pub(crate) mod carousel;
-pub(crate) mod chart;
 pub(crate) mod chip_group;
+pub(crate) mod choice_row;
 pub(crate) mod collapsible;
 pub(crate) mod color_picker;
+pub(crate) mod context_menu;
 pub(crate) mod date_input;
 pub(crate) mod date_range_input;
 pub(crate) mod dialog;
 pub(crate) mod drag;
 pub(crate) mod dropdown;
-pub(crate) mod icon_picker;
 pub(crate) mod entries;
 pub(crate) mod extra;
 pub(crate) mod field;
 pub(crate) mod floating_indicator;
 pub(crate) mod form;
 pub(crate) mod header_bar;
-pub(crate) mod histogram_range_slider;
+pub(crate) mod icon_picker;
 pub(crate) mod infinite;
 pub(crate) mod item_card;
 pub(crate) mod item_row;
 pub(crate) mod menu;
 pub(crate) mod menu_pages;
-mod slide_pages;
 pub(crate) mod multi_select;
 pub(crate) mod navigation;
 pub(crate) mod number_input;
@@ -41,15 +40,15 @@ pub(crate) mod popover;
 pub(crate) mod preferences;
 pub(crate) mod profile_header;
 pub(crate) mod range_slider;
-pub(crate) mod rich_text;
-pub(crate) mod tag_group_list;
 pub(crate) mod reorderable_list;
 pub(crate) mod resizable;
 pub(crate) mod responsive_table;
+pub(crate) mod rich_text;
 pub(crate) mod rows;
 pub(crate) mod section_divider;
 pub(crate) mod section_heading;
 pub(crate) mod segmented;
+mod slide_pages;
 pub(crate) mod sort_header;
 pub(crate) mod split;
 pub(crate) mod spoiler;
@@ -58,6 +57,7 @@ pub(crate) mod stepper;
 pub(crate) mod synced_text;
 pub(crate) mod tabs;
 mod tag_filter;
+pub(crate) mod tag_group_list;
 pub(crate) mod timeline;
 pub(crate) mod toast;
 pub(crate) mod toolbar;
@@ -69,38 +69,38 @@ pub use accordion::{Accordion, AccordionItem};
 pub use autocomplete::Autocomplete;
 pub use banner::{Banner, banner};
 pub use carousel::{Carousel, CarouselIndicator, carousel};
-pub use chart::{
-    BarChart, BarLayout, Funnel, FunnelShape, LineChart, PieChart, Sankey, Sunburst, format_value,
-};
-pub use chart::{BubbleChart, BubblePoint, BubbleSeries, ComboChart, DonutChart};
 pub use chip_group::{ChipGroup, ChipOption};
+pub use choice_row::{ChoicePresentation, ChoiceRow};
 pub use collapsible::Collapsible;
 pub use color_picker::{ColorInput, ColorPicker};
+pub use context_menu::{ContextMenu, ContextMenuProps, context_menu};
 pub use date_input::DateInput;
 pub use date_range_input::DateRangeInput;
 pub use dialog::{
     AboutDialog, AlertDialog, ResponseAppearance, dialog, dialog_in_window, preferences_dialog,
     present_dialog, shortcuts_dialog,
 };
-pub use slide_pages::SlidePages;
 pub use drag::{DragSource, DropZone, drag_source, drop_zone, drop_zone_at};
-pub use icon_picker::icon_color_picker;
-pub use dropdown::{DROPDOWN_MAX_WIDTH, DROPDOWN_MIN_WIDTH, DropdownOptions, dropdown, dropdown_disabled, dropdown_lead, dropdown_with, menu_item, menu_item_disabled, menu_item_lead};
+pub use dropdown::{
+    DROPDOWN_MAX_WIDTH, DROPDOWN_MIN_WIDTH, DropdownOptions, dropdown, dropdown_disabled,
+    dropdown_lead, dropdown_with, menu_item, menu_item_disabled, menu_item_lead,
+};
 pub use extra::{
     breakpoint_bin, carousel_indicator_dots, carousel_indicator_lines, inline_view_switcher,
-    path_bar, shortcut_label, sidebar, tab_button, view_switcher, view_switcher_bar, wrap_box,
+    path_bar, shortcut_label, shortcut_label_with, sidebar, tab_button, view_switcher,
+    view_switcher_bar, view_switcher_bar_with, wrap_box,
 };
 pub use field::{Field, FieldLayout, outlined as field_outline};
 pub use floating_indicator::FloatingIndicator;
 pub use form::{Form, FormActions, Step, StepIndicator};
 pub use header_bar::{HeaderBar, WindowControlIcons, WindowControls, header_bar, window_title};
-pub use histogram_range_slider::HistogramRangeSlider;
+pub use icon_picker::{IconPickerLayout, icon_color_picker, icon_color_picker_with};
 pub use infinite::{InfiniteList, LoadTrigger};
 pub use item_card::ItemCard;
 pub use item_row::{ItemColumns, ItemRow, PICTURE_WIDTH, SUFFIX_WIDTH, TIME_WIDTH};
 pub use menu::{
-    Menu, MenuButton, MenuCheckStyle, MenuIconSide, MenuItem, MenuPresentation, menu_button,
-    primary_menu,
+    Menu, MenuButton, MenuCheckStyle, MenuIconSide, MenuItem, MenuPresentation, MenuProps,
+    menu_button, primary_menu,
 };
 pub use multi_select::MultiSelect;
 pub use navigation::{
@@ -116,24 +116,24 @@ pub use pagination::label as pagination_label;
 pub use pagination::{PageSize, Pagination, PaginationSize, page_size_dropdown};
 pub use popover::{
     Align as PopoverAlign, Appearance as PopoverAppearance, Popover, PopoverBounds,
-    Presentation as PopoverPresentation, popover, popover_bounds,
+    Presentation as PopoverPresentation, popover, popover_bounds, popover_spaced,
 };
 pub use preferences::{PreferencesGroup, PreferencesPage, preferences_group, preferences_page};
 pub use profile_header::ProfileHeader;
 pub use range_slider::{RangeSlider, range_slider};
-pub use rich_text::RichText;
-pub use tag_group_list::{TagGroupList, TagItem};
 pub use reorderable_list::ReorderableList;
 pub use resizable::Resizable;
 pub use responsive_table::{
     Column, Mode as TableMode, Presentation as TablePresentation, ResponsiveTable,
 };
+pub use rich_text::RichText;
 pub use rows::{
     ActionRow, ButtonRow, ComboRow, ExpanderRow, RangeSliderRow, SliderRow, SpinRow, SwitchRow,
     ToggleGroupRow, action_row, boxed_list,
 };
 pub use section_divider::{CollapseState, SectionDivider};
 pub use section_heading::SectionHeading;
+pub use slide_pages::SlidePages;
 pub use sort_header::SortHeader;
 pub use split::{SplitAction, SplitButton, SplitButtonAction, split_button};
 pub use spoiler::{Spoiler, SpoilerList};
@@ -142,6 +142,7 @@ pub use stepper::{Stepper, StepperIconPosition, StepperOrientation, StepperSize,
 pub use synced_text::{SyncedText, follow_synced_text};
 pub use tabs::{TabItem, Tabs, TabsVariant};
 pub use tag_filter::TagFilter;
+pub use tag_group_list::{TagGroupList, TagItem};
 pub use timeline::{Timeline, TimelineAlign, TimelineItem};
 pub use toast::{
     Toast, ToastPosition, ToastTarget, toast_overlay, toast_stack, toast_stack_from, toast_target,
@@ -155,9 +156,68 @@ pub use entries::{EntryInput, EntryRow};
 pub use crate::components::InputWrapper;
 
 pub(crate) mod theme_toggle;
-pub use theme_toggle::{ThemeMode, ThemeToggle};
+pub use theme_toggle::{ThemeMode, ThemeToggle, ThemeToggleProps};
 
 mod scale;
 pub use scale::Scale;
 
 mod toast_timeout;
+
+// Typed presentation props for concrete children of composed widgets.
+pub use accent_picker::AccentPickerProps;
+pub use accordion::{AccordionItemProps, AccordionProps};
+pub use banner::BannerProps;
+pub use chip_group::ChipGroupProps;
+pub use choice_row::{ChoiceDropdownProps, ChoiceToggleProps};
+pub use collapsible::CollapsibleProps;
+pub use color_picker::{ColorInputProps, ColorPickerProps};
+pub use date_input::DateInputProps;
+pub use date_range_input::DateRangeInputProps;
+pub use dialog::{
+    AboutDialogProps, AlertDialogProps, DialogFrameProps, ShortcutsDialogProps,
+    preferences_dialog_with_props, shortcuts_dialog_with_props,
+};
+pub use dropdown::{
+    DropdownItemProps, dropdown_disabled_with_props, menu_item_disabled_with_props,
+    menu_item_lead_with_props, menu_item_with_props,
+};
+pub use entries::EntryRowProps;
+pub use extra::{
+    CarouselIndicatorWidgetProps, PathBarWidgetProps, ShortcutLabelWidgetProps,
+    TabButtonWidgetProps, ViewSwitcherBarWidgetProps, carousel_indicator_dots_with_props,
+    carousel_indicator_lines_with_props, path_bar_with_props, shortcut_label_with_props,
+    tab_button_with_props, view_switcher_bar_with_props,
+};
+pub use field::FieldProps;
+pub use form::FormWidgetProps;
+pub use header_bar::{HeaderBarProps, window_title_with_props};
+pub use icon_picker::{IconPickerProps, icon_color_picker_with_props};
+pub use infinite::InfiniteListWidgetProps;
+pub use item_card::ItemCardProps;
+pub use item_row::ItemRowProps;
+pub use navigation::{SidebarRowProps, navigation_view_with_props, sidebar_row_opening_with_props};
+pub use number_input::NumberInputProps;
+pub use popover::{PopoverProps, PopoverSurfaceProps, popover_spaced_with_props};
+pub use preferences::{PreferencesGroupProps, PreferencesPageProps};
+pub use profile_header::ProfileHeaderProps;
+pub use range_slider::RangeSliderProps;
+pub use reorderable_list::ReorderableListWidgetProps;
+pub use responsive_table::ResponsiveTableWidgetProps;
+pub use rich_text::{RichTextLineProps, RichTextWidgetProps};
+pub use rows::{ActionRowProps, ComboRowProps, ToggleGroupRowProps};
+pub use scale::ScaleProps;
+pub use section_divider::SectionDividerProps;
+pub use section_heading::SectionHeadingProps;
+pub use spoiler::SpoilerWidgetProps;
+pub use status_page::{
+    CardProps, ClampProps, PageProps, StatusPageProps, bin_with_props, card_with_props,
+    clamp_with_props,
+};
+pub use stepper::StepperWidgetProps;
+pub use synced_text::SyncedTextWidgetProps;
+pub use tag_filter::TagFilterProps;
+pub use tag_group_list::TagGroupListProps;
+pub use timeline::TimelineWidgetProps;
+pub use toast::ToastProps;
+pub use toolbar::ToolbarProps;
+pub use tree::TreeProps;

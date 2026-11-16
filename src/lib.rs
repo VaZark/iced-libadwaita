@@ -61,6 +61,6 @@ pub use palette::{AccentColor, Palette, Scheme};
 pub use semantic::{Opacity, Role, Semantic, Surface, Swatch};
 pub use shadow::{Elevation, Layer, Resolved, Shadows};
 pub use system::{DecorationLayout, WindowButton};
-pub use theme::Theme;
+pub use theme::{BevelColors, Theme};
 /// Shorthand for an iced element using this crate's [`Theme`].
 pub type Element<'a, Message> = iced::Element<'a, Message, Theme>;

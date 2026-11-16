@@ -3,10 +3,57 @@ use crate::binds::wrap::{Behavior, Content, Wrap};
 use crate::{Element, Metrics, Theme};
 use iced::advanced::{Shell, layout::Layout, renderer};
 use iced::{Event, mouse};
+use std::sync::{Arc, Mutex};
+
+/// The row owns its transparent frame. Embedded controls do not define its corners.
+/// Keep this style shared with focus and validation rather than copying its tokens.
+pub(super) fn row_style(theme: &Theme) -> iced::widget::container::Style {
+    iced::widget::container::Style {
+        border: iced::Border::default().rounded(theme.metrics.radius_m),
+        ..Default::default()
+    }
+}
+
+#[derive(Clone, Default)]
+pub(super) enum Geometry {
+    #[default]
+    Row,
+    Drawn(Arc<Mutex<Option<iced::border::Radius>>>),
+}
+
+impl Geometry {
+    /// Observe the effective button style with the widget's actual status, including
+    /// popover open state. Both outlines run after the target draws. No status guessing
+    /// or custom-style evaluation with a fabricated `Active` state is needed.
+    pub(super) fn button(
+        style: crate::components::props::ButtonStyle,
+    ) -> (Self, crate::components::props::ButtonStyle) {
+        let radius = Arc::new(Mutex::new(None));
+        let drawn = radius.clone();
+        (
+            Self::Drawn(radius),
+            Arc::new(move |theme, status| {
+                let style = style(theme, status);
+                if let Ok(mut radius) = drawn.lock() {
+                    *radius = Some(style.border.radius);
+                }
+                style
+            }),
+        )
+    }
+
+    pub(super) fn resolve(&self, theme: &Theme) -> Option<iced::border::Radius> {
+        match self {
+            Self::Row => Some(row_style(theme).border.radius),
+            Self::Drawn(radius) => radius.lock().ok().and_then(|radius| *radius),
+        }
+    }
+}
 
 pub(super) struct Ring {
     ring: bool,
     metrics: Metrics,
+    geometry: Geometry,
 }
 
 #[derive(Default)]
@@ -19,8 +66,16 @@ pub(super) fn outlined<'a, M: 'a>(
     content: impl Into<Element<'a, M>>,
     ring: bool,
     metrics: Metrics,
+    geometry: Geometry,
 ) -> Wrap<'a, M, Ring> {
-    Wrap::new(content, Ring { ring, metrics })
+    Wrap::new(
+        content,
+        Ring {
+            ring,
+            metrics,
+            geometry,
+        },
+    )
 }
 
 /// Only these can move focus without an operation; a redraw or pointer move cannot.
@@ -67,6 +122,9 @@ impl<M> Behavior<M> for Ring {
         layout: Layout<'_>,
     ) {
         if self.ring && state.focused {
+            let Some(radius) = self.geometry.resolve(theme) else {
+                return;
+            };
             use iced::advanced::Renderer as _;
             renderer.fill_quad(
                 renderer::Quad {
@@ -74,7 +132,7 @@ impl<M> Behavior<M> for Ring {
                     border: iced::Border {
                         color: theme.semantic.accent.bg,
                         width: self.metrics.focus_ring_width,
-                        radius: self.metrics.radius_m.into(),
+                        radius,
                     },
                     ..Default::default()
                 },

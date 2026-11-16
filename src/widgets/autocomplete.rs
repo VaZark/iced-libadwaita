@@ -43,6 +43,7 @@
 //! give the same [`Validity`] for a [`Field`](crate::widgets::Field) message or a form.
 
 use crate::Element;
+use crate::components::{ButtonProps, ContainerProps, EntryProps, TextProps};
 use crate::components::{EntryState, entry};
 use crate::components::{section_button, section_icon};
 use crate::layouts::anchor::{self, Placement, Side};
@@ -59,6 +60,7 @@ use iced::keyboard::{self, key::Named};
 use iced::widget::canvas;
 use iced::widget::{button, container, row, space, text};
 use iced::{Event, Length, Point, Rectangle, Size, Vector, mouse};
+use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -69,6 +71,14 @@ type ItemFn<'a, T, M> = Box<dyn Fn(&T) -> Element<'a, M> + 'a>;
 type LabelFn<'a, T> = Box<dyn Fn(&T) -> String + 'a>;
 
 pub struct Autocomplete<'a, T, M> {
+    error_props: TextProps,
+    loading_props: TextProps,
+    empty_props: TextProps,
+    retry_button_props: ButtonProps,
+    entry_props: EntryProps,
+    label_props: TextProps,
+    option_props: ContainerProps,
+    notice_props: ContainerProps,
     value: &'a str,
     lookup: &'a Lookup<String, T>,
     on_input: Box<dyn Fn(String) -> M + 'a>,
@@ -80,6 +90,9 @@ pub struct Autocomplete<'a, T, M> {
     placeholder: String,
     disabled: bool,
     width: Length,
+    spacing: Option<f32>,
+    item_padding: Option<iced::Padding>,
+    notice_padding: Option<iced::Padding>,
     metrics: Metrics,
     revealed: bool,
     free_text: bool,
@@ -98,6 +111,14 @@ impl<'a, T, M> Autocomplete<'a, T, M> {
         on_input: impl Fn(String) -> M + 'a,
     ) -> Self {
         Self {
+            error_props: Default::default(),
+            loading_props: Default::default(),
+            empty_props: Default::default(),
+            retry_button_props: Default::default(),
+            entry_props: Default::default(),
+            label_props: Default::default(),
+            option_props: Default::default(),
+            notice_props: Default::default(),
             value,
             lookup,
             on_input: Box::new(on_input),
@@ -109,6 +130,9 @@ impl<'a, T, M> Autocomplete<'a, T, M> {
             placeholder: String::new(),
             disabled: false,
             width: Length::Fill,
+            spacing: None,
+            item_padding: None,
+            notice_padding: None,
             metrics: Metrics::desktop(),
             revealed: true,
             free_text: true,
@@ -117,6 +141,39 @@ impl<'a, T, M> Autocomplete<'a, T, M> {
             max_rows: MAX_ROWS,
             open_initially: false,
         }
+    }
+    pub fn error_props(mut self, props: TextProps) -> Self {
+        self.error_props = props;
+        self
+    }
+    pub fn loading_props(mut self, props: TextProps) -> Self {
+        self.loading_props = props;
+        self
+    }
+    pub fn empty_props(mut self, props: TextProps) -> Self {
+        self.empty_props = props;
+        self
+    }
+    pub fn retry_button_props(mut self, props: ButtonProps) -> Self {
+        self.retry_button_props = props;
+        self
+    }
+    pub fn entry_props(mut self, props: EntryProps) -> Self {
+        self.entry_props = props;
+        self
+    }
+    /// Presentation for built-in suggestion labels (not custom item trees).
+    pub fn label_props(mut self, props: TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn option_props(mut self, props: ContainerProps) -> Self {
+        self.option_props = props;
+        self
+    }
+    pub fn notice_props(mut self, props: ContainerProps) -> Self {
+        self.notice_props = props;
+        self
     }
     /// A suggestion was picked (click, or Enter on the highlighted one).
     pub fn on_select(mut self, f: impl Fn(T) -> M + 'a) -> Self {
@@ -156,6 +213,21 @@ impl<'a, T, M> Autocomplete<'a, T, M> {
     }
     pub fn width(mut self, w: impl Into<Length>) -> Self {
         self.width = w.into();
+        self
+    }
+    /// The gap inside a notice (spinner and text, message and retry; default `space_s`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding of each result (default `space_s` above and below, `space_m` at the sides).
+    pub fn item_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.item_padding = Some(p.into());
+        self
+    }
+    /// The padding of a notice such as "No results" (default a little more than a result's).
+    pub fn notice_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.notice_padding = Some(p.into());
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -308,6 +380,7 @@ pub(crate) struct Widgeted<'a, T, M> {
     entry: Element<'a, M>,
     /// The popover's rows, or its single notice.
     items: Vec<Element<'a, M>>,
+    option_highlight: Rc<Cell<Option<usize>>>,
     labels: Vec<String>,
     choices: &'a [T],
     on_select: Option<Box<dyn Fn(T) -> M + 'a>>,
@@ -321,8 +394,9 @@ pub(crate) struct Widgeted<'a, T, M> {
     width: Length,
 }
 
-impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> for Element<'a, M> {
-    fn from(a: Autocomplete<'a, T, M>) -> Self {
+impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> Autocomplete<'a, T, M> {
+    fn into_widget(self) -> Widgeted<'a, T, M> {
+        let a = self;
         let m = a.metrics;
         let l = a.lookup;
         let enabled = !a.disabled;
@@ -359,26 +433,43 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> f
             .iter()
             .map(|t| a.label.as_ref().map_or_else(|| t.to_string(), |f| f(t)))
             .collect();
-        let notice = |el: Element<'a, M>| -> Element<'a, M> {
-            container(el)
-                .padding([m.space_s + 2.0, m.space_m])
-                .width(Length::Fill)
-                .into()
-        };
+        let notice =
+            |el: Element<'a, M>| -> Element<'a, M> {
+                a.notice_props
+                    .apply(
+                        container(el)
+                            .padding(a.notice_padding.unwrap_or(iced::Padding::from([
+                                m.space_s + m.space_xxs,
+                                m.space_m,
+                            ])))
+                            .width(Length::Fill),
+                    )
+                    .into()
+            };
         let dim = crate::styles::text::dim;
+        let gap = a.spacing.unwrap_or(m.space_s);
+        let item_padding = a
+            .item_padding
+            .unwrap_or(iced::Padding::from([m.space_s, m.space_m]));
+        let option_highlight = Rc::new(Cell::new(None));
         let (body, items): (Body, Vec<Element<'a, M>>) = match l.status() {
             _ if !enabled => (Body::None, Vec::new()),
             Status::Idle => (Body::None, Vec::new()),
             Status::Failed(msg) => {
                 let mut r = row![
-                    text(msg.clone())
-                        .style(crate::styles::text::error)
-                        .width(Length::Fill)
+                    a.error_props.apply(
+                        text(msg.clone())
+                            .style(crate::styles::text::error)
+                            .width(Length::Fill)
+                    )
                 ]
-                .spacing(m.space_s)
+                .spacing(gap)
                 .align_y(iced::alignment::Vertical::Center);
                 if let Some(retry) = a.on_retry.clone() {
-                    r = r.push(button(text("Retry")).style(sb::flat).on_press(retry));
+                    r = r.push(
+                        a.retry_button_props
+                            .apply(button(text("Retry")).style(sb::flat).on_press(retry)),
+                    );
                 }
                 (Body::Notice, vec![notice(r.into())])
             }
@@ -386,34 +477,48 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> f
                 let rows = results
                     .iter()
                     .zip(&labels)
-                    .map(|(t, label)| {
+                    .enumerate()
+                    .map(|(i, (t, label))| {
                         let content: Element<'a, M> = match &a.item {
                             Some(f) => f(t),
-                            None => text(label.clone()).wrapping(text::Wrapping::None).into(),
+                            None => a
+                                .label_props
+                                .apply(text(label.clone()).wrapping(text::Wrapping::None)),
                         };
-                        container(content)
-                            .padding([m.space_s, m.space_m])
-                            .width(Length::Fill)
+                        let highlight = option_highlight.clone();
+                        let option_style = a.option_props.style.clone();
+                        a.option_props
+                            .apply(container(content).padding(item_padding).width(Length::Fill))
+                            .style(move |theme| {
+                                let target = option_style
+                                    .as_ref()
+                                    .map_or_else(|| sc::transparent(theme), |style| style(theme));
+                                option_selection_style(target, theme, highlight.get() == Some(i))
+                            })
                             .into()
                     })
                     .collect::<Vec<_>>();
                 (Body::Rows(rows.len()), rows)
             }
             Status::Waiting(_) | Status::Loading { .. } => {
-                let r = row![busy(m.icon_size), text("Searching…").style(dim)]
-                    .spacing(m.space_s)
-                    .align_y(iced::alignment::Vertical::Center);
+                let r = row![
+                    busy(m.icon_size),
+                    a.loading_props.apply(text("Searching…").style(dim))
+                ]
+                .spacing(gap)
+                .align_y(iced::alignment::Vertical::Center);
                 (Body::Notice, vec![notice(r.into())])
             }
             Status::Loaded => (
                 Body::Notice,
-                vec![notice(text("No results").style(dim).into())],
+                vec![notice(a.empty_props.apply(text("No results").style(dim)))],
             ),
         };
 
         let w = Widgeted {
-            entry: Element::from(e),
+            entry: Element::from(a.entry_props.apply(e)),
             items,
+            option_highlight,
             labels,
             choices: results,
             on_select: a.on_select,
@@ -426,7 +531,13 @@ impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> f
             metrics: m,
             width: a.width,
         };
-        iced::Element::new(w)
+        w
+    }
+}
+
+impl<'a, T: ToString + Clone + 'a, M: Clone + 'a> From<Autocomplete<'a, T, M>> for Element<'a, M> {
+    fn from(a: Autocomplete<'a, T, M>) -> Self {
+        iced::Element::new(a.into_widget())
     }
 }
 
@@ -618,6 +729,7 @@ impl<'a, T: Clone + 'a, M: 'a> Widget<M, Theme, iced::Renderer> for Widgeted<'a,
         };
         Some(overlay::Element::new(Box::new(Popover {
             items: &mut self.items,
+            option_highlight: &self.option_highlight,
             trees: item_trees,
             body: self.body,
             labels: &self.labels,
@@ -635,6 +747,7 @@ impl<'a, T: Clone + 'a, M: 'a> Widget<M, Theme, iced::Renderer> for Widgeted<'a,
 
 struct Popover<'a, 'b, T, M> {
     items: &'b mut [Element<'a, M>],
+    option_highlight: &'b Cell<Option<usize>>,
     trees: &'b mut [Tree],
     body: Body,
     labels: &'b [String],
@@ -757,22 +870,9 @@ impl<'a, 'b, T: Clone + 'a, M: 'a> overlay::Overlay<M, Theme, iced::Renderer>
                 bg,
             );
         }
-        let hl = self.highlight.index().filter(|_| self.selectable());
+        self.option_highlight
+            .set(self.highlight.index().filter(|_| self.selectable()));
         for (child, i) in layout.children().zip(self.first()..) {
-            if hl == Some(i) {
-                let st = sb::menu_item(false)(theme, button::Status::Hovered);
-                if let Some(bg) = st.background {
-                    renderer.fill_quad(
-                        Quad {
-                            bounds: child.bounds(),
-                            border: st.border,
-                            shadow: iced::Shadow::default(),
-                            snap: false,
-                        },
-                        bg,
-                    );
-                }
-            }
             self.items[i].as_widget().draw(
                 &self.trees[i],
                 renderer,
@@ -903,5 +1003,355 @@ impl<'a, 'b, T: Clone + 'a, M: 'a> overlay::Overlay<M, Theme, iced::Renderer>
             })
             .max()
             .unwrap_or_default()
+    }
+}
+
+// Compose into the target fill rather than drawing an underlay that an opaque option hides.
+// Only the tint comes from the menu style; all geometry remains owned by the option.
+fn option_selection_style(
+    mut target: container::Style,
+    theme: &Theme,
+    highlighted: bool,
+) -> container::Style {
+    if !highlighted {
+        return target;
+    }
+    if let Some(iced::Background::Color(tint)) =
+        sb::menu_item(false)(theme, button::Status::Hovered).background
+    {
+        target.background = Some(match target.background {
+            None => iced::Background::Color(tint),
+            Some(iced::Background::Color(fill)) => {
+                iced::Background::Color(crate::color::composite_over(tint, fill))
+            }
+            Some(iced::Background::Gradient(iced::Gradient::Linear(mut gradient))) => {
+                if gradient.stops.iter().all(Option::is_none) {
+                    iced::Background::Color(tint)
+                } else {
+                    for stop in gradient.stops.iter_mut().flatten() {
+                        stop.color = crate::color::composite_over(tint, stop.color);
+                    }
+                    iced::Background::Gradient(iced::Gradient::Linear(gradient))
+                }
+            }
+        });
+    }
+    target
+}
+
+#[cfg(test)]
+mod typed_props_tests {
+    use super::*;
+    use crate::components::TextOverflow;
+
+    fn loading() -> Lookup<String, String> {
+        let mut lookup = Lookup::new().debounce(std::time::Duration::ZERO);
+        let now = Instant::now();
+        lookup.input("query".to_owned(), now);
+        lookup.poll(now).unwrap();
+        lookup
+    }
+
+    fn key(key: Named) -> Event {
+        Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(key),
+            modified_key: keyboard::Key::Named(key),
+            physical_key: keyboard::key::Physical::Unidentified(
+                keyboard::key::NativeCode::Unidentified,
+            ),
+            location: keyboard::Location::Standard,
+            modifiers: keyboard::Modifiers::empty(),
+            text: None,
+            repeat: false,
+        })
+    }
+
+    fn custom_option(theme: &Theme, shape: usize) -> container::Style {
+        let r = theme.metrics.radius_m;
+        container::Style {
+            background: Some(theme.semantic.window.bg.into()),
+            text_color: Some(theme.semantic.window.fg),
+            border: iced::Border {
+                radius: match shape {
+                    0 => 0.0.into(),
+                    1 => r.into(),
+                    _ => iced::border::Radius {
+                        top_left: r,
+                        top_right: 0.0,
+                        bottom_left: r / 2.0,
+                        bottom_right: 0.0,
+                    },
+                },
+                width: 2.0,
+                color: theme.semantic.window.fg,
+            },
+            shadow: iced::Shadow {
+                color: iced::Color::from_rgba(0.0, 0.0, 0.0, 0.2),
+                offset: Vector::new(1.0, 2.0),
+                blur_radius: 3.0,
+            },
+            snap: false,
+        }
+    }
+
+    #[test]
+    fn selection_composition_preserves_target_fields_and_gradient_stops() {
+        for theme in [Theme::light(), Theme::dark()] {
+            for shape in 0..3 {
+                let target = custom_option(&theme, shape);
+                assert_eq!(option_selection_style(target, &theme, false), target);
+                let selected = option_selection_style(target, &theme, true);
+                assert_eq!(selected.border, target.border);
+                assert_eq!(selected.shadow, target.shadow);
+                assert_eq!(selected.text_color, target.text_color);
+                assert_eq!(selected.snap, target.snap);
+                assert_ne!(selected.background, target.background);
+            }
+            let gradient = iced::gradient::Linear::new(iced::Radians(0.7))
+                .add_stop(0.0, iced::Color::WHITE)
+                .add_stop(1.0, iced::Color::BLACK);
+            let target = container::Style {
+                background: Some(gradient.into()),
+                ..custom_option(&theme, 2)
+            };
+            let Some(iced::Background::Color(tint)) =
+                sb::menu_item(false)(&theme, button::Status::Hovered).background
+            else {
+                panic!("menu highlight must supply a tint");
+            };
+            let Some(iced::Background::Gradient(iced::Gradient::Linear(selected))) =
+                option_selection_style(target, &theme, true).background
+            else {
+                panic!("selection must preserve the gradient");
+            };
+            assert_eq!(selected.angle, gradient.angle);
+            for (before, after) in gradient.stops.iter().zip(selected.stops) {
+                assert_eq!(
+                    after,
+                    before.map(|stop| iced::gradient::ColorStop {
+                        color: crate::color::composite_over(tint, stop.color),
+                        ..stop
+                    })
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn keyboard_selection_renders_actual_square_pill_asymmetric_options_in_current_theme() {
+        use iced::advanced::overlay::Overlay as _;
+        use iced::advanced::renderer::Headless;
+        let mut renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer");
+        let mut lookup = loading();
+        lookup.complete(
+            lookup.latest_id(),
+            Ok(vec!["First".into(), "Second".into()]),
+        );
+        let bounds = Size::new(240.0, 180.0);
+        let viewport = Rectangle::with_size(bounds);
+        let screenshot_size = Size::new(240, 180);
+        let clear = iced::Color::from_rgb(0.0, 1.0, 0.0);
+        for shape in 0..3 {
+            let mut widget = Autocomplete::new("unpicked", &lookup, |s| s)
+                .on_select(|s| s)
+                .free_text(false)
+                .item(|_| space().into())
+                .option_props(
+                    ContainerProps::default()
+                        .height(40)
+                        .padding(0)
+                        .style(move |theme| custom_option(theme, shape)),
+                )
+                .into_widget();
+            let mut trees: Vec<_> = widget
+                .items
+                .iter()
+                .map(|el| Tree::new(el.as_widget()))
+                .collect();
+            let mut open = true;
+            let mut highlight = Highlight::default();
+            let mut picked = None;
+            let mut popover = Popover {
+                items: &mut widget.items,
+                option_highlight: &widget.option_highlight,
+                trees: &mut trees,
+                body: widget.body,
+                labels: &widget.labels,
+                choices: widget.choices,
+                on_select: widget.on_select.as_deref(),
+                open: &mut open,
+                highlight: &mut highlight,
+                picked: &mut picked,
+                anchor: Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 24.0)),
+                max_rows: 8,
+                metrics: widget.metrics,
+            };
+            let mut messages = Vec::new();
+            for (key, expected_index) in [
+                (Named::ArrowDown, 0),
+                (Named::ArrowDown, 1),
+                (Named::ArrowUp, 0),
+            ] {
+                let node = popover.layout(&renderer, bounds);
+                let mut shell = Shell::new(&mut messages);
+                popover.update(
+                    &self::key(key),
+                    Layout::new(&node),
+                    mouse::Cursor::Unavailable,
+                    &renderer,
+                    &mut iced::advanced::clipboard::Null,
+                    &mut shell,
+                );
+                assert!(shell.is_event_captured());
+                assert_eq!(popover.highlight.index(), Some(expected_index));
+                assert!(messages.is_empty());
+                let node = popover.layout(&renderer, bounds);
+                // Reuse the same option tree: both the target style and tint must use
+                // the draw-time theme, not the theme from construction or a prior draw.
+                for mut theme in [Theme::light(), Theme::dark()] {
+                    theme.metrics.radius_m = if theme.is_dark() { 12.0 } else { 20.0 };
+                    theme.metrics.radius_menu = 7.0;
+                    renderer.reset(viewport);
+                    popover.draw(
+                        &mut renderer,
+                        &theme,
+                        &renderer::Style {
+                            text_color: iced::Color::BLACK,
+                        },
+                        Layout::new(&node),
+                        mouse::Cursor::Unavailable,
+                    );
+                    let actual = renderer.screenshot(screenshot_size, 1.0, clear);
+                    renderer.reset(viewport);
+                    let surface = sc::popover(&theme);
+                    renderer.fill_quad(
+                        Quad {
+                            bounds: Layout::new(&node).bounds(),
+                            border: surface.border,
+                            shadow: surface.shadow,
+                            snap: false,
+                        },
+                        surface.background.unwrap(),
+                    );
+                    let Some(iced::Background::Color(tint)) =
+                        sb::menu_item(false)(&theme, button::Status::Hovered).background
+                    else {
+                        panic!("highlight tint");
+                    };
+                    for (i, child) in Layout::new(&node).children().enumerate() {
+                        let target = custom_option(&theme, shape);
+                        let fill = if i == expected_index {
+                            crate::color::composite_over(tint, theme.semantic.window.bg)
+                        } else {
+                            theme.semantic.window.bg
+                        };
+                        renderer.fill_quad(
+                            Quad {
+                                bounds: child.bounds(),
+                                border: target.border,
+                                shadow: target.shadow,
+                                snap: target.snap,
+                            },
+                            fill,
+                        );
+                    }
+                    assert_eq!(
+                        actual,
+                        renderer.screenshot(screenshot_size, 1.0, clear),
+                        "shape={shape}, index={expected_index}, theme={:?}",
+                        theme.scheme
+                    );
+                }
+            }
+            let node = popover.layout(&renderer, bounds);
+            let mut shell = Shell::new(&mut messages);
+            popover.update(
+                &key(Named::Enter),
+                Layout::new(&node),
+                mouse::Cursor::Unavailable,
+                &renderer,
+                &mut iced::advanced::clipboard::Null,
+                &mut shell,
+            );
+            assert!(shell.is_event_captured());
+            assert_eq!(messages, ["First"]);
+            assert!(!open);
+            assert_eq!(picked.as_deref(), Some("First"));
+            assert_eq!(widget.value, "unpicked");
+            assert_eq!(widget.choices, &["First", "Second"]);
+        }
+    }
+
+    #[test]
+    fn entry_and_option_props_apply_without_changing_labels_or_selection() {
+        let label = "界🦀e\u{301}".repeat(100);
+        let mut lookup = loading();
+        lookup.complete(lookup.latest_id(), Ok(vec![label.clone()]));
+        let plain = Autocomplete::new("q", &lookup, |_| ()).into_widget();
+        let defaults = Autocomplete::new("q", &lookup, |_| ())
+            .entry_props(EntryProps::default())
+            .label_props(TextProps::default())
+            .option_props(ContainerProps::default())
+            .into_widget();
+        assert_eq!(
+            plain.entry.as_widget().size(),
+            defaults.entry.as_widget().size()
+        );
+        assert_eq!(
+            plain.items[0].as_widget().size(),
+            defaults.items[0].as_widget().size()
+        );
+        for policy in [TextOverflow::Wrap, TextOverflow::Clip, TextOverflow::Grow] {
+            let custom = Autocomplete::new("q", &lookup, |_| ())
+                .entry_props(EntryProps::default().width(143))
+                .label_props(TextProps::default().width(70).overflow(policy))
+                .option_props(ContainerProps::default().width(95))
+                .into_widget();
+            assert_eq!(custom.entry.as_widget().size().width, Length::Fixed(143.0));
+            assert_eq!(
+                custom.items[0].as_widget().size().width,
+                Length::Fixed(95.0)
+            );
+            assert_eq!(custom.labels, vec![label.clone()]);
+            assert_eq!(custom.choices, &[label.clone()]);
+        }
+    }
+
+    #[test]
+    fn notice_overrides_cover_loading_empty_and_error_without_enabling_input() {
+        let mut lookup = loading();
+        for status in 0..3 {
+            if status == 1 {
+                lookup.complete(lookup.latest_id(), Ok(Vec::new()));
+            }
+            if status == 2 {
+                lookup = loading();
+                lookup.complete(lookup.latest_id(), Err("失敗🦀".repeat(50)));
+            }
+            let widget = Autocomplete::new("q", &lookup, |_| ())
+                .on_retry(())
+                .loading_props(TextProps::default().overflow(TextOverflow::Wrap))
+                .empty_props(TextProps::default().size(17))
+                .error_props(TextProps::default().overflow(TextOverflow::Wrap).width(80))
+                .retry_button_props(ButtonProps::default().width(60).padding(9))
+                .notice_props(ContainerProps::default().width(155))
+                .into_widget();
+            assert_eq!(widget.body, Body::Notice);
+            assert_eq!(
+                widget.items[0].as_widget().size().width,
+                Length::Fixed(155.0)
+            );
+        }
+        let disabled = Autocomplete::new("q", &lookup, |_| ())
+            .disabled(true)
+            .entry_props(EntryProps::default().width(143))
+            .into_widget();
+        assert!(disabled.disabled);
+        assert_eq!(disabled.body, Body::None);
     }
 }

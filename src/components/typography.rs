@@ -10,10 +10,19 @@ use iced::Font;
 use iced::font::{Family, Weight};
 use iced::widget::{Text, text};
 
+/// The theme's font family (when it sets one) at weight `w`.
 fn weight(w: Weight) -> Font {
     Font {
         weight: w,
-        ..Font::DEFAULT
+        ..crate::theme_config::font().unwrap_or(Font::DEFAULT)
+    }
+}
+
+/// Applies the theme's font family, when it sets one.
+fn themed<'a>(t: Text<'a, Theme>) -> Text<'a, Theme> {
+    match crate::theme_config::font() {
+        Some(f) => t.font(f),
+        None => t,
     }
 }
 
@@ -37,7 +46,7 @@ impl Typography {
             .wrapping(text::Wrapping::None)
     }
     pub fn body<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
-        text(content).size(self.body)
+        themed(text(content).size(self.body))
     }
     pub fn caption_heading<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
         text(content)
@@ -45,13 +54,15 @@ impl Typography {
             .font(weight(Weight::Bold))
     }
     pub fn caption<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
-        text(content).size(self.caption)
+        themed(text(content).size(self.caption))
     }
     pub fn monospace<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
-        text(content).size(self.monospace).font(Font {
-            family: Family::Monospace,
-            ..Font::DEFAULT
-        })
+        text(content).size(self.monospace).font(
+            crate::theme_config::monospace_font().unwrap_or(Font {
+                family: Family::Monospace,
+                ..Font::DEFAULT
+            }),
+        )
     }
     /// `.dim-label` body text.
     pub fn dim_label<'a>(&self, content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
@@ -63,13 +74,13 @@ impl Typography {
 /// labels). libadwaita ellipsizes; iced cannot, so we keep the full text and
 /// let the surrounding layout wrap or scroll instead of squeezing it.
 pub fn label<'a>(content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
-    text(content).wrapping(text::Wrapping::None)
+    themed(text(content).wrapping(text::Wrapping::None))
 }
 
 macro_rules! free {
     ($($name:ident),*) => {$(
         pub fn $name<'a>(content: impl text::IntoFragment<'a>) -> Text<'a, Theme> {
-            Typography::default().$name(content)
+            Typography::desktop().$name(content)
         }
     )*};
 }

@@ -3,7 +3,9 @@
 mod surface;
 
 use super::{ChipGroup, ChipOption, DateInput, NumberInput};
-use crate::components::{Entry, InputWrapper, TextView};
+use crate::components::{
+    Entry, InputWrapper, InputWrapperProps, TextProps, TextView, TextViewProps,
+};
 use crate::primitives::validation::{Interaction, Validity};
 use crate::{Element, EntryIcon, IconSource, Metrics};
 use iced::{
@@ -33,6 +35,13 @@ pub enum EntryInput<'a, M> {
 
 /// Standard full-width application control with its label inside the row.
 pub struct EntryRow<'a, M> {
+    dropdown_props: super::popover::PopoverProps,
+    button_props: crate::components::ButtonProps,
+    label_props: crate::components::TextProps,
+    entry_props: Option<crate::components::EntryProps>,
+    value_props: TextProps,
+    wrapper_props: InputWrapperProps,
+    text_view_props: TextViewProps,
     label: String,
     input: EntryInput<'a, M>,
     description: Option<String>,
@@ -40,11 +49,61 @@ pub struct EntryRow<'a, M> {
     interaction: Interaction,
     required: bool,
     flat: bool,
+    spacing: Option<f32>,
+    padding: Option<iced::Padding>,
+    value_spacing: Option<f32>,
     metrics: Metrics,
 }
 impl<'a, M: 'a> EntryRow<'a, M> {
+    pub fn dropdown_props(mut self, props: super::popover::PopoverProps) -> Self {
+        self.dropdown_props = props;
+        self
+    }
+    pub fn button_props(mut self, props: crate::components::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+    pub fn label_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
+    pub fn entry_props(mut self, props: crate::components::EntryProps) -> Self {
+        self.entry_props = Some(props);
+        self
+    }
+
+    /// Presentation of a selection's displayed value, including its empty placeholder.
+    /// Does not alter the selected value or the caller-owned option elements.
+    pub fn value_props(mut self, props: TextProps) -> Self {
+        self.value_props = props;
+        self
+    }
+
+    /// Presentation of the outer description and validation-message children.
+    /// The wrapper's label is hidden; use `label_props` for the row's own label.
+    pub fn wrapper_props(mut self, props: InputWrapperProps) -> Self {
+        self.wrapper_props = props;
+        self
+    }
+
+    /// Presentation of the native editor in supplied or convenience-built multiline rows.
+    /// Content, actions, single-line restrictions and growing-height policy stay unchanged.
+    pub fn text_view_props(mut self, props: TextViewProps) -> Self {
+        self.text_view_props = props;
+        self
+    }
+
     pub fn new(label: impl Into<String>, input: EntryInput<'a, M>) -> Self {
         Self {
+            dropdown_props: Default::default(),
+            button_props: Default::default(),
+            label_props: Default::default(),
+            entry_props: Default::default(),
+            value_props: Default::default(),
+            wrapper_props: Default::default(),
+            text_view_props: Default::default(),
+
             label: label.into(),
             input,
             description: None,
@@ -52,6 +111,9 @@ impl<'a, M: 'a> EntryRow<'a, M> {
             interaction: Interaction::default(),
             required: false,
             flat: false,
+            spacing: None,
+            padding: None,
+            value_spacing: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -76,6 +138,21 @@ impl<'a, M: 'a> EntryRow<'a, M> {
         self.required = value;
         self
     }
+    /// The gap between the label and the input (default: the theme's `space_xxs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding around the row's content (default: the theme's `row_padding`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// For a select row: the gap between the value and the arrow (default: the theme's `space_s`).
+    pub fn value_spacing(mut self, px: f32) -> Self {
+        self.value_spacing = Some(px.max(0.0));
+        self
+    }
     pub fn metrics(mut self, value: Metrics) -> Self {
         self.metrics = value;
         self
@@ -91,89 +168,169 @@ macro_rules! embedded {
             .width(Length::Fill)
     };
 }
-fn surface<'a, M: 'a>(content: impl Into<Element<'a, M>>, m: Metrics) -> Element<'a, M> {
+fn surface<'a, M: 'a>(
+    content: impl Into<Element<'a, M>>,
+    m: Metrics,
+    padding: iced::Padding,
+) -> Element<'a, M> {
     container(super::rows::row_frame(content, &m))
-        .padding(m.row_padding)
+        .padding(padding)
         .width(Length::Fill)
+        .style(surface::row_style)
         .into()
 }
 impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
     fn from(e: EntryRow<'a, M>) -> Self {
         let m = e.metrics;
+        let pad = e.padding.unwrap_or(m.row_padding);
+        let gap = e.spacing.unwrap_or(m.space_xxs);
         let label_text = format!("{}{}", e.label, if e.required { " *" } else { "" });
         let label = || {
-            crate::Typography::default()
-                .caption(label_text.clone())
-                .style(crate::styles::text::dim)
+            e.label_props.apply(
+                crate::Typography::desktop()
+                    .caption(label_text.clone())
+                    .style(crate::styles::text::dim),
+            )
         };
         let line = |input: Element<'a, M>| -> Element<'a, M> {
             column![label(), input]
-                .spacing(2)
+                .spacing(gap)
                 .width(Length::Fill)
                 .into()
         };
-        let content = match e.input {
-            EntryInput::Text(input) | EntryInput::Action(input) => {
-                let insets = input.label_insets(&m);
-                let input = embedded!(input, e.flat, m);
-                surface(
-                    column![container(label()).padding(insets), input]
-                        .spacing(2)
-                        .width(Length::Fill),
-                    m,
-                )
-            }
-            EntryInput::Number(input) => surface(line(embedded!(input, e.flat, m).into()), m),
-            EntryInput::Date(input) => surface(line(embedded!(input, e.flat, m).into()), m),
-            EntryInput::Multiline(input) => surface(line(input.flat(e.flat).embedded(m).into()), m),
-            EntryInput::Custom(input) => surface(line(input), m),
-            EntryInput::Switch { active, on_toggle } => {
-                let toggle = on_toggle(!active);
-                let sw = crate::components::switch(active).on_toggle(on_toggle);
-                button(surface(
-                    row![
-                        container(crate::Typography::default().body(label_text.clone()))
+        let mut geometry = surface::Geometry::Row;
+        let content =
+            match e.input {
+                EntryInput::Text(input) | EntryInput::Action(input) => {
+                    let insets = input.label_insets(&m);
+                    let input = embedded!(input, e.flat, m);
+                    let input = if let Some(props) = &e.entry_props {
+                        props.apply(input)
+                    } else {
+                        input
+                    };
+                    surface(
+                        column![container(label()).padding(insets), input]
+                            .spacing(gap)
                             .width(Length::Fill),
-                        sw
-                    ]
-                    .align_y(iced::Alignment::Center),
+                        m,
+                        pad,
+                    )
+                }
+                EntryInput::Number(input) => {
+                    let input = embedded!(input, e.flat, m);
+                    let input = if let Some(props) = &e.entry_props {
+                        input.entry_props(props.clone())
+                    } else {
+                        input
+                    };
+                    surface(line(input.into()), m, pad)
+                }
+                EntryInput::Date(input) => {
+                    let input = embedded!(input, e.flat, m);
+                    let input = if let Some(props) = &e.entry_props {
+                        input.entry_props(props.clone())
+                    } else {
+                        input
+                    };
+                    surface(line(input.into()), m, pad)
+                }
+                EntryInput::Multiline(input) => surface(
+                    line(
+                        e.text_view_props
+                            .apply(input.flat(e.flat).embedded(m))
+                            .into(),
+                    ),
                     m,
-                ))
-                .padding(0)
-                .width(Length::Fill)
-                .style(crate::styles::button::list_row)
-                .on_press(toggle)
-                .into()
-            }
-            EntryInput::Select {
-                value,
-                options,
-                multiple,
-            } => {
-                let value = text(if value.is_empty() {
-                    "Select…".into()
-                } else {
-                    value
-                })
-                .width(Length::Fill);
-                let trigger = row![
-                    container(line(value.into())).width(Length::Fill),
-                    EntryIcon::Select.view(m.icon_size)
-                ]
-                .align_y(iced::Alignment::Center)
-                .spacing(m.space_s);
-                super::Popover::new(surface(trigger, m), options)
-                    .width(Length::Fill)
-                    .padding(0)
-                    .appearance(if e.flat {
+                    pad,
+                ),
+                EntryInput::Custom(input) => surface(line(input), m, pad),
+                EntryInput::Switch { active, on_toggle } => {
+                    let toggle = on_toggle(!active);
+                    let sw = crate::components::switch(active).on_toggle(on_toggle);
+                    let (target, style) =
+                        surface::Geometry::button(e.button_props.style.clone().unwrap_or_else(
+                            || std::sync::Arc::new(crate::styles::button::list_row),
+                        ));
+                    geometry = target;
+                    e.button_props
+                        .apply(
+                            button(surface(
+                                row![
+                                    container(e.label_props.apply(
+                                        crate::Typography::desktop().body(label_text.clone())
+                                    ))
+                                    .width(Length::Fill),
+                                    sw
+                                ]
+                                .align_y(iced::Alignment::Center),
+                                m,
+                                pad,
+                            ))
+                            .padding(0)
+                            .width(Length::Fill)
+                            .style(crate::styles::button::list_row)
+                            .on_press(toggle),
+                        )
+                        .style(move |theme, status| style(theme, status))
+                        .into()
+                }
+                EntryInput::Select {
+                    value,
+                    options,
+                    multiple,
+                } => {
+                    let value = text(if value.is_empty() {
+                        "Select…".into()
+                    } else {
+                        value
+                    })
+                    .width(Length::Fill);
+                    let trigger = row![
+                        container(line(e.value_props.apply(value))).width(Length::Fill),
+                        EntryIcon::Select.view(m.icon_size)
+                    ]
+                    .align_y(iced::Alignment::Center)
+                    .spacing(e.value_spacing.unwrap_or(m.space_s));
+                    let appearance = e.dropdown_props.appearance.unwrap_or(if e.flat {
                         super::PopoverAppearance::Flat
                     } else {
                         super::PopoverAppearance::Row
-                    })
-                    .keep_open(multiple)
-                    .into()
-            }
-        };
+                    });
+                    let (target, style) = surface::Geometry::button(
+                        e.dropdown_props.style.clone().unwrap_or_else(|| {
+                            std::sync::Arc::new(move |theme, status| {
+                                use super::PopoverAppearance;
+                                match appearance {
+                                    PopoverAppearance::Button => {
+                                        crate::styles::button::default(theme, status)
+                                    }
+                                    PopoverAppearance::Flat => {
+                                        crate::styles::button::flat(theme, status)
+                                    }
+                                    PopoverAppearance::Row => {
+                                        crate::styles::button::list_row(theme, status)
+                                    }
+                                    PopoverAppearance::Linked(position) => {
+                                        crate::styles::button::linked(position)(theme, status)
+                                    }
+                                }
+                            })
+                        }),
+                    );
+                    geometry = target;
+                    e.dropdown_props
+                        .apply(
+                            super::Popover::new(surface(trigger, m, pad), options)
+                                .width(Length::Fill)
+                                .padding(0)
+                                .appearance(appearance)
+                                .keep_open(multiple),
+                        )
+                        .style(move |theme, status| style(theme, status))
+                        .into()
+                }
+            };
         let presentation =
             crate::primitives::validation::present(&e.validity, e.interaction.revealed());
         let focus_ring = e.flat
@@ -182,16 +339,17 @@ impl<'a, M: Clone + 'a> From<EntryRow<'a, M>> for Element<'a, M> {
                 crate::primitives::validation::Presentation::Invalid
                     | crate::primitives::validation::Presentation::Warning
             );
-        let content = surface::outlined(content, focus_ring, m);
+        let content = surface::outlined(content, focus_ring, m, geometry.clone());
         let mut wrapper = InputWrapper::new("", content)
             .hide_label()
+            .target_geometry(move |theme, _| geometry.resolve(theme))
             .validity(e.validity)
             .interaction(e.interaction)
             .metrics(m);
         if let Some(description) = e.description {
             wrapper = wrapper.description(description);
         }
-        wrapper.into()
+        e.wrapper_props.apply(wrapper).into()
     }
 }
 impl<'a, M: Clone + 'a> EntryRow<'a, M> {
@@ -339,6 +497,17 @@ impl<'a, M: Clone + 'a> EntryRow<'a, M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_entry_row_takes_its_gaps_and_padding() {
+        let r = EntryRow::<u8>::text("L", "v", |_| 0)
+            .spacing(1.0)
+            .padding([2.0, 3.0])
+            .value_spacing(4.0);
+        assert_eq!((r.spacing, r.value_spacing), (Some(1.0), Some(4.0)));
+        assert_eq!(r.padding, Some(iced::Padding::from([2.0, 3.0])));
+        let _: Element<'_, u8> = r.into();
+    }
     use iced::advanced::{Shell, clipboard, layout, renderer::Headless, widget::Tree};
     use iced::{Event, Point, Rectangle, Size, Vector, mouse};
 
@@ -630,5 +799,900 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod presentation_merge_tests {
+    use super::*;
+    use crate::components::{ButtonProps, EntryProps, TextProps};
+
+    #[test]
+    fn empty_and_partial_overlays_preserve_existing_row_children() {
+        let row = EntryRow::<()>::new(
+            "Title",
+            EntryInput::Switch {
+                active: true,
+                on_toggle: Box::new(|_| ()),
+            },
+        )
+        .required(true)
+        .label_props(TextProps::default().width(173).height(31))
+        .button_props(ButtonProps::default().width(211).clip(true))
+        .entry_props(EntryProps::default().width(187).flat(true));
+        let row = EntryRowProps::default().apply(row);
+        let row = EntryRowProps::default()
+            .label_props(TextProps::default().height(37))
+            .button_props(ButtonProps::default().clip(false))
+            .entry_props(EntryProps::default().padding(0))
+            .apply(row);
+        assert_eq!(row.label_props.width, Some(Length::Fixed(173.0)));
+        assert_eq!(row.label_props.height, Some(Length::Fixed(37.0)));
+        assert_eq!(row.button_props.width, Some(Length::Fixed(211.0)));
+        assert_eq!(row.button_props.clip, Some(false));
+        let entry = row.entry_props.unwrap();
+        assert_eq!(entry.width, Some(Length::Fixed(187.0)));
+        assert_eq!(entry.flat, Some(true));
+        assert_eq!(entry.padding, Some(iced::Padding::ZERO));
+        assert!(row.required);
+        assert!(matches!(row.input, EntryInput::Switch { active: true, .. }));
+    }
+
+    #[test]
+    fn empty_optional_props_do_not_create_entry_presentation() {
+        let row = EntryRow::<()>::new("Title", EntryInput::Custom(iced::widget::space().into()));
+        let row = EntryRowProps::default()
+            .entry_props(EntryProps::default())
+            .apply(row);
+        assert!(row.entry_props.is_none());
+    }
+}
+
+#[cfg(test)]
+mod validation_geometry_tests {
+    use super::*;
+    use crate::Theme;
+    use iced::advanced::{
+        Renderer as _, Shell, clipboard,
+        layout::{self, Layout},
+        renderer::{self, Headless, Quad},
+        widget::Tree,
+    };
+    use iced::{Border, Color, Event, Point, Rectangle, Size, Vector, mouse};
+
+    fn renderer() -> iced::Renderer {
+        iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer")
+    }
+    fn viewport() -> Rectangle {
+        Rectangle::with_size(Size::new(360.0, 240.0))
+    }
+    fn metrics() -> Metrics {
+        Metrics {
+            radius_m: 1.0,
+            focus_ring_width: 3.0,
+            ..Metrics::default()
+        }
+    }
+    fn prepare<'a>(
+        row: EntryRow<'a, u8>,
+        renderer: &iced::Renderer,
+    ) -> (Element<'a, u8>, Tree, layout::Node) {
+        let mut element: Element<'a, u8> = row.metrics(metrics()).into();
+        let mut tree = Tree::new(&element);
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            renderer,
+            &layout::Limits::new(Size::ZERO, viewport().size()),
+        );
+        (element, tree, node)
+    }
+    fn draw(
+        element: &Element<'_, u8>,
+        tree: &Tree,
+        node: &layout::Node,
+        renderer: &mut iced::Renderer,
+        theme: &Theme,
+        cursor: mouse::Cursor,
+    ) {
+        renderer.reset(viewport());
+        element.as_widget().draw(
+            tree,
+            renderer,
+            theme,
+            &renderer::Style::default(),
+            Layout::new(node),
+            cursor,
+            &viewport(),
+        );
+    }
+    fn pixels(renderer: &mut iced::Renderer, theme: &Theme, height: usize) -> Vec<u8> {
+        renderer.screenshot(Size::new(360, 240), 1.0, theme.semantic.window.bg)[..height * 360 * 4]
+            .to_vec()
+    }
+    fn control_bounds(node: &layout::Node) -> Rectangle {
+        Layout::new(node)
+            .children()
+            .next()
+            .unwrap()
+            .children()
+            .next()
+            .unwrap()
+            .bounds()
+    }
+    fn update(
+        element: &mut Element<'_, u8>,
+        tree: &mut Tree,
+        node: &layout::Node,
+        renderer: &iced::Renderer,
+        cursor: mouse::Cursor,
+        events: &[mouse::Event],
+    ) -> Vec<u8> {
+        let mut messages = vec![];
+        for event in events {
+            element.as_widget_mut().update(
+                tree,
+                &Event::Mouse(event.clone()),
+                Layout::new(node),
+                cursor,
+                renderer,
+                &mut clipboard::Null,
+                &mut Shell::new(&mut messages),
+                &viewport(),
+            );
+        }
+        element.as_widget_mut().update(
+            tree,
+            &Event::Window(iced::window::Event::RedrawRequested(
+                std::time::Instant::now(),
+            )),
+            Layout::new(node),
+            cursor,
+            renderer,
+            &mut clipboard::Null,
+            &mut Shell::new(&mut messages),
+            &viewport(),
+        );
+        messages
+    }
+    fn validation(row: EntryRow<'_, u8>, reveal: bool) -> EntryRow<'_, u8> {
+        row.validity(Validity::error("Bad value"))
+            .interaction(Interaction {
+                touched: reveal,
+                submitted: false,
+            })
+    }
+
+    #[test]
+    fn validation_encloses_all_eight_full_row_surfaces_with_current_theme_geometry() {
+        let mut renderer = renderer();
+        let content = iced::widget::text_editor::Content::with_text("Notes");
+        for flat in [false, true] {
+            for kind in 0..8 {
+                let row = || {
+                    EntryRow::new(
+                        "Label",
+                        match kind {
+                            0 => EntryInput::Text(
+                                Entry::new("", "Ada")
+                                    .left_section(text("prefix"))
+                                    .right_section(text("suffix"))
+                                    .on_input(|_| 1),
+                            ),
+                            1 => EntryInput::Action(Entry::new("", "Action").on_input(|_| 1)),
+                            2 => EntryInput::Number(NumberInput::new("12", |_| 1)),
+                            3 => EntryInput::Date(DateInput::new(
+                                "2026-11-08",
+                                crate::primitives::date::Date::new(2026, 11, 8).unwrap(),
+                                |_| 1,
+                            )),
+                            4 => EntryInput::Switch {
+                                active: true,
+                                on_toggle: Box::new(|_| 1),
+                            },
+                            5 => EntryInput::Select {
+                                value: "Selected".into(),
+                                options: text("Option").into(),
+                                multiple: false,
+                            },
+                            6 => EntryInput::Multiline(crate::components::text_view(&content)),
+                            _ => EntryInput::Custom(
+                                container(text("Custom"))
+                                    .style(|_| container::Style {
+                                        border: Border::default().rounded(999.0),
+                                        ..Default::default()
+                                    })
+                                    .into(),
+                            ),
+                        },
+                    )
+                    .flat(flat)
+                };
+                let (baseline, base_tree, base_node) = prepare(validation(row(), false), &renderer);
+                let (element, tree, node) = prepare(validation(row(), true), &renderer);
+                let bounds = control_bounds(&node);
+                assert_eq!(bounds, control_bounds(&base_node));
+                // Same built rows are redrawn with different themes, not rebuilt with copied metrics.
+                for radius in [0.0, 12.0, 999.0] {
+                    let mut theme = Theme::light();
+                    theme.metrics.radius_m = radius;
+                    let expected_radius = match kind {
+                        4 => {
+                            crate::styles::button::list_row(&theme, button::Status::Active)
+                                .border
+                                .radius
+                        }
+                        5 if flat => {
+                            crate::styles::button::flat(&theme, button::Status::Active)
+                                .border
+                                .radius
+                        }
+                        5 => {
+                            crate::styles::button::list_row(&theme, button::Status::Active)
+                                .border
+                                .radius
+                        }
+                        _ => surface::row_style(&theme).border.radius,
+                    };
+                    draw(
+                        &element,
+                        &tree,
+                        &node,
+                        &mut renderer,
+                        &theme,
+                        mouse::Cursor::Unavailable,
+                    );
+                    let actual = pixels(&mut renderer, &theme, bounds.height as usize);
+                    draw(
+                        &baseline,
+                        &base_tree,
+                        &base_node,
+                        &mut renderer,
+                        &theme,
+                        mouse::Cursor::Unavailable,
+                    );
+                    renderer.fill_quad(
+                        Quad {
+                            bounds,
+                            border: Border {
+                                width: 3.0,
+                                color: theme.semantic.error.color,
+                                radius: expected_radius,
+                            },
+                            ..Quad::default()
+                        },
+                        Color::TRANSPARENT,
+                    );
+                    assert_eq!(
+                        actual,
+                        pixels(&mut renderer, &theme, bounds.height as usize),
+                        "kind={kind} flat={flat} radius={radius}"
+                    );
+                }
+            }
+        }
+    }
+
+    fn custom_style(theme: &Theme, status: button::Status) -> button::Style {
+        let radius = match status {
+            button::Status::Active => 0.0.into(),
+            button::Status::Hovered => 999.0.into(),
+            _ => iced::border::Radius {
+                top_left: theme.metrics.radius_m,
+                top_right: 0.0,
+                bottom_left: 0.0,
+                bottom_right: 4.0,
+            },
+        };
+        button::Style {
+            background: Some(Color::BLACK.into()),
+            border: Border::default().rounded(radius),
+            ..crate::styles::button::list_row(theme, status)
+        }
+    }
+
+    #[test]
+    fn switch_and_select_validation_follow_custom_actual_active_hover_pressed_and_open_styles() {
+        let mut renderer = renderer();
+        for select in [false, true] {
+            for phase in 0..3 {
+                let row = || {
+                    if select {
+                        EntryRow::new(
+                            "Select",
+                            EntryInput::Select {
+                                value: "Value".into(),
+                                options: text("Option").into(),
+                                multiple: false,
+                            },
+                        )
+                        .dropdown_props(
+                            super::super::popover::PopoverProps::default().style(custom_style),
+                        )
+                    } else {
+                        EntryRow::switch("Switch", false, |_| 7).button_props(
+                            crate::components::ButtonProps::default().style(custom_style),
+                        )
+                    }
+                };
+                let (mut baseline, mut base_tree, base_node) =
+                    prepare(validation(row(), false), &renderer);
+                let (mut element, mut tree, node) = prepare(validation(row(), true), &renderer);
+                let bounds = control_bounds(&node);
+                let point = Point::new(20.0, bounds.height / 2.0);
+                let cursor = if phase == 0 {
+                    mouse::Cursor::Unavailable
+                } else {
+                    mouse::Cursor::Available(point)
+                };
+                let mut events = vec![mouse::Event::CursorMoved {
+                    position: if phase == 0 {
+                        Point::new(500.0, 500.0)
+                    } else {
+                        point
+                    },
+                }];
+                if phase == 2 {
+                    events.push(mouse::Event::ButtonPressed(mouse::Button::Left));
+                    if select {
+                        events.push(mouse::Event::ButtonReleased(mouse::Button::Left));
+                    }
+                }
+                update(
+                    &mut baseline,
+                    &mut base_tree,
+                    &base_node,
+                    &renderer,
+                    cursor,
+                    &events,
+                );
+                update(&mut element, &mut tree, &node, &renderer, cursor, &events);
+                for radius in [8.0, 19.0] {
+                    let mut theme = Theme::light();
+                    theme.metrics.radius_m = radius;
+                    let status = match phase {
+                        0 => button::Status::Active,
+                        1 => button::Status::Hovered,
+                        _ => button::Status::Pressed,
+                    };
+                    draw(&element, &tree, &node, &mut renderer, &theme, cursor);
+                    let actual = pixels(&mut renderer, &theme, bounds.height as usize);
+                    draw(
+                        &baseline,
+                        &base_tree,
+                        &base_node,
+                        &mut renderer,
+                        &theme,
+                        cursor,
+                    );
+                    renderer.fill_quad(
+                        Quad {
+                            bounds,
+                            border: Border {
+                                color: theme.semantic.error.color,
+                                width: 3.0,
+                                radius: custom_style(&theme, status).border.radius,
+                            },
+                            ..Quad::default()
+                        },
+                        Color::TRANSPARENT,
+                    );
+                    assert!(
+                        actual == pixels(&mut renderer, &theme, bounds.height as usize),
+                        "select={select}, phase={phase}, theme radius={radius}"
+                    );
+                }
+                if phase == 2 {
+                    if select {
+                        assert!(
+                            element
+                                .as_widget_mut()
+                                .overlay(
+                                    &mut tree,
+                                    Layout::new(&node),
+                                    &renderer,
+                                    &viewport(),
+                                    Vector::new(5.0, 7.0)
+                                )
+                                .is_some()
+                        );
+                    } else {
+                        assert_eq!(
+                            update(
+                                &mut element,
+                                &mut tree,
+                                &node,
+                                &renderer,
+                                cursor,
+                                &[mouse::Event::ButtonReleased(mouse::Button::Left)]
+                            ),
+                            [7]
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod child_api_tests {
+    use super::*;
+    use crate::components::{TextEditorProps, TextOverflow};
+    use iced::advanced::{
+        Shell, clipboard, layout,
+        renderer::Headless,
+        widget::{Operation, Tree},
+    };
+    use iced::{Event, Point, Rectangle, Size, mouse};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    fn renderer() -> iced::Renderer {
+        iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap()
+    }
+
+    fn layout<'a>(
+        row: EntryRow<'a, u8>,
+        renderer: &iced::Renderer,
+    ) -> (Element<'a, u8>, Tree, layout::Node) {
+        let mut element: Element<'a, u8> = row.into();
+        let mut tree = Tree::new(&element);
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(420.0, 800.0)),
+        );
+        (element, tree, node)
+    }
+
+    fn sizes(node: &layout::Node) -> Vec<Size> {
+        let mut result = vec![node.size()];
+        for child in node.children() {
+            result.extend(sizes(child));
+        }
+        result
+    }
+
+    #[derive(Default)]
+    struct Texts(Vec<(String, Rectangle)>);
+    impl Operation for Texts {
+        fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation)) {
+            operate(self);
+        }
+        fn text(&mut self, _: Option<&iced::widget::Id>, bounds: Rectangle, value: &str) {
+            self.0.push((value.into(), bounds));
+        }
+    }
+
+    fn texts(
+        element: &mut Element<'_, u8>,
+        tree: &mut Tree,
+        node: &layout::Node,
+        renderer: &iced::Renderer,
+    ) -> Texts {
+        let mut result = Texts::default();
+        element
+            .as_widget_mut()
+            .operate(tree, layout::Layout::new(node), renderer, &mut result);
+        result
+    }
+
+    fn draw(
+        element: &Element<'_, u8>,
+        tree: &Tree,
+        node: &layout::Node,
+        renderer: &mut iced::Renderer,
+    ) {
+        element.as_widget().draw(
+            tree,
+            renderer,
+            &crate::Theme::light(),
+            &iced::advanced::renderer::Style::default(),
+            layout::Layout::new(node),
+            mouse::Cursor::Unavailable,
+            &Rectangle::with_size(Size::new(420.0, 800.0)),
+        );
+    }
+
+    fn styled_text(calls: Arc<AtomicUsize>, width: u32, height: u32) -> TextProps {
+        TextProps::default()
+            .width(width)
+            .height(height)
+            .style(move |_| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                iced::widget::text::Style {
+                    color: Some(iced::Color::from_rgb8(31, 47, 63)),
+                }
+            })
+    }
+
+    fn row<'a>(kind: usize, content: &'a iced::widget::text_editor::Content) -> EntryRow<'a, u8> {
+        let input = match kind {
+            0 => EntryInput::Text(
+                Entry::new("Hint", "Secret")
+                    .password(true)
+                    .on_input(|_| 1)
+                    .on_submit(2),
+            ),
+            1 => EntryInput::Action(Entry::new("Hint", "Value").on_input(|_| 1)),
+            2 => EntryInput::Number(NumberInput::new("42", |_| 1)),
+            3 => EntryInput::Date(DateInput::new(
+                "2026-11-08",
+                crate::primitives::date::Date::new(2026, 11, 8).unwrap(),
+                |_| 1,
+            )),
+            4 => EntryInput::Switch {
+                active: true,
+                on_toggle: Box::new(|_| 3),
+            },
+            5 => EntryInput::Select {
+                value: "Selected".into(),
+                options: text("Option").into(),
+                multiple: false,
+            },
+            6 => EntryInput::Multiline(crate::components::text_view(content).on_action(|_| 7)),
+            7 => EntryInput::Custom(
+                button(text("Action"))
+                    .width(137)
+                    .height(43)
+                    .on_press(9)
+                    .into(),
+            ),
+            _ => unreachable!(),
+        };
+        EntryRow::new("Label", input)
+    }
+
+    #[test]
+    fn default_and_explicit_empty_child_props_preserve_every_input_branch() {
+        let renderer = renderer();
+        let content = iced::widget::text_editor::Content::with_text("Retained");
+        for kind in 0..8 {
+            let (_, _, base) = layout(row(kind, &content), &renderer);
+            let (_, _, default) = layout(
+                EntryRowProps::default().apply(row(kind, &content)),
+                &renderer,
+            );
+            let empty = EntryRowProps::default()
+                .value_props(TextProps::default())
+                .wrapper_props(InputWrapperProps::default())
+                .text_view_props(TextViewProps::default());
+            let (_, _, explicit) = layout(empty.apply(row(kind, &content)), &renderer);
+            assert_eq!(sizes(&base), sizes(&default), "branch {kind}");
+            assert_eq!(
+                sizes(&base),
+                sizes(&explicit),
+                "branch {kind}, explicit empty"
+            );
+        }
+    }
+
+    #[test]
+    fn selected_value_props_reach_single_multiple_and_placeholder_text_and_style() {
+        let mut renderer = renderer();
+        for multiple in [false, true] {
+            for value in ["", "日本語 🦀 selected"] {
+                let calls = Arc::new(AtomicUsize::new(0));
+                let row = EntryRow::new(
+                    "Label",
+                    EntryInput::Select {
+                        value: value.into(),
+                        options: text("Option").into(),
+                        multiple,
+                    },
+                )
+                .value_props(styled_text(calls.clone(), 137, 29));
+                let row = EntryRowProps::default()
+                    .value_props(TextProps::default().height(37))
+                    .apply(row);
+                let (mut element, mut tree, node) = layout(row, &renderer);
+                let expected = if value.is_empty() { "Select…" } else { value };
+                let values = texts(&mut element, &mut tree, &node, &renderer);
+                assert_eq!(
+                    values
+                        .0
+                        .iter()
+                        .find(|(text, _)| text == expected)
+                        .unwrap()
+                        .1
+                        .size(),
+                    Size::new(137.0, 37.0)
+                );
+                draw(&element, &tree, &node, &mut renderer);
+                assert!(calls.load(Ordering::SeqCst) > 0);
+                element.as_widget_mut().update(
+                    &mut tree,
+                    &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                    layout::Layout::new(&node),
+                    mouse::Cursor::Available(Point::new(30.0, 30.0)),
+                    &renderer,
+                    &mut clipboard::Null,
+                    &mut Shell::new(&mut vec![]),
+                    &Rectangle::with_size(Size::new(420.0, 800.0)),
+                );
+                // Opening remains the native popover's policy, not a value-presentation field.
+                assert!(
+                    element
+                        .as_widget_mut()
+                        .overlay(
+                            &mut tree,
+                            layout::Layout::new(&node),
+                            &renderer,
+                            &Rectangle::with_size(Size::new(420.0, 800.0)),
+                            iced::Vector::ZERO
+                        )
+                        .is_some()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn wrapper_props_reach_all_branches_without_revealing_or_replacing_validation() {
+        let mut renderer = renderer();
+        let content = iced::widget::text_editor::Content::with_text("Retained");
+        for kind in 0..8 {
+            for revealed in [false, true] {
+                let description_calls = Arc::new(AtomicUsize::new(0));
+                let message_calls = Arc::new(AtomicUsize::new(0));
+                let wrapper = InputWrapperProps::default()
+                    .description_props(styled_text(description_calls.clone(), 137, 29))
+                    .message_props(styled_text(message_calls.clone(), 151, 31));
+                let row = row(kind, &content)
+                    .description("Help")
+                    .validity(Validity::Error("Invalid".into()))
+                    .interaction(Interaction {
+                        touched: revealed,
+                        submitted: false,
+                    })
+                    .wrapper_props(wrapper)
+                    .required(true);
+                let row = EntryRowProps::default()
+                    .wrapper_props(
+                        InputWrapperProps::default()
+                            .description_props(TextProps::default().height(37))
+                            .message_props(TextProps::default().height(41)),
+                    )
+                    .apply(row);
+                assert_eq!(row.validity, Validity::Error("Invalid".into()));
+                assert_eq!(row.interaction.revealed(), revealed);
+                assert!(row.required);
+                let (mut element, mut tree, node) = layout(row, &renderer);
+                let values = texts(&mut element, &mut tree, &node, &renderer);
+                let expected = if revealed { "Invalid" } else { "Help" };
+                let size = if revealed {
+                    Size::new(151.0, 41.0)
+                } else {
+                    Size::new(137.0, 37.0)
+                };
+                assert_eq!(
+                    values
+                        .0
+                        .iter()
+                        .find(|(text, _)| text == expected)
+                        .unwrap()
+                        .1
+                        .size(),
+                    size,
+                    "branch {kind}"
+                );
+                assert!(
+                    !values
+                        .0
+                        .iter()
+                        .any(|(text, _)| text == if revealed { "Help" } else { "Invalid" })
+                );
+                assert!(values.0.iter().any(|(text, _)| text == "Label *"));
+                draw(&element, &tree, &node, &mut renderer);
+                assert_eq!(description_calls.load(Ordering::SeqCst) > 0, !revealed);
+                assert_eq!(message_calls.load(Ordering::SeqCst) > 0, revealed);
+            }
+        }
+    }
+
+    #[test]
+    fn multiline_props_change_native_layout_and_style_and_preserve_content_actions() {
+        let mut renderer = renderer();
+        let content = iced::widget::text_editor::Content::with_text("One\nTwo\nThree");
+        let (_, _, base) = layout(EntryRow::multiline("Label", &content, |_| 7), &renderer);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let style_calls = calls.clone();
+        let row = EntryRow::multiline("Label", &content, |_| 7).text_view_props(
+            TextViewProps::default().editor_props(
+                TextEditorProps::default()
+                    .size(28)
+                    .font(iced::Font::MONOSPACE)
+                    .style(move |theme, status| {
+                        style_calls.fetch_add(1, Ordering::SeqCst);
+                        crate::styles::text_editor::default(theme, status)
+                    }),
+            ),
+        );
+        let row = EntryRowProps::default()
+            .text_view_props(
+                TextViewProps::default().editor_props(TextEditorProps::default().padding(11)),
+            )
+            .apply(row);
+        assert_eq!(
+            row.text_view_props.editor_props.size,
+            Some(iced::Pixels(28.0))
+        );
+        assert_eq!(
+            row.text_view_props.editor_props.font,
+            Some(iced::Font::MONOSPACE)
+        );
+        let (mut element, mut tree, node) = layout(row, &renderer);
+        assert!(node.size().height > base.size().height);
+        draw(&element, &tree, &node, &mut renderer);
+        assert!(calls.load(Ordering::SeqCst) > 0);
+        fn editor(layout: layout::Layout<'_>) -> Option<Rectangle> {
+            if layout.children().next().is_none() && layout.bounds().height > 80.0 {
+                Some(layout.bounds())
+            } else {
+                layout.children().find_map(editor)
+            }
+        }
+        let target = editor(layout::Layout::new(&node)).expect("native multiline editor");
+        let mut messages = vec![];
+        element.as_widget_mut().update(
+            &mut tree,
+            &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            layout::Layout::new(&node),
+            mouse::Cursor::Available(target.center()),
+            &renderer,
+            &mut clipboard::Null,
+            &mut Shell::new(&mut messages),
+            &Rectangle::with_size(Size::new(420.0, 800.0)),
+        );
+        assert!(messages.contains(&7));
+        assert_eq!(content.text(), "One\nTwo\nThree");
+    }
+
+    #[test]
+    fn unrelated_branch_actions_survive_wrapper_and_multiline_presentation() {
+        let renderer = renderer();
+        let content = iced::widget::text_editor::Content::new();
+        let row = EntryRowProps::default()
+            .wrapper_props(
+                InputWrapperProps::default()
+                    .description_props(TextProps::default().overflow(TextOverflow::Wrap)),
+            )
+            .text_view_props(
+                TextViewProps::default().editor_props(TextEditorProps::default().size(28)),
+            )
+            .apply(row(7, &content).description("Help"));
+        let (mut element, mut tree, node) = layout(row, &renderer);
+        fn action(layout: layout::Layout<'_>) -> Option<Rectangle> {
+            if layout.bounds().size() == Size::new(137.0, 43.0) {
+                Some(layout.bounds())
+            } else {
+                layout.children().find_map(action)
+            }
+        }
+        let target = action(layout::Layout::new(&node)).unwrap();
+        let mut messages = vec![];
+        for event in [
+            mouse::Event::ButtonPressed(mouse::Button::Left),
+            mouse::Event::ButtonReleased(mouse::Button::Left),
+        ] {
+            element.as_widget_mut().update(
+                &mut tree,
+                &Event::Mouse(event),
+                layout::Layout::new(&node),
+                mouse::Cursor::Available(target.center()),
+                &renderer,
+                &mut clipboard::Null,
+                &mut Shell::new(&mut messages),
+                &Rectangle::with_size(Size::new(420.0, 800.0)),
+            );
+        }
+        assert_eq!(messages, vec![9]);
+    }
+}
+
+/// Presentation overrides for an existing EntryRow, leaving validation and input content intact.
+#[derive(Clone, Default)]
+pub struct EntryRowProps {
+    pub dropdown_props: Option<super::popover::PopoverProps>,
+    pub button_props: Option<crate::components::ButtonProps>,
+    pub label_props: Option<crate::components::TextProps>,
+    pub entry_props: Option<crate::components::EntryProps>,
+    pub value_props: Option<TextProps>,
+    pub wrapper_props: Option<InputWrapperProps>,
+    pub text_view_props: Option<TextViewProps>,
+    pub spacing: Option<f32>,
+    pub padding: Option<iced::Padding>,
+    pub value_spacing: Option<f32>,
+}
+impl EntryRowProps {
+    pub fn dropdown_props(mut self, props: super::popover::PopoverProps) -> Self {
+        self.dropdown_props = Some(props);
+        self
+    }
+    pub fn button_props(mut self, props: crate::components::ButtonProps) -> Self {
+        self.button_props = Some(props);
+        self
+    }
+    pub fn label_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = Some(props);
+        self
+    }
+    pub fn entry_props(mut self, props: crate::components::EntryProps) -> Self {
+        self.entry_props = Some(props);
+        self
+    }
+    /// Override only supplied selection-value presentation fields.
+    pub fn value_props(mut self, props: TextProps) -> Self {
+        self.value_props = Some(props);
+        self
+    }
+    /// Override only supplied description/validation-message presentation fields.
+    pub fn wrapper_props(mut self, props: InputWrapperProps) -> Self {
+        self.wrapper_props = Some(props);
+        self
+    }
+    /// Override only supplied native multiline-editor presentation fields.
+    pub fn text_view_props(mut self, props: TextViewProps) -> Self {
+        self.text_view_props = Some(props);
+        self
+    }
+    pub fn spacing(mut self, value: f32) -> Self {
+        self.spacing = Some(value);
+        self
+    }
+    pub fn padding(mut self, value: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(value.into());
+        self
+    }
+    pub fn value_spacing(mut self, value: f32) -> Self {
+        self.value_spacing = Some(value);
+        self
+    }
+    pub fn apply<'a, M: 'a>(&self, mut row: EntryRow<'a, M>) -> EntryRow<'a, M> {
+        if let Some(props) = &self.label_props {
+            row.label_props.merge(props);
+        }
+        crate::components::props::merge_optional!(row, self; entry_props);
+        if let Some(props) = &self.value_props {
+            row.value_props.merge(props);
+        }
+        if let Some(props) = &self.wrapper_props {
+            row.wrapper_props.label_props.merge(&props.label_props);
+            row.wrapper_props
+                .description_props
+                .merge(&props.description_props);
+            row.wrapper_props.message_props.merge(&props.message_props);
+        }
+        if let Some(props) = &self.text_view_props {
+            row.text_view_props.editor_props.merge(&props.editor_props);
+        }
+        if let Some(v) = self.spacing {
+            row = row.spacing(v);
+        }
+        if let Some(v) = self.padding {
+            row = row.padding(v);
+        }
+        if let Some(v) = self.value_spacing {
+            row = row.value_spacing(v);
+        }
+        if let Some(props) = &self.dropdown_props {
+            row.dropdown_props.merge(props);
+        }
+        if let Some(props) = &self.button_props {
+            row.button_props.merge(props);
+        }
+        row
     }
 }

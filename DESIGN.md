@@ -130,6 +130,8 @@ Not implemented: TabOverview, dynamic breakpoint setters, a full symbolic icon t
 
 ## Known limitations
 
+[ICED_LIMITATIONS.md](ICED_LIMITATIONS.md) is the maintained contributor register: evidence, integration traps, workarounds and checks to repeat on every iced-family update. The summary below includes local implementation gaps as well as recorded iced constraints; it is not a fresh verification of upstream behavior.
+
 - iced cannot ellipsize text. Overflow is clipped at its container.
 - No exit animations for dialogs and toasts (the app unmounts them).
 - The carousel takes mouse drag only. A `Dock` has no drag gesture.

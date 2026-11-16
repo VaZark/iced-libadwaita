@@ -1,10 +1,11 @@
-//! The libadwaita named-color palette.
+//! The named-color palette.
 //!
 //! Field names match the `@define-color` names used by libadwaita's
 //! stylesheet (e.g. `accent_bg_color`, `headerbar_fg_color`), so porting
-//! custom CSS is mostly a rename. Values approximate libadwaita 1.6.
+//! custom CSS is mostly a rename. The built-in values are the bare baseline (black on white);
+//! the libadwaita values are in `themes/libadwaita.conf`.
 
-use crate::color::{black, hex, ink, white};
+use crate::color::{black, hex, white};
 use iced::Color;
 
 /// Light or dark appearance (libadwaita's `AdwColorScheme` after resolution).
@@ -151,6 +152,12 @@ pub struct Palette {
     pub accent_fg_color: Color,
     pub accent_color: Color,
 
+    /// The color of primary actions (Bootstrap's `$primary`, Mantine's `primaryColor`): suggested
+    /// buttons and the like. Independent of the accent, which the user's desktop may change.
+    pub primary_bg_color: Color,
+    pub primary_fg_color: Color,
+    pub primary_color: Color,
+
     pub destructive_bg_color: Color,
     pub destructive_fg_color: Color,
     pub destructive_color: Color,
@@ -217,32 +224,38 @@ impl Palette {
         }
     }
 
-    /// The default light palette (blue accent), libadwaita 1.11 values.
+    /// The bare light palette: black on white, grey rules, plain blue accent. Like a browser's
+    /// default stylesheet it has no opinion; a theme file gives the look.
     pub fn light() -> Self {
-        let fg = ink(0.8);
-        let accent = AccentColor::Blue;
+        let fg = Color::BLACK;
+        let rule = black(0.54);
+        let accent = AccentColor::Custom(0x0066cc);
         Self {
             accent_bg_color: accent.to_color(),
             accent_fg_color: Color::WHITE,
-            accent_color: accent.to_standalone_color(Scheme::Light),
+            accent_color: accent.to_color(),
 
-            destructive_bg_color: hex(0xe01b24),
+            primary_bg_color: Color::BLACK,
+            primary_fg_color: Color::WHITE,
+            primary_color: Color::BLACK,
+
+            destructive_bg_color: hex(0xc00000),
             destructive_fg_color: Color::WHITE,
-            destructive_color: hex(0xc30000),
+            destructive_color: hex(0xc00000),
 
-            success_bg_color: hex(0x2ec27e),
+            success_bg_color: hex(0x007000),
             success_fg_color: Color::WHITE,
-            success_color: hex(0x007c3d),
+            success_color: hex(0x007000),
 
-            warning_bg_color: hex(0xe5a50a),
-            warning_fg_color: black(0.8),
-            warning_color: hex(0x905400),
+            warning_bg_color: hex(0xffcc00),
+            warning_fg_color: fg,
+            warning_color: hex(0x805800),
 
-            error_bg_color: hex(0xe01b24),
+            error_bg_color: hex(0xc00000),
             error_fg_color: Color::WHITE,
-            error_color: hex(0xc30000),
+            error_color: hex(0xc00000),
 
-            window_bg_color: hex(0xfafafb),
+            window_bg_color: Color::WHITE,
             window_fg_color: fg,
 
             view_bg_color: Color::WHITE,
@@ -250,106 +263,111 @@ impl Palette {
 
             headerbar_bg_color: Color::WHITE,
             headerbar_fg_color: fg,
-            headerbar_border_color: fg,
-            headerbar_shade_color: ink(0.12),
-            headerbar_darker_shade_color: ink(0.12),
+            headerbar_border_color: rule,
+            headerbar_shade_color: rule,
+            headerbar_darker_shade_color: rule,
 
             card_bg_color: Color::WHITE,
             card_fg_color: fg,
-            card_shade_color: ink(0.07),
+            card_shade_color: rule,
 
-            dialog_bg_color: hex(0xfafafb),
+            dialog_bg_color: Color::WHITE,
             dialog_fg_color: fg,
 
             popover_bg_color: Color::WHITE,
             popover_fg_color: fg,
-            popover_shade_color: ink(0.07),
+            popover_shade_color: rule,
 
-            sidebar_bg_color: hex(0xebebed),
+            sidebar_bg_color: Color::WHITE,
             sidebar_fg_color: fg,
-            sidebar_border_color: ink(0.07),
-            secondary_sidebar_bg_color: hex(0xf3f3f5),
+            sidebar_border_color: rule,
+            secondary_sidebar_bg_color: Color::WHITE,
             secondary_sidebar_fg_color: fg,
 
             thumbnail_bg_color: Color::WHITE,
             thumbnail_fg_color: fg,
 
-            overview_bg_color: hex(0xf3f3f5),
+            overview_bg_color: Color::WHITE,
             overview_fg_color: fg,
 
-            active_toggle_bg_color: Color::WHITE,
+            active_toggle_bg_color: black(0.1),
             active_toggle_fg_color: fg,
 
-            shade_color: ink(0.07),
+            shade_color: rule,
             scrollbar_outline_color: Color::WHITE,
         }
     }
 
-    /// The default dark palette (blue accent), libadwaita 1.11 values.
+    /// The bare dark palette: white on black, the light one inverted.
     pub fn dark() -> Self {
         let fg = Color::WHITE;
-        let accent = AccentColor::Blue;
+        let rule = white(0.54);
+        let accent = AccentColor::Custom(0x6cb6ff);
         Self {
             accent_bg_color: accent.to_color(),
-            accent_fg_color: Color::WHITE,
-            accent_color: accent.to_standalone_color(Scheme::Dark),
+            accent_fg_color: Color::BLACK,
+            accent_color: accent.to_color(),
 
-            destructive_bg_color: hex(0xc01c28),
-            destructive_fg_color: Color::WHITE,
-            destructive_color: hex(0xff938c),
+            primary_bg_color: Color::WHITE,
+            primary_fg_color: Color::BLACK,
+            primary_color: Color::WHITE,
 
-            success_bg_color: hex(0x26a269),
-            success_fg_color: Color::WHITE,
-            success_color: hex(0x78e9ab),
+            destructive_bg_color: hex(0xff6b6b),
+            destructive_fg_color: Color::BLACK,
+            destructive_color: hex(0xff6b6b),
 
-            warning_bg_color: hex(0xcd9309),
-            warning_fg_color: black(0.8),
-            warning_color: hex(0xffc252),
+            success_bg_color: hex(0x5fd35f),
+            success_fg_color: Color::BLACK,
+            success_color: hex(0x5fd35f),
 
-            error_bg_color: hex(0xc01c28),
-            error_fg_color: Color::WHITE,
-            error_color: hex(0xff938c),
+            warning_bg_color: hex(0xffcc00),
+            warning_fg_color: Color::BLACK,
+            warning_color: hex(0xffcc00),
 
-            window_bg_color: hex(0x222226),
+            error_bg_color: hex(0xff6b6b),
+            error_fg_color: Color::BLACK,
+            error_color: hex(0xff6b6b),
+
+            window_bg_color: Color::BLACK,
             window_fg_color: fg,
 
-            view_bg_color: hex(0x1d1d20),
+            view_bg_color: Color::BLACK,
             view_fg_color: fg,
 
-            headerbar_bg_color: hex(0x2e2e32),
+            headerbar_bg_color: Color::BLACK,
             headerbar_fg_color: fg,
-            headerbar_border_color: fg,
-            headerbar_shade_color: ink(0.36),
-            headerbar_darker_shade_color: ink(0.90),
+            headerbar_border_color: rule,
+            headerbar_shade_color: rule,
+            headerbar_darker_shade_color: rule,
 
-            card_bg_color: white(0.08),
+            card_bg_color: Color::BLACK,
             card_fg_color: fg,
-            card_shade_color: ink(0.36),
+            card_shade_color: rule,
 
-            dialog_bg_color: hex(0x36363a),
+            dialog_bg_color: Color::BLACK,
             dialog_fg_color: fg,
 
-            popover_bg_color: hex(0x36363a),
+            popover_bg_color: Color::BLACK,
             popover_fg_color: fg,
-            popover_shade_color: ink(0.25),
+            popover_shade_color: rule,
 
-            sidebar_bg_color: hex(0x2e2e32),
+            sidebar_bg_color: Color::BLACK,
             sidebar_fg_color: fg,
-            sidebar_border_color: ink(0.36),
-            secondary_sidebar_bg_color: hex(0x28282c),
+            sidebar_border_color: rule,
+            secondary_sidebar_bg_color: Color::BLACK,
             secondary_sidebar_fg_color: fg,
 
-            thumbnail_bg_color: hex(0x39393d),
+            thumbnail_bg_color: Color::BLACK,
             thumbnail_fg_color: fg,
 
-            overview_bg_color: hex(0x28282c),
+            overview_bg_color: Color::BLACK,
             overview_fg_color: fg,
 
             active_toggle_bg_color: white(0.2),
             active_toggle_fg_color: fg,
 
-            shade_color: ink(0.25),
-            scrollbar_outline_color: ink(0.5),
+            shade_color: rule,
+            scrollbar_outline_color: Color::BLACK,
         }
     }
 
@@ -387,16 +405,14 @@ mod tests {
     use crate::color::hex;
 
     #[test]
-    fn matches_documented_libadwaita_values() {
+    fn the_built_in_palette_is_black_on_white_and_its_inverse() {
         let l = Palette::light();
-        assert_eq!(l.window_bg_color, hex(0xfafafb));
-        assert_eq!(l.sidebar_bg_color, hex(0xebebed));
-        assert_eq!(l.headerbar_bg_color, Color::WHITE);
+        assert_eq!(l.window_bg_color, Color::WHITE);
+        assert_eq!(l.window_fg_color, Color::BLACK);
         let d = Palette::dark();
-        assert_eq!(d.window_bg_color, hex(0x222226));
-        assert_eq!(d.dialog_bg_color, hex(0x36363a));
-        assert_eq!(d.headerbar_bg_color, hex(0x2e2e32));
-        assert_eq!(d.card_bg_color.a, 0.08);
+        assert_eq!(d.window_bg_color, Color::BLACK);
+        assert_eq!(d.window_fg_color, Color::WHITE);
+        // The named accents are still available for a theme to pick.
         assert_eq!(
             AccentColor::Blue.to_standalone_color(Scheme::Light),
             hex(0x0461be)

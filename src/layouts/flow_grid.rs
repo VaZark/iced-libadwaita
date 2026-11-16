@@ -54,7 +54,7 @@ impl<'a, M: 'a> FlowGrid<'a, M> {
         Self {
             items: items.into_iter().collect(),
             columns: Columns::Fluid(200.0),
-            spacing: 12.0,
+            spacing: crate::Metrics::desktop().space_m,
             row_height: RowHeight::Shared,
         }
     }

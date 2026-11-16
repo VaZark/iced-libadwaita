@@ -53,6 +53,8 @@ pub enum Role {
     #[default]
     Neutral,
     Accent,
+    /// The theme's primary action color: independent of the accent.
+    Primary,
     Destructive,
     Success,
     Warning,
@@ -118,6 +120,7 @@ pub struct Semantic {
     pub active_toggle: Surface,
 
     pub accent: Swatch,
+    pub primary: Swatch,
     pub destructive: Swatch,
     pub success: Swatch,
     pub warning: Swatch,
@@ -169,6 +172,7 @@ impl Semantic {
             active_toggle: s(p.active_toggle_bg_color, p.active_toggle_fg_color),
 
             accent: w(p.accent_bg_color, p.accent_fg_color, p.accent_color),
+            primary: w(p.primary_bg_color, p.primary_fg_color, p.primary_color),
             destructive: w(
                 p.destructive_bg_color,
                 p.destructive_fg_color,
@@ -186,7 +190,7 @@ impl Semantic {
             sidebar_border: p.sidebar_border_color,
             popover_shade: p.popover_shade_color,
             shade: p.shade_color,
-            focus_ring: alpha(p.accent_bg_color, 0.5),
+            focus_ring: p.accent_bg_color,
             selection: alpha(p.accent_bg_color, 0.3),
             osd: Surface {
                 bg: Color::from_rgba(0.0, 0.0, 0.0, 0.65),
@@ -231,6 +235,7 @@ impl Semantic {
         }
         for sw in [
             &mut self.accent,
+            &mut self.primary,
             &mut self.destructive,
             &mut self.success,
             &mut self.warning,
@@ -308,6 +313,7 @@ impl Semantic {
                 color: self.window.fg,
             },
             Role::Accent => self.accent,
+            Role::Primary => self.primary,
             Role::Destructive => self.destructive,
             Role::Success => self.success,
             Role::Warning => self.warning,

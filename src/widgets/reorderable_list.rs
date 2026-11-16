@@ -75,6 +75,7 @@ type Build<'a, T, M> = Box<dyn Fn(&T) -> Element<'a, M> + 'a>;
 
 /// See the [module](self).
 pub struct ReorderableList<'a, T, M> {
+    props: ReorderableListWidgetProps,
     items: &'a [T],
     row: Build<'a, T, M>,
     edit_row: Option<Build<'a, T, M>>,
@@ -89,14 +90,22 @@ pub struct ReorderableList<'a, T, M> {
     edit_label: String,
     submit_label: String,
     cancel_label: String,
+    spacing: Option<f32>,
+    bar_spacing: Option<f32>,
     metrics: Metrics,
 }
 
 impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
     /// `items` in their current order and the closure that builds one row (an
     /// [`ActionRow`](crate::widgets::ActionRow), for instance, without suffix: the grip is added).
+    /// Presentation overrides for native children; actions remain parent-owned.
+    pub fn props(mut self, props: ReorderableListWidgetProps) -> Self {
+        self.props = props;
+        self
+    }
     pub fn new(items: &'a [T], row: impl Fn(&T) -> Element<'a, M> + 'a) -> Self {
         Self {
+            props: ReorderableListWidgetProps::default(),
             items,
             row: Box::new(row),
             title: None,
@@ -111,6 +120,8 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
             edit_label: "Edit".into(),
             submit_label: "Done".into(),
             cancel_label: "Cancel".into(),
+            spacing: None,
+            bar_spacing: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -191,6 +202,16 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
         self.cancel_label = cancel.into();
         self
     }
+    /// The gap between the title bar and the rows (default `space_m`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The gap between the title bar's parts: title and buttons (default `space_s`).
+    pub fn bar_spacing(mut self, px: f32) -> Self {
+        self.bar_spacing = Some(px);
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -225,29 +246,50 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
 
     fn bar(&self, mode: Mode) -> Element<'a, M> {
         let m = &self.metrics;
-        let mut bar = row![].spacing(m.space_s).align_y(Vertical::Center);
+        let mut bar = row![]
+            .spacing(self.bar_spacing.unwrap_or(m.space_s))
+            .align_y(Vertical::Center);
         if let Some(t) = &self.title {
-            bar = bar.push(crate::components::typography::heading(t.clone()));
+            bar = bar.push(
+                self.props
+                    .title
+                    .apply(crate::components::typography::heading(t.clone())),
+            );
         }
         bar = bar.push(space().width(Length::Fill));
         match mode {
             Mode::Preview => {
-                let edit = flat_button(label(self.edit_label.clone())).on_press_maybe(
-                    (!self.disabled)
-                        .then(|| self.send(ReorderEvent::Edit))
-                        .flatten(),
+                let edit = self.props.edit_button.apply(
+                    flat_button(self.props.edit_label.apply(label(self.edit_label.clone())))
+                        .on_press_maybe(
+                            (!self.disabled)
+                                .then(|| self.send(ReorderEvent::Edit))
+                                .flatten(),
+                        ),
                 );
                 bar = bar.push(edit);
             }
             Mode::Edit => {
                 bar = bar
                     .push(
-                        raised_button(label(self.cancel_label.clone()))
+                        self.props.cancel_button.apply(
+                            raised_button(
+                                self.props
+                                    .cancel_label
+                                    .apply(label(self.cancel_label.clone())),
+                            )
                             .on_press_maybe(self.send(ReorderEvent::Cancel)),
+                        ),
                     )
                     .push(
-                        suggested_button(label(self.submit_label.clone()))
+                        self.props.submit_button.apply(
+                            suggested_button(
+                                self.props
+                                    .submit_label
+                                    .apply(label(self.submit_label.clone())),
+                            )
                             .on_press_maybe(self.send(ReorderEvent::Submit)),
+                        ),
                     );
             }
         }
@@ -255,18 +297,31 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
     }
 
     fn preview(&self) -> Element<'a, M> {
-        crate::widgets::boxed_list(self.items.iter().map(|i| (self.row)(i)))
+        let mut rows = self.items.iter().map(|i| (self.row)(i));
+        let Some(first) = rows.next() else {
+            return space().into();
+        };
+        let card = rows.fold(crate::widgets::Card::new(first).padding(0), |card, row| {
+            card.push(row)
+        });
+        self.props.preview_card.apply(card).into()
     }
 
     fn edit(&mut self) -> Element<'a, M> {
         let rows = self.items.iter().map(|item| {
-            let grip = container(Icon::DragHandle.view(self.metrics.icon_size))
-                .width(Length::Fixed(HANDLE_WIDTH))
-                .align_x(iced::alignment::Horizontal::Center);
-            let mut line = row![
-                container((self.edit_row.as_ref().unwrap_or(&self.row))(item)).width(Length::Fill)
-            ]
-            .align_y(Vertical::Center);
+            let grip = self.props.grip.apply(
+                container(Icon::DragHandle.view(self.metrics.icon_size))
+                    .width(Length::Fixed(HANDLE_WIDTH))
+                    .align_x(iced::alignment::Horizontal::Center),
+            );
+            let mut line =
+                row![
+                    self.props.row.apply(
+                        container((self.edit_row.as_ref().unwrap_or(&self.row))(item))
+                            .width(Length::Fill)
+                    )
+                ]
+                .align_y(Vertical::Center);
             if let Some(action) = &self.row_action {
                 line = line.push(action(item));
             }
@@ -284,10 +339,12 @@ impl<'a, T, M: Clone + 'a> ReorderableList<'a, T, M> {
         list.lift = self.lift;
         let list: Element<'a, M> = Element::new(list);
         card_shadow(
-            container(list)
-                .width(Length::Fill)
-                .clip(true)
-                .style(sc::card_surface),
+            self.props.surface.apply(
+                container(list)
+                    .width(Length::Fill)
+                    .clip(true)
+                    .style(sc::card_surface),
+            ),
         )
         .into()
     }
@@ -303,7 +360,9 @@ impl<'a, T, M: Clone + 'a> From<ReorderableList<'a, T, M>> for Element<'a, M> {
         } else {
             l.preview()
         };
-        let mut col = column![].spacing(l.metrics.space_m).width(Length::Fill);
+        let mut col = column![]
+            .spacing(l.spacing.unwrap_or(l.metrics.space_m))
+            .width(Length::Fill);
         if l.controls || l.title.is_some() {
             col = col.push(l.bar(mode));
         }
@@ -961,3 +1020,111 @@ mod tests {
         assert_eq!(L::pick(true), Mode::Edit);
     }
 }
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_gaps_are_parameters() {
+        let items = [1u8];
+        let l = ReorderableList::<u8, ()>::new(&items, |_| iced::widget::text("x").into())
+            .spacing(2.0)
+            .bar_spacing(3.0);
+        assert_eq!((l.spacing, l.bar_spacing), (Some(2.0), Some(3.0)));
+        let _: Element<'_, ()> = l.into();
+    }
+}
+
+/// Typed presentation for parent-built native children. Defaults preserve the original view.
+#[derive(Clone, Default)]
+pub struct ReorderableListWidgetProps {
+    pub preview_card: super::status_page::CardProps,
+    pub title: crate::components::TextProps,
+    pub edit_button: crate::components::ButtonProps,
+    pub edit_label: crate::components::TextProps,
+    pub cancel_button: crate::components::ButtonProps,
+    pub cancel_label: crate::components::TextProps,
+    pub submit_button: crate::components::ButtonProps,
+    pub submit_label: crate::components::TextProps,
+    pub grip: crate::components::ContainerProps,
+    pub row: crate::components::ContainerProps,
+    pub surface: crate::components::ContainerProps,
+}
+
+impl ReorderableListWidgetProps {
+    pub fn title(mut self, props: crate::components::TextProps) -> Self {
+        self.title = props;
+        self
+    }
+    pub fn edit_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.edit_button = props;
+        self
+    }
+    pub fn edit_label(mut self, props: crate::components::TextProps) -> Self {
+        self.edit_label = props;
+        self
+    }
+    pub fn cancel_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.cancel_button = props;
+        self
+    }
+    pub fn cancel_label(mut self, props: crate::components::TextProps) -> Self {
+        self.cancel_label = props;
+        self
+    }
+    pub fn submit_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.submit_button = props;
+        self
+    }
+    pub fn submit_label(mut self, props: crate::components::TextProps) -> Self {
+        self.submit_label = props;
+        self
+    }
+    pub fn grip(mut self, props: crate::components::ContainerProps) -> Self {
+        self.grip = props;
+        self
+    }
+    pub fn row(mut self, props: crate::components::ContainerProps) -> Self {
+        self.row = props;
+        self
+    }
+    pub fn surface(mut self, props: crate::components::ContainerProps) -> Self {
+        self.surface = props;
+        self
+    }
+    pub fn apply<'a, T, M>(&self, widget: ReorderableList<'a, T, M>) -> ReorderableList<'a, T, M>
+    where
+        M: Clone + 'a,
+    {
+        let mut widget = widget;
+        widget.props.merge(self);
+        widget
+    }
+}
+
+#[cfg(test)]
+mod native_props_tests {
+    use super::*;
+    use crate::widgets::synced_text::native_props_tests::{assert_override, text_props};
+    #[test]
+    fn defaults_preserve_layout_and_overrides_reach_native_children() {
+        let items = [1];
+        for editing in [false, true] {
+            let make = || {
+                ReorderableList::<_, ()>::new(&items, |_| iced::widget::space().height(40).into())
+                    .title("Items")
+                    .editing(editing)
+            };
+            assert_override(
+                make().into(),
+                make().props(ReorderableListWidgetProps::default()).into(),
+                make()
+                    .props(ReorderableListWidgetProps::default().title(text_props()))
+                    .into(),
+            );
+        }
+    }
+}
+
+crate::components::props::impl_merge!(ReorderableListWidgetProps; fields: []; optional: []; nested: [preview_card, title, edit_button, edit_label, cancel_button, cancel_label, submit_button, submit_label, grip, row, surface]);

@@ -17,12 +17,14 @@
 //!   [`MenuPresentation::for_width`] (mobile mode, below 576px → full page).
 
 use crate::Element;
+use crate::components::{ButtonProps, ContainerProps, TextProps};
 use crate::layouts::scrolled_window;
 use crate::styles::{button as sb, container as sc, text as st};
 use crate::widgets::menu_pages::{MenuPages, NavRow, Request, plan};
 use crate::widgets::popover::{
     Align, Appearance, PAGE_BACK_WIDTH, PAGE_HEADER_HEIGHT, Popover, PopoverBounds, Presentation,
 };
+use crate::widgets::popover::{PopoverProps, PopoverSurfaceProps, popover_spaced_with_props};
 use crate::widgets::{boxed_list, clamp};
 use crate::{Icon, IconSource, Metrics, Theme, Typography};
 use iced::Length;
@@ -87,6 +89,7 @@ pub enum MenuCheckStyle {
     Mark,
 }
 
+#[derive(Clone)]
 enum Kind<M> {
     Action {
         on_press: M,
@@ -112,7 +115,13 @@ enum Kind<M> {
 }
 
 /// One menu entry: an action, a check item or a submenu.
+#[derive(Clone)]
 pub struct MenuItem<M> {
+    label_props: TextProps,
+    accelerator_props: TextProps,
+    state_props: TextProps,
+    container_props: ContainerProps,
+    button_props: ButtonProps,
     label: String,
     accel: Option<String>,
     icon: Option<IconSource>,
@@ -127,8 +136,35 @@ pub struct MenuItem<M> {
 }
 
 impl<M> MenuItem<M> {
+    pub fn label_props(mut self, props: TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    pub fn accelerator_props(mut self, props: TextProps) -> Self {
+        self.accelerator_props = props;
+        self
+    }
+    pub fn state_props(mut self, props: TextProps) -> Self {
+        self.state_props = props;
+        self
+    }
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+    /// Button presentation for action/check/switch rows. Submenu navigation uses its style.
+    pub fn button_props(mut self, props: ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+
     fn of(label: impl Into<String>, kind: Kind<M>) -> Self {
         Self {
+            label_props: Default::default(),
+            accelerator_props: Default::default(),
+            state_props: Default::default(),
+            container_props: Default::default(),
+            button_props: Default::default(),
             label: label.into(),
             accel: None,
             icon: None,
@@ -225,20 +261,57 @@ impl<M> MenuItem<M> {
 
 /// A menu: a title (shown in the full-page header) and sections of items.
 /// Sections are separated by hairlines; don't mix action and check items in one.
+#[derive(Clone)]
 pub struct Menu<M> {
+    title_props: TextProps,
+    subtitle_props: TextProps,
+    container_props: ContainerProps,
+    dropdown_props: PopoverSurfaceProps,
     title: String,
     sections: Vec<Vec<MenuItem<M>>>,
     icon_side: MenuIconSide,
     check_style: MenuCheckStyle,
+    item_spacing: Option<f32>,
+    item_padding_x: Option<f32>,
+    separator_spacing: Option<f32>,
+    list_spacing: Option<f32>,
+    padding: Option<iced::Padding>,
 }
 
 impl<M> Menu<M> {
+    pub fn title_props(mut self, props: TextProps) -> Self {
+        self.title_props = props;
+        self
+    }
+    pub fn subtitle_props(mut self, props: TextProps) -> Self {
+        self.subtitle_props = props;
+        self
+    }
+    /// Existing root containers of the sheet and full-page presentations.
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
+    pub fn dropdown_props(mut self, props: PopoverSurfaceProps) -> Self {
+        self.dropdown_props = props;
+        self
+    }
+
     pub fn new(title: impl Into<String>) -> Self {
         Self {
+            title_props: Default::default(),
+            subtitle_props: Default::default(),
+            container_props: Default::default(),
+            dropdown_props: Default::default(),
             title: title.into(),
             sections: Vec::new(),
             icon_side: MenuIconSide::End,
             check_style: MenuCheckStyle::Text,
+            item_spacing: None,
+            item_padding_x: None,
+            separator_spacing: None,
+            list_spacing: None,
+            padding: None,
         }
     }
     /// The edge that holds the items' icons (and check marks, with [`MenuCheckStyle::Mark`]): [`MenuIconSide::End`] by default,
@@ -254,6 +327,35 @@ impl<M> Menu<M> {
         self.check_style = style;
         self
     }
+    /// The gap between the parts of a row: lead, label, accelerator, mark (default: the theme's
+    /// `space_m`).
+    pub fn item_spacing(mut self, px: f32) -> Self {
+        self.item_spacing = Some(px.max(0.0));
+        self
+    }
+    /// The horizontal padding of a dropdown row (default: the theme's `space_m`).
+    pub fn item_padding_x(mut self, px: f32) -> Self {
+        self.item_padding_x = Some(px.max(0.0));
+        self
+    }
+    /// The air above and below the hairline between sections of a dropdown (default: the
+    /// theme's `space_xs`).
+    pub fn separator_spacing(mut self, px: f32) -> Self {
+        self.separator_spacing = Some(px.max(0.0));
+        self
+    }
+    /// The gap between the lists of the full-page menu and the bottom sheet (default: the
+    /// theme's `space_l`).
+    pub fn list_spacing(mut self, px: f32) -> Self {
+        self.list_spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding around the full-page menu and the sheet's content (default: the theme's
+    /// `page_padding`).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
     /// Adds a group of items.
     pub fn section(mut self, items: impl IntoIterator<Item = MenuItem<M>>) -> Self {
         self.sections.push(items.into_iter().collect());
@@ -267,17 +369,21 @@ impl<M> Menu<M> {
         M: Clone + 'a,
     {
         let m = Metrics::desktop();
-        let t = Typography::default();
-        let mut head = column![t.heading(self.title.clone())];
+        let t = Typography::desktop();
+        let mut head = column![self.title_props.apply(t.heading(self.title.clone()))];
         if let Some(s) = subtitle {
-            head = head.push(t.caption(s).style(st::dim));
+            head = head.push(self.subtitle_props.apply(t.caption(s).style(st::dim)));
         }
-        container(column![
-            container(head).padding(m.page_padding),
-            container(touch_lists(self)).padding(m.page_padding),
-        ])
-        .width(Length::Fill)
-        .into()
+        let pad = self.padding.unwrap_or(m.page_padding);
+        self.container_props
+            .apply(
+                container(column![
+                    container(head).padding(pad),
+                    container(touch_lists(self)).padding(pad),
+                ])
+                .width(Length::Fill),
+            )
+            .into()
     }
     /// The accelerator and message of every enabled item that has an accelerator, so a
     /// [`Shortcuts`](crate::shortcut::Shortcuts) can make the shown shortcuts work.
@@ -313,7 +419,7 @@ impl<M> Menu<M> {
             })
             .collect()
     }
-    fn has_submenu(&self) -> bool {
+    pub(crate) fn has_submenu(&self) -> bool {
         !self.subs().is_empty()
     }
     /// Total number of items (the HIG recommends 3–12).
@@ -326,11 +432,34 @@ impl<M> Menu<M> {
 }
 
 /// How wide a menu's popover is.
-const POPOVER_WIDTH: f32 = 260.0;
+pub(crate) fn popover_width() -> f32 {
+    crate::theme_config::current()
+        .number("menu", "popover-width")
+        .unwrap_or(260.0)
+}
+
+pub(crate) fn popover_max_height() -> f32 {
+    crate::theme_config::current()
+        .number("menu", "popover-max-height")
+        .unwrap_or(360.0)
+}
+
+/// Native menu trigger presentation, without event or open-state policy.
+#[derive(Clone, Default)]
+pub struct MenuProps {
+    pub popover: PopoverProps,
+    pub trigger: ContainerProps,
+    /// Presentation of a text trigger; never its label value or input policy.
+    pub label: TextProps,
+}
 
 /// `GtkMenuButton`: an icon button that opens a [`Menu`].
 pub struct MenuButton<M> {
+    combobox_props: PopoverProps,
+    trigger_props: ContainerProps,
+    label_props: TextProps,
     icon: IconSource,
+    text_trigger: Option<String>,
     menu: Menu<M>,
     presentation: MenuPresentation,
     tooltip: Option<String>,
@@ -343,7 +472,11 @@ pub struct MenuButton<M> {
 /// An icon button opening `menu`.
 pub fn menu_button<M>(icon: impl Into<IconSource>, menu: Menu<M>) -> MenuButton<M> {
     MenuButton {
+        combobox_props: Default::default(),
+        trigger_props: Default::default(),
+        label_props: Default::default(),
         icon: icon.into(),
+        text_trigger: None,
         menu,
         presentation: MenuPresentation::Dropdown,
         tooltip: None,
@@ -360,6 +493,32 @@ pub fn primary_menu<M>(menu: Menu<M>) -> MenuButton<M> {
 }
 
 impl<M> MenuButton<M> {
+    /// Use a text-only, flat trigger, as in a conventional menubar.
+    pub fn text_trigger(mut self, label: impl Into<String>) -> Self {
+        self.text_trigger = Some(label.into());
+        self
+    }
+    pub fn props(mut self, props: MenuProps) -> Self {
+        self.combobox_props = props.popover;
+        self.trigger_props = props.trigger;
+        self.label_props = props.label;
+        self
+    }
+    pub fn combobox_props(mut self, props: PopoverProps) -> Self {
+        self.combobox_props = props;
+        self
+    }
+    pub fn trigger_props(mut self, props: ContainerProps) -> Self {
+        self.trigger_props = props;
+        self
+    }
+
+    /// Presentation of the caller-supplied text trigger label.
+    pub fn label_props(mut self, props: TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
     /// [`MenuPresentation::Dropdown`] or [`MenuPresentation::FullPage`].
     pub fn presentation(mut self, p: MenuPresentation) -> Self {
         self.presentation = p;
@@ -440,42 +599,42 @@ fn row_content<'a, M: Clone + 'a>(
     style: MenuCheckStyle,
     slots: Slots,
     touch: bool,
+    gap: f32,
 ) -> Element<'a, M> {
     let m = Metrics::desktop();
-    let t = Typography::default();
+    let t = Typography::desktop();
     // The accelerator is shown only when it is available (see `shortcut::hint`).
     let accel = crate::shortcut::hint(item.accel.as_deref(), !item.disabled, touch);
     let disabled = item.disabled;
 
     // Check marks follow the menu's side; an icon may be moved by its item. A check item shows
     // its mark only while checked, but its slot is always there.
-    let check: Option<(MenuIconSide, Element<'a, M>)> =
-        (match item.kind {
-            Kind::Check { .. } => style == MenuCheckStyle::Mark,
-            Kind::Select { .. } => true,
-            _ => false,
-        })
-        .then(|| {
-            let on = matches!(
-                item.kind,
-                Kind::Check { checked: true, .. } | Kind::Select { selected: true, .. }
-            );
-            let el: Element<'a, M> = if on {
-                Icon::Check
-                    .view(m.icon_size)
-                    .style(move |t: &Theme, _| iced::widget::svg::Style {
-                        color: Some(if disabled {
-                            t.semantic.dim()
-                        } else {
-                            t.semantic.popover.fg
-                        }),
-                    })
-                    .into()
-            } else {
-                space().width(m.icon_size).into()
-            };
-            (side, el)
-        });
+    let check: Option<(MenuIconSide, Element<'a, M>)> = (match item.kind {
+        Kind::Check { .. } => style == MenuCheckStyle::Mark,
+        Kind::Select { .. } => true,
+        _ => false,
+    })
+    .then(|| {
+        let on = matches!(
+            item.kind,
+            Kind::Check { checked: true, .. } | Kind::Select { selected: true, .. }
+        );
+        let el: Element<'a, M> = if on {
+            Icon::Check
+                .view(m.icon_size)
+                .style(move |t: &Theme, _| iced::widget::svg::Style {
+                    color: Some(if disabled {
+                        t.semantic.dim()
+                    } else {
+                        t.semantic.popover.fg
+                    }),
+                })
+                .into()
+        } else {
+            space().width(m.icon_size).into()
+        };
+        (side, el)
+    });
     let icon: Option<(MenuIconSide, Element<'a, M>)> = item
         .icon
         .as_ref()
@@ -539,12 +698,12 @@ fn row_content<'a, M: Clone + 'a>(
     if trail.is_empty() && slots.trail && switch.is_none() {
         trail.push(blank());
     }
-    let mut r = row![].spacing(m.space_m).align_y(Vertical::Center);
+    let mut r = row![].spacing(gap).align_y(Vertical::Center);
     r = r
         .extend(lead)
-        .push(lbl)
-        .extend(accel.map(Element::from))
-        .extend(state.map(Element::from))
+        .push(item.label_props.apply(lbl))
+        .extend(accel.map(|t| item.accelerator_props.apply(t)))
+        .extend(state.map(|t| item.state_props.apply(t)))
         .extend(switch.map(Element::from));
     r = r.extend(trail);
     r.into()
@@ -566,13 +725,12 @@ fn pressed<'a, M: Clone + 'a>(
     b: iced::widget::Button<'a, M, Theme>,
     item: &MenuItem<M>,
 ) -> iced::widget::Button<'a, M, Theme> {
+    let b = item.button_props.apply(b);
     match (item.disabled, message(item)) {
-        (false, Some(m)) if item.stays_open() => {
-            b.on_press_with(move || {
-                crate::widgets::popover::stay_open();
-                m.clone()
-            })
-        }
+        (false, Some(m)) if item.stays_open() => b.on_press_with(move || {
+            crate::widgets::popover::stay_open();
+            m.clone()
+        }),
         (false, Some(m)) => b.on_press(m),
         _ => b,
     }
@@ -583,18 +741,26 @@ pub(crate) fn popover_content<'a, M: Clone + 'a>(
     menu: &Menu<M>,
     max_height: f32,
 ) -> Element<'a, M> {
-    crate::widgets::popover(dropdown_items(menu, None), max_height)
+    {
+        let m = Metrics::desktop();
+        popover_spaced_with_props(
+            dropdown_items(menu, None),
+            max_height,
+            m.space_xxs,
+            m.popover_padding,
+            menu.dropdown_props.clone(),
+        )
+    }
 }
 
 /// A hairline between groups of rows.
-fn separator<'a, M: 'a>() -> Element<'a, M> {
-    let m = Metrics::desktop();
+fn separator<'a, M: 'a>(air: f32) -> Element<'a, M> {
     container(
         container(space().height(1))
             .width(Length::Fill)
             .style(sc::popover_separator),
     )
-    .padding([m.space_xs, 0.0])
+    .padding([air, 0.0])
     .into()
 }
 
@@ -606,11 +772,14 @@ fn dropdown_items<'a, M: Clone + 'a>(
 ) -> Vec<Element<'a, M>> {
     let m = Metrics::desktop();
     let slots = slots(menu);
+    let gap = menu.item_spacing.unwrap_or(m.space_m);
+    let pad_x = menu.item_padding_x.unwrap_or(m.space_m);
+    let air = menu.separator_spacing.unwrap_or(m.space_xs);
     let mut out: Vec<Element<'a, M>> = Vec::new();
     let mut next_submenu = 0;
     for (si, section) in menu.sections.iter().enumerate() {
         if si > 0 {
-            out.push(separator());
+            out.push(separator(air));
         }
         for item in section {
             let content = container(row_content(
@@ -619,21 +788,55 @@ fn dropdown_items<'a, M: Clone + 'a>(
                 menu.check_style,
                 slots,
                 false,
-            ))
-            .padding([0.0, m.space_m])
-            .center_y(Length::Fixed(32.0));
+                gap,
+            ));
+            let content =
+                if item.label_props.overflow == Some(crate::components::TextOverflow::Wrap) {
+                    content.padding([m.space_s, pad_x])
+                } else {
+                    content.padding([0.0, pad_x]).center_y(Length::Fixed(32.0))
+                };
+            let content = item.container_props.apply(content);
+            let content = if item.disabled {
+                content
+            } else {
+                content.id("iad-menu-row")
+            };
             if let Kind::Submenu { .. } = &item.kind {
                 let target = pages.and_then(|(children, _)| children.get(next_submenu).copied());
                 next_submenu += 1;
                 out.push(match (target, pages, item.disabled) {
                     (Some(t), Some((_, request)), false) => {
-                        NavRow::new(content.width(Length::Fill), t, request).into()
+                        let mut content = content.width(Length::Fill);
+                        if let Some(v) = item.button_props.width {
+                            content = content.width(v);
+                        }
+                        if let Some(v) = item.button_props.height {
+                            content = content.height(v);
+                        }
+                        if let Some(v) = item.button_props.padding {
+                            content = content.padding(v);
+                        }
+                        if let Some(v) = item.button_props.clip {
+                            content = content.clip(v);
+                        }
+                        container(
+                            NavRow::new(content, t, request).style(item.button_props.style.clone()),
+                        )
+                        .id("iad-menu-submenu")
+                        .width(item.button_props.width.unwrap_or(Length::Fill))
+                        .height(item.button_props.height.unwrap_or(Length::Shrink))
+                        .into()
                     }
                     // Nowhere to go (or switched off): a row that does nothing.
-                    _ => button(content)
-                        .padding(0)
-                        .width(Length::Fill)
-                        .style(sb::menu_item(false))
+                    _ => item
+                        .button_props
+                        .apply(
+                            button(content)
+                                .padding(0)
+                                .width(Length::Fill)
+                                .style(sb::menu_item(false)),
+                        )
                         .into(),
                 });
                 continue;
@@ -657,27 +860,49 @@ fn dropdown_items<'a, M: Clone + 'a>(
 /// `parent`.
 fn back_row<'a, M: Clone + 'a>(menu: &Menu<M>, parent: usize, request: &Request) -> Element<'a, M> {
     let m = Metrics::desktop();
-    let t = Typography::default();
-    NavRow::new(
+    let t = Typography::desktop();
+    container(NavRow::new(
         container(
             row![
                 Icon::GoPrevious.view(m.icon_size),
-                t.heading(menu.title.clone()).wrapping(text::Wrapping::None)
+                menu.title_props
+                    .apply(t.heading(menu.title.clone()).wrapping(text::Wrapping::None))
             ]
             .spacing(m.space_m)
             .align_y(Vertical::Center),
         )
         .padding([0.0, m.space_m])
         .width(Length::Fill)
+        .id("iad-menu-row")
         .center_y(Length::Fixed(32.0)),
         parent,
         request,
-    )
+    ))
+    .id("iad-menu-back")
+    .width(Length::Fill)
     .into()
 }
 
 /// The content of a dropdown whose menu has submenus: one page per menu, sliding as rows ask.
-fn pages_content<'a, M: Clone + 'a>(menu: &Menu<M>, width: f32, initial: usize) -> Element<'a, M> {
+pub(crate) fn pages_content<'a, M: Clone + 'a>(
+    menu: &Menu<M>,
+    width: f32,
+    initial: usize,
+) -> Element<'a, M> {
+    let menu = menu.clone();
+    iced::widget::responsive(move |available| {
+        pages_content_at_width(&menu, width.min(available.width), initial)
+    })
+    .width(Length::Shrink)
+    .height(Length::Shrink)
+    .into()
+}
+
+fn pages_content_at_width<'a, M: Clone + 'a>(
+    menu: &Menu<M>,
+    width: f32,
+    initial: usize,
+) -> Element<'a, M> {
     fn collect<'m, M>(m: &'m Menu<M>, out: &mut Vec<&'m Menu<M>>) {
         out.push(m);
         for s in m.subs() {
@@ -695,50 +920,71 @@ fn pages_content<'a, M: Clone + 'a>(menu: &Menu<M>, width: f32, initial: usize) 
             let mut rows: Vec<Element<'a, M>> = Vec::new();
             if let Some(p) = parent {
                 rows.push(back_row(m, *p, &request));
-                rows.push(separator());
+                rows.push(separator(
+                    m.separator_spacing.unwrap_or(Metrics::desktop().space_xs),
+                ));
             }
             rows.extend(dropdown_items(m, Some((children, &request))));
             // Just the rows, scrolling if they are many: the surface is drawn once, around the
             // pages, so they slide inside one card rather than as cards side by side.
-            crate::layouts::scrolled_window(column(rows).spacing(2).width(Length::Fill)).into()
+            crate::layouts::scrolled_window(
+                column(rows)
+                    .spacing(
+                        m.dropdown_props
+                            .spacing
+                            .unwrap_or(crate::Metrics::desktop().space_xxs),
+                    )
+                    .width(Length::Fill),
+            )
+            .into()
         })
         .collect();
     let m = Metrics::desktop();
     let pad = iced::Padding::from(m.popover_padding);
-    let inner = width - pad.left - pad.right;
-    container(MenuPages::new(pages, &request, inner, initial))
-        .padding(m.popover_padding)
-        .max_height(360.0)
-        .style(sc::popover)
-        .into()
+    let inner = (width - pad.left - pad.right).max(0.0);
+    crate::components::framed(
+        menu.dropdown_props.container.apply(
+            container(MenuPages::new(pages, &request, inner, initial))
+                .padding(m.popover_padding)
+                .max_height(popover_max_height())
+                .style(sc::popover),
+        ),
+        "popover",
+    )
 }
 
 /// Large touch rows, one boxed list per section: the body of the full-page menu and of
 /// [`Menu::sheet`].
 fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M, Theme> {
     let m = Metrics::desktop();
-    let t = Typography::default();
+    let t = Typography::desktop();
     let slots = slots(menu);
-    let mut lists = column![].spacing(m.space_l);
+    let gap = menu.item_spacing.unwrap_or(m.space_m);
+    let mut lists = column![].spacing(menu.list_spacing.unwrap_or(m.space_l));
     for section in &menu.sections {
         let rows: Vec<Element<'a, M>> = section
             .iter()
             .filter(|i| !matches!(i.kind, Kind::Submenu { .. }))
             .map(|item| -> Element<'a, M> {
-                let row_button = button(
-                    container(row_content(
-                        item,
-                        menu.icon_side,
-                        menu.check_style,
-                        slots,
-                        true,
-                    ))
-                    .padding(m.row_padding)
-                    .center_y(Length::Fixed(m.row_min_height)),
-                )
-                .padding(0)
-                .width(Length::Fill)
-                .style(sb::list_row);
+                let content = container(row_content(
+                    item,
+                    menu.icon_side,
+                    menu.check_style,
+                    slots,
+                    true,
+                    gap,
+                ))
+                .padding(m.row_padding);
+                let content =
+                    if item.label_props.overflow == Some(crate::components::TextOverflow::Wrap) {
+                        content
+                    } else {
+                        content.center_y(Length::Fixed(m.row_min_height))
+                    };
+                let row_button = button(item.container_props.apply(content))
+                    .padding(0)
+                    .width(Length::Fill)
+                    .style(sb::list_row);
                 pressed(row_button, item).into()
             })
             .collect();
@@ -750,7 +996,8 @@ fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M,
             if let Kind::Submenu { menu: sub } = &item.kind {
                 lists = lists.push(
                     column![
-                        t.caption(item.label.clone()).style(st::dim),
+                        item.label_props
+                            .apply(t.caption(item.label.clone()).style(st::dim)),
                         touch_lists(sub)
                     ]
                     .spacing(m.space_s),
@@ -763,7 +1010,7 @@ fn touch_lists<'a, M: Clone + 'a>(menu: &Menu<M>) -> iced::widget::Column<'a, M,
 
 fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M> {
     let m = Metrics::desktop();
-    let t = Typography::default();
+    let t = Typography::desktop();
 
     // Header: back arrow (hit area handled by the overlay) + centered title.
     let header = container(
@@ -771,9 +1018,12 @@ fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M>
             container(Icon::GoPrevious.view(m.icon_size + 2.0))
                 .center(Length::Fixed(PAGE_BACK_WIDTH))
                 .height(Length::Fixed(PAGE_HEADER_HEIGHT)),
-            container(t.heading(menu.title.clone()).wrapping(text::Wrapping::None))
-                .center_x(Length::Fill)
-                .center_y(Length::Fixed(PAGE_HEADER_HEIGHT)),
+            container(
+                menu.title_props
+                    .apply(t.heading(menu.title.clone()).wrapping(text::Wrapping::None))
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fixed(PAGE_HEADER_HEIGHT)),
             space().width(PAGE_BACK_WIDTH),
         ]
         .align_y(Vertical::Center),
@@ -788,34 +1038,44 @@ fn page<'a, M: Clone + 'a>(menu: &Menu<M>, window_radius: f32) -> Element<'a, M>
     let lists = touch_lists(menu);
 
     let body = scrolled_window(clamp(
-        container(lists).padding(m.page_padding).width(Length::Fill),
+        container(lists)
+            .padding(menu.padding.unwrap_or(m.page_padding))
+            .width(Length::Fill),
         m.clamp_maximum,
     ))
     .width(Length::Fill)
     .height(Length::Fill);
 
-    container(column![header, body])
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(move |th: &Theme| iced::widget::container::Style {
-            border: iced::Border::default().rounded(window_radius),
-            ..sc::window(th)
-        })
+    menu.container_props
+        .apply(
+            container(column![header, body])
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .style(move |th: &Theme| iced::widget::container::Style {
+                    border: iced::Border::default().rounded(window_radius),
+                    ..sc::window(th)
+                }),
+        )
         .into()
 }
 
 impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
     fn from(b: MenuButton<M>) -> Self {
         let m = Metrics::desktop();
-        let trigger =
-            container(b.icon.view(m.icon_size)).center(Length::Fixed(m.button_min_height));
+        let trigger_content: Element<'a, M> = match b.text_trigger {
+            Some(label) => b.label_props.apply(text(label)).into(),
+            None => b.icon.view(m.icon_size).into(),
+        };
+        let trigger = b
+            .trigger_props
+            .apply(container(trigger_content).center_y(Length::Fixed(m.button_min_height)));
         let (content, presentation) = match b.presentation {
             MenuPresentation::Dropdown if b.menu.has_submenu() => (
-                pages_content(&b.menu, POPOVER_WIDTH, b.open_page),
+                pages_content(&b.menu, popover_width(), b.open_page),
                 Presentation::Popover,
             ),
             MenuPresentation::Dropdown => (
-                crate::widgets::popover(dropdown_items(&b.menu, None), 360.0),
+                popover_content(&b.menu, popover_max_height()),
                 Presentation::Popover,
             ),
             MenuPresentation::FullPage => (page(&b.menu, b.window_radius), Presentation::Page),
@@ -825,11 +1085,13 @@ impl<'a, M: Clone + 'a> From<MenuButton<M>> for Element<'a, M> {
             .padding(0)
             .presentation(presentation)
             .align(Align::End)
-            .popover_width(POPOVER_WIDTH)
-            .open_initially(b.open_initially);
+            .popover_width(popover_width())
+            .open_initially(b.open_initially)
+            .menu_navigation();
         if let Some(bounds) = b.bounds {
             dd = dd.bounds(bounds);
         }
+        let dd = b.combobox_props.apply(dd);
         let button: Element<'a, M> = match b.tooltip {
             Some(t) => tooltip(
                 Element::from(dd),
@@ -853,6 +1115,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_menu_takes_its_gaps_and_padding() {
+        let m = Menu::<u8>::new("M")
+            .section([MenuItem::action("A", 1)])
+            .item_spacing(2.0)
+            .item_padding_x(3.0)
+            .separator_spacing(4.0)
+            .list_spacing(5.0)
+            .padding(6.0);
+        assert_eq!((m.item_spacing, m.item_padding_x), (Some(2.0), Some(3.0)));
+        assert_eq!(
+            (m.separator_spacing, m.list_spacing),
+            (Some(4.0), Some(5.0))
+        );
+        let _: Element<'_, u8> = m.sheet(None);
+    }
+
+    #[test]
     fn only_a_command_closes_the_menu_unless_the_item_says_otherwise() {
         assert!(!MenuItem::action("Quit", ()).stays_open());
         assert!(MenuItem::check("Show", true, ()).stays_open());
@@ -860,7 +1139,11 @@ mod tests {
         assert!(MenuItem::switch("Closed", false, ()).stays_open());
         // Either default can be overridden.
         assert!(MenuItem::action("Refresh", ()).keep_open(true).stays_open());
-        assert!(!MenuItem::select("Pick", false, ()).keep_open(false).stays_open());
+        assert!(
+            !MenuItem::select("Pick", false, ())
+                .keep_open(false)
+                .stays_open()
+        );
     }
 
     #[test]
@@ -988,5 +1271,56 @@ mod tests {
             ]);
         assert_eq!(m.len(), 3);
         assert!(!m.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod typed_props_tests {
+    use super::*;
+    use crate::components::TextOverflow;
+
+    #[test]
+    fn menu_item_defaults_preserve_rows_and_custom_native_button_props_apply() {
+        let plain = Menu::new("menu").section([MenuItem::action("界🦀", ())]);
+        let defaults = Menu::new("menu").section([MenuItem::action("界🦀", ())
+            .label_props(TextProps::default())
+            .container_props(ContainerProps::default())
+            .button_props(ButtonProps::default())]);
+        assert_eq!(
+            dropdown_items(&plain, None)[0].as_widget().size(),
+            dropdown_items(&defaults, None)[0].as_widget().size()
+        );
+        let menu = Menu::new("menu").section([MenuItem::action("界🦀e\u{301}".repeat(100), ())
+            .label_props(TextProps::default().width(80).overflow(TextOverflow::Wrap))
+            .button_props(ButtonProps::default().width(177).height(61))]);
+        assert_eq!(
+            dropdown_items(&menu, None)[0].as_widget().size(),
+            iced::Size::new(Length::Fixed(177.0), Length::Fixed(61.0))
+        );
+        let _ = menu.sheet(Some("subtitle".into()));
+    }
+
+    #[test]
+    fn navigation_and_sheet_forward_safe_presentation() {
+        let menu = Menu::new("menu")
+            .container_props(ContainerProps::default().width(201))
+            .section([MenuItem::submenu(
+                "sub",
+                Menu::new("子🦀").section([MenuItem::action("action", ())]),
+            )
+            .button_props(ButtonProps::default().width(153).height(53))]);
+        let request = Request::default();
+        let rows = dropdown_items(&menu, Some((&[1], &request)));
+        assert_eq!(
+            rows[0].as_widget().size(),
+            iced::Size::new(Length::Fixed(153.0), Length::Fixed(53.0))
+        );
+        assert_eq!(
+            menu.sheet(None).as_widget().size().width,
+            Length::Fixed(201.0)
+        );
+        let _: Element<'_, ()> = menu_button(Icon::OpenMenu, menu)
+            .combobox_props(PopoverProps::default().width(129))
+            .into();
     }
 }

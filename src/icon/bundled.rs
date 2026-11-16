@@ -2,9 +2,10 @@
 use super::{ChevronIcon, EntryIcon, Icon, WindowIcon};
 
 impl Icon {
-    /// Bundled SVG artwork, when provided. Global overrides apply through `IconSource`.
-    pub fn bundled_source(self) -> Option<&'static str> {
-        Some(match self {
+    /// The bundled SVG artwork of every predefined icon (the match is exhaustive, so a new
+    /// variant cannot be added without drawing it). Global overrides apply through `IconSource`.
+    pub fn bundled_source(self) -> &'static str {
+        match self {
             Self::ListAdd => iad_icons::common::ADD,
             Self::OpenMenu => iad_icons::common::OPEN_MENU,
             // The night-sky glyph the appearance switch already draws for "dark".
@@ -13,6 +14,8 @@ impl Icon {
             Self::DialogInformation => iad_icons::common::INFORMATION,
             Self::HelpAbout => iad_icons::common::INFORMATION,
             Self::Edit => iad_icons::common::EDIT,
+            Self::Save => iad_icons::common::SAVE,
+            Self::SaveAs => iad_icons::common::SAVE_AS,
             Self::ViewMore => iad_icons::common::VIEW_MORE,
             Self::Play => iad_icons::common::PLAY,
             Self::Pause => iad_icons::common::PAUSE,
@@ -61,8 +64,30 @@ impl Icon {
             Self::FileShow => iad_icons::app::FILE_SHOW,
             Self::Link => iad_icons::app::LINK,
             Self::Home => iad_icons::common::HOME,
-            _ => return None,
-        })
+            Self::Check => iad_icons::common::CHECK,
+            Self::ListRemove => iad_icons::common::REMOVE,
+            Self::Window => iad_icons::common::WINDOW,
+            Self::DialogWarning => iad_icons::common::WARNING,
+            Self::DialogError => iad_icons::common::ERROR,
+            Self::Reset => iad_icons::common::RESET,
+            Self::Document => iad_icons::common::DOCUMENT,
+            Self::Dice => iad_icons::common::DICE,
+            Self::Bolt => iad_icons::common::BOLT,
+            Self::Globe => iad_icons::common::GLOBE,
+            Self::Tag => iad_icons::common::TAG,
+            Self::Star => iad_icons::common::STAR,
+            Self::Clock => iad_icons::common::CLOCK,
+            Self::Target => iad_icons::common::TARGET,
+            Self::Smile => iad_icons::common::SMILE,
+            Self::Compass => iad_icons::common::COMPASS,
+            Self::Sparkle => iad_icons::common::SPARKLE,
+            Self::Compact => iad_icons::common::COMPACT,
+            Self::Shuffle => iad_icons::media::SHUFFLE,
+            Self::Repeat => iad_icons::media::REPEAT,
+            Self::Queue => iad_icons::media::QUEUE,
+            Self::MusicNote => iad_icons::media::MUSIC_NOTE,
+            Self::Lyrics => iad_icons::media::LYRICS,
+        }
     }
 }
 
@@ -71,11 +96,26 @@ mod tests {
     use super::*;
     use crate::IconSource;
     #[test]
+    fn save_icons_are_registered_with_distinct_bundled_artwork() {
+        for (icon, name, source) in [
+            (Icon::Save, "document-save", iad_icons::common::SAVE),
+            (Icon::SaveAs, "document-save-as", iad_icons::common::SAVE_AS),
+        ] {
+            assert_eq!(Icon::ALL.iter().filter(|&&value| value == icon).count(), 1);
+            assert_eq!(icon.name(), name);
+            assert_eq!(icon.system_name().unwrap(), format!("{name}-symbolic"));
+            assert_eq!(icon.bundled_source(), source);
+            assert!(matches!(IconSource::from(icon), IconSource::Svg(handle)
+                if handle == iced::widget::svg::Handle::from_memory(source.as_bytes())));
+            let _view = icon.view(16.0);
+        }
+        assert_ne!(Icon::Save.bundled_source(), Icon::SaveAs.bundled_source());
+    }
+
+    #[test]
     fn bundled_defaults_fit_and_render_at_control_sizes() {
         for icon in Icon::ALL {
-            let Some(source) = icon.bundled_source() else {
-                continue;
-            };
+            let source = icon.bundled_source();
             assert!(
                 matches!(IconSource::from(*icon), IconSource::Svg(_)),
                 "{icon:?}"

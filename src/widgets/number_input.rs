@@ -58,6 +58,8 @@ pub enum NumberDrag {
 }
 
 pub struct NumberInput<'a, M> {
+    entry_props: crate::components::EntryProps,
+    button_props: crate::components::ButtonProps,
     text: &'a str,
     on_input: Option<std::rc::Rc<dyn Fn(String) -> M + 'a>>,
     numeric: Numeric,
@@ -66,13 +68,23 @@ pub struct NumberInput<'a, M> {
     drag: NumberDrag,
     disabled: bool,
     revealed: bool,
-    width: Length,
+    width: Option<Length>,
     metrics: Metrics,
     embedded: bool,
     flat: bool,
 }
 
 impl<'a, M> NumberInput<'a, M> {
+    pub fn entry_props(mut self, props: crate::components::EntryProps) -> Self {
+        self.entry_props = props;
+        self
+    }
+
+    pub fn button_props(mut self, props: crate::components::ButtonProps) -> Self {
+        self.button_props = props;
+        self
+    }
+
     /// Transparent page-surface entry style.
     pub fn flat(mut self, flat: bool) -> Self {
         self.flat = flat;
@@ -85,6 +97,9 @@ impl<'a, M> NumberInput<'a, M> {
     /// An integer input with no limits, stepping by 1. `text` is the entry's content.
     pub fn new(text: &'a str, on_input: impl Fn(String) -> M + 'a) -> Self {
         Self {
+            entry_props: Default::default(),
+            button_props: Default::default(),
+
             text,
             on_input: Some(std::rc::Rc::new(on_input)),
             numeric: Numeric::default(),
@@ -93,7 +108,7 @@ impl<'a, M> NumberInput<'a, M> {
             drag: NumberDrag::Vertical,
             disabled: false,
             revealed: true,
-            width: Length::Fixed(160.0),
+            width: None,
             metrics: Metrics::desktop(),
             embedded: false,
             flat: false,
@@ -150,7 +165,7 @@ impl<'a, M> NumberInput<'a, M> {
         self
     }
     pub fn width(mut self, w: impl Into<Length>) -> Self {
-        self.width = w.into();
+        self.width = Some(w.into());
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -171,19 +186,24 @@ impl<'a, M> NumberInput<'a, M> {
     }
 }
 
-/// Width of the handles' slot.
-const HANDLE_W: f32 = 22.0;
-
 impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
     fn from(n: NumberInput<'a, M>) -> Self {
         let m = n.metrics;
+        let handle_width = m.icon_size + m.space_s;
+        let handle_height = m.entry_min_height / 2.0;
         let mut field = entry::<M>(n.placeholder.clone(), n.text)
             .flat(n.flat)
             .state(n.text_state())
-            .width(n.width)
+            .width(n.width.unwrap_or_else(|| {
+                Length::Fixed(
+                    crate::theme_config::current()
+                        .number("number-input", "width")
+                        .unwrap_or(m.row_wrap_basis),
+                )
+            }))
             .metrics(m);
         if n.disabled {
-            return field.into();
+            return n.entry_props.apply(field).into();
         }
         if n.embedded {
             field = field.embedded();
@@ -199,15 +219,15 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
             let up = value.is_none_or(|v| n.numeric.can_up(v));
             let down = value.is_none_or(|v| n.numeric.can_down(v));
             let handle = |icon: crate::EntryIcon, enabled: bool, text: String| {
-                let glyph = container(icon.view(12.0))
+                let glyph = container(icon.view(m.icon_size))
                     .center(Length::Fill)
-                    .width(Length::Fixed(HANDLE_W))
-                    .height(Length::Fixed(14.0));
+                    .width(Length::Fixed(handle_width))
+                    .height(Length::Fixed(handle_height));
                 let mut b = button(glyph).padding(0).style(sb::flat);
                 if enabled {
                     b = b.on_press(f(text));
                 }
-                b
+                n.button_props.apply(b)
             };
             let handles = column![
                 handle(crate::EntryIcon::Increment, up, n.numeric.up_text(n.text)),
@@ -219,10 +239,10 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
             ];
             field = field
                 .right_section(handles)
-                .right_section_width(HANDLE_W)
-                .section_height(28.0);
+                .right_section_width(handle_width)
+                .section_height(m.entry_min_height);
         }
-        let field: Element<'a, M> = field.into();
+        let field: Element<'a, M> = n.entry_props.apply(field).into();
         let axis = match n.drag {
             NumberDrag::Select => return field,
             NumberDrag::Horizontal => Axis::Horizontal,
@@ -239,7 +259,7 @@ impl<'a, M: Clone + 'a> From<NumberInput<'a, M>> for Element<'a, M> {
             on_input,
             // A press on the handles is theirs, not the start of a drag.
             guard: if n.handles {
-                HANDLE_W + m.space_xs
+                handle_width + m.space_xs
             } else {
                 0.0
             },
@@ -480,5 +500,68 @@ mod tests {
         let _: Element<'_, ()> = mk("5").into();
         let _: Element<'_, ()> = mk("5").handles(false).into();
         let _: Element<'_, ()> = mk("5").disabled(true).into();
+    }
+}
+
+#[cfg(test)]
+mod nested_props_tests {
+    use super::*;
+    use crate::components::{ButtonProps, EntryProps};
+    #[test]
+    fn presentation_does_not_change_numeric_validation_or_handlers() {
+        let input = NumberInput::new("not a number", |text| text).min(0).max(10);
+        let validity = input.validity();
+        let input = input
+            .entry_props(EntryProps::default().padding(13).width(291))
+            .button_props(ButtonProps::default().padding(5));
+        assert_eq!(input.validity(), validity);
+        assert_eq!(input.text_state(), EntryState::Error);
+        assert_eq!((input.on_input.as_ref().unwrap())("kept".into()), "kept");
+        let element: Element<'_, String> = input.drag(NumberDrag::Select).into();
+        use iced::advanced::Widget;
+        assert_eq!(element.as_widget().size().width, Length::Fixed(291.0));
+    }
+}
+
+/// Presentation-only overrides supported by [`NumberInput`]. Values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct NumberInputProps {
+    pub width: Option<iced::Length>,
+    pub metrics: Option<crate::Metrics>,
+    pub entry_props: Option<crate::components::EntryProps>,
+    pub button_props: Option<crate::components::ButtonProps>,
+}
+impl NumberInputProps {
+    pub fn width(mut self, value: impl Into<iced::Length>) -> Self {
+        self.width = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<crate::Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn entry_props(mut self, value: impl Into<crate::components::EntryProps>) -> Self {
+        self.entry_props = Some(value.into());
+        self
+    }
+    pub fn button_props(mut self, value: impl Into<crate::components::ButtonProps>) -> Self {
+        self.button_props = Some(value.into());
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: NumberInput<'a, M>) -> NumberInput<'a, M> {
+        let mut widget = widget;
+        if let Some(value) = &self.width {
+            widget = widget.width(value.clone());
+        }
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
+        }
+        if let Some(props) = &self.entry_props {
+            widget.entry_props.merge(props);
+        }
+        if let Some(props) = &self.button_props {
+            widget.button_props.merge(props);
+        }
+        widget
     }
 }

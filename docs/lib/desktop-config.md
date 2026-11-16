@@ -34,7 +34,6 @@ Defaults are in parentheses. Every key is optional.
 | `color-scheme`                               | system, light, dark (system)              | `Theme::from_config`. System follows the settings portal, then shared toolkit settings |
 | `accent`                                     | system, a name, `#rrggbb` (system)        | the accent. System is the default (blue) for now   |
 | `flat-headerbars`                            | bool (true)                               | continuous, Nautilus-style header bars               |
-| `auto-contrast`                              | bool (true)                               | text on colored fills by contrast (`color-contrast()`) |
 | `density`                                    | comfort, compact                          | `Metrics`                                            |
 | `text-scale`                                 | 0.5 … 3.0 (1.0)                           | `Typography` base size                               |
 | `transparency`                               | 0 … 1 (0)                                 | `Theme::with_transparency`: surface alpha            |
@@ -57,7 +56,7 @@ Defaults are in parentheses. Every key is optional.
 | Key                | Values                          | Drives                                          |
 | ------------------ | ------------------------------- | ----------------------------------------------- |
 | `decorations`      | csd, ssd (csd)                  | `windows::settings()`; transparent base for csd  |
-| `button-layout`    | system, a GTK string (system)   | `DecorationLayout::detect()`                    |
+| `button-layout`    | system, a GTK-style string (system) | `DecorationLayout::detect()`: a fixed value here, else the theme's `[windows] button-layout`, else `appmenu:close` |
 | `min-width`, `min-height` | px (360, 200)            | minimum window size                             |
 | `mobile-max-width` | px (575, `sm` − 1)              | `breakpoints::is_mobile`, menu `Auto`                |
 
@@ -150,6 +149,6 @@ The library's `utils` module provides one application setup path:
 - Run `utils::detect_theme().map(Message::SystemTheme)` at startup.
 - Include `utils::follow_theme().map(Message::SystemTheme)` in the application's subscription; handling that message redraws with `utils::theme()`.
 
-Color-scheme detection uses iced's native settings/portal integration. Icon selection reads `gtk-icon-theme-name` from `/etc/gtk-{3,4}.0/settings.ini` and the corresponding XDG config directories, with user settings taking precedence. The same files supply a light/dark fallback when the portal has no preference. Files are checked once per second; changed icon-theme names invalidate icon caches. Fixed values in global configuration remain authoritative. The gallery uses the same API for its header System/Light/Dark button.
+Color-scheme detection uses iced's native settings/portal integration: the portal's light/dark is the only thing the toolkit reads from the system. Nothing is read from GSettings or GTK settings files. The icon theme, window button layout and animations come from the config (`[icons] theme`, `[windows] button-layout`, `[motion] animations`), and the look itself from a theme file (see `theme-config.md`). Fixed values in global configuration remain authoritative. The gallery uses the same API for its header System/Light/Dark button.
 
 `components::ThemeToggle::new(mode).on_toggle(Message::Appearance)` cycles `ThemeMode::System` (the default), `Light`, `Dark`, then back to `System`. Handle it with `utils::set_scheme_override(mode.scheme_override())`; `utils::theme()` and `Theme::from_config` then use that app-level choice. `set_scheme_override(None)` resumes following the desktop. This process-local override never changes desktop preferences or writes the shared configuration, and respects `allow-app-overrides`.

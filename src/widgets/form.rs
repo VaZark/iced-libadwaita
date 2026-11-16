@@ -80,6 +80,7 @@ pub enum FormActions {
 
 /// See the [module](self).
 pub struct Form<'a, M> {
+    props: FormWidgetProps,
     title: Option<String>,
     description: Option<String>,
     steps: Vec<Step<'a, M>>,
@@ -98,6 +99,10 @@ pub struct Form<'a, M> {
     submitting: bool,
     enter: bool,
     actions: FormActions,
+    spacing: Option<f32>,
+    header_spacing: Option<f32>,
+    actions_spacing: Option<f32>,
+    padding: iced::Padding,
     metrics: Metrics,
 }
 
@@ -108,8 +113,14 @@ impl<'a, M: Clone + 'a> Default for Form<'a, M> {
 }
 
 impl<'a, M: Clone + 'a> Form<'a, M> {
+    /// Presentation overrides for native children; actions remain parent-owned.
+    pub fn props(mut self, props: FormWidgetProps) -> Self {
+        self.props = props;
+        self
+    }
     pub fn new() -> Self {
         Self {
+            props: FormWidgetProps::default(),
             title: None,
             description: None,
             steps: Vec::new(),
@@ -128,6 +139,10 @@ impl<'a, M: Clone + 'a> Form<'a, M> {
             submitting: false,
             enter: true,
             actions: FormActions::Spread,
+            spacing: None,
+            header_spacing: None,
+            actions_spacing: None,
+            padding: iced::Padding::ZERO,
             metrics: Metrics::desktop(),
         }
     }
@@ -213,6 +228,27 @@ impl<'a, M: Clone + 'a> Form<'a, M> {
         self.actions = l;
         self
     }
+    /// The gap between the heading, the steps, the content and the action bar (default: the
+    /// theme's `space_l`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px.max(0.0));
+        self
+    }
+    /// The gap between the title and the description (default: the theme's `space_xs`).
+    pub fn header_spacing(mut self, px: f32) -> Self {
+        self.header_spacing = Some(px.max(0.0));
+        self
+    }
+    /// The gap between the action buttons (default: the theme's `space_s`).
+    pub fn actions_spacing(mut self, px: f32) -> Self {
+        self.actions_spacing = Some(px.max(0.0));
+        self
+    }
+    /// The padding around the whole form (default none).
+    pub fn padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.padding = p.into();
+        self
+    }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
         self
@@ -232,14 +268,24 @@ impl<'a, M: Clone + 'a> From<Form<'a, M>> for Element<'a, M> {
         let busy = f.submitting;
         let idle = |msg: &Option<M>| if busy { None } else { msg.clone() };
 
-        let mut body = column![].spacing(m.space_l).width(Length::Fill);
+        let mut body = column![]
+            .spacing(f.spacing.unwrap_or(m.space_l))
+            .width(Length::Fill);
         if f.title.is_some() || f.description.is_some() {
-            let mut head = column![].spacing(m.space_xs);
+            let mut head = column![].spacing(f.header_spacing.unwrap_or(m.space_xs));
             if let Some(t) = &f.title {
-                head = head.push(crate::components::typography::title_3(t.clone()));
+                head = head.push(
+                    f.props
+                        .title
+                        .apply(crate::components::typography::title_3(t.clone())),
+                );
             }
             if let Some(d) = &f.description {
-                head = head.push(crate::components::typography::body(d.clone()).style(st::dim));
+                head = head.push(
+                    f.props
+                        .description
+                        .apply(crate::components::typography::body(d.clone()).style(st::dim)),
+                );
             }
             body = body.push(head);
         }
@@ -255,7 +301,9 @@ impl<'a, M: Clone + 'a> From<Form<'a, M>> for Element<'a, M> {
                     )
                 })
                 .collect();
-            let mut ind = StepIndicator::new(items).metrics(m);
+            let mut ind = StepIndicator::new(items)
+                .metrics(m)
+                .props(f.props.indicator.clone());
             if let (Some(on), false) = (&f.on_step, busy) {
                 let clickable = (0..f.steps.len())
                     .map(|i| i != f.current && f.reachable.get(i).copied().unwrap_or(false))
@@ -277,12 +325,23 @@ impl<'a, M: Clone + 'a> From<Form<'a, M>> for Element<'a, M> {
             &crate::breakpoints::Breakpoints::default(),
         )
         .map_or_else(|| space().into(), |i| (f.steps[i].build)());
-        body = body.push(container(content).width(Length::Fill));
+        body = body.push(
+            f.props
+                .content
+                .apply(container(content).width(Length::Fill)),
+        );
 
         // Action bar.
-        let reset = raised_button(label(&f.reset_label)).on_press_maybe(idle(&f.on_reset));
-        let back = (many && f.current > 0)
-            .then(|| raised_button(label(&f.back_label)).on_press_maybe(idle(&f.on_back)));
+        let reset = f.props.reset_button.apply(
+            raised_button(f.props.reset_label.apply(label(&f.reset_label)))
+                .on_press_maybe(idle(&f.on_reset)),
+        );
+        let back = (many && f.current > 0).then(|| {
+            f.props.back_button.apply(
+                raised_button(f.props.back_label.apply(label(&f.back_label)))
+                    .on_press_maybe(idle(&f.on_back)),
+            )
+        });
         let (primary_label, primary_msg) = if last {
             (
                 if busy {
@@ -295,8 +354,12 @@ impl<'a, M: Clone + 'a> From<Form<'a, M>> for Element<'a, M> {
         } else {
             (f.next_label.clone(), f.on_next.clone())
         };
-        let primary = suggested_button(label(&primary_label)).on_press_maybe(idle(&primary_msg));
-        let mut right = row![].spacing(m.space_s);
+        let primary = f.props.primary_button.apply(
+            suggested_button(f.props.primary_label.apply(label(&primary_label)))
+                .on_press_maybe(idle(&primary_msg)),
+        );
+        let bar_gap = f.actions_spacing.unwrap_or(m.space_s);
+        let mut right = row![].spacing(bar_gap);
         if let Some(b) = back {
             right = right.push(b);
         }
@@ -304,13 +367,21 @@ impl<'a, M: Clone + 'a> From<Form<'a, M>> for Element<'a, M> {
         let bar: Element<'a, M> = match f.actions {
             FormActions::Spread => row![reset, space().width(Length::Fill), right].into(),
             FormActions::End => row![space().width(Length::Fill), reset, right]
-                .spacing(m.space_s)
+                .spacing(bar_gap)
                 .into(),
-            FormActions::Start => row![reset, right].spacing(m.space_s).into(),
+            FormActions::Start => row![reset, right].spacing(bar_gap).into(),
         };
         body = body.push(bar);
 
-        let el: Element<'a, M> = body.into();
+        let el: Element<'a, M> =
+            if f.padding == iced::Padding::ZERO && !f.props.has_surface_overrides() {
+                body.into()
+            } else {
+                f.props
+                    .surface
+                    .apply(container(body).padding(f.padding))
+                    .into()
+            };
         match (f.enter, idle(&primary_msg)) {
             (true, Some(msg)) => Shortcuts::new().bind("Enter", msg).scope(el),
             _ => el,
@@ -327,6 +398,7 @@ fn label<'a>(s: &str) -> iced::widget::Text<'a, Theme> {
 /// usable alone. A thin wrapper over [`Stepper`] (indicator only, given statuses and reachable
 /// steps); use `Stepper` directly for content, orientation, icons and the rest.
 pub struct StepIndicator<'a, M> {
+    props: super::stepper::StepperWidgetProps,
     items: Vec<(String, StepStatus)>,
     clickable: Vec<bool>,
     messages: Vec<M>,
@@ -335,8 +407,14 @@ pub struct StepIndicator<'a, M> {
 }
 
 impl<'a, M> StepIndicator<'a, M> {
+    /// Presentation overrides for native children; actions remain parent-owned.
+    pub fn props(mut self, props: super::stepper::StepperWidgetProps) -> Self {
+        self.props = props;
+        self
+    }
     pub fn new(items: Vec<(String, StepStatus)>) -> Self {
         Self {
+            props: super::stepper::StepperWidgetProps::default(),
             items,
             clickable: Vec::new(),
             messages: Vec::new(),
@@ -368,6 +446,7 @@ impl<'a, M: Clone + 'a> From<StepIndicator<'a, M>> for Element<'a, M> {
             .collect();
         let messages = s.messages;
         let mut st = Stepper::new()
+            .props(s.props)
             .statuses(statuses)
             .clickable(clickable)
             // As before the extraction: a long row clips instead of collapsing.
@@ -381,3 +460,191 @@ impl<'a, M: Clone + 'a> From<StepIndicator<'a, M>> for Element<'a, M> {
         st.into()
     }
 }
+
+#[cfg(test)]
+mod spacing_params_tests {
+    use super::*;
+
+    #[test]
+    fn a_form_takes_its_gaps_and_padding() {
+        let f = Form::<u8>::new()
+            .title("T")
+            .description("D")
+            .step(Step::new("One", || iced::widget::text("x").into()))
+            .spacing(1.0)
+            .header_spacing(2.0)
+            .actions_spacing(3.0)
+            .padding(4.0)
+            .layout(FormActions::End);
+        assert_eq!(
+            (f.spacing, f.header_spacing, f.actions_spacing),
+            (Some(1.0), Some(2.0), Some(3.0))
+        );
+        assert_eq!(f.padding, iced::Padding::from(4.0));
+        let _: Element<'_, u8> = f.into();
+    }
+}
+
+/// Typed presentation for parent-built native children. Defaults preserve the original view.
+#[derive(Clone, Default)]
+pub struct FormWidgetProps {
+    pub indicator: super::stepper::StepperWidgetProps,
+    pub title: crate::components::TextProps,
+    pub description: crate::components::TextProps,
+    pub content: crate::components::ContainerProps,
+    pub reset_button: crate::components::ButtonProps,
+    pub reset_label: crate::components::TextProps,
+    pub back_button: crate::components::ButtonProps,
+    pub back_label: crate::components::TextProps,
+    pub primary_button: crate::components::ButtonProps,
+    pub primary_label: crate::components::TextProps,
+    pub surface: crate::components::ContainerProps,
+}
+
+impl FormWidgetProps {
+    fn has_surface_overrides(&self) -> bool {
+        let p = &self.surface;
+        p.width.is_some()
+            || p.height.is_some()
+            || p.max_width.is_some()
+            || p.max_height.is_some()
+            || p.padding.is_some()
+            || p.align_x.is_some()
+            || p.align_y.is_some()
+            || p.clip.is_some()
+            || p.style.is_some()
+    }
+}
+
+impl FormWidgetProps {
+    pub fn indicator(mut self, props: super::stepper::StepperWidgetProps) -> Self {
+        self.indicator = props;
+        self
+    }
+    pub fn title(mut self, props: crate::components::TextProps) -> Self {
+        self.title = props;
+        self
+    }
+    pub fn description(mut self, props: crate::components::TextProps) -> Self {
+        self.description = props;
+        self
+    }
+    pub fn content(mut self, props: crate::components::ContainerProps) -> Self {
+        self.content = props;
+        self
+    }
+    pub fn reset_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.reset_button = props;
+        self
+    }
+    pub fn reset_label(mut self, props: crate::components::TextProps) -> Self {
+        self.reset_label = props;
+        self
+    }
+    pub fn back_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.back_button = props;
+        self
+    }
+    pub fn back_label(mut self, props: crate::components::TextProps) -> Self {
+        self.back_label = props;
+        self
+    }
+    pub fn primary_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.primary_button = props;
+        self
+    }
+    pub fn primary_label(mut self, props: crate::components::TextProps) -> Self {
+        self.primary_label = props;
+        self
+    }
+    pub fn surface(mut self, props: crate::components::ContainerProps) -> Self {
+        self.surface = props;
+        self
+    }
+    pub fn apply<'a, M>(&self, widget: Form<'a, M>) -> Form<'a, M>
+    where
+        M: Clone + 'a,
+    {
+        let mut widget = widget;
+        widget.props.merge(self);
+        widget
+    }
+}
+
+#[cfg(test)]
+mod native_props_tests {
+    use super::*;
+    use crate::widgets::synced_text::native_props_tests::{assert_override, text_props};
+
+    #[test]
+    fn aggregate_apply_recurses_into_indicator_and_preserves_siblings_and_policy() {
+        use crate::components::{ButtonProps, TextProps};
+        let original = FormWidgetProps::default()
+            .indicator(
+                super::super::stepper::StepperWidgetProps::default()
+                    .label(TextProps::default().width(137).height(29))
+                    .step_button(ButtonProps::default().width(151).clip(true)),
+            )
+            .description(TextProps::default().width(173));
+        let form = Form::new()
+            .on_submit(7u8)
+            .submitting(true)
+            .props(original.clone());
+        let form = FormWidgetProps::default().apply(form);
+        let form = FormWidgetProps::default()
+            .indicator(
+                super::super::stepper::StepperWidgetProps::default()
+                    .label(TextProps::default().height(37))
+                    .step_button(ButtonProps::default().clip(false)),
+            )
+            .apply(form);
+        assert_eq!(
+            form.props.indicator.label.width,
+            original.indicator.label.width
+        );
+        assert_eq!(form.props.indicator.label.height, Some(37.into()));
+        assert_eq!(
+            form.props.indicator.step_button.width,
+            original.indicator.step_button.width
+        );
+        assert_eq!(form.props.indicator.step_button.clip, Some(false));
+        assert_eq!(form.props.description.width, original.description.width);
+        assert!(form.submitting);
+        assert_eq!(form.on_submit, Some(7));
+    }
+    #[test]
+    fn defaults_preserve_layout_and_overrides_reach_native_children() {
+        let make = || {
+            Form::<()>::new()
+                .title("Title")
+                .step(Step::new("One", || iced::widget::space().into()))
+        };
+        assert_override(
+            make().into(),
+            make().props(FormWidgetProps::default()).into(),
+            make()
+                .props(FormWidgetProps::default().title(text_props()))
+                .into(),
+        );
+    }
+}
+
+#[cfg(test)]
+mod native_behavior_tests {
+    use super::*;
+    use crate::components::ButtonProps;
+    use crate::widgets::synced_text::native_props_tests::click_sized;
+    #[test]
+    fn presentation_preserves_submit_and_busy_policy() {
+        let make = || {
+            Form::new().enter_submits(false).on_submit(7).props(
+                FormWidgetProps::default()
+                    .primary_button(ButtonProps::default().width(137).height(29)),
+            )
+        };
+        assert_eq!(click_sized(make().into()), vec![7]);
+        assert!(click_sized(make().submitting(true).into()).is_empty());
+    }
+}
+
+crate::components::props::impl_merge!(FormWidgetProps; fields: []; optional: []; nested: [indicator, title, description, content, reset_button, reset_label, back_button, back_label, primary_button, primary_label, surface]);

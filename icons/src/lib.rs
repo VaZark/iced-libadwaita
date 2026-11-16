@@ -15,6 +15,10 @@ pub mod common {
     pub const ADD: &str = include_str!("../svg/common/add.svg");
     pub const DELETE: &str = include_str!("../svg/common/delete.svg");
     pub const EDIT: &str = include_str!("../svg/common/edit.svg");
+    /// An originally drawn disk: save the current document.
+    pub const SAVE: &str = include_str!("../svg/common/save.svg");
+    /// An originally drawn disk with a pencil: save under a new name.
+    pub const SAVE_AS: &str = include_str!("../svg/common/save-as.svg");
     pub const FILTER: &str = include_str!("../svg/common/filter.svg");
     pub const FULLSCREEN_EXIT: &str = include_str!("../svg/common/fullscreen-exit.svg");
     pub const FULLSCREEN: &str = include_str!("../svg/common/fullscreen.svg");
@@ -36,6 +40,56 @@ pub mod common {
     pub const VIEW_MORE: &str = include_str!("../svg/common/view-more.svg");
     pub const VOLUME_MUTE: &str = include_str!("../svg/common/volume-mute.svg");
     pub const VOLUME: &str = include_str!("../svg/common/volume.svg");
+    /// A check mark: chosen, done.
+    pub const CHECK: &str = include_str!("../svg/common/check.svg");
+    /// A minus: take away (pair it with `add`).
+    pub const REMOVE: &str = include_str!("../svg/common/remove.svg");
+    /// A window with a title bar.
+    pub const WINDOW: &str = include_str!("../svg/common/window.svg");
+    /// A triangle with an exclamation mark.
+    pub const WARNING: &str = include_str!("../svg/common/warning.svg");
+    /// A circle with a cross.
+    pub const ERROR: &str = include_str!("../svg/common/error.svg");
+    /// A counterclockwise arrow: back to the initial state.
+    pub const RESET: &str = include_str!("../svg/common/reset.svg");
+    /// A page with a folded corner and lines.
+    pub const DOCUMENT: &str = include_str!("../svg/common/document.svg");
+    /// A die with five pips: a random choice.
+    pub const DICE: &str = include_str!("../svg/common/dice.svg");
+    /// A lightning bolt.
+    pub const BOLT: &str = include_str!("../svg/common/bolt.svg");
+    /// A globe: the web, languages.
+    pub const GLOBE: &str = include_str!("../svg/common/globe.svg");
+    /// A price tag: one label (see `app::TAGS` for several).
+    pub const TAG: &str = include_str!("../svg/common/tag.svg");
+    /// A five-pointed star.
+    pub const STAR: &str = include_str!("../svg/common/star.svg");
+    /// A clock face: time, recent.
+    pub const CLOCK: &str = include_str!("../svg/common/clock.svg");
+    /// A bullseye.
+    pub const TARGET: &str = include_str!("../svg/common/target.svg");
+    /// A smiling face.
+    pub const SMILE: &str = include_str!("../svg/common/smile.svg");
+    /// A circle with a needle: explore.
+    pub const COMPASS: &str = include_str!("../svg/common/compass.svg");
+    /// A four-pointed star: new, magic, suggestions.
+    pub const SPARKLE: &str = include_str!("../svg/common/sparkle.svg");
+    /// A window with its bottom strip marked: the compact view.
+    pub const COMPACT: &str = include_str!("../svg/common/compact.svg");
+}
+
+/// Media and music glyphs: playback order, queue, notes, lyrics.
+pub mod media {
+    /// Two crossing arrows.
+    pub const SHUFFLE: &str = include_str!("../svg/media/shuffle.svg");
+    /// Two arrows in a loop.
+    pub const REPEAT: &str = include_str!("../svg/media/repeat.svg");
+    /// Lines with a play mark: what plays next.
+    pub const QUEUE: &str = include_str!("../svg/media/queue.svg");
+    /// A beamed note.
+    pub const MUSIC_NOTE: &str = include_str!("../svg/media/music-note.svg");
+    /// A speech box with lines: lyrics, captions.
+    pub const LYRICS: &str = include_str!("../svg/media/lyrics.svg");
 }
 
 /// Navigation and disclosure chevrons.
@@ -135,6 +189,31 @@ pub fn all() -> impl Iterator<Item = (&'static str, &'static str)> {
         ("common/view-more", common::VIEW_MORE),
         ("common/volume-mute", common::VOLUME_MUTE),
         ("common/volume", common::VOLUME),
+        ("common/check", common::CHECK),
+        ("common/remove", common::REMOVE),
+        ("common/window", common::WINDOW),
+        ("common/warning", common::WARNING),
+        ("common/error", common::ERROR),
+        ("common/reset", common::RESET),
+        ("common/document", common::DOCUMENT),
+        ("common/dice", common::DICE),
+        ("common/bolt", common::BOLT),
+        ("common/globe", common::GLOBE),
+        ("common/tag", common::TAG),
+        ("common/star", common::STAR),
+        ("common/clock", common::CLOCK),
+        ("common/target", common::TARGET),
+        ("common/smile", common::SMILE),
+        ("common/compass", common::COMPASS),
+        ("common/sparkle", common::SPARKLE),
+        ("common/compact", common::COMPACT),
+        ("common/save", common::SAVE),
+        ("common/save-as", common::SAVE_AS),
+        ("media/shuffle", media::SHUFFLE),
+        ("media/repeat", media::REPEAT),
+        ("media/queue", media::QUEUE),
+        ("media/music-note", media::MUSIC_NOTE),
+        ("media/lyrics", media::LYRICS),
         ("chevron/down", chevron::DOWN),
         ("chevron/first", chevron::FIRST),
         ("chevron/last", chevron::LAST),
@@ -198,16 +277,25 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for (name, svg) in all() {
             assert!(seen.insert(name), "{name} listed twice");
-            assert!(svg.starts_with("<svg ") && svg.trim_end().ends_with("</svg>"), "{name}");
+            assert!(
+                svg.starts_with("<svg ") && svg.trim_end().ends_with("</svg>"),
+                "{name}"
+            );
             assert!(svg.contains(r#"viewBox="0 0 16 16""#), "{name}: not 16x16");
-            assert!(!svg.contains("currentColor"), "{name}: fixed colour is #000, recoloured by the toolkit");
+            assert!(
+                !svg.contains("currentColor"),
+                "{name}: fixed colour is #000, recoloured by the toolkit"
+            );
         }
-        assert!(seen.len() >= 50, "found only {}", seen.len());
+        assert!(seen.len() >= 70, "found only {}", seen.len());
     }
 
     #[test]
     fn lookup_by_name() {
         assert_eq!(get("app/pin"), Some(app::PIN));
         assert_eq!(get("app/nope"), None);
+        assert_eq!(get("common/save"), Some(common::SAVE));
+        assert_eq!(get("common/save-as"), Some(common::SAVE_AS));
+        assert_ne!(common::SAVE, common::SAVE_AS);
     }
 }

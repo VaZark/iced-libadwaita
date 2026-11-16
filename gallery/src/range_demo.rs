@@ -15,6 +15,59 @@ use iad::{components as cmp, widgets as w};
 use iced::Length;
 use iced::widget::{column, container, row};
 
+// Share the actual native input style with the Field, including its validation
+// state. Stock entry geometry is invariant across active/hover/focus/disabled.
+fn field_entry_style(
+    state: cmp::EntryState,
+) -> fn(&iad::Theme, iced::widget::text_input::Status) -> iced::widget::text_input::Style {
+    match state {
+        cmp::EntryState::Normal => iad::styles::text_input::default,
+        cmp::EntryState::Error => iad::styles::text_input::error,
+        cmp::EntryState::Warning => iad::styles::text_input::warning,
+        cmp::EntryState::Success => iad::styles::text_input::success,
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn stay_field_geometry_matches_native_style_for_every_entry_state_and_status() {
+    use iced::widget::text_input::Status;
+    for mut theme in [iad::Theme::light(), iad::Theme::dark()] {
+        for radius in [0.0, 12.0, 999.0] {
+            theme.metrics.radius_m = radius;
+            for state in [
+                cmp::EntryState::Normal,
+                cmp::EntryState::Error,
+                cmp::EntryState::Warning,
+                cmp::EntryState::Success,
+            ] {
+                let style = field_entry_style(state);
+                let geometry = style(&theme, Status::Active).border.radius;
+                for status in [
+                    Status::Active,
+                    Status::Hovered,
+                    Status::Focused { is_hovered: false },
+                    Status::Focused { is_hovered: true },
+                    Status::Disabled,
+                ] {
+                    assert_eq!(geometry, style(&theme, status).border.radius);
+                    let expected = match state {
+                        cmp::EntryState::Normal => iad::styles::text_input::default(&theme, status),
+                        cmp::EntryState::Error => iad::styles::text_input::error(&theme, status),
+                        cmp::EntryState::Warning => {
+                            iad::styles::text_input::warning(&theme, status)
+                        }
+                        cmp::EntryState::Success => {
+                            iad::styles::text_input::success(&theme, status)
+                        }
+                    };
+                    assert_eq!(style(&theme, status), expected);
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Msg {
     Basic((f32, f32)),
@@ -486,7 +539,19 @@ impl State {
         let f = &self.field_dates;
         let spec = spec();
         let input = Self::dates_input(f, m).revealed(self.form.revealed(&spec, &"dates"));
+        let entry_style = field_entry_style(input.text_state());
+        let input = input.entry_props(
+            cmp::EntryProps::default()
+                .input_props(cmp::TextInputProps::default().style(entry_style)),
+        );
         let field = Field::new("Stay", input)
+            .target_geometry(move |theme, _| {
+                Some(
+                    entry_style(theme, iced::widget::text_input::Status::Active)
+                        .border
+                        .radius,
+                )
+            })
             .description("From check-in to check-out.")
             .required(true)
             .validity(self.validity(&"dates"))

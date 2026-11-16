@@ -6,7 +6,6 @@
 //! `docs/lib/primitives.md`.
 //!
 //! * [`calendar`]: calendar navigation by level (month, year, decade);
-//! * [`chart`]: charts, headless: scales and ticks, line and area shapes, stacks, pie, funnel, sankey and sunburst layouts (d3, Chart.js, TanStack Charts);
 //! * [`color_picker`]: a color as hue / saturation / value / alpha, its conversions and text forms (hex, rgb, hsl, hsv), parsing (Mantine's ColorPicker);
 //! * [`date`]: calendar dates and month math;
 //! * [`drag`]: what a drop target says while a drag is over it, and which of nested targets takes the drop;
@@ -15,7 +14,6 @@
 //! * [`form`]: submit / reset / next / back gating and when a form's fields reveal errors (steps);
 //! * [`countdown`]: a one-shot timer (a toast's auto-dismiss): fires once at its deadline, zero never fires;
 //! * [`tag_groups`]: tag groups as alternatives (every tag of one group, any group), one active, a slot for a new group;
-//! * [`histogram`]: values counted into bins over a range, and which bins a selection covers;
 //! * [`history`]: where Back goes: open pushes the place you leave, go forgets the trail, back pops;
 //! * [`infinite`]: a list that grows page by page (offset or cursor): one request in flight, stale responses discarded, the scroll rule;
 //! * [`lookup`]: a query answered asynchronously: debounce, stale-response discarding, cache;
@@ -45,15 +43,15 @@
 //! engines are in `layouts`, next to the widgets that place things with them.
 
 pub mod appearance;
+pub mod bevel;
+pub mod pixmap;
 pub mod calendar;
-pub mod chart;
 pub mod color_picker;
 pub mod countdown;
 pub mod date;
 pub mod draft;
 pub mod focus;
 pub mod form;
-pub mod histogram;
 pub mod history;
 pub mod infinite;
 pub mod loading;

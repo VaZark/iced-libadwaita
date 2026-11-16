@@ -9,7 +9,7 @@
 //!
 //! ```ignore
 //! TableGrid::new([
-//!     TableCell::new(chart).span(8),
+//!     TableCell::new(list).span(8),
 //!     TableCell::new(summary).span(4),
 //!     TableCell::new(table).span(12),
 //! ])
@@ -61,7 +61,7 @@ impl<'a, M: 'a> TableGrid<'a, M> {
         Self {
             cells: cells.into_iter().collect(),
             columns: 12,
-            spacing: 12.0,
+            spacing: crate::Metrics::desktop().space_m,
             align: Vertical::Top,
         }
     }

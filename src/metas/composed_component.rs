@@ -4,18 +4,13 @@
 //!
 //! Every part is built from the shared state and answers with the next state. Whichever part the
 //! user touches, the application gets one value through one `on_change`, and every part is
-//! built from that value on the next view, so they cannot disagree. A histogram over a range
-//! slider, a color box next to a hex entry, a calendar beside a date entry: each pair edits one
-//! value.
+//! built from that value on the next view, so they cannot disagree. A number entry beside a
+//! range slider, a color box next to a hex entry, a calendar beside a date entry: each pair edits
+//! one value.
 //!
 //! ```ignore
 //! ComposedComponent::new(self.range, Msg::Range)
-//!     .part(|r| {
-//!         BarChart::histogram(&self.histogram)
-//!             .selected(|i| self.histogram.selected(i, *r))   // the bars inside the range
-//!             .on_pick(|i| self.histogram.bin_range(i))        // a pressed bar is a range
-//!             .into()
-//!     })
+//!     .part(|r| range_label(*r).into())
 //!     .part(|r| range_slider(0.0..=100.0, *r, |moved| moved).into())
 //!     .normalize(|(lo, hi)| (lo.min(hi), lo.max(hi)))
 //! ```
@@ -63,7 +58,7 @@ impl<'a, S: 'a, M: 'a> ComposedComponent<'a, S, M> {
             normalize: None,
             parts: Vec::new(),
             axis: ComposeAxis::Vertical,
-            spacing: 8.0,
+            spacing: crate::Metrics::desktop().gap,
             width: Length::Fill,
         }
     }

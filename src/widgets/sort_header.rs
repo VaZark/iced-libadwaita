@@ -16,6 +16,8 @@
 //! ```
 
 use crate::Element;
+use crate::components::{ButtonProps, ContainerProps, TextProps};
+
 use crate::components::typography as ty;
 use crate::layouts::{Flex, FlexCells};
 use crate::primitives::sorting::{Direction, SortState};
@@ -60,13 +62,41 @@ pub struct SortHeader<'a, K, M> {
     cells: Vec<Cell<K>>,
     padding: Padding,
     metrics: Metrics,
+    label_props: TextProps,
+    sort_button_props: ButtonProps,
+    cell_props: ContainerProps,
+    container_props: ContainerProps,
 }
 
 impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> SortHeader<'a, K, M> {
     /// `state` says which column is sorted and how; `on_sort` gets the key of a pressed label
     /// (the application calls [`SortState::activate`] with it).
+    /// Presentation overrides applied after the child's defaults.
+    pub fn label_props(mut self, props: TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn sort_button_props(mut self, props: ButtonProps) -> Self {
+        self.sort_button_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn cell_props(mut self, props: ContainerProps) -> Self {
+        self.cell_props = props;
+        self
+    }
+    /// Presentation overrides applied after the child's defaults.
+    pub fn container_props(mut self, props: ContainerProps) -> Self {
+        self.container_props = props;
+        self
+    }
     pub fn new(state: &'a SortState<K>, on_sort: impl Fn(K) -> M + 'a) -> Self {
         Self {
+            label_props: TextProps::default(),
+            sort_button_props: ButtonProps::default(),
+            cell_props: ContainerProps::default(),
+            container_props: ContainerProps::default(),
             state,
             on_sort: Box::new(on_sort),
             cells: Vec::new(),
@@ -159,13 +189,17 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<SortHeader<'a, K, M>> fo
                     let flex = flex_of(w, &label);
                     line.cell(
                         flex,
-                        container(
-                            ty::caption(label)
-                                .style(st::dim)
-                                .wrapping(iced::widget::text::Wrapping::None),
-                        )
-                        .width(Length::Fill)
-                        .align_x(align),
+                        h.cell_props.apply(
+                            container(
+                                h.label_props.apply(
+                                    ty::caption(label)
+                                        .style(st::dim)
+                                        .wrapping(iced::widget::text::Wrapping::None),
+                                ),
+                            )
+                            .width(Length::Fill)
+                            .align_x(align),
+                        ),
                     )
                 }
                 Cell::Sortable(key, label, w, align) => {
@@ -179,35 +213,42 @@ impl<'a, K: PartialEq + Clone + 'a, M: Clone + 'a> From<SortHeader<'a, K, M>> fo
                             .style(st::dim)
                             .wrapping(iced::widget::text::Wrapping::None)
                     };
+                    let label = h.label_props.apply(label);
                     let msg = (h.on_sort)(key);
                     // The label is the click target over **the whole column**, not just its text,
                     // and it does not highlight: a header is not a button to look at.
                     line.cell(
                         flex,
-                        button(
-                            container(
-                                row![label, icon.view(12.0)]
-                                    .spacing(m.space_xs)
-                                    .align_y(Alignment::Center),
+                        h.sort_button_props.apply(
+                            button(
+                                h.cell_props.apply(
+                                    container(
+                                        row![label, icon.view(12.0)]
+                                            .spacing(m.space_xs)
+                                            .align_y(Alignment::Center),
+                                    )
+                                    .width(Length::Fill)
+                                    .align_x(align),
+                                ),
                             )
                             .width(Length::Fill)
-                            .align_x(align),
-                        )
-                        .width(Length::Fill)
-                        .padding(0)
-                        .style(|t: &crate::Theme, _| button::Style {
-                            background: None,
-                            text_color: t.semantic.window.fg,
-                            border: iced::Border::default(),
-                            shadow: iced::Shadow::default(),
-                            snap: false,
-                        })
-                        .on_press(msg),
+                            .padding(0)
+                            .style(|t: &crate::Theme, _| button::Style {
+                                background: None,
+                                text_color: t.semantic.window.fg,
+                                border: iced::Border::default(),
+                                shadow: iced::Shadow::default(),
+                                snap: false,
+                            })
+                            .on_press(msg),
+                        ),
                     )
                 }
             };
         }
-        container(line).padding(h.padding).into()
+        h.container_props
+            .apply(container(line).padding(h.padding))
+            .into()
     }
 }
 

@@ -46,21 +46,36 @@ impl TagItem {
 type OnRemove<'a, M> = Box<dyn Fn(usize, usize) -> M + 'a>;
 
 pub struct TagGroupList<'a, M> {
+    chip_props: crate::components::badge::ChipProps,
+    label_props: crate::components::TextProps,
     groups: Vec<Vec<TagItem>>,
     separator: String,
     size: ChipSize,
     on_remove: Option<OnRemove<'a, M>>,
-    #[allow(dead_code)]
+    spacing: Option<f32>,
     metrics: Metrics,
 }
 
 impl<'a, M: Clone + 'a> TagGroupList<'a, M> {
+    pub fn chip_props(mut self, props: crate::components::badge::ChipProps) -> Self {
+        self.chip_props = props;
+        self
+    }
+
+    pub fn label_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
     pub fn new(groups: Vec<Vec<TagItem>>) -> Self {
         Self {
+            chip_props: Default::default(),
+            label_props: Default::default(),
             groups,
             separator: String::new(),
             size: ChipSize::Small,
             on_remove: None,
+            spacing: None,
             metrics: Metrics::desktop(),
         }
     }
@@ -68,6 +83,12 @@ impl<'a, M: Clone + 'a> TagGroupList<'a, M> {
     /// What goes between groups. Nothing by default.
     pub fn separator(mut self, s: impl Into<String>) -> Self {
         self.separator = s.into();
+        self
+    }
+
+    /// The gap between the chips of a group (default `space_xs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
         self
     }
 
@@ -105,9 +126,8 @@ impl<'a, M: Clone + 'a> From<TagGroupList<'a, M>> for Element<'a, M> {
                     flow.push(space().width(GAP).into());
                 } else {
                     flow.push(
-                        text(list.separator.clone())
-                            .style(crate::styles::text::dim)
-                            .into(),
+                        list.label_props
+                            .apply(text(list.separator.clone()).style(crate::styles::text::dim)),
                     );
                 }
             }
@@ -120,16 +140,72 @@ impl<'a, M: Clone + 'a> From<TagGroupList<'a, M>> for Element<'a, M> {
                 if let Some(f) = &list.on_remove {
                     chip = chip.on_remove(f(g, t));
                 }
-                Element::from(chip)
+                Element::from(list.chip_props.apply(chip))
             });
             flow.push(
                 row(chips)
-                    .spacing(4)
+                    .spacing(list.spacing.unwrap_or(list.metrics.space_xs))
                     .align_y(Alignment::Center)
                     .wrap()
                     .into(),
             );
         }
         token_flow(flow)
+    }
+}
+
+#[cfg(test)]
+mod spacing_params {
+    use super::*;
+
+    #[test]
+    fn the_chip_gap_is_a_parameter() {
+        let l =
+            TagGroupList::<()>::new(vec![vec![TagItem::new("a"), TagItem::new("b")]]).spacing(7.0);
+        assert_eq!(l.spacing, Some(7.0));
+        let _: Element<'_, ()> = l.into();
+    }
+}
+
+/// Presentation-only overrides supported by [`TagGroupList`]. Values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct TagGroupListProps {
+    pub spacing: Option<f32>,
+    pub metrics: Option<crate::Metrics>,
+    pub label_props: Option<crate::components::TextProps>,
+    pub chip_props: Option<crate::components::badge::ChipProps>,
+}
+impl TagGroupListProps {
+    pub fn spacing(mut self, value: impl Into<f32>) -> Self {
+        self.spacing = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<crate::Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn label_props(mut self, value: impl Into<crate::components::TextProps>) -> Self {
+        self.label_props = Some(value.into());
+        self
+    }
+    pub fn chip_props(mut self, value: impl Into<crate::components::badge::ChipProps>) -> Self {
+        self.chip_props = Some(value.into());
+        self
+    }
+    pub fn apply<'a, M: Clone + 'a>(&self, widget: TagGroupList<'a, M>) -> TagGroupList<'a, M> {
+        let mut widget = widget;
+        if let Some(value) = &self.spacing {
+            widget = widget.spacing(value.clone());
+        }
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
+        }
+        if let Some(props) = &self.label_props {
+            widget.label_props.merge(props);
+        }
+        if let Some(props) = &self.chip_props {
+            widget.chip_props.merge(props);
+        }
+        widget
     }
 }

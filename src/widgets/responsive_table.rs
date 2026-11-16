@@ -144,6 +144,7 @@ struct Window {
 /// Rows of `T` as a table or as cards, by the width of the container. See the
 /// [module](self).
 pub struct ResponsiveTable<'a, T, M> {
+    props: ResponsiveTableWidgetProps,
     rows: &'a [T],
     columns: Vec<Column<'a, T, M>>,
     card: Option<Cell<'a, T, M>>,
@@ -155,11 +156,21 @@ pub struct ResponsiveTable<'a, T, M> {
     footer: Option<Footer<'a, M>>,
     window: Option<Window>,
     on_scroll: Option<Scroll<'a, M>>,
+    spacing: Option<f32>,
+    padding: Option<Padding>,
+    column_spacing: Option<f32>,
+    card_spacing: Option<f32>,
 }
 
 impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
+    /// Presentation overrides for native children; actions remain parent-owned.
+    pub fn props(mut self, props: ResponsiveTableWidgetProps) -> Self {
+        self.props = props;
+        self
+    }
     pub fn new(rows: &'a [T]) -> Self {
         Self {
+            props: ResponsiveTableWidgetProps::default(),
             rows,
             columns: Vec::new(),
             card: None,
@@ -171,7 +182,14 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
             footer: None,
             window: None,
             on_scroll: None,
+            spacing: None,
+            padding: None,
+            column_spacing: None,
+            card_spacing: None,
         }
+    }
+    fn page_pad(&self) -> Padding {
+        self.padding.unwrap_or(self.metrics.page_padding)
     }
     pub fn column(mut self, c: Column<'a, T, M>) -> Self {
         self.columns.push(c);
@@ -189,6 +207,27 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
         self.metrics = m;
+        self
+    }
+    /// The gap between the header (or sort control), the body and the footer (default: the
+    /// theme's `space_s` as a table, `space_m` as cards).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The padding around the table (default: the theme's page padding).
+    pub fn padding(mut self, p: impl Into<Padding>) -> Self {
+        self.padding = Some(p.into());
+        self
+    }
+    /// The gap between the cells of a row (default: the theme's `row_spacing`).
+    pub fn column_spacing(mut self, px: f32) -> Self {
+        self.column_spacing = Some(px);
+        self
+    }
+    /// The gap between cards (default: the theme's `space_m`).
+    pub fn card_spacing(mut self, px: f32) -> Self {
+        self.card_spacing = Some(px);
         self
     }
     /// Height of the table (default `Fill`; the body scrolls inside it).
@@ -272,7 +311,8 @@ impl<'a, T: 'a, M: 'a> ResponsiveTable<'a, T, M> {
     pub fn needed_width(&self) -> f32 {
         let m = &self.metrics;
         let cols: f32 = self.columns.iter().map(|c| c.min_width).sum();
-        let gaps = self.columns.len().saturating_sub(1) as f32 * m.row_spacing;
+        let gaps = self.columns.len().saturating_sub(1) as f32
+            * self.column_spacing.unwrap_or(m.row_spacing);
         cols + gaps + m.card_padding.x()
     }
 }
@@ -283,9 +323,13 @@ struct ColumnSort<M> {
     priority: Option<usize>,
 }
 
-fn dim_caption<'a, M: 'a>(s: &str) -> Element<'a, M> {
-    crate::components::typography::caption_heading(s.to_owned())
-        .style(crate::styles::text::dim)
+fn dim_caption<'a, M: 'a>(s: &str, props: &ResponsiveTableWidgetProps) -> Element<'a, M> {
+    props
+        .caption
+        .apply(
+            crate::components::typography::caption_heading(s.to_owned())
+                .style(crate::styles::text::dim),
+        )
         .into()
 }
 
@@ -330,6 +374,7 @@ fn is_empty<T, M>(t: &ResponsiveTable<'_, T, M>) -> bool {
 }
 
 fn table_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Element<'a, M> {
+    let props = &t.props;
     if is_empty(t) {
         return space().into();
     }
@@ -338,8 +383,8 @@ fn table_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Elemen
         row(cells
             .into_iter()
             .zip(&t.columns)
-            .map(|(c, col)| container(c).width(col.width).into()))
-        .spacing(m.row_spacing)
+            .map(|(c, col)| props.cell.apply(container(c).width(col.width)).into()))
+        .spacing(t.column_spacing.unwrap_or(m.row_spacing))
     };
     let header = line(t.columns.iter().map(|c| header_cell(t, c)).collect());
     if let Some(w) = t.window {
@@ -354,14 +399,19 @@ fn table_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Elemen
         card = card.push(r);
     }
     let mut body = column![
-        container(header).padding(m.card_padding),
-        crate::layouts::scrolled_window(card).height(Length::Fill),
+        props
+            .header
+            .apply(container(header).padding(m.card_padding)),
+        crate::layouts::scrolled_window(t.props.card.apply(card)).height(Length::Fill),
     ]
-    .spacing(m.space_s);
+    .spacing(t.spacing.unwrap_or(m.space_s));
     if let Some(footer) = &t.footer {
         body = body.push(footer());
     }
-    container(body).padding(m.page_padding).into()
+    props
+        .surface
+        .apply(container(body).padding(t.page_pad()))
+        .into()
 }
 
 /// The table of a long list: the header, then the window's rows at a fixed height with a
@@ -371,6 +421,7 @@ fn virtual_table_view<'a, T: 'a, M: Clone + 'a>(
     w: Window,
     header: iced::widget::Row<'a, M, Theme>,
 ) -> Element<'a, M> {
+    let props = &t.props;
     let m = &t.metrics;
     let pitch = ResponsiveTable::<T, M>::pitch(w.row_height);
     let range = w.first..(w.first + t.rows.len()).min(w.total);
@@ -378,34 +429,44 @@ fn virtual_table_view<'a, T: 'a, M: Clone + 'a>(
     let mut rows = column![space().height(fill.above)];
     for item in t.rows.iter().take(range.len()) {
         let cells = row(t.columns.iter().map(|col| {
-            container((col.cell)(item))
-                .width(col.width)
-                .height(Length::Fill)
-                .align_y(col.align_y)
+            props
+                .virtual_cell
+                .apply(
+                    container((col.cell)(item))
+                        .width(col.width)
+                        .height(Length::Fill)
+                        .align_y(col.align_y),
+                )
                 .into()
         }))
-        .spacing(m.row_spacing)
+        .spacing(t.column_spacing.unwrap_or(m.row_spacing))
         .height(Length::Fill);
         rows = rows.push(column![
-            container(cells)
-                .height(w.row_height)
-                .center_y(Length::Fixed(w.row_height))
-                .padding(
-                    Padding::ZERO
-                        .left(m.card_padding.left)
-                        .right(m.card_padding.right)
-                ),
-            container(space().height(1))
-                .width(Length::Fill)
-                .style(crate::styles::container::card_separator),
+            props.virtual_row.apply(
+                container(cells)
+                    .height(w.row_height)
+                    .center_y(Length::Fixed(w.row_height))
+                    .padding(
+                        Padding::ZERO
+                            .left(m.card_padding.left)
+                            .right(m.card_padding.right)
+                    )
+            ),
+            props.separator.apply(
+                container(space().height(1))
+                    .width(Length::Fill)
+                    .style(crate::styles::container::card_separator)
+            ),
         ]);
     }
     rows = rows.push(space().height(fill.below));
     let list = crate::components::card_shadow(
-        container(rows)
-            .width(Length::Fill)
-            .clip(true)
-            .style(crate::styles::container::card_surface),
+        props.virtual_surface.apply(
+            container(rows)
+                .width(Length::Fill)
+                .clip(true)
+                .style(crate::styles::container::card_surface),
+        ),
     );
     let mut scroll = crate::layouts::scrolled_window(list).height(Length::Fill);
     if let Some(f) = &t.on_scroll {
@@ -416,11 +477,20 @@ fn virtual_table_view<'a, T: 'a, M: Clone + 'a>(
             f(v)
         });
     }
-    let mut body = column![container(header).padding(m.card_padding), scroll].spacing(m.space_s);
+    let mut body = column![
+        props
+            .header
+            .apply(container(header).padding(m.card_padding)),
+        scroll
+    ]
+    .spacing(t.spacing.unwrap_or(m.space_s));
     if let Some(footer) = &t.footer {
         body = body.push(footer());
     }
-    container(body).padding(m.page_padding).into()
+    props
+        .surface
+        .apply(container(body).padding(t.page_pad()))
+        .into()
 }
 
 /// A column header: dim caption text, or for a sortable column a button with the arrow.
@@ -428,8 +498,9 @@ fn header_cell<'a, T: 'a, M: Clone + 'a>(
     t: &ResponsiveTable<'a, T, M>,
     col: &Column<'a, T, M>,
 ) -> Element<'a, M> {
+    let props = &t.props;
     let Some(sort) = t.sorting(col) else {
-        return dim_caption(&col.header);
+        return dim_caption(&col.header, &t.props);
     };
     let m = &t.metrics;
     let sorted = sort.dir.is_some();
@@ -450,35 +521,49 @@ fn header_cell<'a, T: 'a, M: Clone + 'a>(
                 }),
             });
     let mut content = row![
-        crate::components::typography::caption_heading(col.header.clone()),
+        props
+            .header_label
+            .apply(crate::components::typography::caption_heading(
+                col.header.clone()
+            )),
         icon
     ]
     .spacing(m.space_xs)
     .align_y(Vertical::Center);
     if let Some(n) = sort.priority {
-        content = content.push(crate::components::typography::caption(n.to_string()));
+        content = content.push(
+            props
+                .sort_priority
+                .apply(crate::components::typography::caption(n.to_string())),
+        );
     }
     // No padding: the label stays on the column's left edge, aligned with the cells.
-    button(content)
-        .padding(Padding::ZERO)
-        .style(move |th: &Theme, status| {
-            let hot = sorted || matches!(status, button::Status::Hovered | button::Status::Pressed);
-            button::Style {
-                text_color: if hot {
-                    th.semantic.window.fg
-                } else {
-                    th.semantic.dim()
-                },
-                ..button::Style::default()
-            }
-        })
-        .on_press(sort.press)
+    props
+        .header_button
+        .apply(
+            button(content)
+                .padding(Padding::ZERO)
+                .style(move |th: &Theme, status| {
+                    let hot = sorted
+                        || matches!(status, button::Status::Hovered | button::Status::Pressed);
+                    button::Style {
+                        text_color: if hot {
+                            th.semantic.window.fg
+                        } else {
+                            th.semantic.dim()
+                        },
+                        ..button::Style::default()
+                    }
+                })
+                .on_press(sort.press),
+        )
         .into()
 }
 
 /// The cards' stand-in for the header row: a dropdown of the sortable columns and a button
 /// that cycles the direction of the current one. `None` if nothing is sortable.
 fn sort_control<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Option<Element<'a, M>> {
+    let props = &t.props;
     let m = &t.metrics;
     let cols: Vec<(&Column<'a, T, M>, ColumnSort<M>)> = t
         .columns
@@ -493,23 +578,42 @@ fn sort_control<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Opti
         .find(|(_, s)| s.dir.is_some() && s.priority.is_none_or(|p| p == 1));
     let side = m.button_min_height;
     let items = cols.iter().map(|(c, s)| {
-        crate::widgets::menu_item(c.header.clone(), s.dir.is_some(), s.press.clone())
+        super::dropdown::menu_item_with_props(
+            c.header.clone(),
+            s.dir.is_some(),
+            s.press.clone(),
+            props.sort_item.clone(),
+        )
     });
-    let trigger = container(
-        row![
-            text(
-                current
-                    .map_or("None", |(c, _)| c.header.as_str())
-                    .to_owned()
-            )
-            .wrapping(text::Wrapping::None),
-            Icon::GoDown.view(m.icon_size),
-        ]
-        .spacing(m.space_s)
-        .align_y(Vertical::Center),
-    )
-    .center_y(Length::Fixed(side - m.button_padding.y()));
-    let picker = crate::widgets::Popover::new(trigger, crate::widgets::popover(items, 280.0));
+    let trigger = props.sort_trigger.apply(
+        container(
+            row![
+                props.sort_selection.apply(
+                    text(
+                        current
+                            .map_or("None", |(c, _)| c.header.as_str())
+                            .to_owned()
+                    )
+                    .wrapping(text::Wrapping::None)
+                ),
+                Icon::GoDown.view(m.icon_size),
+            ]
+            .spacing(m.space_s)
+            .align_y(Vertical::Center),
+        )
+        .center_y(Length::Fixed(side - m.button_padding.y())),
+    );
+    let defaults = Metrics::desktop();
+    let picker = props.sort_picker.apply(crate::widgets::Popover::new(
+        trigger,
+        super::popover::popover_spaced_with_props(
+            items,
+            280.0,
+            defaults.space_xxs,
+            defaults.popover_padding,
+            props.sort_popover.clone(),
+        ),
+    ));
 
     let (arrow, press) = match current {
         Some((_, s)) => (
@@ -523,23 +627,28 @@ fn sort_control<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Opti
         None => (Icon::GoUpDown, None),
     };
     let enabled = press.is_some();
-    let dir_button =
+    let dir_button = props.direction_button.apply(
         button(
-            container(arrow.view(m.icon_size).style(move |th: &Theme, _| {
-                iced::widget::svg::Style {
-                    color: Some(th.semantic.icon_color(!enabled)),
-                }
-            }))
-            .center(Length::Fixed(side)),
+            props.direction_container.apply(
+                container(arrow.view(m.icon_size).style(move |th: &Theme, _| {
+                    iced::widget::svg::Style {
+                        color: Some(th.semantic.icon_color(!enabled)),
+                    }
+                }))
+                .center(Length::Fixed(side)),
+            ),
         )
         .padding(Padding::ZERO)
         .style(sb::default)
-        .on_press_maybe(press);
+        .on_press_maybe(press),
+    );
 
     Some(
         row![
-            crate::components::typography::caption_heading("Sort by")
-                .style(crate::styles::text::dim),
+            props.sort_label.apply(
+                crate::components::typography::caption_heading("Sort by")
+                    .style(crate::styles::text::dim)
+            ),
             picker,
             dir_button,
         ]
@@ -550,21 +659,29 @@ fn sort_control<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Opti
 }
 
 fn cards_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Element<'a, M> {
+    let props = &t.props;
     if is_empty(t) {
         return space().into();
     }
     let m = &t.metrics;
+    let mut card_metrics = *m;
+    if let Some(px) = t.column_spacing {
+        card_metrics.row_spacing = px;
+    }
     let cards = t.rows.iter().map(|item| {
         let inner = match &t.card {
             Some(build) => build(item),
-            None => default_card(&t.columns, item, m),
+            None => default_card(&t.columns, item, &card_metrics, &t.props),
         };
-        crate::widgets::Card::new(inner).into()
+        t.props.card.apply(crate::widgets::Card::new(inner)).into()
     });
-    let scroll =
-        crate::layouts::scrolled_window(column(cards).spacing(m.space_m).width(Length::Fill))
-            .height(Length::Fill);
-    let mut body = column![].spacing(m.space_m);
+    let scroll = crate::layouts::scrolled_window(
+        column(cards)
+            .spacing(t.card_spacing.unwrap_or(m.space_m))
+            .width(Length::Fill),
+    )
+    .height(Length::Fill);
+    let mut body = column![].spacing(t.spacing.unwrap_or(m.space_m));
     if let Some(sort) = sort_control(t) {
         body = body.push(sort);
     }
@@ -572,7 +689,10 @@ fn cards_view<'a, T: 'a, M: Clone + 'a>(t: &ResponsiveTable<'a, T, M>) -> Elemen
     if let Some(footer) = &t.footer {
         body = body.push(footer());
     }
-    container(body).padding(m.page_padding).into()
+    props
+        .surface
+        .apply(container(body).padding(t.page_pad()))
+        .into()
 }
 
 /// The first column as a title, then a `label  value` line for each of the others.
@@ -580,6 +700,7 @@ fn default_card<'a, T, M: 'a>(
     columns: &[Column<'a, T, M>],
     item: &T,
     m: &Metrics,
+    props: &ResponsiveTableWidgetProps,
 ) -> Element<'a, M> {
     let mut col = column![].spacing(m.space_s).width(Length::Fill);
     for (i, c) in columns.iter().enumerate() {
@@ -588,8 +709,12 @@ fn default_card<'a, T, M: 'a>(
         } else {
             col = col.push(
                 row![
-                    container(dim_caption(&c.header)).width(Length::FillPortion(2)),
-                    container((c.cell)(item)).width(Length::FillPortion(3)),
+                    props.card_label.apply(
+                        container(dim_caption(&c.header, props)).width(Length::FillPortion(2))
+                    ),
+                    props
+                        .card_value
+                        .apply(container((c.cell)(item)).width(Length::FillPortion(3))),
                 ]
                 .spacing(m.row_spacing),
             );
@@ -732,4 +857,238 @@ mod tests {
             .virtualized(10_000, 40, 32.0);
         let _: Element<'_, ()> = t.into();
     }
+
+    #[test]
+    fn the_gaps_and_padding_are_parameters() {
+        let rows = [1u32, 2];
+        let base = || {
+            ResponsiveTable::<u32, ()>::new(&rows)
+                .column(Column::new("a", |_| space().into()))
+                .column(Column::new("b", |_| space().into()))
+        };
+        let wide = base().column_spacing(100.0).needed_width();
+        assert_eq!(
+            wide - base().needed_width(),
+            100.0 - Metrics::desktop().row_spacing
+        );
+        for mode in [Mode::Table, Mode::Cards] {
+            let _: Element<'_, ()> = base()
+                .mode(mode)
+                .spacing(1.0)
+                .padding([2.0, 3.0])
+                .card_spacing(4.0)
+                .into();
+        }
+    }
 }
+
+/// Typed presentation for parent-built native children. Defaults preserve the original view.
+#[derive(Clone, Default)]
+pub struct ResponsiveTableWidgetProps {
+    pub sort_item: super::dropdown::DropdownItemProps,
+    pub sort_picker: super::popover::PopoverProps,
+    pub sort_popover: super::popover::PopoverSurfaceProps,
+    pub card: super::status_page::CardProps,
+    pub caption: crate::components::TextProps,
+    pub cell: crate::components::ContainerProps,
+    pub header: crate::components::ContainerProps,
+    pub surface: crate::components::ContainerProps,
+    pub virtual_cell: crate::components::ContainerProps,
+    pub virtual_row: crate::components::ContainerProps,
+    pub separator: crate::components::ContainerProps,
+    pub virtual_surface: crate::components::ContainerProps,
+    pub header_label: crate::components::TextProps,
+    pub sort_priority: crate::components::TextProps,
+    pub header_button: crate::components::ButtonProps,
+    pub sort_trigger: crate::components::ContainerProps,
+    pub sort_selection: crate::components::TextProps,
+    pub direction_button: crate::components::ButtonProps,
+    pub direction_container: crate::components::ContainerProps,
+    pub sort_label: crate::components::TextProps,
+    pub card_label: crate::components::ContainerProps,
+    pub card_value: crate::components::ContainerProps,
+}
+
+impl ResponsiveTableWidgetProps {
+    pub fn caption(mut self, props: crate::components::TextProps) -> Self {
+        self.caption = props;
+        self
+    }
+    pub fn cell(mut self, props: crate::components::ContainerProps) -> Self {
+        self.cell = props;
+        self
+    }
+    pub fn header(mut self, props: crate::components::ContainerProps) -> Self {
+        self.header = props;
+        self
+    }
+    pub fn surface(mut self, props: crate::components::ContainerProps) -> Self {
+        self.surface = props;
+        self
+    }
+    pub fn virtual_cell(mut self, props: crate::components::ContainerProps) -> Self {
+        self.virtual_cell = props;
+        self
+    }
+    pub fn virtual_row(mut self, props: crate::components::ContainerProps) -> Self {
+        self.virtual_row = props;
+        self
+    }
+    pub fn separator(mut self, props: crate::components::ContainerProps) -> Self {
+        self.separator = props;
+        self
+    }
+    pub fn virtual_surface(mut self, props: crate::components::ContainerProps) -> Self {
+        self.virtual_surface = props;
+        self
+    }
+    pub fn header_label(mut self, props: crate::components::TextProps) -> Self {
+        self.header_label = props;
+        self
+    }
+    pub fn sort_priority(mut self, props: crate::components::TextProps) -> Self {
+        self.sort_priority = props;
+        self
+    }
+    pub fn header_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.header_button = props;
+        self
+    }
+    pub fn sort_trigger(mut self, props: crate::components::ContainerProps) -> Self {
+        self.sort_trigger = props;
+        self
+    }
+    pub fn sort_selection(mut self, props: crate::components::TextProps) -> Self {
+        self.sort_selection = props;
+        self
+    }
+    pub fn direction_button(mut self, props: crate::components::ButtonProps) -> Self {
+        self.direction_button = props;
+        self
+    }
+    pub fn direction_container(mut self, props: crate::components::ContainerProps) -> Self {
+        self.direction_container = props;
+        self
+    }
+    pub fn sort_label(mut self, props: crate::components::TextProps) -> Self {
+        self.sort_label = props;
+        self
+    }
+    pub fn card_label(mut self, props: crate::components::ContainerProps) -> Self {
+        self.card_label = props;
+        self
+    }
+    pub fn card_value(mut self, props: crate::components::ContainerProps) -> Self {
+        self.card_value = props;
+        self
+    }
+    pub fn apply<'a, T, M>(&self, widget: ResponsiveTable<'a, T, M>) -> ResponsiveTable<'a, T, M>
+    where
+        T: 'a,
+        M: 'a,
+    {
+        let mut widget = widget;
+        widget.props.merge(self);
+        widget
+    }
+}
+
+#[cfg(test)]
+mod native_props_tests {
+    use super::*;
+    use crate::widgets::synced_text::native_props_tests::{assert_override, text_props};
+
+    #[test]
+    fn aggregate_apply_recurses_into_card_dropdown_and_popover_fields() {
+        use crate::components::{ButtonProps, ContainerProps, TextProps};
+        use crate::widgets::{CardProps, DropdownItemProps, PopoverProps, PopoverSurfaceProps};
+        let rows = [()];
+        let original = ResponsiveTableWidgetProps {
+            sort_item: DropdownItemProps::default()
+                .label_props(TextProps::default().width(137).height(29))
+                .button_props(ButtonProps::default().width(151).clip(true)),
+            sort_picker: PopoverProps::default()
+                .width(173)
+                .offset(11.0)
+                .style(|_, _| iced::widget::button::Style::default()),
+            sort_popover: PopoverSurfaceProps::default()
+                .spacing(7.0)
+                .container_props(ContainerProps::default().width(191).clip(true)),
+            card: CardProps::default()
+                .child_props(ContainerProps::default().width(211).height(31))
+                .separator_props(ContainerProps::default().height(3)),
+            ..Default::default()
+        };
+        let table = ResponsiveTable::<(), ()>::new(&rows).props(original.clone());
+        let needed = table.needed_width();
+        let table = ResponsiveTableWidgetProps::default().apply(table);
+        let overrides = ResponsiveTableWidgetProps {
+            sort_item: DropdownItemProps::default()
+                .label_props(TextProps::default().height(37))
+                .button_props(ButtonProps::default().clip(false)),
+            sort_picker: PopoverProps::default().offset(0.0),
+            sort_popover: PopoverSurfaceProps::default()
+                .spacing(0.0)
+                .container_props(ContainerProps::default().clip(false)),
+            card: CardProps::default().child_props(ContainerProps::default().height(41)),
+            ..Default::default()
+        };
+        let table = overrides.apply(table);
+        let props = &table.props;
+        assert_eq!(props.sort_item.label.width, original.sort_item.label.width);
+        assert_eq!(props.sort_item.label.height, Some(37.into()));
+        assert_eq!(
+            props.sort_item.button.width,
+            original.sort_item.button.width
+        );
+        assert_eq!(props.sort_item.button.clip, Some(false));
+        assert_eq!(props.sort_picker.width, original.sort_picker.width);
+        assert_eq!(props.sort_picker.offset, Some(0.0));
+        assert!(std::sync::Arc::ptr_eq(
+            props.sort_picker.style.as_ref().unwrap(),
+            original.sort_picker.style.as_ref().unwrap()
+        ));
+        assert_eq!(props.sort_popover.spacing, Some(0.0));
+        assert_eq!(
+            props.sort_popover.container.width,
+            original.sort_popover.container.width
+        );
+        assert_eq!(props.sort_popover.container.clip, Some(false));
+        assert_eq!(
+            props.card.child_props.as_ref().unwrap().width,
+            Some(211.into())
+        );
+        assert_eq!(
+            props.card.child_props.as_ref().unwrap().height,
+            Some(41.into())
+        );
+        assert_eq!(
+            props.card.separator_props.as_ref().unwrap().height,
+            Some(3.into())
+        );
+        assert_eq!(table.needed_width(), needed);
+    }
+    #[test]
+    fn defaults_preserve_layout_and_overrides_reach_native_children() {
+        let rows = [()];
+        let make = || {
+            ResponsiveTable::<(), ()>::new(&rows)
+                .column(Column::new("Name", |_| iced::widget::space().into()))
+        };
+        let plain = make();
+        let default = make().props(ResponsiveTableWidgetProps::default());
+        let changed = make().props(ResponsiveTableWidgetProps::default().caption(text_props()));
+        assert_eq!(
+            plain.needed_width(),
+            changed.needed_width(),
+            "presentation must not rewrite breakpoints"
+        );
+        assert_override(
+            table_view(&plain),
+            table_view(&default),
+            table_view(&changed),
+        );
+    }
+}
+
+crate::components::props::impl_merge!(ResponsiveTableWidgetProps; fields: []; optional: []; nested: [sort_item, sort_picker, sort_popover, card, caption, cell, header, surface, virtual_cell, virtual_row, separator, virtual_surface, header_label, sort_priority, header_button, sort_trigger, sort_selection, direction_button, direction_container, sort_label, card_label, card_value]);

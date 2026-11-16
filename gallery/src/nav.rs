@@ -5,7 +5,7 @@ use iced_adaptive_design::Icon;
 use iced_adaptive_design::layouts as lay;
 
 /// A level-1 page (a sidebar entry). Groups with details list their components; the others
-/// (`Typography`, `Theming`) are a single page.
+/// (`Typography`, `RichText`) are a single page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Page {
     Buttons,
@@ -18,11 +18,10 @@ pub enum Page {
     Dialogs,
     Typography,
     RichText,
-    Theming,
 }
 
 impl Page {
-    pub const ALL: [Page; 11] = [
+    pub const ALL: [Page; 10] = [
         Page::Buttons,
         Page::Inputs,
         Page::Lists,
@@ -33,7 +32,6 @@ impl Page {
         Page::Dialogs,
         Page::Typography,
         Page::RichText,
-        Page::Theming,
     ];
 
     pub fn title(self) -> &'static str {
@@ -48,7 +46,6 @@ impl Page {
             Page::Dialogs => "Dialogs & Sheets",
             Page::Typography => "Typography",
             Page::RichText => "Rich text",
-            Page::Theming => "Theming",
         }
     }
 
@@ -65,7 +62,6 @@ impl Page {
             Page::Dialogs => "Alerts, about, shortcuts and sheets",
             Page::Typography => "Text styles and colors",
             Page::RichText => "Headings, lists, tasks, code, tables and footnotes",
-            Page::Theming => "Colors, radii, shadows and motion",
         }
     }
 
@@ -81,7 +77,6 @@ impl Page {
             Page::Dialogs => Icon::Sidebar,
             Page::Typography => Icon::Search,
             Page::RichText => Icon::Note,
-            Page::Theming => Icon::Settings,
         }
     }
 
@@ -128,6 +123,7 @@ impl Page {
                         n(Scale),
                         n(RangeSlider),
                         n(ColorPicker),
+                        n(AccentPicker),
                     ],
                 ),
                 ("Form components", vec![n(Stepper)]),
@@ -140,6 +136,7 @@ impl Page {
                         n(SwitchAndComboRows),
                         n(TreeRow),
                         n(ButtonRow),
+                        n(ExpanderRow),
                     ],
                 ),
                 ("Lists", vec![n(ItemRow)]),
@@ -148,7 +145,13 @@ impl Page {
             Page::Data => vec![
                 (
                     "Tables",
-                    vec![n(ResponsiveTable), n(Data), n(TableVirtual), n(TableAsync)],
+                    vec![
+                        n(ResponsiveTable),
+                        n(Data),
+                        n(SortHeader),
+                        n(TableVirtual),
+                        n(TableAsync),
+                    ],
                 ),
                 (
                     "Trees",
@@ -161,20 +164,6 @@ impl Page {
                     ],
                 ),
                 ("Timed", vec![n(SyncedText), n(VirtualList)]),
-                (
-                    "Charts",
-                    vec![
-                        n(LineChart),
-                        n(BarChart),
-                        n(PieChart),
-                        n(DonutChart),
-                        n(BubbleChart),
-                        n(ComboChart),
-                        n(Funnel),
-                        n(Sankey),
-                        n(Sunburst),
-                    ],
-                ),
             ],
             Page::Layout => vec![
                 (
@@ -187,17 +176,22 @@ impl Page {
                         n(FlowGrid),
                         n(TableGrid),
                         n(SectionHeading),
+                        n(SectionDivider),
+                        n(ProfileHeader),
+                        n(Toolbar),
                         n(Card),
                         n(Clamp),
                         n(StatusPage),
                         n(Splitter),
                     ],
                 ),
+                ("Window", vec![n(WindowShell), n(Motion)]),
                 (
                     "Flow",
                     vec![
                         n(WrapBox),
                         n(Collapse),
+                        n(Collapsible),
                         n(ClipWindow),
                         n(Divider),
                         n(Spoiler),
@@ -215,8 +209,14 @@ impl Page {
                 ),
             ],
             Page::Navigation => vec![
-                ("Switchers", vec![n(Tabs), n(ViewSwitcher), n(PathBar)]),
-                ("Paging", vec![n(Carousel), n(History)]),
+                (
+                    "Switchers",
+                    vec![n(Tabs), n(ViewSwitcher), n(PathBar), n(FloatingIndicator)],
+                ),
+                (
+                    "Paging",
+                    vec![n(Carousel), n(History), n(SlidePages), n(OverlaySplitView)],
+                ),
                 (
                     "Menus & shortcuts",
                     vec![n(MenuButton), n(ShortcutLabel), n(AnchoredPopover)],
@@ -246,19 +246,6 @@ impl Page {
                     n(Docked),
                 ],
             )],
-            Page::Theming => vec![
-                (
-                    "Look",
-                    vec![
-                        n(ThemeColors),
-                        n(ThemeShape),
-                        n(ColorHelpers),
-                        n(ThemeConfig),
-                    ],
-                ),
-                ("Behavior", vec![n(ThemeMotion), n(ThemeWindow)]),
-                ("Reference", vec![n(Surfaces)]),
-            ],
             Page::Typography | Page::RichText => vec![],
         }
     }
@@ -274,6 +261,16 @@ pub enum Entry {
 /// A level-2 page: a component with two or more significantly different properties.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Detail {
+    AccentPicker,
+    Collapsible,
+    ExpanderRow,
+    SectionDivider,
+    ProfileHeader,
+    FloatingIndicator,
+    SlidePages,
+    SortHeader,
+    Toolbar,
+    OverlaySplitView,
     // Buttons
     Button,
     ButtonContent,
@@ -334,7 +331,6 @@ pub enum Detail {
     ShortcutLabel,
     MultiSelect,
     AnchoredPopover,
-    Surfaces,
 
     MetaComponent,
     Reorderable,
@@ -370,23 +366,10 @@ pub enum Detail {
     Icons,
     Composed,
     SyncedText,
-    LineChart,
-    BarChart,
-    PieChart,
-    DonutChart,
-    BubbleChart,
-    ComboChart,
-    Funnel,
-    Sankey,
-    Sunburst,
     // (the last ones moved from inline demos: two or more properties)
-    // Theming
-    ThemeColors,
-    ColorHelpers,
-    ThemeConfig,
-    ThemeShape,
-    ThemeMotion,
-    ThemeWindow,
+    // Window behavior
+    WindowShell,
+    Motion,
 }
 
 /// A component with one demo, rendered inline on its group page.
@@ -421,7 +404,6 @@ pub enum Inline {
     AnchoredPopover,
     ResponsiveTable,
     Accordion,
-    Surfaces,
 }
 
 impl Detail {
@@ -436,17 +418,11 @@ impl Detail {
             .collect()
     }
 
-    /// How wide the page of this component reads: charts and wide demos get more room.
+    /// How wide the page of this component reads: wide demos get more room.
     pub fn container_size(self) -> lay::ContainerSize {
         use lay::ContainerSize::{Md, Sm};
         match self {
-            Detail::LineChart
-            | Detail::BarChart
-            | Detail::PieChart
-            | Detail::Funnel
-            | Detail::Sankey
-            | Detail::Sunburst
-            | Detail::Composed => Md,
+            Detail::Composed => Md,
             _ => Sm,
         }
     }
@@ -464,6 +440,16 @@ impl Detail {
 
     pub fn title(self) -> &'static str {
         match self {
+            Detail::AccentPicker => "Accent picker",
+            Detail::Collapsible => "Collapsible",
+            Detail::ExpanderRow => "Expander row",
+            Detail::SectionDivider => "Section divider",
+            Detail::ProfileHeader => "Profile header",
+            Detail::FloatingIndicator => "Floating indicator",
+            Detail::SlidePages => "Sliding pages",
+            Detail::SortHeader => "Sort header",
+            Detail::Toolbar => "Toolbar & action bar",
+            Detail::OverlaySplitView => "Overlay split view",
             Detail::Button => "Button",
             Detail::ButtonContent => "Button content",
             Detail::ToggleGroup => "Toggle group",
@@ -516,7 +502,6 @@ impl Detail {
             Detail::ShortcutLabel => "Shortcut label",
             Detail::MultiSelect => "Multi select",
             Detail::AnchoredPopover => "Anchored popover",
-            Detail::Surfaces => "Surfaces",
             Detail::PathBar => "Path bar",
             Detail::MenuButton => "Menu button",
             Detail::Banner => "Banner",
@@ -550,27 +535,38 @@ impl Detail {
             Detail::ChipGroup => "Chip group",
             Detail::History => "History",
             Detail::Composed => "Composed component",
-            Detail::LineChart => "Line chart",
-            Detail::BarChart => "Bar chart",
-            Detail::PieChart => "Pie chart",
-            Detail::DonutChart => "Donut chart",
-            Detail::BubbleChart => "Bubble chart",
-            Detail::ComboChart => "Combo chart",
-            Detail::Funnel => "Funnel",
-            Detail::Sankey => "Sankey",
-            Detail::Sunburst => "Sunburst",
             Detail::SyncedText => "Synced text",
-            Detail::ThemeColors => "Colors",
-            Detail::ColorHelpers => "Color helpers",
-            Detail::ThemeConfig => "App theme config",
-            Detail::ThemeShape => "Shape & shadows",
-            Detail::ThemeMotion => "Motion",
-            Detail::ThemeWindow => "Window & menus",
+            Detail::Motion => "Motion",
+            Detail::WindowShell => "Window & sidebar",
         }
     }
 
     pub fn description(self) -> &'static str {
         match self {
+            Detail::AccentPicker => {
+                "Named accents and an editable custom color, with local selection state."
+            }
+            Detail::Collapsible => {
+                "A controlled disclosure with a custom trigger and animated body."
+            }
+            Detail::ExpanderRow => "A disclosure row revealing nested settings.",
+            Detail::SectionDivider => {
+                "A section boundary with a count and controlled collapse state."
+            }
+            Detail::ProfileHeader => {
+                "A profile image, identity and actions in wide or narrow layouts."
+            }
+            Detail::FloatingIndicator => "A sliding highlight behind custom switcher buttons.",
+            Detail::SlidePages => {
+                "Forward and backward page transitions driven by navigation depth."
+            }
+            Detail::SortHeader => {
+                "Standalone sortable columns with real three-state data ordering."
+            }
+            Detail::Toolbar => "A content view framed by a header and a bottom action bar.",
+            Detail::OverlaySplitView => {
+                "A sidebar that can become a dismissible overlay beside a navigation page."
+            }
             Detail::Button => "Styles, shapes and their disabled states",
             Detail::ButtonContent => "Icon and label, split button",
             Detail::ToggleGroup => "Text, icons, crowded and as a row",
@@ -629,7 +625,6 @@ impl Detail {
             Detail::ShortcutLabel => "Key combinations",
             Detail::MultiSelect => "Several choices in a dropdown",
             Detail::AnchoredPopover => "Side, flip and shift",
-            Detail::Surfaces => "The semantic surfaces and status colors",
             Detail::PathBar => "Path and search variants",
             Detail::MenuButton => "Menu, primary menu and popover presentations",
             Detail::Banner => "Roles, buttons and revealing",
@@ -650,15 +645,6 @@ impl Detail {
                 "Edit and preview, edit row, labels, own controls, disabled, lift"
             }
             Detail::MetaParent => "Notifies the children that announced an action",
-            Detail::LineChart => "Lines and areas: smooth, stepped, stacked, 100%",
-            Detail::BarChart => "Grouped, stacked, 100%, horizontal, histogram",
-            Detail::PieChart => "Parts of a whole, as a pie or a donut",
-            Detail::DonutChart => "Rings with the total in the middle",
-            Detail::BubbleChart => "Two axes and a size",
-            Detail::ComboChart => "Bars, lines and areas on one scale",
-            Detail::Funnel => "Stages that narrow",
-            Detail::Sankey => "Flows between nodes",
-            Detail::Sunburst => "A tree as rings",
             Detail::VirtualList => "Fixed-height rows, only those in view are built",
             Detail::MultilineEntry => "Growing multiline and single-line editors",
             Detail::PageHeader => "Cover, title, facts and actions, wide or narrow",
@@ -675,12 +661,8 @@ impl Detail {
             Detail::Container => "Centered content at a named maximum width",
             Detail::Composed => "Several components editing one shared state, as one widget",
             Detail::SyncedText => "Timed lines with the current one highlighted",
-            Detail::ThemeColors => "Scheme, accent, density and a card color override",
-            Detail::ColorHelpers => "Seeded colors and a contrast floor",
-            Detail::ThemeConfig => "Hardcoded, app theme, toolkit theme: layered and regenerable",
-            Detail::ThemeShape => "Control, card and toast radii, shadows, with a live preview",
-            Detail::ThemeMotion => "Animations on or off, easings and springs",
-            Detail::ThemeWindow => "Menu presentation, mobile sidebar and the path bar title",
+            Detail::Motion => "Animations on or off, easings and springs",
+            Detail::WindowShell => "Menu presentation, mobile sidebar and the path bar title",
         }
     }
 }

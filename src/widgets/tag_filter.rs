@@ -45,6 +45,10 @@ use std::rc::Rc;
 
 /// See the [module](self).
 pub struct TagFilter<'a, K: Clone, M> {
+    entry_props: crate::components::entry::TextInputProps,
+    row_props: super::entries::EntryRowProps,
+    label_props: crate::components::TextProps,
+    chip_props: crate::components::badge::ChipProps,
     groups: Cow<'a, TagGroups<K>>,
     options: Vec<ChipOption<K>>,
     query: &'a str,
@@ -68,9 +72,32 @@ pub struct TagFilter<'a, K: Clone, M> {
     add_tip: String,
     separator: Box<dyn Fn(usize) -> String + 'a>,
     add_button: Option<Element<'a, M>>,
+    spacing: Option<f32>,
+    pill_spacing: Option<f32>,
+    field_padding: Option<iced::Padding>,
+    chips_spacing: Option<f32>,
 }
 
 impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M> {
+    pub fn row_props(mut self, props: super::entries::EntryRowProps) -> Self {
+        self.row_props = props;
+        self
+    }
+    pub fn entry_props(mut self, props: crate::components::entry::TextInputProps) -> Self {
+        self.entry_props = props;
+        self
+    }
+
+    pub fn label_props(mut self, props: crate::components::TextProps) -> Self {
+        self.label_props = props;
+        self
+    }
+
+    pub fn chip_props(mut self, props: crate::components::badge::ChipProps) -> Self {
+        self.chip_props = props;
+        self
+    }
+
     /// `options` is every tag on offer, `groups` what is picked (owned by the app) and `query`
     /// what the field holds.
     pub fn new(
@@ -101,6 +128,10 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
         on_query: impl Fn(String) -> M + 'a,
     ) -> Self {
         Self {
+            entry_props: Default::default(),
+            row_props: Default::default(),
+            label_props: Default::default(),
+            chip_props: Default::default(),
             groups,
             options: options.into_iter().collect(),
             query,
@@ -124,6 +155,10 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
             add_tip: "Finish this group and start another".into(),
             separator: Box::new(|_| ",".into()),
             add_button: None,
+            spacing: None,
+            pill_spacing: None,
+            field_padding: None,
+            chips_spacing: None,
         }
     }
     /// Several alternative groups (true) or a single one (false, the default). A single-group
@@ -160,6 +195,28 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
     /// Transparent entry with flat row styling, for use outside a boxed list.
     pub fn flat(mut self, flat: bool) -> Self {
         self.flat = flat;
+        self
+    }
+    /// The gap between the leading slot, the pills and field, the trailing slot and the add
+    /// button (default: the theme's `space_xs`).
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = Some(px);
+        self
+    }
+    /// The gap between the pills of a group (default: the theme's `space_xs`).
+    pub fn pill_spacing(mut self, px: f32) -> Self {
+        self.pill_spacing = Some(px);
+        self
+    }
+    /// The padding of the text field among the pills (default: the theme's `space_xs` by
+    /// `space_xxs`).
+    pub fn field_padding(mut self, p: impl Into<iced::Padding>) -> Self {
+        self.field_padding = Some(p.into());
+        self
+    }
+    /// The gap between the entry and the chips to choose from (default: the theme's `gap`).
+    pub fn chips_spacing(mut self, px: f32) -> Self {
+        self.chips_spacing = Some(px);
         self
     }
     pub fn metrics(mut self, m: Metrics) -> Self {
@@ -247,7 +304,7 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
         if let Some(color) = option.and_then(|o| o.color) {
             chip = chip.color(color);
         }
-        chip.into()
+        self.chip_props.apply(chip).into()
     }
     /// The pills of the entry in order, and where the field goes among them.
     fn pills(&mut self) -> (Vec<Element<'a, M>>, usize) {
@@ -269,7 +326,7 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
             }
             if !group.is_empty() {
                 let cluster: Element<'a, M> = row(group.iter().map(|key| self.pill(index, key)))
-                    .spacing(4)
+                    .spacing(self.pill_spacing.unwrap_or(self.metrics.space_xs))
                     .align_y(Alignment::Center)
                     .wrap()
                     .into();
@@ -294,9 +351,13 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> TagFilter<'a, K, M
             } else {
                 // A bit of room after the pills that selects the last group when pressed.
                 items.push(
-                    mouse_area(space::horizontal().width(20).height(28))
-                        .on_press((self.on_change)(GroupEvent::Select(last)))
-                        .into(),
+                    mouse_area(
+                        space::horizontal()
+                            .width(self.metrics.icon_size)
+                            .height(self.metrics.entry_min_height),
+                    )
+                    .on_press((self.on_change)(GroupEvent::Select(last)))
+                    .into(),
                 );
             }
         }
@@ -316,19 +377,26 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
         let mut field = text_input(if items.is_empty() { &f.placeholder } else { "" }, f.query)
             .on_input(move |q| on_query(q))
             .style(crate::styles::text_input::embedded)
-            .padding([4, 2])
-            .size(14)
+            .padding(
+                f.field_padding
+                    .unwrap_or(iced::Padding::from([m.space_xs, m.space_xxs])),
+            )
+            .size(crate::Typography::desktop().body)
             .width(Length::Fill);
         if let Some(id) = f.field_id.clone() {
             field = field.id(id);
         }
-        items.push(field.into());
+        items.push(f.entry_props.apply(field).into());
         let input = if f.multiple {
             token_flow_with_caret(
                 items,
                 caret,
                 // Empty, the field is just a slot for the caret between the pills; typing widens it.
-                if f.query.is_empty() { 16.0 } else { 120.0 },
+                if f.query.is_empty() {
+                    m.icon_size
+                } else {
+                    m.row_wrap_basis
+                },
                 between_groups(
                     f.query,
                     Some((f.on_change)(GroupEvent::Step(Step::Previous))),
@@ -338,7 +406,9 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
         } else {
             token_flow(items)
         };
-        let mut line = row![].spacing(4).align_y(Alignment::Center);
+        let mut line = row![]
+            .spacing(f.spacing.unwrap_or(m.space_xs))
+            .align_y(Alignment::Center);
         if let Some(leading) = f.leading.take() {
             line = line.push(leading);
         }
@@ -357,11 +427,13 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
             });
         }
         let mut entry = EntryRow::new(f.label.clone(), EntryInput::Custom(line.into()))
+            .label_props(f.label_props.clone())
             .flat(f.flat)
             .metrics(m);
         if let Some(d) = f.description.take() {
             entry = entry.description(d);
         }
+        let entry = f.row_props.apply(entry);
         let chips: Element<'a, M> = match f.choices.take() {
             Some(choices) => choices,
             None => {
@@ -387,7 +459,7 @@ impl<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a> From<TagFilter<'a,
             }
         };
         column![Element::from(entry), chips]
-            .spacing(8)
+            .spacing(f.chips_spacing.unwrap_or(m.gap))
             .width(Length::Fill)
             .into()
     }
@@ -421,6 +493,22 @@ mod tests {
     }
 
     #[test]
+    fn the_gaps_and_padding_are_parameters() {
+        let mut groups = TagGroups::new();
+        groups.toggle("rock");
+        let f = TagFilter::new(&groups, options(), "", |e| e, |_| GroupEvent::AddGroup)
+            .spacing(1.0)
+            .pill_spacing(2.0)
+            .field_padding([3.0, 4.0])
+            .chips_spacing(5.0);
+        assert_eq!(
+            (f.spacing, f.pill_spacing, f.chips_spacing),
+            (Some(1.0), Some(2.0), Some(5.0))
+        );
+        let _: Element<'_, GroupEvent<&str>> = f.into();
+    }
+
+    #[test]
     fn a_single_filter_shows_the_first_group_only_and_has_no_separators() {
         let mut groups = TagGroups::new();
         groups.toggle("rock");
@@ -446,5 +534,98 @@ mod tests {
         let mut f =
             TagFilter::new(&groups, options(), "", |e| e, |_| GroupEvent::AddGroup).multiple(true);
         assert_eq!(f.pills().1, 1);
+    }
+}
+
+/// Presentation-only overrides supported by [`TagFilter`]. Values and events stay parent-owned.
+#[derive(Clone, Default)]
+pub struct TagFilterProps {
+    pub spacing: Option<f32>,
+    pub pill_spacing: Option<f32>,
+    pub field_padding: Option<iced::Padding>,
+    pub chips_spacing: Option<f32>,
+    pub metrics: Option<crate::Metrics>,
+    pub entry_props: Option<crate::components::entry::TextInputProps>,
+    pub label_props: Option<crate::components::TextProps>,
+    pub chip_props: Option<crate::components::badge::ChipProps>,
+    pub row_props: Option<super::entries::EntryRowProps>,
+}
+impl TagFilterProps {
+    pub fn spacing(mut self, value: impl Into<f32>) -> Self {
+        self.spacing = Some(value.into());
+        self
+    }
+    pub fn pill_spacing(mut self, value: impl Into<f32>) -> Self {
+        self.pill_spacing = Some(value.into());
+        self
+    }
+    pub fn field_padding(mut self, value: impl Into<iced::Padding>) -> Self {
+        self.field_padding = Some(value.into());
+        self
+    }
+    pub fn chips_spacing(mut self, value: impl Into<f32>) -> Self {
+        self.chips_spacing = Some(value.into());
+        self
+    }
+    pub fn metrics(mut self, value: impl Into<crate::Metrics>) -> Self {
+        self.metrics = Some(value.into());
+        self
+    }
+    pub fn entry_props(
+        mut self,
+        value: impl Into<crate::components::entry::TextInputProps>,
+    ) -> Self {
+        self.entry_props = Some(value.into());
+        self
+    }
+    pub fn label_props(mut self, value: impl Into<crate::components::TextProps>) -> Self {
+        self.label_props = Some(value.into());
+        self
+    }
+    pub fn chip_props(mut self, value: impl Into<crate::components::badge::ChipProps>) -> Self {
+        self.chip_props = Some(value.into());
+        self
+    }
+    pub fn row_props(mut self, value: impl Into<super::entries::EntryRowProps>) -> Self {
+        self.row_props = Some(value.into());
+        self
+    }
+    pub fn apply<'a, K: PartialEq + Clone + ToString + 'a, M: Clone + 'a>(
+        &self,
+        widget: TagFilter<'a, K, M>,
+    ) -> TagFilter<'a, K, M> {
+        let mut widget = widget;
+        if let Some(value) = &self.spacing {
+            widget = widget.spacing(value.clone());
+        }
+        if let Some(value) = &self.pill_spacing {
+            widget = widget.pill_spacing(value.clone());
+        }
+        if let Some(value) = &self.field_padding {
+            widget = widget.field_padding(value.clone());
+        }
+        if let Some(value) = &self.chips_spacing {
+            widget = widget.chips_spacing(value.clone());
+        }
+        if let Some(value) = &self.metrics {
+            widget = widget.metrics(value.clone());
+        }
+        if let Some(props) = &self.entry_props {
+            widget.entry_props.merge(props);
+        }
+        if let Some(props) = &self.label_props {
+            widget.label_props.merge(props);
+        }
+        if let Some(props) = &self.chip_props {
+            widget.chip_props.merge(props);
+        }
+        if let Some(value) = &self.row_props {
+            let existing = &mut widget.row_props;
+            crate::components::props::merge_optional!(existing, value;
+                        dropdown_props, button_props, label_props, entry_props);
+            crate::components::props::merge_fields!(existing, value;
+                        spacing, padding, value_spacing);
+        }
+        widget
     }
 }
