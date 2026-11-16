@@ -124,7 +124,7 @@ impl Gradient {
         }
         let mut stops: Vec<(f32, Color)> = Vec::with_capacity(items.len());
         for item in items {
-            let (R::Seq(pair)) = item else {
+            let R::Seq(pair) = item else {
                 return Err("a stop is (position, \"color\")".into());
             };
             let [R::Number(at), R::String(color)] = pair.as_slice() else {

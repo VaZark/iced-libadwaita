@@ -8,6 +8,9 @@ use iad::widgets as w;
 use iad::{Element, Icon};
 use iced::widget::{column, container, responsive, row, space, text};
 use iced::{Alignment, Length};
+
+/// The fold key of the theme dialog's groups: the same set the token groups use.
+const THEMES_SECTION: &str = "themes";
 use iced_adaptive_design as iad;
 
 impl Editor {
@@ -127,18 +130,26 @@ impl Editor {
         };
 
         let mut list = column![].spacing(m.space_xxs).width(Length::Fill);
-        let (mut group, mut shown) = ("", 0);
+        let (mut group, mut shown, mut folded) = ("", 0, false);
         for preset in self.presets.iter().filter(|p| matches(p)) {
             shown += 1;
             if preset.group != group {
                 group = preset.group;
+                // A group folds like a token group does, except while filtering.
+                folded = query.is_empty()
+                    && self
+                        .collapsed
+                        .contains(&(THEMES_SECTION.to_string(), group.to_string()));
                 list = list.push(
-                    text(group)
-                        .size(m.space_m + 1.0)
-                        .style(iad::styles::text::dim),
+                    w::SectionDivider::new(group)
+                        .open(!folded)
+                        .on_toggle(Msg::ToggleGroup(THEMES_SECTION.into(), group.into()))
+                        .metrics(m),
                 );
             }
-            list = list.push(self.theme_option(preset, (width - 2.0 * m.space_s).max(0.0)));
+            if !folded {
+                list = list.push(self.theme_option(preset, (width - 2.0 * m.space_s).max(0.0)));
+            }
         }
 
         let body: Element<'_, Msg> = if shown == 0 {

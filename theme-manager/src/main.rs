@@ -24,7 +24,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use tokens::GradEdit;
 
-/// The editor's own look is libadwaita's, with a neutral primary color: it has no blue buttons.
+/// The editor's own base look: libadwaita's, bundled in the binary. It never depends on the file
+/// being edited, the desktop, or an installed theme.
+const DEFAULT_BASE_THEME: &str = include_str!("../../themes/libadwaita.ron");
+
+/// Laid over the base: a neutral primary color, since the editor has no blue buttons.
 const NEUTRAL_PRIMARY: &str = r##"{
     "menu": {
         "popover-max-height": 560,
@@ -44,21 +48,24 @@ const APP_ID: &str = "org.iad.ThemeEditor";
 /// How many edits undo goes back.
 const UNDO_MAX: usize = 100;
 
+/// The editor's own look: the bundled base with the neutral primary over it, and nothing from
+/// the desktop or the files.
+fn own_theme() -> iad::theme_config::ThemeConfig {
+    iad::theme_config::ThemeConfig::builder(APP_ID)
+        .files(false)
+        .inheritance(Inheritance::OptOut)
+        .base_theme(DEFAULT_BASE_THEME)
+        .app_text(NEUTRAL_PRIMARY)
+        .build()
+}
+
 fn main() -> iced::Result {
     // DECISION (user, 2026-11-16): the gallery is part of this app: `theme-manager gallery` runs it
     // and the window can start it too. It has no desktop entry of its own.
     if std::env::args_os().nth(1).is_some_and(|a| a == "gallery") {
         return iced_adaptive_design_gallery::run();
     }
-    // The editor's look never depends on the file being edited or on the desktop.
-    let own = iad::theme_config::ThemeConfig::builder(APP_ID)
-        .files(false)
-        .inheritance(Inheritance::OptOut)
-        .app_text(format!(
-            "{}{NEUTRAL_PRIMARY}",
-            bundled::text("libadwaita").unwrap_or_default()
-        ))
-        .build();
+    let own = own_theme();
     iad::config::install(iad::config::Config::default().with_theme_config(&own));
     iad::dev::Switches::from_env().apply();
     iced::application(Editor::new, Editor::update, Editor::view)

@@ -1847,3 +1847,20 @@ fn the_header_offers_set_as_global_theme_and_shows_when_it_is_done() {
     let _ = e.view();
     let _ = std::fs::remove_dir_all(d);
 }
+
+#[test]
+fn the_editors_own_theme_is_the_bundled_libadwaita_with_a_neutral_primary() {
+    let own = super::own_theme();
+    assert!(own.warnings().is_empty(), "{:?}", own.warnings());
+    assert!(own.unknown().is_empty(), "{:?}", own.unknown());
+    // The base is what styles it: libadwaita's window radius, not the bare default.
+    let theme = iad::Theme::light().with_theme_config(&own);
+    assert_eq!(theme.metrics.radius_window, 15.0);
+    // The overlay is laid over the base.
+    assert_eq!(own.number("menu", "popover-max-height"), Some(560.0));
+    assert_eq!(
+        crate::bundled::text("libadwaita").unwrap(),
+        super::DEFAULT_BASE_THEME,
+        "the bundled themes list and the editor's base are the same file"
+    );
+}

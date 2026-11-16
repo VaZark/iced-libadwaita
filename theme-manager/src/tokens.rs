@@ -323,38 +323,29 @@ impl Editor {
             }
         };
         let set_here = self.group_keys(section, title).len();
-        let mut buttons = row![].spacing(m.space_xs).align_y(Alignment::Center);
+        // The title, a rule and the fold chevron: the divider every section of the editor uses.
+        let mut divider = w::SectionDivider::new(heading)
+            .open(!folded)
+            .on_toggle(Msg::ToggleGroup(key.0.clone(), key.1.clone()))
+            .metrics(m);
         if set_here > 0 {
-            buttons = buttons.push(cmp::tooltip(
-                cmp::flat_button(cmp::typography::label(format!("Reset {set_here}")))
-                    .on_press(Msg::ResetGroup(section.to_string(), title.to_string())),
-                "Remove the values this group sets in the current variant",
-                iad::components::TooltipPosition::Bottom,
-            ));
+            // How many values the group sets, in a chip beside the title; and a reset icon
+            // between the rule and the chevron.
+            divider = divider
+                .after_title(cmp::Badge::new(set_here.to_string()).metrics(m))
+                .beside_toggle(cmp::tooltip(
+                    cmp::icon_button(Icon::Reset)
+                        .on_press(Msg::ResetGroup(section.to_string(), title.to_string())),
+                    "Remove the values this group sets in the current variant",
+                    iad::components::TooltipPosition::Bottom,
+                ));
         }
-        buttons = buttons.push(cmp::tooltip(
-            cmp::icon_button(if folded { Icon::GoNext } else { Icon::GoDown })
-                .on_press(Msg::ToggleGroup(key.0.clone(), key.1.clone())),
-            if folded {
-                "Show the tokens"
-            } else {
-                "Hide the tokens"
-            },
-            iad::components::TooltipPosition::Bottom,
-        ));
         // The heading has a height of its own and every row one of its own (`page::row_height`),
         // so the group is as tall as `page::group_height` says whatever the font: the page is
         // virtualized and has to know the heights without laying anything out.
-        let head = container(
-            row![
-                iad::Typography::desktop().heading(heading),
-                space().width(Length::Fill),
-                buttons
-            ]
-            .align_y(Alignment::Center),
-        )
-        .width(Length::Fill)
-        .center_y(Length::Fixed(m.button_min_height));
+        let head = container(divider)
+            .width(Length::Fill)
+            .center_y(Length::Fixed(m.button_min_height));
         if folded {
             return head.into();
         }
@@ -507,10 +498,11 @@ impl Editor {
             }
         })
         .alpha(true)
-        .width(Length::Fixed(260.0));
+        .width(Length::Fill);
         let panel = w::popover_spaced([Element::from(picker)], 420.0, m.space_s, m.space_m);
         row![
-            w::Popover::new(swatch(color), panel),
+            // The swatch is small: the popover has a width of its own, like the date picker's.
+            w::Popover::new(swatch(color), panel).popover_width(w::COLOR_POPOVER_MIN_WIDTH),
             cmp::entry("#rrggbb", shown)
                 .on_input(move |v| Msg::Input(s.clone(), k.clone(), v))
                 .width(Length::Fixed(150.0)),

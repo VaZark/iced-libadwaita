@@ -37,6 +37,8 @@ pub struct SectionDivider<'a, M> {
     collapsible: Option<bool>,
     chevron: bool,
     trailing: Option<Element<'a, M>>,
+    beside_toggle: Option<Element<'a, M>>,
+    after_title: Option<Element<'a, M>>,
     on_toggle: Option<M>,
     action: Option<Element<'a, M>>,
     metrics: Metrics,
@@ -90,6 +92,8 @@ impl<'a, M> SectionDivider<'a, M> {
             collapsible: None,
             chevron: true,
             trailing: None,
+            beside_toggle: None,
+            after_title: None,
             on_toggle: None,
             action: None,
             metrics: Metrics::desktop(),
@@ -118,6 +122,18 @@ impl<'a, M> SectionDivider<'a, M> {
         self
     }
     /// A dimmed note after the name (a count).
+    /// An element right after the title, before the rule: a count in a chip.
+    pub fn after_title(mut self, element: impl Into<Element<'a, M>>) -> Self {
+        self.after_title = Some(element.into());
+        self
+    }
+
+    /// An element between the rule and the toggle: a reset button and a count for the section.
+    pub fn beside_toggle(mut self, element: impl Into<Element<'a, M>>) -> Self {
+        self.beside_toggle = Some(element.into());
+        self
+    }
+
     pub fn detail(mut self, detail: impl Into<String>) -> Self {
         self.detail = Some(detail.into());
         self
@@ -184,6 +200,9 @@ impl<'a, M: Clone + 'a> From<SectionDivider<'a, M>> for Element<'a, M> {
         let mut head = row![d.title_props.apply(ty::heading(d.title))]
             .spacing(d.spacing.unwrap_or(m.space_m))
             .align_y(Alignment::Center);
+        if let Some(after) = d.after_title {
+            head = head.push(after);
+        }
         if let Some(detail) = d.detail {
             head = head.push(
                 d.detail_props
@@ -213,9 +232,13 @@ impl<'a, M: Clone + 'a> From<SectionDivider<'a, M>> for Element<'a, M> {
                 .into(),
             (None, _) => iced::widget::space().width(0).into(),
         };
-        let mut row = row![head, end]
+        let mut row = row![head]
             .spacing(d.end_spacing.unwrap_or(m.space_s))
             .align_y(Alignment::Center);
+        if let Some(beside) = d.beside_toggle {
+            row = row.push(beside);
+        }
+        row = row.push(end);
         if let Some(trailing) = d.trailing {
             row = row.push(trailing);
         }

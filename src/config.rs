@@ -39,7 +39,6 @@ use crate::palette::AccentColor;
 use crate::theme_config::Document;
 use crate::widgets::CollapsedSidebar;
 use crate::{CollapseBehavior, Metrics, Scheme};
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
@@ -272,13 +271,6 @@ fn num_of(v: &ron::Value) -> Option<f32> {
     }
 }
 
-fn parse_bool(v: &str) -> Option<bool> {
-    match v.to_ascii_lowercase().as_str() {
-        "true" | "yes" | "on" | "1" => Some(true),
-        "false" | "no" | "off" | "0" => Some(false),
-        _ => None,
-    }
-}
 
 /// `none`, or a hex color whose alpha (`#rrggbbaa`, else a quarter) is the strength.
 fn parse_tint(v: &str) -> Option<Option<iced::Color>> {

@@ -73,7 +73,7 @@ pub use carousel::{Carousel, CarouselIndicator, carousel};
 pub use chip_group::{ChipGroup, ChipOption};
 pub use choice_row::{ChoicePresentation, ChoiceRow};
 pub use collapsible::Collapsible;
-pub use color_picker::{ColorInput, ColorPicker};
+pub use color_picker::{ColorInput, ColorPicker, POPOVER_MIN_WIDTH as COLOR_POPOVER_MIN_WIDTH};
 pub use context_menu::{ContextMenu, ContextMenuProps, context_menu};
 pub use date_input::DateInput;
 pub use date_range_input::DateRangeInput;

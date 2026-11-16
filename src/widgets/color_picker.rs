@@ -39,6 +39,11 @@ fn to_color(c: Hsva) -> Color {
     Color { r, g, b, a }
 }
 
+/// The least width of a popover that holds a color picker: the saturation square, the sliders
+/// and the code entry need room, however small the trigger that opens it is (the date picker's
+/// popover has its own, `POPOVER_WIDTH`). [`ColorInput`] never goes below it.
+pub const POPOVER_MIN_WIDTH: f32 = 260.0;
+
 /// A gradient across a track: left to right, or top to bottom when `down`. iced measures the
 /// angle from "up" clockwise: 0 runs bottom to top, a quarter turn left to right, half a turn
 /// top to bottom.
@@ -726,7 +731,8 @@ impl<'a, M: Clone + 'a> From<ColorInput<'a, M>> for Element<'a, M> {
             .popover_width(
                 crate::theme_config::current()
                     .number("color-input", "popover-width")
-                    .unwrap_or(m.sidebar_width),
+                    .unwrap_or(m.sidebar_width)
+                    .max(POPOVER_MIN_WIDTH),
             )
             .keep_open(true)
             .disabled(i.disabled)
