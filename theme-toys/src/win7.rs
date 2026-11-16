@@ -1,6 +1,7 @@
 //! Windows 7 All Programs Start menu scene, not an unrelated Explorer window.
 use crate::{common::*, design::px};
 use iad::components as cmp;
+use iad::widgets as w;
 use iad::{Icon, Metrics};
 use iced::widget::{column, container, row, scrollable, space};
 use iced::{Alignment, Length};
@@ -38,6 +39,29 @@ pub fn filtered_programs(query: &str) -> impl Iterator<Item = (usize, &'static s
         .enumerate()
         .filter(move |(_, name)| matches_query(name, query))
 }
+fn program_menu(t: &Toy, index: usize) -> w::Menu<Msg> {
+    native_menu(PROGRAMS[index]).section([
+        w::MenuItem::action("Open", Msg::Launch(index)),
+        w::MenuItem::check(
+            "Pin to Start Menu",
+            t.pinned_programs.contains(&index),
+            Msg::PinProgram(index),
+        )
+        .keep_open(false),
+    ])
+}
+
+fn power_menu() -> w::Menu<Msg> {
+    native_menu("Power").section(["Switch user", "Log off", "Lock", "Restart", "Sleep"].map(
+        |name| {
+            w::MenuItem::action(
+                name,
+                Msg::Status(format!("{name} preview only — no host action")),
+            )
+        },
+    ))
+}
+
 pub fn view(t: &Toy) -> El<'_> {
     let m = Metrics::desktop();
     let programs = column(filtered_programs(&t.text).map(|(i, name)| {
@@ -55,13 +79,14 @@ pub fn view(t: &Toy) -> El<'_> {
         } else {
             cmp::flat_button(content)
         };
-        El::from(
+        El::from(w::context_menu(
             button
                 .width(Length::Fill)
                 .height(g("program-row-height"))
                 .padding(0)
                 .on_press(Msg::Launch(i)),
-        )
+            program_menu(t, i),
+        ))
     }));
     let left = container(column![
         scrollable(programs).height(Length::Fill),
@@ -115,7 +140,11 @@ pub fn view(t: &Toy) -> El<'_> {
         .center_x(Length::Fill),
         places,
         space().height(Length::Fill),
-        cmp::raised_button(label("Shut down ▸")).on_press(Msg::Status("Shutdown preview only — no host action".into())),
+        w::split_button(
+            label("Shut down"),
+            Msg::Status("Shutdown preview only — no host action".into()),
+            power_menu()
+        ),
     ]
     .width(Length::Fill)
     .padding(m.space_s);
@@ -167,4 +196,56 @@ pub fn view(t: &Toy) -> El<'_> {
         })
         .into();
     content
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn program_context_commands_preserve_row_size_and_pin_the_clicked_program() {
+        let mut t = Toy::new();
+        let index = PROGRAMS.len() - 1;
+        for expected in [true, false] {
+            let target = container(space())
+                .width(g("programs-width"))
+                .height(g("program-row-height"));
+            let (size, command) = crate::common::menu_tests::activate(
+                w::context_menu(target, program_menu(&t, index)).into(),
+                2,
+                true,
+                1,
+            );
+            assert_eq!(size.height, g("program-row-height"));
+            t.update(command);
+            assert_eq!(t.pinned_programs.contains(&index), expected);
+            assert!(!t.dialog);
+        }
+        let target = space()
+            .width(g("programs-width"))
+            .height(g("program-row-height"));
+        let (_, command) = crate::common::menu_tests::activate(
+            w::context_menu(target, program_menu(&t, index)).into(),
+            2,
+            true,
+            0,
+        );
+        t.update(command);
+        assert_eq!(t.pick, index);
+        assert!(t.status.contains("Word"));
+    }
+
+    #[test]
+    fn power_alternatives_are_real_menu_commands_without_host_actions() {
+        let mut t = Toy::new();
+        let (_, command) = crate::common::menu_tests::activate(
+            menu_trigger("Power", power_menu(), g("program-row-height")),
+            2,
+            false,
+            3,
+        );
+        t.update(command);
+        assert_eq!(t.status, "Restart preview only — no host action");
+        assert!(!t.dialog);
+    }
 }

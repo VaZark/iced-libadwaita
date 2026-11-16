@@ -1,6 +1,7 @@
 //! MATE 1.26 desktop, Pluma and Desktop User Guide. File name retained for source compatibility.
 use crate::{common::*, design::px};
 use iad::components as cmp;
+use iad::widgets as w;
 use iad::{Icon, Metrics};
 use iced::widget::{column, container, row, scrollable, space, stack};
 use iced::{Alignment, Length};
@@ -81,6 +82,72 @@ fn child_window<'a>(
         .into()
 }
 
+fn edit_menu() -> w::Menu<Msg> {
+    native_menu("Edit")
+        .section([
+            w::MenuItem::action("Undo", Msg::UndoDocument).accel("Ctrl+Z"),
+            w::MenuItem::action("Redo", Msg::RedoDocument).accel("Ctrl+Shift+Z"),
+        ])
+        .section([
+            w::MenuItem::action("Select All", Msg::Edit(cmp::TextAction::SelectAll))
+                .accel("Ctrl+A"),
+        ])
+}
+
+fn editor_menu(name: &str, t: &Toy) -> w::Menu<Msg> {
+    use w::MenuItem as Item;
+    match name {
+        "File" => native_menu(name).section([
+            Item::action("Open…", Msg::ChooseDocument).accel("Ctrl+O"),
+            Item::action("Save", Msg::SaveDocument).accel("Ctrl+S"),
+        ]),
+        "Edit" => edit_menu(),
+        "View" => native_menu(name).section([Item::check(
+            "Toolbar",
+            t.editor_toolbar,
+            Msg::EditorToolbar(!t.editor_toolbar),
+        )]),
+        "Search" => {
+            native_menu(name).section([Item::action("Find…", Msg::Find(true)).accel("Ctrl+F")])
+        }
+        "Tools" => native_menu(name).section([Item::action(
+            "Check Spelling",
+            Msg::Status("Spelling unavailable".into()),
+        )
+        .disabled()]),
+        "Documents" => native_menu(name).section([Item::action("index.html", Msg::ShowChild(0))]),
+        _ => native_menu(name).section([Item::action("Contents", Msg::ShowChild(1)).accel("F1")]),
+    }
+}
+
+fn places_menu() -> w::Menu<Msg> {
+    native_menu("Places").section(
+        [
+            ("Home", "~"),
+            ("Desktop", "~/Desktop"),
+            ("Computer", "/"),
+            ("Network", "network:///"),
+        ]
+        .map(|(name, path)| {
+            w::MenuItem::action(
+                name,
+                Msg::Places(iad::primitives::tree::Event::Click(path.into())),
+            )
+        }),
+    )
+}
+
+pub fn find_matches(document: &str, query: &str) -> usize {
+    if query.is_empty() {
+        0
+    } else {
+        document
+            .to_lowercase()
+            .matches(&query.to_lowercase())
+            .count()
+    }
+}
+
 pub fn view(t: &Toy) -> El<'_> {
     let m = Metrics::desktop();
     let menus = row([
@@ -92,27 +159,26 @@ pub fn view(t: &Toy) -> El<'_> {
         "Documents",
         "Help",
     ]
-    .map(|name| {
-        El::from(
-            cmp::flat_button(label(name))
-                .padding([0.0, m.space_xs])
-                .on_press(Msg::Status(format!("{name} menu"))),
-        )
-    }))
+    .map(|name| menu_trigger(name, editor_menu(name, t), g("menu-height"))))
     .height(g("menu-height"))
     .align_y(Alignment::Center);
     let editor_tools = row![
         cmp::flat_button(row![Icon::Folder.view(m.icon_size), label("Open")].spacing(m.space_s))
-            .on_press(Msg::Status("Requires core text-trigger/context menu support".into())),
+            .on_press(Msg::ChooseDocument),
         cmp::flat_button(row![Icon::Document.view(m.icon_size), label("Save")].spacing(m.space_s))
             .on_press(Msg::SaveDocument),
         cmp::flat_button(label("Undo")).on_press(Msg::UndoDocument),
         cmp::flat_button(label("Redo")).on_press(Msg::RedoDocument),
-        cmp::flat_button(Icon::Search.view(m.icon_size)).on_press(Msg::Status("Requires core text-trigger/context menu support".into())),
+        cmp::flat_button(Icon::Search.view(m.icon_size)).on_press(Msg::Find(true)),
     ]
     .spacing(m.space_s)
     .height(g("toolbar-height"))
     .align_y(Alignment::Center);
+    let editor_tools: El<'_> = if t.editor_toolbar {
+        editor_tools.into()
+    } else {
+        space().into()
+    };
     let editor: El<'_> = cmp::text_view(&t.document)
         .on_action(Msg::Edit)
         .editor_props(
@@ -126,6 +192,24 @@ pub fn view(t: &Toy) -> El<'_> {
         )
         .height(Length::Fill)
         .into();
+    let editor: El<'_> = w::context_menu(editor, edit_menu()).into();
+    let mut editor_body = column![editor].height(Length::Fill);
+    if t.find_open {
+        editor_body = editor_body.push(
+            row![
+                cmp::entry("Find in document", &t.find_query)
+                    .on_input(Msg::FindQuery)
+                    .width(Length::Fill),
+                caption(format!(
+                    "{} matches (case-insensitive)",
+                    find_matches(&t.document.text(), &t.find_query)
+                )),
+                cmp::flat_button(label("Close")).on_press(Msg::Find(false)),
+            ]
+            .spacing(m.space_s)
+            .align_y(Alignment::Center),
+        );
+    }
     let pluma = child_window(
         0,
         "index.html — Pluma",
@@ -135,7 +219,7 @@ pub fn view(t: &Toy) -> El<'_> {
             container(label("index.html  ×"))
                 .height(g("tab-height"))
                 .padding([0.0, m.space_xs]),
-            editor,
+            editor_body,
             status_bar("HTML   ▾    Tab Width: 4", t.status.clone()),
         ]
         .height(Length::Fill)
@@ -212,7 +296,17 @@ pub fn view(t: &Toy) -> El<'_> {
                 )
             }),
     );
-    let mut desktop = stack![container(icons).padding([m.space_s, 0.0])];
+    let desktop_menu = native_menu("Desktop").section([
+        w::MenuItem::action("Show Desktop", Msg::ShowDesktop),
+        w::MenuItem::action("Desktop User Guide", Msg::ShowChild(1)),
+    ]);
+    let mut desktop = stack![w::context_menu(
+        container(icons)
+            .padding([m.space_s, 0.0])
+            .width(Length::Fill)
+            .height(Length::Fill),
+        desktop_menu,
+    )];
     let mut previews: [Option<El<'_>>; 2] = [
         t.open[0].then(|| {
             container(pluma)
@@ -241,9 +335,27 @@ pub fn view(t: &Toy) -> El<'_> {
     let desktop = desktop.height(Length::Fill).width(Length::Fill);
     let top = container(
         row![
-            cmp::flat_button(label("Applications")).on_press(Msg::Status("Applications".into())),
-            cmp::flat_button(label("Places")).on_press(Msg::Status("Requires core text-trigger/context menu support".into())),
-            cmp::flat_button(label("System")).on_press(Msg::Status("System".into())),
+            menu_trigger(
+                "Applications",
+                native_menu("Applications").section([
+                    w::MenuItem::action("Text Editor", Msg::ShowChild(0)),
+                    w::MenuItem::action("Desktop User Guide", Msg::ShowChild(1)),
+                ]),
+                g("panel-height")
+            ),
+            menu_trigger("Places", places_menu(), g("panel-height")),
+            menu_trigger(
+                "System",
+                native_menu("System").section([
+                    w::MenuItem::action("Help", Msg::ShowChild(1)),
+                    w::MenuItem::action(
+                        "Preferences",
+                        Msg::Status("System preferences unavailable in this preview".into())
+                    )
+                    .disabled(),
+                ]),
+                g("panel-height")
+            ),
             space().width(Length::Fill),
             label("Tue Aug 24, 21:21"),
         ]
@@ -276,5 +388,111 @@ pub fn view(t: &Toy) -> El<'_> {
             ..Default::default()
         })
         .into();
-    content
+    let dialog = w::AlertDialog::new("Open document")
+        .body("Choose a bundled document. No host files are read or written.")
+        .extra_child(
+            column![
+                cmp::flat_button(label("index.html (bundled sample)"))
+                    .on_press(Msg::LoadDocument(DOCUMENT.into())),
+                cmp::flat_button(label("Last saved preview"))
+                    .on_press(Msg::LoadDocument(t.saved_document.clone())),
+            ]
+            .spacing(m.space_s),
+        )
+        .response("Cancel", w::ResponseAppearance::Default, Msg::Dialog(false))
+        .into();
+    overlays(t, content, dialog)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::menu_tests::activate;
+
+    #[test]
+    fn editor_context_undo_and_redo_use_document_history_without_a_modal() {
+        let mut t = Toy::new();
+        let original = t.document.text();
+        t.update(Msg::Edit(cmp::TextAction::Edit(
+            iced::widget::text_editor::Edit::Insert('X'),
+        )));
+        let changed = t.document.text();
+        for row in [0, 1] {
+            let target = space().width(g("editor-width")).height(g("editor-height"));
+            let (size, command) =
+                activate(w::context_menu(target, edit_menu()).into(), 3, true, row);
+            assert_eq!(size, iced::Size::new(g("editor-width"), g("editor-height")));
+            t.update(command);
+            assert_eq!(
+                t.document.text(),
+                if row == 0 { &original } else { &changed }.as_str()
+            );
+            assert!(!t.dialog);
+        }
+    }
+
+    #[test]
+    fn places_and_search_text_menus_keep_compact_geometry_and_independent_queries() {
+        let mut t = Toy::new();
+        let (size, command) = activate(
+            menu_trigger("Places", places_menu(), g("panel-height")),
+            3,
+            false,
+            1,
+        );
+        assert_eq!(size.height, g("panel-height"));
+        t.update(command);
+        assert!(t.status.contains("~/Desktop"));
+        assert!(!t.dialog);
+        t.text = "help search".into();
+        let (size, command) = activate(
+            menu_trigger("Search", editor_menu("Search", &t), g("menu-height")),
+            3,
+            false,
+            0,
+        );
+        assert_eq!(size.height, g("menu-height"));
+        t.update(command);
+        t.update(Msg::FindQuery("GALLERY".into()));
+        assert!(t.find_open);
+        assert_eq!(t.text, "help search");
+        assert!(find_matches(DOCUMENT, &t.find_query) > 0);
+        assert_eq!(find_matches(DOCUMENT, ""), 0);
+        assert_eq!(find_matches("a.b aXb", "a.b"), 1);
+        let (_, command) = activate(
+            menu_trigger("View", editor_menu("View", &t), g("menu-height")),
+            3,
+            false,
+            0,
+        );
+        t.update(command);
+        assert!(!t.editor_toolbar);
+        let _ = view(&t);
+    }
+
+    #[test]
+    fn file_open_is_a_document_picker_not_a_menu_substitute_and_load_is_undoable() {
+        let mut t = Toy::new();
+        let (_, command) = activate(
+            menu_trigger("File", editor_menu("File", &t), g("menu-height")),
+            3,
+            false,
+            0,
+        );
+        t.update(command);
+        assert!(t.dialog);
+        let _ = view(&t);
+        let original = t.document.text();
+        t.update(Msg::LoadDocument("preview document".into()));
+        assert!(!t.dialog);
+        assert_eq!(t.document.text(), "preview document");
+        t.update(Msg::UndoDocument);
+        assert_eq!(t.document.text(), original);
+        t.update(Msg::ShowDesktop);
+        assert!(!t.open[0] && !t.open[1]);
+        t.update(Msg::ShowChild(1));
+        t.update(Msg::ShowChild(1));
+        assert!(t.open[1]);
+        assert_eq!(t.active_child, 1);
+    }
 }

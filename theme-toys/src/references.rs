@@ -45,10 +45,10 @@ pub const TARGETS: &[Reference] = &[
         key: "mate",
         source: "https://mate-desktop.org/gallery/1.26/english/",
         image: "https://mate-desktop.org/gallery/1.26/english/mate-1.26_7.png",
-        raster: (4096, 2160),
+        raster: (1280, 675),
         logical: (1280.0, 675.0),
         body_px: 10.0,
-        scene: "Official MATE1.26 Pluma left and Desktop User Guide right; scale raster/3.2. Panels18px, editor408x410 at114,104 including top panel, help444x410 at798,50. Silver title gradient #eeeeee to #c5c5c5; blue wallpaper approximated by a gradient.",
+        scene: "Official MATE1.26 Pluma left and Desktop User Guide right; downloaded source is 1280x675, mapped 1:1 to logical scene coordinates. Panels18px, editor408x410 at114,104 including top panel, help444x410 at798,50. Silver title gradient #eeeeee to #c5c5c5; blue wallpaper approximated by a gradient.",
     },
 ];
 
@@ -124,6 +124,33 @@ mod tests {
                 .build();
             assert!(!config.warnings().is_empty(), "{section}.{key}");
             assert_eq!(config.number(section, key), Some(default));
+        }
+    }
+
+    #[test]
+    fn editor_menu_overlays_preserve_each_independent_base_even_when_geometry_is_rejected() {
+        use iced_adaptive_design::theme_config::Source;
+        for (index, reference) in TARGETS.iter().enumerate() {
+            let base = design::resolve(index, "");
+            let width = base.number("menu", "popover-width").unwrap()
+                + base.number("metrics", "space-m").unwrap();
+            let overlay =
+                format!("[menu]\npopover-width={width}px\n[colors]\npopover-bg=#123456\n");
+            for text in [
+                overlay.clone(),
+                format!("{overlay}[toy.{}]\nwidth=1px\n", reference.key),
+            ] {
+                let config = design::resolve(index, &text);
+                assert_eq!(config.text("theme", "key"), Some(reference.key));
+                assert_eq!(config.number("menu", "popover-width"), Some(width));
+                assert_eq!(config.source("menu", "popover-width"), Source::App);
+                assert_eq!(config.source("colors", "popover-bg"), Source::App);
+                assert_eq!(
+                    config.get("typography", "base-size"),
+                    base.get("typography", "base-size")
+                );
+                assert!(design::layout_fits(&config, index));
+            }
         }
     }
 

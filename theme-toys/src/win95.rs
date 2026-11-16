@@ -23,7 +23,8 @@ pub fn view(t: &Toy) -> El<'_> {
     let tabs = w::Tabs::new(Some(t.tab), Msg::Tab)
         .panel_spacing(g("tab-panel-gap"))
         .label_props(cmp::TextProps::default().size(iad::Typography::desktop().body))
-        .variant(w::TabsVariant::Outline)
+        .padding([0.0, m.space_s])
+        .variant(w::TabsVariant::Default)
         .tab(w::TabItem::new(0usize, "Themes").panel(move || appearance(t)))
         .tab(w::TabItem::new(1usize, "Desktop").panel(move || background(t)))
         .tab(w::TabItem::new(2usize, "Screen Saver").panel(move || screen_saver(t)))
@@ -72,6 +73,13 @@ pub fn view(t: &Toy) -> El<'_> {
     window(t, TITLE, overlays(t, content, dialog))
 }
 
+fn color_menu(t: &Toy) -> w::Menu<Msg> {
+    native_menu("Background color").section([
+        w::MenuItem::select("Blue", !t.checks[5], Msg::Check(5, false)).keep_open(false),
+        w::MenuItem::select("Green", t.checks[5], Msg::Check(5, true)).keep_open(false),
+    ])
+}
+
 fn background(t: &Toy) -> El<'_> {
     let m = Metrics::desktop();
     let nodes: Vec<_> = WALLPAPERS
@@ -113,9 +121,11 @@ fn background(t: &Toy) -> El<'_> {
             MODES.iter().position(|mode| *mode == s).unwrap_or(0)
         )),
         label("Color:"),
-        cmp::raised_button(label(if t.checks[5] { "Green ▾" } else { "Blue ▾" }))
-            .width(Length::Fill)
-            .on_press(Msg::Check(5, !t.checks[5])),
+        menu_trigger(
+            if t.checks[5] { "Green ▾" } else { "Blue ▾" },
+            color_menu(t),
+            m.button_min_height,
+        ),
     ]
     .spacing(m.space_xs)
     .width(g("group-width"));
@@ -133,20 +143,18 @@ fn background(t: &Toy) -> El<'_> {
     ]
     .spacing(m.gap)
     .align_y(Alignment::Start);
-    cmp::framed(
-        container(
-            column![
-                container(monitor(t))
-                    .width(Length::Fill)
-                    .center_x(Length::Fill),
-                controls,
-            ]
-            .spacing(g("preview-gap")),
-        )
-        .padding(g("panel-padding"))
-        .width(Length::Fill),
-        "panel",
+    container(
+        column![
+            container(monitor(t))
+                .width(Length::Fill)
+                .center_x(Length::Fill),
+            controls,
+        ]
+        .spacing(g("preview-gap")),
     )
+    .padding(g("panel-padding"))
+    .width(Length::Fill)
+    .into()
 }
 
 /// Rounded CRT casing, recessed glass, neck and foot; no raster artwork required.
@@ -297,4 +305,33 @@ fn appearance(t: &Toy) -> El<'_> {
     ]
     .spacing(m.space_m)
     .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn color_menu_is_an_explicit_choice_not_a_blind_toggle_or_dialog() {
+        let mut t = Toy::new();
+        for row in [1, 1, 0] {
+            let (_, command) = crate::common::menu_tests::activate(
+                menu_trigger(
+                    "Color",
+                    color_menu(&t),
+                    Metrics::desktop().button_min_height,
+                ),
+                0,
+                false,
+                row,
+            );
+            t.update(command);
+            assert_eq!(t.checks[5], row == 1);
+            assert!(!t.dialog);
+        }
+        t.update(Msg::Apply);
+        t.update(Msg::Check(5, true));
+        t.update(Msg::Discard);
+        assert!(!t.checks[5]);
+    }
 }

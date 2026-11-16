@@ -21,6 +21,17 @@ pub enum Msg {
     Scheme,
     Edit(iad::components::TextAction),
     SaveDocument,
+    ChooseDocument,
+    LoadDocument(String),
+    Find(bool),
+    FindQuery(String),
+    ShowChild(usize),
+    ShowDesktop,
+    OpenXpItem(usize),
+    SelectAllXp,
+    XpProperties(Option<usize>),
+    EditorToolbar(bool),
+    PinProgram(usize),
     UndoDocument,
     RedoDocument,
     Start(bool),
@@ -54,6 +65,12 @@ pub struct Toy {
     undo: Vec<String>,
     redo: Vec<String>,
     pub saved_document: String,
+    pub find_open: bool,
+    pub find_query: String,
+    pub pinned_programs: Vec<usize>,
+    pub xp_all_selected: bool,
+    pub xp_properties: Option<usize>,
+    pub editor_toolbar: bool,
     pub active_child: usize,
     pub document: iad::components::TextContent,
     pub start_open: bool,
@@ -106,6 +123,12 @@ impl Toy {
             undo: Vec::new(),
             redo: Vec::new(),
             saved_document: crate::mate::DOCUMENT.into(),
+            find_open: false,
+            find_query: String::new(),
+            pinned_programs: Vec::new(),
+            xp_all_selected: false,
+            xp_properties: None,
+            editor_toolbar: true,
             active_child: 0,
             document: iad::components::TextContent::with_text(crate::mate::DOCUMENT),
             start_open: true,
@@ -160,6 +183,56 @@ impl Toy {
                     self.document = iad::components::TextContent::with_text(&text);
                 }
             }
+            Msg::ChooseDocument => self.dialog = true,
+            Msg::LoadDocument(text) => {
+                let before = self.document.text();
+                if before != text {
+                    self.undo.push(before);
+                    self.redo.clear();
+                    self.document = iad::components::TextContent::with_text(&text);
+                }
+                self.dialog = false;
+                self.open[0] = true;
+                self.active_child = 0;
+                self.status = "Opened bundled document in preview memory".into();
+            }
+            Msg::Find(open) => self.find_open = open,
+            Msg::FindQuery(query) => self.find_query = query,
+            Msg::ShowDesktop => {
+                self.open[0] = false;
+                self.open[1] = false;
+            }
+            Msg::ShowChild(index) => {
+                if index < 2 {
+                    self.open[index] = true;
+                    self.active_child = index;
+                }
+            }
+            Msg::SelectAllXp => self.xp_all_selected = true,
+            Msg::XpProperties(index) => {
+                if index.is_none_or(|i| crate::winxp::item_name(i).is_some()) {
+                    self.xp_properties = index;
+                    self.dialog = true;
+                }
+            }
+            Msg::EditorToolbar(visible) => self.editor_toolbar = visible,
+            Msg::OpenXpItem(index) => {
+                if let Some(name) = crate::winxp::item_name(index) {
+                    self.pick = index;
+                    self.text = name.into();
+                    self.status = format!("Preview location: {name}");
+                }
+            }
+            Msg::PinProgram(index) => {
+                if crate::win7::PROGRAMS.get(index).is_some() {
+                    if self.pinned_programs.contains(&index) {
+                        self.pinned_programs.retain(|i| *i != index);
+                    } else {
+                        self.pinned_programs.push(index);
+                    }
+                    self.status = "Start menu pin updated in preview memory".into();
+                }
+            }
             Msg::SaveDocument => {
                 self.saved_document = self.document.text();
                 self.status = "Saved to preview memory (no disk write)".into();
@@ -175,7 +248,10 @@ impl Toy {
                 }
             }
             Msg::Tab(i) => self.tab = i,
-            Msg::Pick(i) => self.pick = i,
+            Msg::Pick(i) => {
+                self.pick = i;
+                self.xp_all_selected = false;
+            }
             Msg::Radio(i) => self.radio = i,
             Msg::Check(i, on) => {
                 if i == 4 || i == 5 {
@@ -253,6 +329,29 @@ impl Toy {
     }
 }
 
+/// Conventional desktop menus keep check marks/icons on the leading edge.
+pub fn native_menu(title: &str) -> w::Menu<Msg> {
+    w::Menu::new(title)
+        .icon_side(w::MenuIconSide::Start)
+        .check_style(w::MenuCheckStyle::Mark)
+}
+
+/// Compact text trigger; height comes from the scene token, not global button minimums.
+pub fn menu_trigger<'a>(title: &str, menu: w::Menu<Msg>, height: f32) -> El<'a> {
+    let m = Metrics::desktop();
+    w::menu_button(iad::Icon::OpenMenu, menu)
+        .text_trigger(title)
+        .props(w::MenuProps {
+            label: iad::components::TextProps::default().size(iad::Typography::desktop().body),
+            trigger: iad::components::ContainerProps::default()
+                .height(Length::Fixed(height))
+                .padding(iced::Padding::from([0.0, m.space_xs])),
+            ..Default::default()
+        })
+        .presentation(w::MenuPresentation::Dropdown)
+        .into()
+}
+
 /// A line of text.
 pub fn label<'a>(s: impl Into<String>) -> El<'a> {
     ty::body(s.into()).into()
@@ -313,4 +412,99 @@ pub fn overlays<'a>(t: &'a Toy, content: El<'a>, dialog: El<'a>) -> El<'a> {
 /// Case-insensitive literal search shared by file and preference views.
 pub fn matches_query(name: &str, query: &str) -> bool {
     name.to_lowercase().contains(&query.trim().to_lowercase())
+}
+
+#[cfg(test)]
+pub mod menu_tests {
+    use super::*;
+    use iced::advanced::{Shell, layout, renderer::Headless, widget::Tree};
+    use iced::{Event, Rectangle, Size, keyboard, mouse};
+
+    fn key(named: keyboard::key::Named) -> Event {
+        Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(named),
+            modified_key: keyboard::Key::Named(named),
+            physical_key: keyboard::key::Physical::Unidentified(
+                keyboard::key::NativeCode::Unidentified,
+            ),
+            location: keyboard::Location::Standard,
+            modifiers: keyboard::Modifiers::empty(),
+            text: None,
+            repeat: false,
+        })
+    }
+
+    /// Open the real wrapper, check containment, and activate its enabled row by keyboard.
+    /// All fixture rectangles come from the scene/schema rather than unrelated test sizes.
+    pub fn activate(mut element: El<'_>, design: usize, context: bool, row: usize) -> (Size, Msg) {
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(iad::Typography::desktop().body),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        let viewport = Rectangle::with_size(crate::design::size(design));
+        let mut tree = Tree::new(&element);
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport.size()),
+        );
+        let size = node.size();
+        let mut messages = Vec::new();
+        element.as_widget_mut().update(
+            &mut tree,
+            &Event::Mouse(mouse::Event::ButtonPressed(if context {
+                mouse::Button::Right
+            } else {
+                mouse::Button::Left
+            })),
+            layout::Layout::new(&node),
+            mouse::Cursor::Available(node.bounds().center()),
+            &renderer,
+            &mut iced::advanced::clipboard::Null,
+            &mut Shell::new(&mut messages),
+            &viewport,
+        );
+        assert!(
+            messages.is_empty(),
+            "opening is not a command or modal: {messages:?}"
+        );
+        let mut overlay = element
+            .as_widget_mut()
+            .overlay(
+                &mut tree,
+                layout::Layout::new(&node),
+                &renderer,
+                &viewport,
+                iced::Vector::ZERO,
+            )
+            .expect("native menu overlay");
+        let menu_node = overlay.as_overlay_mut().layout(&renderer, viewport.size());
+        let bounds = menu_node.bounds();
+        assert!(
+            bounds.x >= viewport.x && bounds.y >= viewport.y,
+            "{bounds:?}"
+        );
+        assert!(
+            bounds.x + bounds.width <= viewport.width
+                && bounds.y + bounds.height <= viewport.height,
+            "{bounds:?}"
+        );
+        let events = std::iter::once(key(keyboard::key::Named::Home))
+            .chain((0..row).map(|_| key(keyboard::key::Named::ArrowDown)))
+            .chain(std::iter::once(key(keyboard::key::Named::Enter)));
+        for event in events {
+            overlay.as_overlay_mut().update(
+                &event,
+                layout::Layout::new(&menu_node),
+                mouse::Cursor::Unavailable,
+                &renderer,
+                &mut iced::advanced::clipboard::Null,
+                &mut Shell::new(&mut messages),
+            );
+        }
+        assert_eq!(messages.len(), 1, "one menu command: {messages:?}");
+        (size, messages.remove(0))
+    }
 }

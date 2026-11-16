@@ -105,6 +105,16 @@ pub fn schema() -> Schema {
             "Reference scene geometry, in logical px",
         );
     }
+    schema = schema.variable(
+        "toy",
+        "overflow",
+        VariableType::String {
+            values: ["grow", "scroll", "scale-down"].map(String::from).to_vec(),
+            accepts_random: false,
+        },
+        Some(Value::Text("grow".into())),
+        "Natural scene overflow: grow, two-axis scroll, or contain without upscaling",
+    );
     for name in ["desktop", "taskbar", "start-menu"] {
         schema = schema.variable(
             "gradients",
@@ -126,7 +136,7 @@ pub fn scene_text(design: usize) -> &'static str {
     }
 }
 
-/// Property-specific bounds, with cross-property containment checked by `layout_fits`.
+/// Individual token validation; whole-scene negotiation belongs to the overflow layout.
 pub fn bounds(key: &str, default: f32) -> (f32, f32) {
     match key {
         "width" | "height" => (default, default * 1.5),
@@ -134,40 +144,62 @@ pub fn bounds(key: &str, default: f32) -> (f32, f32) {
         "editor-font-size" => (8.0, 24.0),
         "heading-size" => (12.0, 40.0),
         key if key.ends_with("radius") => (0.0, 24.0),
-        key if key.ends_with("padding") || key.ends_with("gap") || key.ends_with("inset") =>
-            (0.0, (default * 2.0).max(12.0)),
+        key if key.ends_with("padding") || key.ends_with("gap") || key.ends_with("inset") => {
+            (0.0, (default * 2.0).max(12.0))
+        }
         _ => ((default * 0.5).max(1.0), default * 1.5),
     }
 }
 
 fn build(design: usize, overlay: &str) -> ThemeConfig {
     ThemeConfig::builder("org.iad.ThemeToys")
-        .files(false).schema(schema()).inheritance(Inheritance::OptOut)
-        .toolkit_text(scene_text(design)).app_text(overlay).build()
+        .files(false)
+        .schema(schema())
+        .inheritance(Inheritance::OptOut)
+        .toolkit_text(scene_text(design))
+        .app_text(overlay)
+        .build()
 }
 
 /// Actual resolved IAD lengths, not the manifest constants, determine containment.
 pub fn layout_fits(config: &ThemeConfig, design: usize) -> bool {
     let section = ["toy.win95", "toy.winxp", "toy.win7", "toy.mate"][design];
     let n = |key: &str| config.number(section, key).expect("declared geometry");
-    let w = n("width"); let h = n("height");
+    let w = n("width");
+    let h = n("height");
     match design {
         0 => {
-            let vertical_delta = n("screen-height") - 112.0 + 2.0 * (n("bezel-padding") - 8.0)
-                + n("preview-gap") - 16.0 + n("list-height") - 112.0
-                + 2.0 * (n("panel-padding") - 12.0) + n("tab-panel-gap")
-                + n("neck-height") - 5.0 + n("foot-height") - 4.0;
+            let vertical_delta =
+                n("screen-height") - 112.0 + 2.0 * (n("bezel-padding") - 8.0) + n("preview-gap")
+                    - 16.0
+                    + n("list-height")
+                    - 112.0
+                    + 2.0 * (n("panel-padding") - 12.0)
+                    + n("tab-panel-gap")
+                    + n("neck-height")
+                    - 5.0
+                    + n("foot-height")
+                    - 4.0;
             n("screen-width") + 2.0 * (n("bezel-padding") + n("border-width")) <= n("monitor-width")
                 && n("monitor-width") + 2.0 * n("panel-padding") <= w
                 && n("group-width") + 2.0 * n("panel-padding") + 120.0 <= w
                 && 448.0 + vertical_delta <= h
         }
-        1 => n("sidebar-width") + 2.0 * n("item-width") <= w
-            && n("menu-height") + n("toolbar-height") + n("address-height")
-                + 4.0 * (n("section-height") + n("item-height")) <= h,
-        2 => n("menu-width") <= w && n("menu-height") + n("taskbar-height") <= h
-            && n("programs-width") + 2.0 * n("menu-padding") + 140.0 <= n("menu-width")
-            && n("user-height") + 9.0 * n("place-row-height") + n("search-height") <= n("menu-height"),
+        1 => {
+            n("sidebar-width") + 2.0 * n("item-width") <= w
+                && n("menu-height")
+                    + n("toolbar-height")
+                    + n("address-height")
+                    + 4.0 * (n("section-height") + n("item-height"))
+                    <= h
+        }
+        2 => {
+            n("menu-width") <= w
+                && n("menu-height") + n("taskbar-height") <= h
+                && n("programs-width") + 2.0 * n("menu-padding") + 140.0 <= n("menu-width")
+                && n("user-height") + 9.0 * n("place-row-height") + n("search-height")
+                    <= n("menu-height")
+        }
         _ => ["editor", "help"].iter().all(|name| {
             let value = |suffix| n(&format!("{name}-{suffix}"));
             value("x") + value("width") <= w
@@ -179,22 +211,35 @@ pub fn layout_fits(config: &ThemeConfig, design: usize) -> bool {
 
 pub fn resolve(design: usize, overlay: &str) -> ThemeConfig {
     let config = build(design, overlay);
-    if layout_fits(&config, design) { return config; }
+    if layout_fits(&config, design) {
+        return config;
+    }
     // Keep editor palette/font/native-widget edits, but reject an impossible scene rectangle.
     let mut geometry = false;
-    let safe: String = overlay.lines().filter(|line| {
-        let line = line.trim();
-        if line.starts_with('[') { geometry = line.contains("toy."); }
-        !geometry
-    }).map(|line| format!("{line}\n")).collect();
-    eprintln!("theme-toys: scene geometry exceeds its bounds; using base geometry, keeping native theme edits");
+    let safe: String = overlay
+        .lines()
+        .filter(|line| {
+            let line = line.trim();
+            if line.starts_with('[') {
+                geometry = line.contains("toy.");
+            }
+            !geometry
+        })
+        .map(|line| format!("{line}\n"))
+        .collect();
+    eprintln!(
+        "theme-toys: scene geometry exceeds its bounds; using base geometry, keeping native theme edits"
+    );
     build(design, &safe)
 }
 
 pub fn config(design: usize) -> ThemeConfig {
     let overlay = match std::env::var_os("IAD_THEME") {
         Some(path) => std::fs::read_to_string(&path).unwrap_or_else(|error| {
-            eprintln!("theme-toys: cannot read IAD_THEME {:?}: {error}; using base", path);
+            eprintln!(
+                "theme-toys: cannot read IAD_THEME {:?}: {error}; using base",
+                path
+            );
             String::new()
         }),
         None => String::new(),
