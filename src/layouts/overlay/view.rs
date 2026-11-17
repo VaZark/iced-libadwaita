@@ -40,6 +40,7 @@ pub struct Overlay<'a, M> {
     margin: f32,
     initial_focus: Option<iced::widget::Id>,
     fade: bool,
+    spec: Option<crate::layouts::animation::Spec>,
 }
 
 impl<'a, M: Clone + 'a> Overlay<'a, M> {
@@ -56,6 +57,7 @@ impl<'a, M: Clone + 'a> Overlay<'a, M> {
             margin: 0.0,
             initial_focus: None,
             fade: false,
+            spec: None,
         }
     }
     /// Keeps the layer stationary instead of sliding it (default off). The background
@@ -64,6 +66,12 @@ impl<'a, M: Clone + 'a> Overlay<'a, M> {
     /// [`crate::layouts::Entrance::container`] for a shape-derived fade.
     pub fn fade(mut self, on: bool) -> Self {
         self.fade = on;
+        self
+    }
+    /// How the entrance moves: a spring by default; a timed one with an easing is what a plain
+    /// fade-in and fade-out wants.
+    pub fn spec(mut self, spec: crate::layouts::animation::Spec) -> Self {
+        self.spec = Some(spec);
         self
     }
     /// Fades the base below the layer (default on).
@@ -171,6 +179,9 @@ impl<'a, M: Clone + 'a> From<Overlay<'a, M>> for Element<'a, M> {
         }
         if o.fade {
             entrance = entrance.fade();
+        }
+        if let Some(spec) = o.spec {
+            entrance = entrance.spec(spec);
         }
         if o.rules.scrim {
             let radius = o.window_radius;

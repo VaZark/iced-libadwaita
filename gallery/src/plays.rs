@@ -246,6 +246,12 @@ pub fn specs(d: Detail) -> Vec<Spec> {
         Detail::Docked => vec![
             S::choice("side", "Side", &["Bottom", "Top", "Left", "Right"], 0),
             S::choice(
+                "motion",
+                "Overlay motion",
+                &["Slide (spring)", "Fade (spring)", "Fade, ease-in-out cubic"],
+                0,
+            ),
+            S::choice(
                 "size",
                 "Size (across)",
                 &["Its own", "120 px", "40%", "Full screen"],
@@ -942,8 +948,10 @@ pub fn build<'a>(
             )
             .padding(m.space_l)
             .width(Length::Fill);
-            let el = lay::Dock::new(stage, surface)
+            let motion = p.choice("motion");
+            let mut el = lay::Dock::new(stage, surface)
                 .open(p.bool("open"))
+                .fade(motion > 0)
                 .side(side)
                 .size(size)
                 .length(length)
@@ -954,6 +962,12 @@ pub fn build<'a>(
                 .border(p.bool("border"))
                 .scrim(p.bool("scrim"))
                 .on_outside(Message::Noop);
+            if motion == 2 {
+                el = el.spec(iad::layouts::animation::Spec::Timed(
+                    std::time::Duration::from_millis(280),
+                    iad::layouts::animation::Easing::EaseInOutCubic,
+                ));
+            }
             let preview = container(Element::from(el))
                 .width(Length::Fill)
                 .height(Length::Fixed(260.0))

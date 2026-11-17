@@ -132,6 +132,7 @@ pub struct Dock<'a, M> {
     border: bool,
     initial_focus: Option<iced::widget::Id>,
     fade: bool,
+    spec: Option<crate::layouts::animation::Spec>,
 }
 
 impl<'a, M: Clone + 'a> Dock<'a, M> {
@@ -156,7 +157,14 @@ impl<'a, M: Clone + 'a> Dock<'a, M> {
             border: true,
             initial_focus: None,
             fade: false,
+            spec: None,
         }
+    }
+    /// How an [`Overlay`](DockMode::Overlay) surface moves in and out: a spring by default, or a
+    /// timed animation with an easing (a fade wants one).
+    pub fn spec(mut self, spec: crate::layouts::animation::Spec) -> Self {
+        self.spec = Some(spec);
+        self
     }
     /// Fades an [`Overlay`](DockMode::Overlay) surface in instead of sliding it from its edge
     /// (default off). Meant for a `FullScreen` one: a page that appears rather than arrives.
@@ -551,6 +559,9 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
                     .margin(margin)
                     .window_radius(window_edge)
                     .fade(d.fade);
+                if let Some(spec) = d.spec {
+                    o = o.spec(spec);
+                }
                 if let Some(m) = d.on_outside {
                     o = o.on_outside(m);
                 }
