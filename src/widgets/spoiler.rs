@@ -56,6 +56,7 @@ pub struct Spoiler<'a, M> {
     width: Length,
     gap: Option<f32>,
     metrics: Metrics,
+    duration: Option<std::time::Duration>,
 }
 
 impl<'a, M: Clone + 'a> Spoiler<'a, M> {
@@ -78,6 +79,7 @@ impl<'a, M: Clone + 'a> Spoiler<'a, M> {
             width: Length::Fill,
             gap: None,
             metrics: Metrics::desktop(),
+            duration: None,
         }
     }
     /// The partial-data form: only the visible items of `state` are built.
@@ -95,6 +97,11 @@ impl<'a, M: Clone + 'a> Spoiler<'a, M> {
             hide: "Hide".into(),
             spacing: Metrics::desktop().space_s,
         }
+    }
+    /// How long it takes to open or close (default the theme's reveal motion).
+    pub fn duration(mut self, d: std::time::Duration) -> Self {
+        self.duration = Some(d);
+        self
     }
     pub fn max_height(mut self, px: f32) -> Self {
         self.max_height = px.max(1.0);
@@ -148,6 +155,7 @@ struct Clamp<'a, M> {
     preview: bool,
     gap: f32,
     width: Length,
+    duration: Option<std::time::Duration>,
 }
 
 struct State {
@@ -243,7 +251,10 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Clamp<'a, M> {
             &mut state.progress,
             event,
             if self.expanded { 1.0 } else { 0.0 },
-            Trigger::Reveal.spec(Spec::STYLE),
+            Trigger::Reveal.spec(match self.duration {
+                Some(d) => Spec::STYLE.with_duration(d),
+                None => Spec::STYLE,
+            }),
             shell,
             true,
         );
@@ -455,6 +466,7 @@ impl<'a, M: Clone + 'a> From<Spoiler<'a, M>> for Element<'a, M> {
             preview: s.preview,
             gap: s.gap.unwrap_or(s.metrics.space_xs),
             width: s.width,
+            duration: s.duration,
         })
     }
 }

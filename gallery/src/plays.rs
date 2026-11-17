@@ -244,12 +244,21 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::number("line", "Line size", 1.0..=6.0, 1.0),
         ],
         Detail::Docked => vec![
+            S::bool("open", "Open", true),
             S::choice("side", "Side", &["Bottom", "Top", "Left", "Right"], 0),
             S::choice(
-                "motion",
-                "Overlay motion",
-                &["Slide (spring)", "Fade (spring)", "Fade, ease-in-out cubic"],
+                "enter",
+                "Enter effect",
+                &["Slide", "Fade", "None"],
                 0,
+            ),
+            S::choice("exit", "Exit effect", &["Slide", "Fade", "None"], 0),
+            S::number("duration", "Duration (ms)", 50.0..=5000.0, 1500.0),
+            S::choice(
+                "easing",
+                "Easing",
+                &["Default (spring)", "Ease in-out cubic", "Linear"],
+                1,
             ),
             S::choice(
                 "size",
@@ -278,7 +287,6 @@ pub fn specs(d: Detail) -> Vec<Spec> {
                 0.0,
             ),
             S::bool("border", "Hairline border (not on flush sides)", true),
-            S::bool("open", "Open", true),
             S::bool("scrim", "Fade the base (overlay)", true),
         ],
         Detail::NumberInput => vec![
@@ -325,6 +333,7 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::number("max_height", "Maximum height", 40.0..=240.0, 80.0),
             S::bool("expanded", "Expanded", false),
             S::bool("preview", "Preview (no control, always clipped)", false),
+            S::number("duration", "Open/close duration (ms)", 50.0..=5000.0, 250.0),
             S::choice("width", "Width", &["Fill", "Fixed 240 px"], 0),
             S::number("initial", "Items shown first", 1.0..=10.0, 3.0),
             S::choice("step", "A press reveals", &["All", "5 more", "10 more"], 2),
@@ -948,10 +957,23 @@ pub fn build<'a>(
             )
             .padding(m.space_l)
             .width(Length::Fill);
-            let motion = p.choice("motion");
+            let effect = |k: &str| {
+                [
+                    lay::Effect::Slide,
+                    lay::Effect::Fade,
+                    lay::Effect::None,
+                ][p.choice(k)]
+            };
+            let duration = std::time::Duration::from_millis(p.number("duration") as u64);
+            // Always given and always built, so closing it plays the exit: once it has left,
+            // an overlay draws nothing and lets everything through.
             let mut el = lay::Dock::new(stage, surface)
                 .open(p.bool("open"))
-                .fade(motion > 0)
+                .closing(true)
+                // The preview's own fill is what shows behind the surface.
+                .backdrop(|t| t.semantic.view.bg)
+                .motion(effect("enter"), effect("exit"))
+                .duration(duration)
                 .side(side)
                 .size(size)
                 .length(length)
@@ -962,11 +984,20 @@ pub fn build<'a>(
                 .border(p.bool("border"))
                 .scrim(p.bool("scrim"))
                 .on_outside(Message::Noop);
-            if motion == 2 {
-                el = el.spec(iad::layouts::animation::Spec::Timed(
-                    std::time::Duration::from_millis(280),
-                    iad::layouts::animation::Easing::EaseInOutCubic,
-                ));
+            match p.choice("easing") {
+                1 => {
+                    el = el.spec(iad::layouts::animation::Spec::Timed(
+                        duration,
+                        iad::layouts::animation::Easing::EaseInOutCubic,
+                    ));
+                }
+                2 => {
+                    el = el.spec(iad::layouts::animation::Spec::Timed(
+                        duration,
+                        iad::layouts::animation::Easing::Linear,
+                    ));
+                }
+                _ => {}
             }
             let preview = container(Element::from(el))
                 .width(Length::Fill)
@@ -1045,6 +1076,7 @@ pub fn build<'a>(
                     .max_height(p.number("max_height"))
                     .expanded(open)
                     .preview(p.bool("preview"))
+                    .duration(std::time::Duration::from_millis(p.number("duration") as u64))
                     .on_toggle(on_bool(d, "expanded"))
                     .metrics(m);
                 Element::from(s)

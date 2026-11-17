@@ -16,7 +16,7 @@
 //! The math is pure and unit-tested; widgets drive it from iced's redraw events.
 
 use std::f64::consts::PI;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 /// The `AdwEasing` curves.
@@ -723,9 +723,75 @@ impl Trigger {
         self.motion() == Motion::Animated
     }
 
-    /// `own` when the trigger animates, [`Spec::Instant`] otherwise.
+    /// `own` when the trigger animates, [`Spec::Instant`] otherwise. Slowed or sped up by the
+    /// [time scale](set_time_scale).
     pub fn spec(self, own: Spec) -> Spec {
-        if self.animated() { own } else { Spec::Instant }
+        if self.animated() {
+            own.scaled(time_scale())
+        } else {
+            Spec::Instant
+        }
+    }
+}
+
+/// The time scale as `f32` bits: 1 is normal speed.
+static TIME_SCALE: AtomicU32 = AtomicU32::new(0x3f80_0000);
+
+/// Makes **every** animation that runs through a [`Trigger`] take `scale` times as long: `4.0` is
+/// slow motion for looking at an effect, `0.5` twice as fast. `1.0` (the default) is normal.
+/// Development and demos; an app's own durations are set on the widget with `duration`.
+pub fn set_time_scale(scale: f32) {
+    TIME_SCALE.store(scale.clamp(0.05, 100.0).to_bits(), Ordering::Relaxed);
+}
+
+/// The current [time scale](set_time_scale).
+pub fn time_scale() -> f32 {
+    f32::from_bits(TIME_SCALE.load(Ordering::Relaxed))
+}
+
+impl Spec {
+    /// The same motion over `d`. A timed animation takes `d`; a spring keeps its damping ratio
+    /// and is stretched or squeezed until its estimated running time is `d`. [`Spec::Instant`]
+    /// stays instant.
+    pub fn with_duration(self, d: Duration) -> Spec {
+        match self {
+            Spec::Timed(_, easing) => Spec::Timed(d, easing),
+            Spec::Spring(p) => {
+                // The estimate is not exactly linear in the scale, so close in on `d`.
+                let mut spec = Spec::Spring(p);
+                for _ in 0..4 {
+                    let Spec::Spring(now) = spec else { break };
+                    match SpringAnimation::new(0.0, 1.0, now).estimated_duration() {
+                        Some(e) if e > Duration::ZERO => {
+                            spec = spec.scaled(d.as_secs_f32() / e.as_secs_f32());
+                        }
+                        _ => break,
+                    }
+                }
+                spec
+            }
+            Spec::Instant => Spec::Instant,
+        }
+    }
+
+    /// The same motion, `k` times as long. A spring's time is scaled by dividing its stiffness
+    /// by `k²` and its damping by `k`, which keeps its shape.
+    pub fn scaled(self, k: f32) -> Spec {
+        if (k - 1.0).abs() < f32::EPSILON || k <= 0.0 {
+            return self;
+        }
+        match self {
+            Spec::Timed(d, e) => Spec::Timed(d.mul_f32(k), e),
+            Spec::Spring(p) => {
+                let k = k as f64;
+                Spec::Spring(SpringParams::new_full(
+                    p.mass,
+                    p.stiffness / (k * k),
+                    p.damping / k,
+                ))
+            }
+            Spec::Instant => Spec::Instant,
+        }
     }
 }
 
@@ -878,6 +944,41 @@ impl Tween {
             }
             _ => true,
         }
+    }
+}
+
+#[cfg(test)]
+mod duration_tests {
+    use super::*;
+
+    #[test]
+    fn a_timed_spec_takes_the_duration_and_a_spring_is_stretched_to_it() {
+        let timed = Spec::Timed(Duration::from_millis(250), Easing::Ease);
+        assert_eq!(
+            timed.with_duration(Duration::from_secs(2)),
+            Spec::Timed(Duration::from_secs(2), Easing::Ease)
+        );
+        assert_eq!(
+            timed.scaled(4.0),
+            Spec::Timed(Duration::from_millis(1000), Easing::Ease)
+        );
+        let spring = Spec::Spring(SpringParams::new(0.8, 1.0, 400.0));
+        let est = |s: Spec| match s {
+            Spec::Spring(p) => SpringAnimation::new(0.0, 1.0, p)
+                .estimated_duration()
+                .unwrap()
+                .as_secs_f32(),
+            _ => unreachable!(),
+        };
+        let slow = est(spring.with_duration(Duration::from_secs(2)));
+        assert!(
+            (slow - 2.0).abs() < 0.1,
+            "a spring stretched to 2s took {slow}s"
+        );
+        assert_eq!(
+            Spec::Instant.with_duration(Duration::from_secs(1)),
+            Spec::Instant
+        );
     }
 }
 

@@ -33,6 +33,10 @@ pub struct AdaptiveSplit<'a, M> {
     window_radius: f32,
     side: Side,
     extent: Option<Extent>,
+    /// How the slot opens and how it closes, when not the sidebar spring.
+    slot_specs: (Option<Spec>, Option<Spec>),
+    /// While this is above zero the slot is kept open, whatever `wide` says.
+    hold: Option<std::rc::Rc<std::cell::Cell<f32>>>,
 }
 
 /// A sidebar and a content area. `wide`: the sidebar sits beside the content (`sidebar_width`);
@@ -54,6 +58,8 @@ pub fn adaptive_split<'a, M>(
         window_radius: 0.0,
         side: Side::Left,
         extent: None,
+        slot_specs: (None, None),
+        hold: None,
     }
 }
 
@@ -81,6 +87,18 @@ impl<'a, M> AdaptiveSplit<'a, M> {
         self.extent = Some(extent);
         self
     }
+    /// How the sidebar slot opens and how it closes, instead of the sidebar spring. `Spec::Instant`
+    /// skips the slide in that direction.
+    pub fn slot_specs(mut self, open: Option<Spec>, close: Option<Spec>) -> Self {
+        self.slot_specs = (open, close);
+        self
+    }
+    /// Keeps the slot open for as long as `hold` is above zero: a sidebar that fades out where it
+    /// stands is still there until it has finished, then its room closes.
+    pub fn hold_open(mut self, hold: std::rc::Rc<std::cell::Cell<f32>>) -> Self {
+        self.hold = Some(hold);
+        self
+    }
     /// Rounds the drawer scrim to the window's corners.
     pub fn window_radius(mut self, r: f32) -> Self {
         self.window_radius = r;
@@ -93,10 +111,22 @@ struct SplitState {
     slot: Progress,
     /// 1 when the drawer is fully open.
     drawer: Progress,
+    /// What the hold said at the end of the last frame: the view is built again every frame, so
+    /// the value it carries starts at zero until the surface under it has run.
+    held: f32,
 }
 
 fn spring() -> Spec {
     Spec::Spring(presets::sidebar())
+}
+
+impl<'a, M> AdaptiveSplit<'a, M> {
+    /// Keeps what the hold says now for the next frame's view.
+    fn remember_hold(&self, tree: &mut Tree) {
+        if let Some(hold) = &self.hold {
+            tree.state.downcast_mut::<SplitState>().held = hold.get();
+        }
+    }
 }
 
 impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
@@ -111,6 +141,7 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
             } else {
                 0.0
             }),
+            held: 0.0,
         })
     }
     fn children(&self) -> Vec<Tree> {
@@ -215,14 +246,23 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
         shell: &mut Shell<'_, M>,
         viewport: &Rectangle,
     ) {
+        let open_slot = self.wide
+            || (self.hold.is_some() && tree.state.downcast_ref::<SplitState>().held > 0.001);
         let (slot, drawer) = {
             let st = tree.state.downcast_mut::<SplitState>();
             // The content's width changes every frame while the sidebar slides: relayout.
             advance(
                 &mut st.slot,
                 event,
-                if self.wide { 1.0 } else { 0.0 },
-                Trigger::Layout.spec(spring()),
+                if open_slot { 1.0 } else { 0.0 },
+                Trigger::Layout.spec(
+                    if open_slot {
+                        self.slot_specs.0
+                    } else {
+                        self.slot_specs.1
+                    }
+                    .unwrap_or_else(spring),
+                ),
                 shell,
                 true,
             );
@@ -269,6 +309,7 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
                     shell.capture_event();
                 }
             }
+            self.remember_hold(tree);
             return;
         }
         if slot > 0.001 || keyboard {
@@ -279,6 +320,7 @@ impl<'a, M: Clone> Widget<M, Theme, iced::Renderer> for AdaptiveSplit<'a, M> {
         self.children[1].as_widget_mut().update(
             &mut b[0], event, content_l, cursor, renderer, clipboard, shell, viewport,
         );
+        self.remember_hold(tree);
     }
 
     fn mouse_interaction(

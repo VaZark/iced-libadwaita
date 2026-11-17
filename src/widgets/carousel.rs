@@ -104,6 +104,11 @@ impl<'a, M> Carousel<'a, M> {
         self.spec = spec;
         self
     }
+    /// How long a page change takes; the default spring is stretched to it.
+    pub fn duration(mut self, d: std::time::Duration) -> Self {
+        self.spec = self.spec.with_duration(d);
+        self
+    }
 
     fn page_area(&self, layout: Layout<'_>) -> Rectangle {
         Rectangle {

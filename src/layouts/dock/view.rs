@@ -47,7 +47,9 @@
 
 use crate::Element;
 use crate::layouts::anchor::{Align, Dim, Side};
+use crate::layouts::animation::{Spec, Trigger, presets};
 use crate::layouts::dock::rule::Extent;
+use crate::layouts::motion::{Effect, FadeCover};
 use crate::layouts::{Overlay, adaptive_split};
 use crate::styles::container as sc;
 use crate::{Metrics, Theme};
@@ -57,6 +59,8 @@ use iced::advanced::widget::{Operation, Tree, Widget};
 use iced::advanced::{Clipboard, Renderer as _, Shell, overlay};
 use iced::widget::container;
 use iced::{Event, Length, Rectangle, Size, Vector, mouse};
+use std::rc::Rc;
+use std::time::Duration;
 
 /// How the dock shares the window with the base.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -131,8 +135,15 @@ pub struct Dock<'a, M> {
     margin: f32,
     border: bool,
     initial_focus: Option<iced::widget::Id>,
-    fade: bool,
-    spec: Option<crate::layouts::animation::Spec>,
+    enter: Effect,
+    exit: Effect,
+    spec: Option<Spec>,
+    exit_spec: Option<Spec>,
+    duration: Option<Duration>,
+    exit_duration: Option<Duration>,
+    closing: bool,
+    on_settled: Option<M>,
+    backdrop: Option<Rc<dyn Fn(&Theme) -> iced::Color>>,
 }
 
 impl<'a, M: Clone + 'a> Dock<'a, M> {
@@ -156,23 +167,76 @@ impl<'a, M: Clone + 'a> Dock<'a, M> {
             margin: 0.0,
             border: true,
             initial_focus: None,
-            fade: false,
+            enter: Effect::Slide,
+            exit: Effect::Slide,
             spec: None,
+            exit_spec: None,
+            duration: None,
+            exit_duration: None,
+            closing: false,
+            on_settled: None,
+            backdrop: None,
         }
     }
-    /// How an [`Overlay`](DockMode::Overlay) surface moves in and out: a spring by default, or a
-    /// timed animation with an easing (a fade wants one).
-    pub fn spec(mut self, spec: crate::layouts::animation::Spec) -> Self {
+    /// What the surface does as it arrives (`enter`) and as it leaves (`exit`), in either
+    /// [mode](DockMode): [`Slide`](Effect::Slide) (the default) moves it in from its edge,
+    /// [`None`](Effect::None) shows and hides it at once, and [`Fade`](Effect::Fade) rises it out
+    /// of the window colour where it stands, at any size and in either mode (a pushed surface's
+    /// room still opens and closes while it fades).
+    pub fn motion(mut self, enter: Effect, exit: Effect) -> Self {
+        self.enter = enter;
+        self.exit = exit;
+        self
+    }
+    /// Both effects at once: fades a full-screen surface in and out (a page that appears rather
+    /// than arrives); off, slides.
+    pub fn fade(self, on: bool) -> Self {
+        let e = if on { Effect::Fade } else { Effect::Slide };
+        self.motion(e, e)
+    }
+    /// The colour a [fading](Effect::Fade) surface fades to and from: what shows behind it
+    /// (default the window colour). The whole surface fades, its own fill as well as its
+    /// contents, so this must be the colour actually behind it.
+    pub fn backdrop(mut self, color: impl Fn(&Theme) -> iced::Color + 'static) -> Self {
+        self.backdrop = Some(Rc::new(color));
+        self
+    }
+    /// How the way in moves: a spring by default; a timed one with an easing is what a fade
+    /// wants.
+    pub fn spec(mut self, spec: Spec) -> Self {
         self.spec = Some(spec);
         self
     }
-    /// Fades an [`Overlay`](DockMode::Overlay) surface in instead of sliding it from its edge
-    /// (default off). Meant for a `FullScreen` one: a page that appears rather than arrives.
-    pub fn fade(mut self, on: bool) -> Self {
-        self.fade = on;
+    /// How the way out moves, when it is not the way in's.
+    pub fn exit_spec(mut self, spec: Spec) -> Self {
+        self.exit_spec = Some(spec);
         self
     }
-    /// Whether the surface shows (default true).
+    /// How long the way in takes, and the way out unless
+    /// [`exit_duration`](Self::exit_duration) says otherwise. A spring is stretched to it. The
+    /// same in both modes: the one setting a slow-motion look at the effect needs.
+    pub fn duration(mut self, d: Duration) -> Self {
+        self.duration = Some(d);
+        self
+    }
+    /// How long the way out takes, when it is not the way in's.
+    pub fn exit_duration(mut self, d: Duration) -> Self {
+        self.exit_duration = Some(d);
+        self
+    }
+    /// The surface is closed but still on its way out, so it is still given and still built: an
+    /// [overlay](DockMode::Overlay) keeps it until the exit has finished, then sends
+    /// [`on_settled`](Self::on_settled). The app sets it from the moment it closes the surface
+    /// and clears it on that message. (A pushed surface is always built and needs none of this.)
+    pub fn closing(mut self, closing: bool) -> Self {
+        self.closing = closing;
+        self
+    }
+    /// Sent once an [overlay's](DockMode::Overlay) exit has finished and nothing of it shows.
+    pub fn on_settled(mut self, m: M) -> Self {
+        self.on_settled = Some(m);
+        self
+    }
     pub fn open(mut self, open: bool) -> Self {
         self.open = open;
         self
@@ -467,6 +531,22 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
         let flush = flush_sides(side, size, length, d.align, margin);
         let lifted_radius = margin > 0.0;
         let radius = d.radius;
+        // How the surface moves in and out: the dock's spec, or the mode's own spring, over the
+        // dock's duration if it has one. Shared by the slide, the fade and the layer's scrim, so
+        // they stay in step.
+        let default = Spec::Spring(match d.mode {
+            DockMode::Push => presets::sidebar(),
+            DockMode::Overlay => presets::sheet(false),
+        });
+        let stretch = |spec: Spec, duration: Option<Duration>| match duration {
+            Some(dur) => spec.with_duration(dur),
+            None => spec,
+        };
+        let spec_in = stretch(d.spec.unwrap_or(default), d.duration);
+        let spec_out = stretch(
+            d.exit_spec.or(d.spec).unwrap_or(default),
+            d.exit_duration.or(d.duration),
+        );
         match d.mode {
             DockMode::Push => {
                 // The same geometry as a split view's sidebar: the dock is the sidebar, in flow
@@ -497,13 +577,40 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
                     })
                     .into();
                 let ext = size.extent();
-                adaptive_split(panel, d.base, d.open, 0.0, 0.0)
+                // The room slides by the dock's spec only for a slide; a fade moves nothing, and
+                // `None` is at once. While a surface fades out its room stays, and closes only
+                // when the fade is done.
+                let at_once = |effect: Effect, spec: Spec| {
+                    if effect.slides() { spec } else { Spec::Instant }
+                };
+                let hold = std::rc::Rc::new(std::cell::Cell::new(0.0_f32));
+                let panel: Element<'a, M> = if d.enter.fades() || d.exit.fades() {
+                    FadeCover::new(panel, d.open)
+                        .effects(d.enter, d.exit)
+                        .spec(spec_in)
+                        .exit_spec(spec_out)
+                        .trigger(Trigger::Layout)
+                        .backdrop_opt(d.backdrop.clone())
+                        .share(hold.clone())
+                        .radius(move |_| radius.unwrap_or_default())
+                        .into()
+                } else {
+                    panel
+                };
+                let mut split = adaptive_split(panel, d.base, d.open, 0.0, 0.0)
                     .side(side)
                     .extent(ext)
-                    .into()
+                    .slot_specs(
+                        Some(at_once(d.enter, spec_in)),
+                        Some(at_once(d.exit, spec_out)),
+                    );
+                if d.exit.fades() {
+                    split = split.hold_open(hold);
+                }
+                split.into()
             }
             DockMode::Overlay => {
-                if !d.open {
+                if !d.open && !d.closing {
                     return crate::layouts::overlay::view::closed(d.base);
                 }
                 let lifted = margin > 0.0;
@@ -552,15 +659,44 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
                 } else {
                     panel
                 };
+                // A fade is the surface's own: a cover over its bounds, in step with the layer's
+                // entrance (the same specs), so it works at any size.
+                let fades = d.enter.fades() || d.exit.fades();
+                let panel: Element<'a, M> = if fades {
+                    FadeCover::new(panel, d.open)
+                        .effects(d.enter, d.exit)
+                        .spec(spec_in)
+                        .exit_spec(spec_out)
+                        .trigger(Trigger::Sheet)
+                        .mount_hidden(true)
+                        .backdrop_opt(d.backdrop.clone())
+                        .radius(move |t: &Theme| {
+                            surface_radius(
+                                radius,
+                                side,
+                                t.metrics.radius_l,
+                                edge_radius,
+                                lifted_radius,
+                                full,
+                            )
+                        })
+                        .into()
+                } else {
+                    panel
+                };
                 let mut o = Overlay::new(d.base, panel)
                     .docked(side, size.dim())
                     .along(length.dim(), d.align)
                     .scrim(d.scrim)
                     .margin(margin)
                     .window_radius(window_edge)
-                    .fade(d.fade);
-                if let Some(spec) = d.spec {
-                    o = o.spec(spec);
+                    .open(d.open)
+                    .cover(false)
+                    .effects(d.enter, d.exit)
+                    .spec(spec_in)
+                    .exit_spec(spec_out);
+                if let Some(m) = d.on_settled {
+                    o = o.on_settled(m);
                 }
                 if let Some(m) = d.on_outside {
                     o = o.on_outside(m);
@@ -776,5 +912,147 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod fade_tests {
+    use super::*;
+    use crate::layouts::animation::Easing;
+    use iced::advanced::renderer::Headless;
+    use iced::advanced::widget::Tree;
+    use iced::advanced::{clipboard, layout};
+    use iced::widget::space;
+    use iced::{Color, window};
+    use std::time::Instant;
+
+    fn solid<'a>(color: Color, w: f32, h: f32) -> Element<'a, ()> {
+        container(space().width(w).height(h))
+            .width(Length::Fill)
+            .height(h)
+            .style(move |_| iced::widget::container::Style {
+                background: Some(iced::Background::Color(color)),
+                ..Default::default()
+            })
+            .into()
+    }
+
+    struct Rig {
+        tree: Option<Tree>,
+        renderer: iced::Renderer,
+    }
+
+    impl Rig {
+        fn new() -> Self {
+            let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+                iced::Font::DEFAULT,
+                iced::Pixels(14.0),
+                Some("tiny-skia"),
+            ))
+            .expect("software renderer");
+            Self {
+                tree: None,
+                renderer,
+            }
+        }
+
+        /// One frame at `at`: the dock (push, bottom, 30px surface) open or not, as pixels
+        /// down the middle: `[top (the base), bottom (the surface)]`.
+        fn frame(&mut self, open: bool, effect: Effect, at: Instant) -> [[u8; 3]; 2] {
+            let size = Size::new(100.0, 100.0);
+            let mut element: Element<'_, ()> = Dock::new(
+                solid(Color::from_rgb(0.0, 0.0, 1.0), 100.0, 100.0),
+                solid(Color::from_rgb(1.0, 0.0, 0.0), 100.0, 30.0),
+            )
+            .open(open)
+            .side(Side::Bottom)
+            .size(DockSize::Fixed(30.0))
+            .mode(DockMode::Push)
+            .motion(effect, effect)
+            .spec(Spec::Timed(Duration::from_millis(1000), Easing::Linear))
+            .into();
+            let tree = match &mut self.tree {
+                Some(t) => {
+                    t.diff(&element);
+                    t
+                }
+                none => none.insert(Tree::new(&element)),
+            };
+            let node = element.as_widget_mut().layout(
+                tree,
+                &self.renderer,
+                &layout::Limits::new(Size::ZERO, size),
+            );
+            let viewport = Rectangle::with_size(size);
+            let mut messages = vec![];
+            element.as_widget_mut().update(
+                tree,
+                &iced::Event::Window(window::Event::RedrawRequested(at)),
+                Layout::new(&node),
+                mouse::Cursor::Unavailable,
+                &self.renderer,
+                &mut clipboard::Null,
+                &mut Shell::new(&mut messages),
+                &viewport,
+            );
+            // The layout moves with the progress: lay it out again for what is drawn.
+            let node = element.as_widget_mut().layout(
+                tree,
+                &self.renderer,
+                &layout::Limits::new(Size::ZERO, size),
+            );
+            self.renderer.reset(viewport);
+            element.as_widget().draw(
+                tree,
+                &mut self.renderer,
+                &Theme::light(),
+                &renderer::Style {
+                    text_color: Color::BLACK,
+                },
+                Layout::new(&node),
+                mouse::Cursor::Unavailable,
+                &viewport,
+            );
+            let px = self.renderer.screenshot(iced::Size::new(100, 100), 1.0, Color::WHITE);
+            let at = |y: usize| {
+                let i = (y * 100 + 50) * 4;
+                [px[i], px[i + 1], px[i + 2]]
+            };
+            [at(10), at(90)]
+        }
+    }
+
+    #[test]
+    fn a_fade_changes_opacity_and_moves_nothing() {
+        let mut rig = Rig::new();
+        let t0 = Instant::now();
+        let ms = |n| t0 + Duration::from_millis(n);
+        let window = Theme::light().semantic.window.bg;
+        let window = [
+            (window.r * 255.0).round() as u8,
+            (window.g * 255.0).round() as u8,
+            (window.b * 255.0).round() as u8,
+        ];
+        // Closed: the base fills the area, nothing of the surface.
+        let [top, bottom] = rig.frame(false, Effect::Fade, ms(0));
+        assert_eq!((top, bottom), ([0, 0, 255], [0, 0, 255]));
+        // Opens: the room is there at once, the surface fades up in it.
+        rig.frame(true, Effect::Fade, ms(100));
+        let [top, mid_in] = rig.frame(true, Effect::Fade, ms(600));
+        assert_eq!(top, [0, 0, 255], "the base is not moved by the fade");
+        assert_ne!(mid_in, [0, 0, 255], "the surface already has its place");
+        assert_ne!(mid_in, [255, 0, 0], "and is only part way shown: {mid_in:?}");
+        let [_, settled] = rig.frame(true, Effect::Fade, ms(1500));
+        assert_eq!(settled, [255, 0, 0]);
+        // Closes: the surface stays where it is and fades out; then the room closes.
+        rig.frame(false, Effect::Fade, ms(1600));
+        let [_, mid_out] = rig.frame(false, Effect::Fade, ms(2100));
+        assert_ne!(mid_out, [0, 0, 255], "the room is held while it fades out");
+        assert_ne!(mid_out, [255, 0, 0], "and it is part way gone: {mid_out:?}");
+        // Faded out; the room closes on the frame after.
+        let [_, faded] = rig.frame(false, Effect::Fade, ms(3500));
+        assert_eq!(faded[..], window[..], "nothing of it is left: {faded:?}");
+        let [_, gone] = rig.frame(false, Effect::Fade, ms(3600));
+        assert_eq!(gone, [0, 0, 255], "once faded, the room closes");
     }
 }

@@ -144,6 +144,11 @@ impl<'a, M> Reveal<'a, M> {
         self.spec = spec;
         self
     }
+    /// How long it takes to open or close (default 250 ms).
+    pub fn duration(mut self, d: std::time::Duration) -> Self {
+        self.spec = self.spec.with_duration(d);
+        self
+    }
 }
 
 struct RevealState {
@@ -354,6 +359,14 @@ pub fn drawer_layer<'a, M>(
         scrim_shape: None,
         on_close: None,
         spec: Spec::Spring(presets::sidebar()),
+    }
+}
+
+impl<'a, M> DrawerLayer<'a, M> {
+    /// How long the drawer takes to open or close; the default spring is stretched to it.
+    pub fn duration(mut self, d: std::time::Duration) -> Self {
+        self.spec = self.spec.with_duration(d);
+        self
     }
 }
 
@@ -585,14 +598,51 @@ impl<'a, M: Clone + 'a> From<DrawerLayer<'a, M>> for Element<'a, M, Theme> {
 /// (damping ratio 0.8, mass 1, stiffness 400); toasts use 300ms `ADW_EASE`.
 pub struct Entrance<'a, M> {
     content: Element<'a, M, Theme>,
+    /// Where a [`Slide`](Effect::Slide) starts (and ends), relative to the content's place.
     offset: Vector,
     surface_scrim: bool,
     scrim_shape: Option<EffectShape<'a>>,
     fade_shape: Option<EffectShape<'a>>,
     spec: Spec,
+    /// The spec of the way out, when it is not the way in's.
+    exit_spec: Option<Spec>,
     trigger: Trigger,
-    fade: bool,
+    /// Whether the content is wanted: it animates in while `true` and out while `false`.
+    open: bool,
+    enter: Effect,
+    exit: Effect,
+    on_settled: Option<Box<dyn Fn() -> M + 'a>>,
 }
+
+/// What a surface does as it arrives or leaves: one thing, chosen per way. The way in and the
+/// way out each have their own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Effect {
+    /// Moves in from (out to) its edge. Nothing else about it changes.
+    #[default]
+    Slide,
+    /// Its opacity runs between hidden and shown, by laying the window colour over it (iced has no
+    /// layer opacity). It does not move, and takes the surface's own bounds and corners itself.
+    Fade,
+    /// Shown and hidden at once.
+    None,
+}
+
+impl Effect {
+    /// Whether it moves.
+    pub fn slides(self) -> bool {
+        self == Effect::Slide
+    }
+    /// Whether its opacity changes.
+    pub fn fades(self) -> bool {
+        self == Effect::Fade
+    }
+    /// Whether it does nothing: shown and hidden at once.
+    pub fn is_none(self) -> bool {
+        self == Effect::None
+    }
+}
+
 
 // Keep the public closure convention while resolving background geometry through
 // the same normalized shape as actual boundaries.
@@ -638,8 +688,12 @@ pub fn entrance<'a, M>(
         scrim_shape: None,
         fade_shape: None,
         spec: Spec::Spring(presets::sheet(false)),
+        exit_spec: None,
         trigger: Trigger::Dialog,
-        fade: false,
+        open: true,
+        enter: Effect::Slide,
+        exit: Effect::Slide,
+        on_settled: None,
     }
 }
 
@@ -717,8 +771,47 @@ impl<'a, M> Entrance<'a, M> {
     /// this safely shows the content without a mask instead of guessing square corners.
     /// Input remains blocked until the entrance settles, as with a sliding entrance.
     pub fn fade(mut self) -> Self {
-        self.fade = true;
-        self.offset = Vector::ZERO;
+        self.enter = Effect::Fade;
+        self.exit = Effect::Fade;
+        self
+    }
+    /// The effect of the way in and of the way out.
+    pub fn effects(mut self, enter: Effect, exit: Effect) -> Self {
+        self.enter = enter;
+        self.exit = exit;
+        self
+    }
+    /// Whether the content is wanted. `false` runs the way out, after which the content is
+    /// neither drawn nor reached; until then it must still be given. Default `true`.
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = open;
+        self
+    }
+    /// How long the way in takes (and the way out, unless [`exit_duration`](Self::exit_duration)
+    /// says otherwise). A spring is stretched to it.
+    pub fn duration(mut self, d: std::time::Duration) -> Self {
+        self.spec = self.spec.with_duration(d);
+        if let Some(e) = self.exit_spec {
+            self.exit_spec = Some(e.with_duration(d));
+        }
+        self
+    }
+    /// How long the way out takes, when it is not the way in's.
+    pub fn exit_duration(mut self, d: std::time::Duration) -> Self {
+        self.exit_spec = Some(self.exit_spec.unwrap_or(self.spec).with_duration(d));
+        self
+    }
+    /// The spec of the way out, when it is not the way in's.
+    pub fn exit_spec(mut self, spec: Spec) -> Self {
+        self.exit_spec = Some(spec);
+        self
+    }
+    /// Sent once the way out has finished: the content is gone and the app can stop giving it.
+    pub fn on_settled(mut self, message: M) -> Self
+    where
+        M: Clone + 'a,
+    {
+        self.on_settled = Some(Box::new(move || message.clone()));
         self
     }
     /// Which trigger this entrance is: [`Trigger::Dialog`] (default), `Sheet` or `Toast`.
@@ -731,6 +824,17 @@ impl<'a, M> Entrance<'a, M> {
 
 struct EntranceState {
     progress: Progress,
+    /// Which way it was last heading, for the effect to draw.
+    heading_open: bool,
+    /// The settled message of this way out has been sent.
+    settled_sent: bool,
+}
+
+impl EntranceState {
+    /// Closed, and the way out is done: nothing to draw or reach.
+    fn gone(&self) -> bool {
+        !self.heading_open && self.progress.shown <= 0.001
+    }
 }
 
 impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
@@ -741,6 +845,8 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         // Starts hidden and animates to 1 on the first redraw (mounting is the trigger).
         tree::State::new(EntranceState {
             progress: Progress::new(if self.trigger.animated() { 0.0 } else { 1.0 }),
+            heading_open: true,
+            settled_sent: false,
         })
     }
     fn children(&self) -> Vec<Tree> {
@@ -778,15 +884,37 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         viewport: &Rectangle,
     ) {
         let state = tree.state.downcast_mut::<EntranceState>();
+        state.heading_open = self.open;
+        let (effect, spec) = if self.open {
+            (self.enter, self.spec)
+        } else {
+            (self.exit, self.exit_spec.unwrap_or(self.spec))
+        };
+        let spec = if effect.is_none() {
+            Spec::Instant
+        } else {
+            self.trigger.spec(spec)
+        };
         advance(
             &mut state.progress,
             event,
-            1.0,
-            self.trigger.spec(self.spec),
+            if self.open { 1.0 } else { 0.0 },
+            spec,
             shell,
             false,
         );
-        let settled = (state.progress.shown - 1.0).abs() < 0.002;
+        if self.open {
+            state.settled_sent = false;
+        } else if state.gone() && !state.settled_sent {
+            state.settled_sent = true;
+            if let Some(message) = &self.on_settled {
+                shell.publish(message());
+            }
+        }
+        if state.gone() {
+            return;
+        }
+        let settled = self.open && (state.progress.shown - 1.0).abs() < 0.002;
         if settled {
             self.content.as_widget_mut().update(
                 &mut tree.children[0],
@@ -813,6 +941,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         viewport: &Rectangle,
         translation: Vector,
     ) -> Option<iced::advanced::overlay::Element<'b, M, Theme, iced::Renderer>> {
+        if tree.state.downcast_ref::<EntranceState>().gone() {
+            return None;
+        }
         self.content.as_widget_mut().overlay(
             &mut tree.children[0],
             layout.children().next()?,
@@ -830,6 +961,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         viewport: &Rectangle,
         renderer: &iced::Renderer,
     ) -> mouse::Interaction {
+        if tree.state.downcast_ref::<EntranceState>().gone() {
+            return mouse::Interaction::None;
+        }
         self.content.as_widget().mouse_interaction(
             &tree.children[0],
             layout.children().next().unwrap(),
@@ -849,7 +983,16 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         cursor: mouse::Cursor,
         viewport: &Rectangle,
     ) {
-        let p = tree.state.downcast_ref::<EntranceState>().progress.shown;
+        let state = tree.state.downcast_ref::<EntranceState>();
+        if state.gone() {
+            return;
+        }
+        let p = state.progress.shown;
+        let effect = if state.heading_open {
+            self.enter
+        } else {
+            self.exit
+        };
         let background = if self.surface_scrim || self.scrim_shape.is_some() {
             background_shape(self.scrim_shape.as_ref(), theme, layout.bounds())
         } else {
@@ -866,7 +1009,11 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
                 Background::Color(scrim(theme, p.min(1.0))),
             );
         }
-        let d = Vector::new(self.offset.x * (1.0 - p), self.offset.y * (1.0 - p));
+        let d = if effect.slides() {
+            Vector::new(self.offset.x * (1.0 - p), self.offset.y * (1.0 - p))
+        } else {
+            Vector::ZERO
+        };
         draw_translated(renderer, layout.bounds(), viewport, d, |r, view| {
             self.content.as_widget().draw(
                 &tree.children[0],
@@ -878,7 +1025,11 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
                 view,
             );
         });
-        if let Some(shape) = self.fade_shape.as_ref().filter(|_| self.fade && p < 0.999) {
+        if let Some(shape) = self
+            .fade_shape
+            .as_ref()
+            .filter(|_| effect.fades() && p < 0.999)
+        {
             // A later layer, so the window colour covers the content's text as well as its quads.
             let bg = theme.semantic.window.bg;
             let (bounds, radius) = shape(theme, layout.children().next().unwrap().bounds());
@@ -907,6 +1058,290 @@ impl<'a, M: 'a> From<Entrance<'a, M>> for Element<'a, M, Theme> {
 }
 
 // ---------------------------------------------------------------------------
+// FadeCover
+// ---------------------------------------------------------------------------
+
+/// Fades its content in and out by laying the window colour over it, over the content's **own**
+/// bounds and corners: it needs no help from where the content sits, so it works for a surface
+/// that is pushed, floated, full-screen or small. Iced has no layer opacity, so it is a cover
+/// that clears away (a fill-coloured, rounded surface is what it suits).
+///
+/// It runs its own progress toward `open`, by the spec of the way it is going. It starts hidden
+/// when `mount_hidden` (a layer that appears) and shown otherwise (a panel that was there).
+pub struct FadeCover<'a, M> {
+    content: Element<'a, M, Theme>,
+    open: bool,
+    enter: Effect,
+    exit: Effect,
+    spec: Spec,
+    exit_spec: Option<Spec>,
+    mount_hidden: bool,
+    trigger: Trigger,
+    radius: Box<dyn Fn(&Theme) -> iced::border::Radius + 'a>,
+    share: Option<std::rc::Rc<std::cell::Cell<f32>>>,
+    backdrop: Option<Box<dyn Fn(&Theme) -> Color + 'a>>,
+}
+
+struct FadeCoverState {
+    progress: Progress,
+    heading_open: bool,
+}
+
+impl<'a, M> FadeCover<'a, M> {
+    pub fn new(content: impl Into<Element<'a, M, Theme>>, open: bool) -> Self {
+        Self {
+            content: content.into(),
+            open,
+            enter: Effect::Fade,
+            exit: Effect::Fade,
+            spec: Spec::Timed(presets::REVEAL.0, presets::REVEAL.1),
+            exit_spec: None,
+            mount_hidden: false,
+            trigger: Trigger::Dialog,
+            radius: Box::new(|_| iced::border::Radius::default()),
+            share: None,
+            backdrop: None,
+        }
+    }
+    /// The colour the surface fades to and from: whatever shows behind it (default the window
+    /// colour). The cover is laid over the surface **and** what is on it, so its own fill fades
+    /// as well as its contents; with the wrong backdrop the fill would stay and only the contents
+    /// would fade.
+    pub fn backdrop(mut self, color: impl Fn(&Theme) -> Color + 'a) -> Self {
+        self.backdrop = Some(Box::new(color));
+        self
+    }
+    /// [`backdrop`](Self::backdrop), when there is one.
+    pub fn backdrop_opt(mut self, color: Option<std::rc::Rc<dyn Fn(&Theme) -> Color + 'a>>) -> Self {
+        if let Some(f) = color {
+            self.backdrop = Some(Box::new(move |t| f(t)));
+        }
+        self
+    }
+    /// Writes the progress it shows (0 hidden to 1 shown) into `cell` on every frame, for
+    /// whatever has to wait for the fade (a room that closes after it).
+    pub fn share(mut self, cell: std::rc::Rc<std::cell::Cell<f32>>) -> Self {
+        self.share = Some(cell);
+        self
+    }
+    /// Which ways fade (the others show and hide at once).
+    pub fn effects(mut self, enter: Effect, exit: Effect) -> Self {
+        self.enter = enter;
+        self.exit = exit;
+        self
+    }
+    pub fn spec(mut self, spec: Spec) -> Self {
+        self.spec = spec;
+        self
+    }
+    pub fn exit_spec(mut self, spec: Spec) -> Self {
+        self.exit_spec = Some(spec);
+        self
+    }
+    /// Which trigger this is (its `[motion]` setting can turn the animation off).
+    pub fn trigger(mut self, trigger: Trigger) -> Self {
+        self.trigger = trigger;
+        self
+    }
+    /// Starts hidden and fades in on mounting, rather than being there already.
+    pub fn mount_hidden(mut self, hidden: bool) -> Self {
+        self.mount_hidden = hidden;
+        self
+    }
+    /// The corners of the content, which the cover follows.
+    pub fn radius(mut self, radius: impl Fn(&Theme) -> iced::border::Radius + 'a) -> Self {
+        self.radius = Box::new(radius);
+        self
+    }
+}
+
+impl<'a, M> Widget<M, Theme, iced::Renderer> for FadeCover<'a, M> {
+    fn tag(&self) -> tree::Tag {
+        tree::Tag::of::<FadeCoverState>()
+    }
+    fn state(&self) -> tree::State {
+        let start = if self.mount_hidden && self.trigger.animated() {
+            0.0
+        } else if self.open || self.mount_hidden {
+            1.0
+        } else {
+            0.0
+        };
+        tree::State::new(FadeCoverState {
+            progress: Progress::new(start),
+            heading_open: self.open,
+        })
+    }
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.content)]
+    }
+    fn diff(&self, tree: &mut Tree) {
+        tree.diff_children(&[self.content.as_widget()]);
+    }
+    fn size(&self) -> Size<Length> {
+        self.content.as_widget().size()
+    }
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &iced::Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        let child = self
+            .content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits);
+        layout::Node::with_children(child.size(), vec![child])
+    }
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &iced::Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, M>,
+        viewport: &Rectangle,
+    ) {
+        let state = tree.state.downcast_mut::<FadeCoverState>();
+        state.heading_open = self.open;
+        let (effect, spec) = if self.open {
+            (self.enter, self.spec)
+        } else {
+            (self.exit, self.exit_spec.unwrap_or(self.spec))
+        };
+        // A way that does not fade jumps; one that does follows the trigger's switch.
+        let spec = if effect.fades() {
+            self.trigger.spec(spec)
+        } else {
+            Spec::Instant
+        };
+        advance(
+            &mut state.progress,
+            event,
+            if self.open { 1.0 } else { 0.0 },
+            spec,
+            shell,
+            false,
+        );
+        if let Some(cell) = &self.share {
+            cell.set(state.progress.shown);
+        }
+        self.content.as_widget_mut().update(
+            &mut tree.children[0],
+            event,
+            layout.children().next().unwrap(),
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
+    }
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &iced::Renderer,
+    ) -> mouse::Interaction {
+        self.content.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+            renderer,
+        )
+    }
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn iced::advanced::widget::Operation,
+    ) {
+        self.content.as_widget_mut().operate(
+            &mut tree.children[0],
+            layout.children().next().unwrap(),
+            renderer,
+            operation,
+        );
+    }
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<iced::advanced::overlay::Element<'b, M, Theme, iced::Renderer>> {
+        self.content.as_widget_mut().overlay(
+            &mut tree.children[0],
+            layout.children().next()?,
+            renderer,
+            viewport,
+            translation,
+        )
+    }
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut iced::Renderer,
+        theme: &Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        let state = tree.state.downcast_ref::<FadeCoverState>();
+        let p = state.progress.shown;
+        let effect = if state.heading_open {
+            self.enter
+        } else {
+            self.exit
+        };
+        self.content.as_widget().draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+        );
+        if effect.fades() && p < 0.999 {
+            let bg = self
+                .backdrop
+                .as_ref()
+                .map_or(theme.semantic.window.bg, |f| f(theme));
+            let bounds = layout.bounds();
+            renderer.with_layer(bounds, |r| {
+                r.fill_quad(
+                    Quad {
+                        bounds,
+                        border: Border::default().rounded((self.radius)(theme)),
+                        shadow: Default::default(),
+                        snap: false,
+                    },
+                    Background::Color(Color {
+                        a: bg.a * fade_cover(p),
+                        ..bg
+                    }),
+                );
+            });
+        }
+    }
+}
+
+impl<'a, M: 'a> From<FadeCover<'a, M>> for Element<'a, M, Theme> {
+    fn from(f: FadeCover<'a, M>) -> Self {
+        Element::new(f)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Page transition (content cross-fade)
 // ---------------------------------------------------------------------------
 
@@ -921,6 +1356,7 @@ pub struct PageTransition<'a, M> {
     scroll_key: Option<u64>,
     trigger: Trigger,
     fade_shape: Option<EffectShape<'a>>,
+    duration: Option<std::time::Duration>,
 }
 
 pub fn page_transition<'a, M>(
@@ -933,10 +1369,16 @@ pub fn page_transition<'a, M>(
         scroll_key: None,
         trigger: Trigger::PageChange,
         fade_shape: None,
+        duration: None,
     }
 }
 
 impl<'a, M> PageTransition<'a, M> {
+    /// How long the cross-fade takes (default 200 ms).
+    pub fn duration(mut self, d: std::time::Duration) -> Self {
+        self.duration = Some(d);
+        self
+    }
     /// Exact filled surface to cover while fading. Iced has no composited opacity;
     /// transparent/arbitrary silhouettes cannot be faded this way. Without a known
     /// shape the content is drawn unmasked; keys, scroll restoration and events work
@@ -1101,7 +1543,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PageTransition<'a, M> {
             &mut tree.state.downcast_mut::<PageState>().progress,
             event,
             1.0,
-            self.trigger.spec(Spec::STYLE),
+            self.trigger.spec(match self.duration {
+                Some(d) => Spec::STYLE.with_duration(d),
+                None => Spec::STYLE,
+            }),
             shell,
             false,
         );
@@ -1273,6 +1718,7 @@ pub struct PushStack<'a, M> {
     top: Element<'a, M, Theme>,
     pushed: bool,
     root_shape: Option<EffectShape<'a>>,
+    duration: Option<std::time::Duration>,
 }
 
 pub fn push_stack<'a, M>(
@@ -1285,10 +1731,16 @@ pub fn push_stack<'a, M>(
         top: top.into(),
         pushed,
         root_shape: None,
+        duration: None,
     }
 }
 
 impl<'a, M> PushStack<'a, M> {
+    /// How long a push or pop takes; the navigation spring is stretched to it.
+    pub fn duration(mut self, d: std::time::Duration) -> Self {
+        self.duration = Some(d);
+        self
+    }
     /// Exact root surface geometry in its untranslated child coordinates. The
     /// dimmer moves with that target. Without known geometry it is not painted.
     pub fn root_shape(
@@ -1385,7 +1837,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for PushStack<'a, M> {
             &mut state.progress,
             event,
             if self.pushed { 1.0 } else { 0.0 },
-            Trigger::PagePush.spec(Spec::Spring(presets::navigation())),
+            Trigger::PagePush.spec(match self.duration {
+                Some(d) => Spec::Spring(presets::navigation()).with_duration(d),
+                None => Spec::Spring(presets::navigation()),
+            }),
             shell,
             false,
         );
@@ -1609,6 +2064,7 @@ pub struct Highlight<'a, M> {
     content: Element<'a, M, Theme>,
     selected: bool,
     paint: HighlightPaint,
+    duration: Option<std::time::Duration>,
 }
 
 enum HighlightPaint {
@@ -1626,6 +2082,7 @@ pub fn highlight<'a, M>(
         content: content.into(),
         selected,
         paint: HighlightPaint::Background { radius, alpha },
+        duration: None,
     }
 }
 
@@ -1649,7 +2106,16 @@ impl<'a, M: Clone + 'a> Highlight<'a, M> {
                 .into(),
             selected,
             paint: HighlightPaint::Target(progress),
+            duration: None,
         }
+    }
+}
+
+impl<'a, M> Highlight<'a, M> {
+    /// How long the highlight takes to move or fade (default 200 ms).
+    pub fn duration(mut self, d: std::time::Duration) -> Self {
+        self.duration = Some(d);
+        self
     }
 }
 
@@ -1702,7 +2168,10 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Highlight<'a, M> {
             &mut tree.state.downcast_mut::<HighlightState>().progress,
             event,
             if self.selected { 1.0 } else { 0.0 },
-            Trigger::Selection.spec(Spec::STYLE),
+            Trigger::Selection.spec(match self.duration {
+                Some(d) => Spec::STYLE.with_duration(d),
+                None => Spec::STYLE,
+            }),
             shell,
             false,
         );
@@ -3203,5 +3672,181 @@ mod reveal_clip_tests {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod exit_tests {
+    use super::*;
+    use crate::layouts::animation::Easing;
+    use iced::advanced::renderer::Headless;
+    use iced::advanced::{clipboard, layout};
+    use iced::widget::space;
+    use std::time::Duration;
+
+    /// Drives `entrance` through `tree` at `now`, returning the messages it sent.
+    fn drive(entrance: &mut Entrance<'_, u8>, tree: &mut Tree, now: Instant) -> Vec<u8> {
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer");
+        let viewport = Rectangle::with_size(Size::new(100.0, 60.0));
+        let node = Widget::layout(
+            entrance,
+            tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport.size()),
+        );
+        let mut messages = vec![];
+        Widget::update(
+            entrance,
+            tree,
+            &Event::Window(window::Event::RedrawRequested(now)),
+            Layout::new(&node),
+            mouse::Cursor::Unavailable,
+            &renderer,
+            &mut clipboard::Null,
+            &mut Shell::new(&mut messages),
+            &viewport,
+        );
+        messages
+    }
+
+    fn make(open: bool) -> Entrance<'static, u8> {
+        entrance(space().width(20).height(20), Vector::new(0.0, 30.0))
+            .spec(Spec::Timed(Duration::from_millis(100), Easing::Linear))
+            .open(open)
+            .on_settled(7)
+    }
+
+    #[test]
+    fn the_way_out_runs_and_reports_once_when_it_has_finished() {
+        let t0 = Instant::now();
+        let mut shown = make(true);
+        let mut tree = Tree::new(&shown as &dyn Widget<u8, Theme, iced::Renderer>);
+        drive(&mut shown, &mut tree, t0);
+        drive(&mut shown, &mut tree, t0 + Duration::from_millis(500));
+        assert!(!tree.state.downcast_ref::<EntranceState>().gone());
+        // Closed: the same widget in the same place, now heading out.
+        let mut leaving = make(false);
+        tree.diff(&leaving as &dyn Widget<u8, Theme, iced::Renderer>);
+        let first = drive(&mut leaving, &mut tree, t0 + Duration::from_millis(600));
+        assert!(first.is_empty(), "not finished on its first frame");
+        let state = |tree: &Tree| tree.state.downcast_ref::<EntranceState>().progress.shown;
+        assert!(state(&tree) > 0.0, "still on its way out");
+        let done = drive(&mut leaving, &mut tree, t0 + Duration::from_millis(900));
+        assert_eq!(done, vec![7], "reported when it has gone");
+        assert!(tree.state.downcast_ref::<EntranceState>().gone());
+        assert!(drive(&mut leaving, &mut tree, t0 + Duration::from_millis(1000)).is_empty());
+        // Opened again, it comes back and can report the next exit.
+        let mut back = make(true);
+        tree.diff(&back as &dyn Widget<u8, Theme, iced::Renderer>);
+        drive(&mut back, &mut tree, t0 + Duration::from_millis(1100));
+        drive(&mut back, &mut tree, t0 + Duration::from_millis(1500));
+        assert!(!tree.state.downcast_ref::<EntranceState>().gone());
+    }
+
+    #[test]
+    fn a_none_effect_leaves_at_once() {
+        let t0 = Instant::now();
+        let mut shown = make(true).effects(Effect::None, Effect::None);
+        let mut tree = Tree::new(&shown as &dyn Widget<u8, Theme, iced::Renderer>);
+        drive(&mut shown, &mut tree, t0);
+        let mut leaving = make(false).effects(Effect::None, Effect::None);
+        tree.diff(&leaving as &dyn Widget<u8, Theme, iced::Renderer>);
+        let sent = drive(&mut leaving, &mut tree, t0 + Duration::from_millis(10));
+        assert_eq!(sent, vec![7]);
+    }
+}
+
+#[cfg(test)]
+mod fade_cover_tests {
+    use super::*;
+    use iced::advanced::renderer::Headless;
+    use iced::advanced::{layout, renderer};
+    use iced::widget::{container, space};
+
+    /// The centre pixel of `FadeCover` around a red square, with its progress set to `p`.
+    fn centre(p: f32, effect: Effect, open: bool) -> [u8; 4] {
+        centre_over(p, effect, open, None)
+    }
+
+    fn centre_over(p: f32, effect: Effect, open: bool, backdrop: Option<Color>) -> [u8; 4] {
+        let mut renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer");
+        let size = Size::new(40.0, 40.0);
+        let red = Color::from_rgb(1.0, 0.0, 0.0);
+        let surface = container(space().width(40).height(40)).style(move |_| {
+            container::Style {
+                background: Some(Background::Color(red)),
+                ..Default::default()
+            }
+        });
+        let mut cover: FadeCover<'_, ()> = FadeCover::new(surface, open).effects(effect, effect);
+        if let Some(color) = backdrop {
+            cover = cover.backdrop(move |_| color);
+        }
+        let mut tree = Tree::new(&cover as &dyn Widget<(), Theme, iced::Renderer>);
+        tree.state
+            .downcast_mut::<FadeCoverState>()
+            .progress
+            .set_immediate(p);
+        let node = Widget::layout(
+            &mut cover,
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, size),
+        );
+        let theme = Theme::light();
+        let viewport = Rectangle::with_size(size);
+        renderer.reset(viewport);
+        Widget::draw(
+            &cover,
+            &tree,
+            &mut renderer,
+            &theme,
+            &renderer::Style {
+                text_color: Color::BLACK,
+            },
+            Layout::new(&node),
+            mouse::Cursor::Unavailable,
+            &viewport,
+        );
+        let px = renderer.screenshot(
+            iced::Size::new(40, 40),
+            1.0,
+            Color::WHITE,
+        );
+        let at = ((20 * 40 + 20) * 4) as usize;
+        [px[at], px[at + 1], px[at + 2], px[at + 3]]
+    }
+
+    #[test]
+    fn the_surface_fades_to_its_backdrop_fill_and_contents_alike() {
+        let green = Color::from_rgb(0.0, 1.0, 0.0);
+        // Hidden, the red fill of the surface is the backdrop; settled, it is itself.
+        assert_eq!(centre_over(0.0, Effect::Fade, true, Some(green))[..3], [0, 255, 0]);
+        assert_eq!(centre_over(1.0, Effect::Fade, true, Some(green))[..3], [255, 0, 0]);
+        let half = centre_over(0.5, Effect::Fade, true, Some(green));
+        assert!(half[0] > 0 && half[0] < 255 && half[1] > 0, "{half:?}");
+    }
+
+    #[test]
+    fn the_cover_clears_away_as_the_surface_settles() {
+        let full = centre(1.0, Effect::Fade, true);
+        let half = centre(0.5, Effect::Fade, true);
+        let none = centre(0.0, Effect::Fade, true);
+        assert_eq!(full[..3], [255, 0, 0], "settled: the surface itself");
+        // The window colour is covering it: less red-only, more of the window colour.
+        assert!(half[1] > full[1], "halfway the cover shows: {half:?}");
+        assert!(none[1] > half[1], "hidden it is the window colour: {none:?}");
+        // A way that does not fade draws the surface at any progress.
+        assert_eq!(centre(0.0, Effect::None, true)[..3], [255, 0, 0]);
     }
 }

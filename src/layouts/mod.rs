@@ -42,8 +42,8 @@ pub use flex::FlexRow;
 pub use flex::{Flex, FlexCells};
 pub use flow_grid::{FlowGrid, RowHeight};
 pub use motion::{
-    DrawerLayer, Entrance, Highlight, PageTransition, PushStack, Reveal, drawer_layer, entrance,
-    highlight, layered, page_transition, push_stack, reveal,
+    DrawerLayer, Effect, Entrance, FadeCover, Highlight, PageTransition, PushStack, Reveal, drawer_layer,
+    entrance, highlight, layered, page_transition, push_stack, reveal,
 };
 pub use overflow::{Overflow, OverflowMode, overflow};
 pub use overlay::{

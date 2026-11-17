@@ -24,9 +24,12 @@
 use crate::Element;
 use crate::binds::{FocusScope, focus_return};
 use crate::layouts::anchor::{Align, Dim, Side};
+use crate::layouts::animation::Spec;
+use crate::layouts::motion::Effect;
 use crate::layouts::overlay::rule::Overlay as Rules;
 use iced::Length;
 use iced::widget::{container, mouse_area, opaque, space, stack};
+use std::time::Duration;
 
 /// A layer over a base. See the [module](self).
 pub struct Overlay<'a, M> {
@@ -39,8 +42,15 @@ pub struct Overlay<'a, M> {
     along: (Dim, Align),
     margin: f32,
     initial_focus: Option<iced::widget::Id>,
-    fade: bool,
-    spec: Option<crate::layouts::animation::Spec>,
+    open: bool,
+    enter: Effect,
+    exit: Effect,
+    cover: bool,
+    spec: Option<Spec>,
+    exit_spec: Option<Spec>,
+    duration: Option<Duration>,
+    exit_duration: Option<Duration>,
+    on_settled: Option<M>,
 }
 
 impl<'a, M: Clone + 'a> Overlay<'a, M> {
@@ -56,8 +66,15 @@ impl<'a, M: Clone + 'a> Overlay<'a, M> {
             along: (Dim::Fill, Align::Start),
             margin: 0.0,
             initial_focus: None,
-            fade: false,
+            open: true,
+            enter: Effect::Slide,
+            exit: Effect::Slide,
+            cover: true,
             spec: None,
+            exit_spec: None,
+            duration: None,
+            exit_duration: None,
+            on_settled: None,
         }
     }
     /// Keeps the layer stationary instead of sliding it (default off). The background
@@ -65,13 +82,56 @@ impl<'a, M: Clone + 'a> Overlay<'a, M> {
     /// window-sized foreground mask is painted; wrap a known surface with
     /// [`crate::layouts::Entrance::container`] for a shape-derived fade.
     pub fn fade(mut self, on: bool) -> Self {
-        self.fade = on;
+        let effect = if on { Effect::Fade } else { Effect::Slide };
+        self.enter = effect;
+        self.exit = effect;
         self
     }
-    /// How the entrance moves: a spring by default; a timed one with an easing is what a plain
-    /// fade-in and fade-out wants.
-    pub fn spec(mut self, spec: crate::layouts::animation::Spec) -> Self {
+    /// The effect of the way in and of the way out (default both slide). A fade covers the
+    /// layer's whole area, so it is for a layer that is the whole area (a full-screen page).
+    pub fn effects(mut self, enter: Effect, exit: Effect) -> Self {
+        self.enter = enter;
+        self.exit = exit;
+        self
+    }
+    /// Whether a [fade](Effect::Fade) covers the layer's whole area with the window colour
+    /// (default). Off, the fade only stops the slide and fades the scrim, for a layer whose surface
+    /// fades itself (a [`FadeCover`](crate::layouts::FadeCover) around it).
+    pub fn cover(mut self, on: bool) -> Self {
+        self.cover = on;
+        self
+    }
+    /// Whether the layer is up (default). `false` runs the way out; until it has finished the
+    /// layer must still be given, and [`on_settled`](Self::on_settled) says when it has.
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = open;
+        self
+    }
+    /// How the way in moves: a spring by default; a timed one with an easing is what a plain
+    /// fade wants.
+    pub fn spec(mut self, spec: Spec) -> Self {
         self.spec = Some(spec);
+        self
+    }
+    /// How the way out moves, when it is not the way in's.
+    pub fn exit_spec(mut self, spec: Spec) -> Self {
+        self.exit_spec = Some(spec);
+        self
+    }
+    /// How long the way in takes, and the way out unless
+    /// [`exit_duration`](Self::exit_duration) says otherwise.
+    pub fn duration(mut self, d: Duration) -> Self {
+        self.duration = Some(d);
+        self
+    }
+    /// How long the way out takes, when it is not the way in's.
+    pub fn exit_duration(mut self, d: Duration) -> Self {
+        self.exit_duration = Some(d);
+        self
+    }
+    /// Sent once the way out has finished and the layer is gone.
+    pub fn on_settled(mut self, m: M) -> Self {
+        self.on_settled = Some(m);
         self
     }
     /// Fades the base below the layer (default on).
@@ -173,15 +233,31 @@ impl<'a, M: Clone + 'a> From<Overlay<'a, M>> for Element<'a, M> {
             ),
         };
         parts.push(layer);
-        let mut entrance = crate::layouts::entrance(stack(parts), offset);
+        let mut entrance = crate::layouts::entrance(stack(parts), offset)
+            .effects(o.enter, o.exit)
+            .open(o.open);
         if o.edge.is_some() {
             entrance = entrance.trigger(crate::layouts::animation::Trigger::Sheet);
         }
-        if o.fade {
-            entrance = entrance.fade();
+        if o.cover && (o.enter.fades() || o.exit.fades()) {
+            // The layer is the surface: the cover takes its bounds and the window's corners.
+            let radius = o.window_radius;
+            entrance = entrance.fade_shape(move |_, bounds| (bounds, radius.into()));
         }
         if let Some(spec) = o.spec {
             entrance = entrance.spec(spec);
+        }
+        if let Some(spec) = o.exit_spec {
+            entrance = entrance.exit_spec(spec);
+        }
+        if let Some(d) = o.duration {
+            entrance = entrance.duration(d);
+        }
+        if let Some(d) = o.exit_duration {
+            entrance = entrance.exit_duration(d);
+        }
+        if let Some(m) = o.on_settled {
+            entrance = entrance.on_settled(m);
         }
         if o.rules.scrim {
             let radius = o.window_radius;
