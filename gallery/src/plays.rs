@@ -253,6 +253,8 @@ pub fn specs(d: Detail) -> Vec<Spec> {
                 0,
             ),
             S::choice("exit", "Exit effect", &["Slide", "Fade", "None"], 0),
+            S::number("starting", "Starting value (%)", 0.0..=100.0, 0.0),
+            S::number("ending", "Ending value (%)", 0.0..=100.0, 0.0),
             S::number("duration", "Duration (ms)", 50.0..=5000.0, 1500.0),
             S::choice(
                 "easing",
@@ -974,6 +976,8 @@ pub fn build<'a>(
                 .backdrop(|t| t.semantic.view.bg)
                 .motion(effect("enter"), effect("exit"))
                 .duration(duration)
+                .starting_value(p.number("starting") / 100.0)
+                .ending_value(p.number("ending") / 100.0)
                 .side(side)
                 .size(size)
                 .length(length)

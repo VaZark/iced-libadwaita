@@ -144,6 +144,8 @@ pub struct Dock<'a, M> {
     closing: bool,
     on_settled: Option<M>,
     backdrop: Option<Rc<dyn Fn(&Theme) -> iced::Color>>,
+    starting: f32,
+    ending: f32,
 }
 
 impl<'a, M: Clone + 'a> Dock<'a, M> {
@@ -176,6 +178,8 @@ impl<'a, M: Clone + 'a> Dock<'a, M> {
             closing: false,
             on_settled: None,
             backdrop: None,
+            starting: 0.0,
+            ending: 0.0,
         }
     }
     /// What the surface does as it arrives (`enter`) and as it leaves (`exit`), in either
@@ -193,6 +197,21 @@ impl<'a, M: Clone + 'a> Dock<'a, M> {
     pub fn fade(self, on: bool) -> Self {
         let e = if on { Effect::Fade } else { Effect::Slide };
         self.motion(e, e)
+    }
+    /// The value the effect has when the way in begins, 0 (the default) to 1, handed to whichever
+    /// effect the way in uses: a [fade](Effect::Fade)'s opacity, a [slide](Effect::Slide)'s
+    /// progress (how far in it already is; a pushed surface's room always opens from nothing). A
+    /// page that starts at 0 is a blank window for a moment; starting it at 0.5 keeps what it
+    /// shows from being empty.
+    pub fn starting_value(mut self, value: f32) -> Self {
+        self.starting = value.clamp(0.0, 1.0);
+        self
+    }
+    /// The value the effect has when the way out is done, 0 (the default) to 1, handed to
+    /// whichever effect the way out uses. The surface is discarded at that value.
+    pub fn ending_value(mut self, value: f32) -> Self {
+        self.ending = value.clamp(0.0, 1.0);
+        self
     }
     /// The colour a [fading](Effect::Fade) surface fades to and from: what shows behind it
     /// (default the window colour). The whole surface fades, its own fill as well as its
@@ -590,6 +609,8 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
                         .spec(spec_in)
                         .exit_spec(spec_out)
                         .trigger(Trigger::Layout)
+                        .starting_value(d.starting)
+                        .ending_value(d.ending)
                         .backdrop_opt(d.backdrop.clone())
                         .share(hold.clone())
                         .radius(move |_| radius.unwrap_or_default())
@@ -668,6 +689,8 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
                         .spec(spec_in)
                         .exit_spec(spec_out)
                         .trigger(Trigger::Sheet)
+                        .starting_value(d.starting)
+                        .ending_value(d.ending)
                         .mount_hidden(true)
                         .backdrop_opt(d.backdrop.clone())
                         .radius(move |t: &Theme| {
@@ -692,6 +715,8 @@ impl<'a, M: Clone + 'a> From<Dock<'a, M>> for Element<'a, M> {
                     .window_radius(window_edge)
                     .open(d.open)
                     .cover(false)
+                    .starting_value(d.starting)
+                    .ending_value(d.ending)
                     .effects(d.enter, d.exit)
                     .spec(spec_in)
                     .exit_spec(spec_out);

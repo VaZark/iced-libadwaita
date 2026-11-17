@@ -46,6 +46,8 @@ pub struct Overlay<'a, M> {
     enter: Effect,
     exit: Effect,
     cover: bool,
+    starting: f32,
+    ending: f32,
     spec: Option<Spec>,
     exit_spec: Option<Spec>,
     duration: Option<Duration>,
@@ -70,6 +72,8 @@ impl<'a, M: Clone + 'a> Overlay<'a, M> {
             enter: Effect::Slide,
             exit: Effect::Slide,
             cover: true,
+            starting: 0.0,
+            ending: 0.0,
             spec: None,
             exit_spec: None,
             duration: None,
@@ -99,6 +103,19 @@ impl<'a, M: Clone + 'a> Overlay<'a, M> {
     /// fades itself (a [`FadeCover`](crate::layouts::FadeCover) around it).
     pub fn cover(mut self, on: bool) -> Self {
         self.cover = on;
+        self
+    }
+    /// The value the layer's effect has when the way in begins, 0 (the default) to 1: for a slide,
+    /// how far in it already is. Forwarded to the effect; a fade's is its surface's own (see
+    /// [`FadeCover`](crate::layouts::FadeCover)).
+    pub fn starting_value(mut self, value: f32) -> Self {
+        self.starting = value.clamp(0.0, 1.0);
+        self
+    }
+    /// The value the effect has when the way out is done, 0 (the default) to 1, at which the layer
+    /// is discarded.
+    pub fn ending_value(mut self, value: f32) -> Self {
+        self.ending = value.clamp(0.0, 1.0);
         self
     }
     /// Whether the layer is up (default). `false` runs the way out; until it has finished the
@@ -243,6 +260,12 @@ impl<'a, M: Clone + 'a> From<Overlay<'a, M>> for Element<'a, M> {
             // The layer is the surface: the cover takes its bounds and the window's corners.
             let radius = o.window_radius;
             entrance = entrance.fade_shape(move |_, bounds| (bounds, radius.into()));
+        }
+        if o.enter.slides() {
+            entrance = entrance.starting_value(o.starting);
+        }
+        if o.exit.slides() {
+            entrance = entrance.ending_value(o.ending);
         }
         if let Some(spec) = o.spec {
             entrance = entrance.spec(spec);

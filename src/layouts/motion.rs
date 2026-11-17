@@ -611,6 +611,10 @@ pub struct Entrance<'a, M> {
     open: bool,
     enter: Effect,
     exit: Effect,
+    /// The value its effect has when the way in begins (0 to 1).
+    starting: f32,
+    /// The value its effect has when the way out is done, before it is discarded (0 to 1).
+    ending: f32,
     on_settled: Option<Box<dyn Fn() -> M + 'a>>,
 }
 
@@ -693,6 +697,8 @@ pub fn entrance<'a, M>(
         open: true,
         enter: Effect::Slide,
         exit: Effect::Slide,
+        starting: 0.0,
+        ending: 0.0,
         on_settled: None,
     }
 }
@@ -781,6 +787,18 @@ impl<'a, M> Entrance<'a, M> {
         self.exit = exit;
         self
     }
+    /// The value its effect has when the way in begins, 0 (the default) to 1: how far in a slide
+    /// already is, how dark the scrim already is.
+    pub fn starting_value(mut self, value: f32) -> Self {
+        self.starting = value.clamp(0.0, 1.0);
+        self
+    }
+    /// The value its effect has when the way out is done, 0 (the default) to 1, at which the
+    /// content is discarded.
+    pub fn ending_value(mut self, value: f32) -> Self {
+        self.ending = value.clamp(0.0, 1.0);
+        self
+    }
     /// Whether the content is wanted. `false` runs the way out, after which the content is
     /// neither drawn nor reached; until then it must still be given. Default `true`.
     pub fn open(mut self, open: bool) -> Self {
@@ -828,12 +846,14 @@ struct EntranceState {
     heading_open: bool,
     /// The settled message of this way out has been sent.
     settled_sent: bool,
+    /// Where the way out ends, taken from the widget on each frame.
+    ending: f32,
 }
 
 impl EntranceState {
     /// Closed, and the way out is done: nothing to draw or reach.
     fn gone(&self) -> bool {
-        !self.heading_open && self.progress.shown <= 0.001
+        !self.heading_open && self.progress.shown <= self.ending + 0.001
     }
 }
 
@@ -844,9 +864,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
     fn state(&self) -> tree::State {
         // Starts hidden and animates to 1 on the first redraw (mounting is the trigger).
         tree::State::new(EntranceState {
-            progress: Progress::new(if self.trigger.animated() { 0.0 } else { 1.0 }),
+            progress: Progress::new(if self.trigger.animated() {
+                self.starting
+            } else {
+                1.0
+            }),
             heading_open: true,
             settled_sent: false,
+            ending: self.ending,
         })
     }
     fn children(&self) -> Vec<Tree> {
@@ -884,7 +909,12 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         viewport: &Rectangle,
     ) {
         let state = tree.state.downcast_mut::<EntranceState>();
+        // Coming in from out of sight starts from the starting value, not from nothing.
+        if self.open && !state.heading_open && state.progress.shown < self.starting {
+            state.progress.set_immediate(self.starting);
+        }
         state.heading_open = self.open;
+        state.ending = self.ending;
         let (effect, spec) = if self.open {
             (self.enter, self.spec)
         } else {
@@ -898,7 +928,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for Entrance<'a, M> {
         advance(
             &mut state.progress,
             event,
-            if self.open { 1.0 } else { 0.0 },
+            if self.open { 1.0 } else { self.ending },
             spec,
             shell,
             false,
@@ -1077,6 +1107,10 @@ pub struct FadeCover<'a, M> {
     exit_spec: Option<Spec>,
     mount_hidden: bool,
     trigger: Trigger,
+    /// The opacity it has when the way in begins (0 to 1).
+    starting: f32,
+    /// The opacity it has when the way out is done, before it is discarded (0 to 1).
+    ending: f32,
     radius: Box<dyn Fn(&Theme) -> iced::border::Radius + 'a>,
     share: Option<std::rc::Rc<std::cell::Cell<f32>>>,
     backdrop: Option<Box<dyn Fn(&Theme) -> Color + 'a>>,
@@ -1098,6 +1132,8 @@ impl<'a, M> FadeCover<'a, M> {
             exit_spec: None,
             mount_hidden: false,
             trigger: Trigger::Dialog,
+            starting: 0.0,
+            ending: 0.0,
             radius: Box::new(|_| iced::border::Radius::default()),
             share: None,
             backdrop: None,
@@ -1138,6 +1174,18 @@ impl<'a, M> FadeCover<'a, M> {
         self.exit_spec = Some(spec);
         self
     }
+    /// The opacity it has when the way in begins, 0 (the default: hidden) to 1. A page that
+    /// opens at 0 is a blank window for a moment; one that opens at 0.5 is already half there.
+    pub fn starting_value(mut self, opacity: f32) -> Self {
+        self.starting = opacity.clamp(0.0, 1.0);
+        self
+    }
+    /// The opacity it has when the way out is done, 0 (the default) to 1, at which it is
+    /// discarded.
+    pub fn ending_value(mut self, opacity: f32) -> Self {
+        self.ending = opacity.clamp(0.0, 1.0);
+        self
+    }
     /// Which trigger this is (its `[motion]` setting can turn the animation off).
     pub fn trigger(mut self, trigger: Trigger) -> Self {
         self.trigger = trigger;
@@ -1161,7 +1209,7 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for FadeCover<'a, M> {
     }
     fn state(&self) -> tree::State {
         let start = if self.mount_hidden && self.trigger.animated() {
-            0.0
+            self.starting
         } else if self.open || self.mount_hidden {
             1.0
         } else {
@@ -1205,6 +1253,9 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for FadeCover<'a, M> {
         viewport: &Rectangle,
     ) {
         let state = tree.state.downcast_mut::<FadeCoverState>();
+        if self.open && !state.heading_open && state.progress.shown < self.starting {
+            state.progress.set_immediate(self.starting);
+        }
         state.heading_open = self.open;
         let (effect, spec) = if self.open {
             (self.enter, self.spec)
@@ -1220,13 +1271,14 @@ impl<'a, M> Widget<M, Theme, iced::Renderer> for FadeCover<'a, M> {
         advance(
             &mut state.progress,
             event,
-            if self.open { 1.0 } else { 0.0 },
+            if self.open { 1.0 } else { self.ending },
             spec,
             shell,
             false,
         );
+        // What the room waits for: how far it still is from its ending value.
         if let Some(cell) = &self.share {
-            cell.set(state.progress.shown);
+            cell.set((state.progress.shown - self.ending).max(0.0));
         }
         self.content.as_widget_mut().update(
             &mut tree.children[0],
@@ -3848,5 +3900,94 @@ mod fade_cover_tests {
         assert!(none[1] > half[1], "hidden it is the window colour: {none:?}");
         // A way that does not fade draws the surface at any progress.
         assert_eq!(centre(0.0, Effect::None, true)[..3], [255, 0, 0]);
+    }
+}
+
+#[cfg(test)]
+mod initial_tests {
+    use super::*;
+    use crate::layouts::animation::Easing;
+    use iced::advanced::renderer::Headless;
+    use iced::advanced::{clipboard, layout};
+    use iced::widget::space;
+    use std::time::Duration;
+
+    fn frame(cover: &mut FadeCover<'_, ()>, tree: &mut Tree, at: Instant) {
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .expect("software renderer");
+        let viewport = Rectangle::with_size(Size::new(40.0, 40.0));
+        let node = Widget::layout(
+            cover,
+            tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, viewport.size()),
+        );
+        Widget::update(
+            cover,
+            tree,
+            &Event::Window(window::Event::RedrawRequested(at)),
+            Layout::new(&node),
+            mouse::Cursor::Unavailable,
+            &renderer,
+            &mut clipboard::Null,
+            &mut Shell::new(&mut vec![]),
+            &viewport,
+        );
+    }
+
+    fn make(open: bool, initial: f32) -> FadeCover<'static, ()> {
+        FadeCover::new(space().width(20).height(20), open)
+            .spec(Spec::Timed(Duration::from_millis(1000), Easing::Linear))
+            .starting_value(initial)
+    }
+
+    fn shown(tree: &Tree) -> f32 {
+        tree.state.downcast_ref::<FadeCoverState>().progress.shown
+    }
+
+    #[test]
+    fn a_surface_coming_in_starts_from_its_initial_opacity_not_from_nothing() {
+        let t0 = Instant::now();
+        for initial in [0.0, 0.5] {
+            let mut closed = make(false, initial);
+            let mut tree = Tree::new(&closed as &dyn Widget<(), Theme, iced::Renderer>);
+            frame(&mut closed, &mut tree, t0);
+            assert_eq!(shown(&tree), 0.0, "closed is hidden whatever the initial");
+            let mut opening = make(true, initial);
+            tree.diff(&opening as &dyn Widget<(), Theme, iced::Renderer>);
+            frame(&mut opening, &mut tree, t0 + Duration::from_millis(100));
+            assert!(
+                shown(&tree) >= initial,
+                "opening from {initial}: {}",
+                shown(&tree)
+            );
+            // And it still ends fully shown.
+            frame(&mut opening, &mut tree, t0 + Duration::from_millis(2000));
+            assert_eq!(shown(&tree), 1.0);
+        }
+        // Leaving ends at its ending value.
+        let mut leaving = make(false, 0.0).ending_value(0.3);
+        let mut tree = Tree::new(&leaving as &dyn Widget<(), Theme, iced::Renderer>);
+        tree.state
+            .downcast_mut::<FadeCoverState>()
+            .progress
+            .set_immediate(1.0);
+        frame(&mut leaving, &mut tree, t0);
+        frame(&mut leaving, &mut tree, t0 + Duration::from_millis(2000));
+        assert!((shown(&tree) - 0.3).abs() < 1e-3, "{}", shown(&tree));
+        // Without one, at nothing.
+        let mut leaving = make(false, 0.5);
+        let mut tree = Tree::new(&leaving as &dyn Widget<(), Theme, iced::Renderer>);
+        tree.state
+            .downcast_mut::<FadeCoverState>()
+            .progress
+            .set_immediate(1.0);
+        frame(&mut leaving, &mut tree, t0);
+        frame(&mut leaving, &mut tree, t0 + Duration::from_millis(2000));
+        assert_eq!(shown(&tree), 0.0);
     }
 }
