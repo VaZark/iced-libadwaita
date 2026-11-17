@@ -44,6 +44,9 @@ pub struct Metrics {
     pub radius_m: f32,
     /// Cards and boxed lists (`$card_radius`).
     pub radius_l: f32,
+    /// Multi-line editors. A tall box cannot take the pill radius a one-line entry takes
+    /// (`radius_m`), so the editor has its own; a theme that does not declare it uses `radius_m`.
+    pub radius_editor: f32,
     /// Menu items (`$menu_radius`).
     pub radius_menu: f32,
     /// Popovers (`$popover_radius` = menu radius + 6).
@@ -160,6 +163,7 @@ impl Default for Metrics {
             radius_s: 0.0,
             radius_m: 0.0,
             radius_l: 0.0,
+            radius_editor: 0.0,
             radius_menu: 0.0,
             radius_popover: 0.0,
             radius_toast: 0.0,
@@ -235,6 +239,7 @@ impl Metrics {
     pub const MAX_RADIUS_M: f32 = 9.0;
     pub const MAX_RADIUS_L: f32 = 12.0;
     pub const MAX_RADIUS_MENU: f32 = 9.0;
+    pub const MAX_RADIUS_EDITOR: f32 = 12.0;
     pub const MAX_RADIUS_POPOVER: f32 = 15.0;
     /// A toast is about 44px tall, so anything above 22px is the same full pill.
     pub const MAX_RADIUS_TOAST: f32 = 24.0;
@@ -245,6 +250,7 @@ impl Metrics {
         self.radius_s = self.radius_s.clamp(0.0, Self::MAX_RADIUS_S);
         self.radius_m = self.radius_m.clamp(0.0, Self::MAX_RADIUS_M);
         self.radius_l = self.radius_l.clamp(0.0, Self::MAX_RADIUS_L);
+        self.radius_editor = self.radius_editor.clamp(0.0, Self::MAX_RADIUS_EDITOR);
         self.radius_menu = self.radius_menu.clamp(0.0, Self::MAX_RADIUS_MENU);
         self.radius_popover = self.radius_popover.clamp(0.0, Self::MAX_RADIUS_POPOVER);
         self.radius_toast = self.radius_toast.clamp(0.0, Self::MAX_RADIUS_TOAST);

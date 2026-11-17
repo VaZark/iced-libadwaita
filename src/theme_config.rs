@@ -1697,6 +1697,7 @@ metrics! {
     "radius-s", "Small corner radius", |m| m.radius_s, |m, v| m.radius_s = v;
     "radius-m", "Buttons and entries", |m| m.radius_m, |m, v| m.radius_m = v;
     "radius-l", "Cards and boxed lists", |m| m.radius_l, |m, v| m.radius_l = v;
+    "radius-editor", "Multi-line editors (default: radius-m)", |m| m.radius_editor, |m, v| m.radius_editor = v;
     "radius-menu", "Menu items", |m| m.radius_menu, |m, v| m.radius_menu = v;
     "radius-popover", "Popovers", |m| m.radius_popover, |m, v| m.radius_popover = v;
     "radius-toast", "Toasts", |m| m.radius_toast, |m, v| m.radius_toast = v;
@@ -2282,6 +2283,10 @@ impl ThemeConfig {
             {
                 set(metrics, v);
             }
+        }
+        // A theme that does not declare the editor radius uses the entry radius.
+        if !self.is_set("metrics", "radius-editor") {
+            metrics.radius_editor = metrics.radius_m;
         }
     }
 

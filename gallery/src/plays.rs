@@ -318,9 +318,15 @@ pub fn specs(d: Detail) -> Vec<Spec> {
             S::choice("mode", "Part of", &["The height", "The data"], 0),
             S::number("max_height", "Maximum height", 40.0..=240.0, 80.0),
             S::bool("expanded", "Expanded", false),
+            S::bool("preview", "Preview (no control, always clipped)", false),
             S::choice("width", "Width", &["Fill", "Fixed 240 px"], 0),
             S::number("initial", "Items shown first", 1.0..=10.0, 3.0),
             S::choice("step", "A press reveals", &["All", "5 more", "10 more"], 2),
+        ],
+        Detail::NoteCard => vec![
+            S::bool("selected", "Selected", false),
+            S::choice("tint", "Tint", &["None", "Red", "Green", "Blue"], 1),
+            S::number("max_height", "Body height", 40.0..=200.0, 70.0),
         ],
         Detail::Tabs => vec![
             S::choice(
@@ -1024,10 +1030,35 @@ pub fn build<'a>(
                     })
                     .max_height(p.number("max_height"))
                     .expanded(open)
+                    .preview(p.bool("preview"))
                     .on_toggle(on_bool(d, "expanded"))
                     .metrics(m);
                 Element::from(s)
             }
+        }
+        Detail::NoteCard => {
+            let tint = [
+                None,
+                Some(iced::Color::from_rgb(0.9, 0.2, 0.2)),
+                Some(iced::Color::from_rgb(0.2, 0.7, 0.3)),
+                Some(iced::Color::from_rgb(0.2, 0.4, 0.9)),
+            ][p.choice("tint")];
+            let body = "Review spirit and code organisation of the merged branch; no functional changes. Findings so far: split the config module, refresh its stale docs, move the window accessors out, audit float literals, dedupe the theme folders. ".repeat(2);
+            let content = column![
+                ty::body("Review the merge"),
+                w::Spoiler::new(ty::body(body))
+                    .max_height(p.number("max_height"))
+                    .preview(true)
+                    .metrics(m),
+            ]
+            .spacing(m.space_s);
+            Element::from(
+                w::NoteCard::new(content)
+                    .tint(tint)
+                    .selected(p.bool("selected"))
+                    .width(Length::Fixed(260.0))
+                    .on_press(Message::Noop),
+            )
         }
         Detail::Tabs => {
             let names = [

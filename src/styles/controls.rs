@@ -105,7 +105,7 @@ pub mod text_editor {
                     iced::Color::TRANSPARENT
                 },
                 width: if focused { theme.focus_width() } else { 0.0 },
-                radius: theme.metrics.radius_m.into(),
+                radius: theme.metrics.radius_editor.into(),
             },
             placeholder: s.dim(),
             value: if matches!(status, Status::Disabled) {

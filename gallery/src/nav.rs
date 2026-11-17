@@ -195,6 +195,7 @@ impl Page {
                         n(ClipWindow),
                         n(Divider),
                         n(Spoiler),
+                        n(NoteCard),
                     ],
                 ),
                 (
@@ -298,6 +299,7 @@ pub enum Detail {
     NumberInput,
     Timeline,
     Spoiler,
+    NoteCard,
 
     TableVirtual,
     TableAsync,
@@ -472,6 +474,7 @@ impl Detail {
             Detail::NumberInput => "Number input",
             Detail::Timeline => "Timeline",
             Detail::Spoiler => "Spoiler",
+            Detail::NoteCard => "Note card",
             Detail::TableVirtual => "Table: virtualization",
             Detail::TableAsync => "Table: async chunks",
             Detail::Tree => "Tree",
@@ -591,6 +594,7 @@ impl Detail {
             Detail::NumberInput => "Integer or fixed decimals, limits, step handles",
             Detail::Timeline => "Events along a line, sharing the stepper primitive",
             Detail::Spoiler => "Part of the height or of the data, the rest on request",
+            Detail::NoteCard => "A Keep-style note: tint, selection ring, a clipped preview body",
             Detail::TableVirtual => "100,000 rows, only the ones in view built",
             Detail::TableAsync => {
                 "5,000 rows fetched in chunks as you scroll, with placeholders and Retry"

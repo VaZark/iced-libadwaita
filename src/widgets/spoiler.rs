@@ -2,7 +2,9 @@
 //! [Spoiler](https://mantine.dev/core/spoiler/). The rules (when a control is needed, how many
 //! items are shown) are the [`spoiler`](crate::primitives::spoiler) primitive.
 //!
-//! Two forms, for the two kinds of "part":
+//! Two forms, for the two kinds of "part", each also as a **preview**
+//! ([`preview`](Spoiler::preview)): the part is all there is, with no control and no reveal (a
+//! note card showing the start of its text).
 //!
 //! * **Part of the height.** [`Spoiler::new`]`(content)` clips its content to
 //!   [`max_height`](Spoiler::max_height), fades the cut, and shows a Show more / Hide control
@@ -47,6 +49,7 @@ pub struct Spoiler<'a, M> {
     content: Element<'a, M>,
     max_height: f32,
     expanded: bool,
+    preview: bool,
     on_toggle: Option<Rc<dyn Fn(bool) -> M + 'a>>,
     show: String,
     hide: String,
@@ -68,6 +71,7 @@ impl<'a, M: Clone + 'a> Spoiler<'a, M> {
             content: content.into(),
             max_height: 100.0,
             expanded: false,
+            preview: false,
             on_toggle: None,
             show: "Show more".into(),
             hide: "Hide".into(),
@@ -86,6 +90,7 @@ impl<'a, M: Clone + 'a> Spoiler<'a, M> {
             state,
             build: Box::new(build),
             on_event: None,
+            preview: false,
             show: None,
             hide: "Hide".into(),
             spacing: Metrics::desktop().space_s,
@@ -93,6 +98,13 @@ impl<'a, M: Clone + 'a> Spoiler<'a, M> {
     }
     pub fn max_height(mut self, px: f32) -> Self {
         self.max_height = px.max(1.0);
+        self
+    }
+    /// Preview mode: only the first [`max_height`](Self::max_height) of the content shows, always.
+    /// No Show more / Hide control, no fade, nothing to toggle; the clipped part is neither drawn
+    /// nor reachable by the pointer.
+    pub fn preview(mut self, preview: bool) -> Self {
+        self.preview = preview;
         self
     }
     /// Whether the whole content shows (controlled).
@@ -132,6 +144,8 @@ struct Clamp<'a, M> {
     children: Vec<Element<'a, M>>,
     max_height: f32,
     expanded: bool,
+    /// Never reveals and has no control.
+    preview: bool,
     gap: f32,
     width: Length,
 }
@@ -191,9 +205,14 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Clamp<'a, M> {
         state.content_height = content_h;
         state.overflow = spoiler::overflows(content_h, self.max_height);
         let visible = spoiler::height(content_h, self.max_height, state.progress.shown);
+        if self.preview {
+            // Only the first part is the widget's size.
+            let h = visible;
+            return layout::Node::with_children(Size::new(width, h), vec![content]);
+        }
         let mut nodes = vec![content];
         let mut total = visible;
-        if state.overflow {
+        if state.overflow && !self.preview {
             let control = self.children[1]
                 .as_widget_mut()
                 .layout(
@@ -320,6 +339,12 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Clamp<'a, M> {
                 spoiler::height(state.content_height, self.max_height, t),
             ),
         );
+        // Only the visible part is drawn: the content gets the cut as its viewport, so what is
+        // outside it is skipped, not drawn and clipped.
+        let in_view = visible.intersection(viewport).unwrap_or(Rectangle::new(
+            visible.position(),
+            Size::ZERO,
+        ));
         renderer.with_layer(visible, |renderer| {
             self.children[0].as_widget().draw(
                 &tree.children[0],
@@ -328,11 +353,11 @@ impl<'a, M: 'a> Widget<M, Theme, iced::Renderer> for Clamp<'a, M> {
                 style,
                 content_l,
                 cursor,
-                viewport,
+                &in_view,
             );
         });
         // The cut fades into the page until it is fully open.
-        if state.overflow && t < 0.999 {
+        if state.overflow && !self.preview && t < 0.999 {
             let h = FADE.min(visible.height);
             let page = theme.semantic.window.bg;
             let fade = Linear::new(Radians(std::f32::consts::PI))
@@ -426,7 +451,8 @@ impl<'a, M: Clone + 'a> From<Spoiler<'a, M>> for Element<'a, M> {
         iced::Element::new(Clamp {
             children: vec![s.content, control],
             max_height: s.max_height,
-            expanded: s.expanded,
+            expanded: s.expanded && !s.preview,
+            preview: s.preview,
             gap: s.gap.unwrap_or(s.metrics.space_xs),
             width: s.width,
         })
@@ -439,6 +465,7 @@ pub struct SpoilerList<'a, M> {
     state: &'a SpoilerState,
     build: Box<dyn Fn(usize) -> Element<'a, M> + 'a>,
     on_event: Option<Rc<dyn Fn(Event) -> M + 'a>>,
+    preview: bool,
     show: Option<String>,
     hide: String,
     spacing: f32,
@@ -450,6 +477,11 @@ impl<'a, M: Clone + 'a> SpoilerList<'a, M> {
         self
     }
 
+    /// Preview mode: the first `state.shown()` items and no control.
+    pub fn preview(mut self, preview: bool) -> Self {
+        self.preview = preview;
+        self
+    }
     /// The control was pressed: apply it with [`SpoilerState::apply`].
     pub fn on_event(mut self, f: impl Fn(Event) -> M + 'a) -> Self {
         self.on_event = Some(Rc::new(f));
@@ -472,7 +504,7 @@ impl<'a, M: Clone + 'a> From<SpoilerList<'a, M>> for Element<'a, M> {
         // Only the visible items are built.
         let items: Vec<Element<'a, M>> = l.state.visible().map(|i| (l.build)(i)).collect();
         let mut col = column(items).spacing(l.spacing).width(Length::Fill);
-        if l.state.needs_control() {
+        if l.state.needs_control() && !l.preview {
             let press = |e: Event| l.on_event.as_ref().map(|f| f(e));
             let mut controls = row![].spacing(l.spacing);
             if l.state.can_expand() {
@@ -536,6 +568,49 @@ mod tests {
             .max_height(80.0)
             .expanded(true)
             .on_toggle(|open| open as u8)
+            .into();
+    }
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+    use iced::widget::{space, text};
+
+    #[test]
+    fn a_preview_has_no_control_and_is_as_tall_as_its_window() {
+        use iced::advanced::{layout, renderer::Headless, widget::Tree};
+        let renderer = iced::futures::executor::block_on(iced::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(14.0),
+            Some("tiny-skia"),
+        ))
+        .unwrap();
+        // The control of the open form makes the widget taller than its window.
+        let height = |preview: bool| {
+            let mut el: Element<'_, ()> = Spoiler::new(space().height(300.0))
+                .max_height(80.0)
+                .preview(preview)
+                .into();
+            let mut tree = Tree::new(&el);
+            el.as_widget_mut()
+                .layout(
+                    &mut tree,
+                    &renderer,
+                    &layout::Limits::new(Size::ZERO, Size::new(200.0, 1000.0)),
+                )
+                .size()
+                .height
+        };
+        assert_eq!(height(true), 80.0);
+        assert!(height(false) > 80.0);
+    }
+
+    #[test]
+    fn a_preview_list_builds_only_the_shown_items() {
+        let state = SpoilerState::new(1000, 4);
+        let _: Element<'_, ()> = Spoiler::items(&state, |_| text("row").into())
+            .preview(true)
             .into();
     }
 }

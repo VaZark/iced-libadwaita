@@ -114,6 +114,7 @@
         "radius-s": 8,
         "radius-m": 100,
         "radius-l": 16,
+        "radius-editor": 12,
         "radius-menu": 12,
         "radius-popover": 16,
         "radius-toast": 100,

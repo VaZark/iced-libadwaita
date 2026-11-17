@@ -761,7 +761,8 @@ impl Gallery {
             | Detail::ColorPicker
             | Detail::NumberInput
             | Detail::Timeline
-            | Detail::Spoiler => column![].into(),
+            | Detail::Spoiler
+            | Detail::NoteCard => column![].into(),
             Detail::TableVirtual => self.virtual_demo.virtual_view(m).map(Message::Virtual),
             Detail::TableAsync => self.virtual_demo.async_view(m).map(Message::Virtual),
             Detail::TreeAsync => self.tree_demo.async_view(m).map(Message::Tree),

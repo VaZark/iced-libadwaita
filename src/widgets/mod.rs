@@ -33,6 +33,7 @@ pub(crate) mod item_row;
 pub(crate) mod menu;
 pub(crate) mod menu_pages;
 pub(crate) mod multi_select;
+pub(crate) mod note_card;
 pub(crate) mod navigation;
 pub(crate) mod number_input;
 pub(crate) mod pagination;
@@ -104,6 +105,7 @@ pub use menu::{
     menu_button, primary_menu,
 };
 pub use multi_select::MultiSelect;
+pub use note_card::NoteCard;
 pub use navigation::{
     Breakpoint, COLLAPSE_WIDTH, CollapsedSidebar, DRAWER_MAX_FRACTION, MIN_CONTENT_WIDTH,
     NavigationPage, NavigationSplitView, OverlaySplitView, SIDEBAR_FRACTION, SIDEBAR_MAX_WIDTH,
