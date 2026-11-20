@@ -116,11 +116,16 @@ impl<'a, M: Clone + 'a> Widget<M, Theme, iced::Renderer> for DragSource<'a, M> {
                 state.press = cursor.position();
             }
             Event::Mouse(mouse::Event::CursorMoved { position }) if !state.dragging => {
+                // Where the pointer is, in the same coordinates as where it went down. Inside a
+                // scrollable the cursor is given in the content's coordinates (the scroll offset
+                // added) but the event's position is not, so mixing the two put the carried copy,
+                // and the drop it chooses, a whole scroll offset away from the pointer.
+                let here = cursor.position().unwrap_or(*position);
                 if let Some(from) = state.press
-                    && from.distance(*position) > THRESHOLD
+                    && from.distance(here) > THRESHOLD
                 {
                     state.dragging = true;
-                    self.publish_ghost(layout, state.press, *position);
+                    self.publish_ghost(layout, state.press, here);
                     shell.publish(self.on_start.clone());
                     // The content's button must not take the release for a click.
                     self.content.as_widget_mut().update(
@@ -153,7 +158,7 @@ impl<'a, M: Clone + 'a> Widget<M, Theme, iced::Renderer> for DragSource<'a, M> {
             // The floating copy follows the pointer.
             if let Event::Mouse(mouse::Event::CursorMoved { position }) = event {
                 let press = tree.state.downcast_ref::<SourceState>().press;
-                self.publish_ghost(layout, press, *position);
+                self.publish_ghost(layout, press, cursor.position().unwrap_or(*position));
                 shell.request_redraw();
             }
             return;
